@@ -335,6 +335,9 @@ var lastDamageSeq: [String: Int] = [:]             // プレート名 -> ダメ�
 var lastDamageTurn: [String: Int] = [:]            // プレート名 -> ダメージ行を出したターン番号
 var lastDamageDir: [String: Int] = [:]             // プレート名 -> 最後に出した行の向き (-1: ダメージ / +1: 回復)
 var lastCritAt: [String: Date] = [:]               // 枠 -> 最後に |-crit| を出した時刻
+var heldLine: [String: (toPct: Int, dir: Int, seq: Int, turn: Int, hpText: String)] = [:]  // プレート名 -> 行動内に保留したダメージ/回復行
+var pendingFaints: [(slot: String, speciesEn: String, at: Date)] = []  // 遅延出力するひんし行 (効果行より後に並べるため)
+var lastSideCondAt: [String: Date] = [:]          // "side:move:phase" -> サイドコンディション告知を処理した時刻
 var commandPhaseSeen = false                      // コマンド選択中 (全プレート表示) かどうか。ターン数え用
 var pendingDamageCount: [String: Int] = [:]       // プレート名 -> 同じ HP% が続いた回数 (3 回で確定)
 var winLogged = false                             // このバトルで勝敗が確定したか
@@ -624,7 +627,17 @@ func renderLogLine(_ line: String) -> [String] {
     case "-activate":
         guard f.count >= 4 else { return [] }
         let (_, side, species) = renderLabelParts(f[2])
+        if f[3].contains("Focus Sash") { return ["(\(renderPrefix(side))\(species) held on thanks to its Focus Sash!)"] }
         if f[3].contains("Protect") { return ["\(renderPrefix(side))\(species) protected itself!"] }
+        return []
+    case "-sidestart", "-sideend":
+        guard f.count >= 4 else { return [] }
+        if f[3].contains("Tailwind") {
+            if f[1] == "-sidestart" {
+                return [f[2] == "p2" ? "(The Tailwind started blowing on the opposing team's side!)" : "(The Tailwind started blowing!)"]
+            }
+            return [f[2] == "p2" ? "(The Tailwind on the opposing team's side stopped blowing.)" : "(The Tailwind stopped blowing.)"]
+        }
         return []
     case "-fail":
         return ["But it failed!"]
@@ -750,6 +763,7 @@ func resetLogState() {
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
+    heldLine = [:]; pendingFaints = []; lastSideCondAt = [:]
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -801,26 +815,42 @@ func hpTextFor(_ s: SlotState) -> String {
 // ダメージ/回復行を 1 件出す (確定待ちの消化と新規確定の両方から呼ばれる)
 @discardableResult
 func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: String, fromPct: Int, toPct: Int, hpText: String, force: Bool = false) -> Bool {
-    // 同じ行動 (|move| / |turn| を区切りとする) の中で 2 本目のダメージ・
-    // 回復行は、HP バーの段階アニメーションの途中値であることが多いため
-    // 保留する (実例: 岩なだれ 1 発で 136/145 -> 87/145 と 2 行に分かれた)。
-    // 保留分は次のメッセージ (flushPendingDamage) か次の行動で確定する。
-    // 0% (ひんし) は常に出す
-    // 保留は「同じ行動・同じターン・同じ向き」の 2 本目だけに限る:
-    // 向きが逆の行 (被弾したターン終了時の たべのこし/グラスフィールド回復、
-    // オボンのみ等) は HP アニメーションの途中値ではあり得ないため即時に出す。
-    // また技の文を取りこぼして actionSeq が進まなかったターンでも、
-    // ターンが変わっていれば別イベントとして出す (実例: 2026-11-20 vs Mark 戦、
-    // Turn 7 の たべのこし回復が Turn 8 の途中にずれて表示された)。
-    let dir = toPct < fromPct ? -1 : 1
-    if !force && toPct != 0 && actionSeq > 0 && lastDamageSeq[plateName] == actionSeq
-        && lastDamageTurn[plateName] == currentTurn && lastDamageDir[plateName] == dir { return false }
+    // 行動内のダメージ/回復行は、HP バーの段階アニメーションの途中値と
+    // 区別がつかないため、原則として保留し、次の文の翻訳時かターン境界の
+    // flushPendingDamage で「最終値への 1 行」にまとめて出す
+    // (実例: 2026-11-20 vs Zycloud 戦、スロートチョップ 1 発が 13% と
+    //  60% の 2 行に割れた。また一時的な誤読で下がって元に戻った値は、
+    //  確定待ちが自然に消えるため行自体が出ない)。
+    // 例外: 0% (ひんし) は即時。方向が反転した行 (被弾直後の きのみ回復等)
+    // は途中値ではあり得ないため、保留分を先に確定させてから即時に出す。
+    // ターン境界では |turn| の前に flush されるため、ターン終了時の回復が
+    // 次のターンにずれることもない (2026-11-20 vs Mark 戦の教訓)
+    // 向きは「最後に出力した値」ではなく「保留中の値」を基準に判定する
+    // (100 →保留→ 40 → 65 は、出力済みの 100 から見れば減少でも、
+    //  実際の HP の動きとしては 40 からの回復 = 反転であるため)
+    var effFrom = fromPct
+    var dirBase = fromPct
+    if let h = heldLine[plateName], h.seq == actionSeq, h.turn == currentTurn { dirBase = h.toPct }
+    let dir = toPct < dirBase ? -1 : 1
+    if !force && toPct != 0 && actionSeq > 0 {
+        if let h = heldLine[plateName], h.seq == actionSeq && h.turn == currentTurn, h.dir != dir {
+            heldLine[plateName] = nil
+            _ = emitDamageLine(plateName: plateName, slot: slot, key: key, speciesEn: speciesEn,
+                               fromPct: lastEmittedPct[plateName] ?? fromPct, toPct: h.toPct,
+                               hpText: h.hpText, force: true)
+            effFrom = h.toPct
+        } else {
+            heldLine[plateName] = (toPct: toPct, dir: dir, seq: actionSeq, turn: currentTurn, hpText: hpText)
+            return false
+        }
+    }
+    heldLine[plateName] = nil
     lastDamageSeq[plateName] = actionSeq
     lastDamageTurn[plateName] = currentTurn
     lastDamageDir[plateName] = dir
     lastEmittedPct[plateName] = toPct
     if lastPendingLabel == "\(slot): \(speciesEn)" { lastPendingLabel = "" }
-    if toPct < fromPct {
+    if toPct < effFrom {
         lastDamageLabel = "\(slot): \(speciesEn)"
         lastDamageAt = Date()
         var line = "|-damage|\(slot): \(speciesEn)|\(hpText)"
@@ -829,12 +859,28 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             pendingStatusFrom[key] = nil
         }
         emitLog(line)
-        recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: fromPct, toPct: toPct, hpText: hpText)
-    } else if toPct > fromPct {
+        recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, hpText: hpText)
+    } else if toPct > effFrom {
         emitLog("|-heal|\(slot): \(speciesEn)|\(hpText)")
     }
-    if toPct == 0 { emitLog("|faint|\(slot): \(speciesEn)") }
+    if toPct == 0 { deferFaint(slot: slot, speciesEn: speciesEn) }
     return true
+}
+
+// ひんし行の遅延出力: プレートは HP 0% を即座に拾うが、ゲームの文は
+// 「効果は バツグンだ」の後に「たおれた」が出るため、即時に出すと
+// 効果行より先に ひんしが並んでしまう (実例: 2026-11-20 vs Zycloud 戦)。
+// 文の翻訳が終わったタイミング (watchBattleMessage の末尾) でまとめて出す
+func deferFaint(slot: String, speciesEn: String) {
+    if !pendingFaints.contains(where: { $0.slot == slot }) {
+        pendingFaints.append((slot: slot, speciesEn: speciesEn, at: Date()))
+    }
+}
+
+func emitPendingFaints() {
+    let fs = pendingFaints
+    pendingFaints = []
+    for f in fs { emitLog("|faint|\(f.slot): \(f.speciesEn)") }
 }
 
 // 推定エンジン用: ダメージイベントを記録する (直近の技に帰属できる場合のみ)
@@ -895,6 +941,7 @@ func flushPendingDamage() {
         guard let pend = pendingDamagePct[plate.name], let s = lastSlots[plate.name] else { continue }
         pendingDamagePct[plate.name] = nil
         pendingDamageCount[plate.name] = nil
+        heldLine[plate.name] = nil
         let side = plate.name.hasPrefix("mine") ? "p1" : "p2"
         let key = "\(side):\(s.speciesEn)"
         let from = lastEmittedPct[plate.name] ?? s.hpPercent
@@ -910,6 +957,15 @@ func flushPendingDamage() {
 // プレートの差分をログ行に変換する
 func processPlates(_ hits: [String: SlotState]) {
     if !logStarted { startBattleLog() }
+    // 遅延中のひんし行: 文が来なくても 1.5 秒経ったら出す
+    if !pendingFaints.isEmpty {
+        let now = Date()
+        let ready = pendingFaints.filter { now.timeIntervalSince($0.at) > 1.5 }
+        if !ready.isEmpty {
+            pendingFaints.removeAll { now.timeIntervalSince($0.at) > 1.5 }
+            for f in ready { emitLog("|faint|\(f.slot): \(f.speciesEn)") }
+        }
+    }
     for plate in plates {
         guard let s = hits[plate.name] else { continue }
         let slot = slotId(plate.name)
@@ -938,6 +994,7 @@ func processPlates(_ hits: [String: SlotState]) {
                 pendingSwitchCount[plate.name] = nil
                 if let p = prev { monStates["\(side):\(p.speciesEn)"]?.boosts = [:] }  // 交代でランク変化はリセット
                 pendingDamagePct[plate.name] = nil
+                heldLine[plate.name] = nil
                 lastEmittedPct[plate.name] = s.hpPercent
                 monStates[key]?.hpPercent = s.hpPercent
                 monStates[key]?.hpText = hpTextFor(s)
@@ -1707,6 +1764,19 @@ func translateBattleMessage(_ text: String) -> Bool {
             let n = String(t[..<r.lowerBound])
             if !n.isEmpty && n.count <= 20 { oppName = n }
         }
+        // 降参の文が拾えなかった場合の推定: 負けた側に「場に出て倒れて
+        // いないポケモンがいる」か「場に出たのが 4 体未満」なら、倒し切って
+        // の終了ではあり得ないため降参として扱う (実例: 2026-11-20
+        // vs Zycloud 戦、相手に 3 体残して勝敗が確定した)
+        if forfeitName == nil {
+            let loserSide = won ? "p2" : "p1"
+            let entered = fieldSeen[loserSide] ?? []
+            let anyAlive = entered.contains { (monStates["\(loserSide):\($0)"]?.hpPercent ?? 100) > 0 }
+            if anyAlive || entered.count < 4 {
+                forfeitName = won ? (oppName.isEmpty ? "Opponent" : oppName) : (trainerMine.isEmpty ? "You" : trainerMine)
+            }
+        }
+        emitPendingFaints()
         if won { emitLog("|win|\(trainerMine.isEmpty ? "p1" : trainerMine)") }
         else { emitLog("|win|\(oppName.isEmpty ? "p2" : oppName)") }
         if !oppName.isEmpty { trainerOpp = oppName }
@@ -1717,6 +1787,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         if winLogged { return true }   // 同じ勝敗文の再読では出さない
         let oppGaveUp = t.contains("相手") || t.contains("あいて")
         forfeitName = oppGaveUp ? (trainerOpp.isEmpty ? "Opponent" : trainerOpp) : (trainerMine.isEmpty ? "You" : trainerMine)
+        emitPendingFaints()
         emitLog("|win|\(oppGaveUp ? (trainerMine.isEmpty ? "p1" : trainerMine) : (trainerOpp.isEmpty ? "p2" : trainerOpp))")
         winLogged = true
         return true
@@ -1824,6 +1895,28 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 状態が変化した文はフィールドの告知として消費する
     // 天候・フィールドの告知文は、状態が変わらなかった (再読だった) 場合も消費する
     if checkFieldText(text: t) { return true }
+    // サイドコンディション (おいかぜ) の告知文: 種族名を含まないため、
+    // 種族照合より前にここで処理する (実例: 2026-11-20 vs Zycloud 戦、
+    // 「あいて相手にかぜおはし追い風が吹き始めた！」が日本語のまま漏れた)
+    if t.contains("追い風") || t.contains("おいかぜ") {
+        let scSide = (t.contains("相手") || t.contains("あいて")) ? "p2" : "p1"
+        if t.contains("吹き始") || t.contains("ふきはじ") {
+            let k = "\(scSide):Tailwind:start"
+            if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+                lastSideCondAt[k] = Date()
+                emitLog("|-sidestart|\(scSide)|move: Tailwind")
+            }
+            return true
+        }
+        if t.contains("止ん") || t.contains("やん") || t.contains("終わ") || t.contains("なくな") {
+            let k = "\(scSide):Tailwind:end"
+            if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+                lastSideCondAt[k] = Date()
+                emitLog("|-sideend|\(scSide)|move: Tailwind")
+            }
+            return true
+        }
+    }
     // 効果の確認文・交代の指示文 (出来事そのものは別の行で記録済みのため、
     // 本文だけを |-message| に残さないよう消費する)
     if t.contains("手助けする") || t.contains("ワイドガード") || t.contains("守られた") || t.contains("身を守った") || t.contains("体勢に入った")
@@ -1907,9 +2000,23 @@ func translateBattleMessage(_ text: String) -> Bool {
             let chars = Array(nt)
             if ms <= chars.count { cand = String(chars[ms...]) }
         }
+        var mvJaFound: String? = nil
         if let cand {
             let c = cand.trimmingCharacters(in: CharacterSet(charactersIn: "！!"))
-            if let mvJa = moveNameOrig[c] ?? moveNameLoose(c) {
+            mvJaFound = moveNameOrig[c] ?? moveNameLoose(c)
+        }
+        if mvJaFound == nil {
+            // 種族名直後の切り出しに失敗した場合は、文中の技名を直接探す
+            // (実例: 「あいてペンドラーの相手のつるぎのまい！」のように
+            //  前置きが二重に化けた文でも、技名そのものは無事なことが多い。
+            //  誤爆を避けるため、場にいる種族の文だけを対象にする)
+            let onField = lastSlots.values.contains { $0.speciesEn == sp.en }
+                || formeGroup(sp).contains { g in lastSlots.values.contains { $0.speciesEn == g.en } }
+            if onField, let hit = moveNameOrig.keys.filter({ nt.contains($0) }).max(by: { $0.count < $1.count }) {
+                mvJaFound = moveNameOrig[hit]
+            }
+        }
+        if let mvJa = mvJaFound {
                 let moveEn = moveJa2En[mvJa] ?? mvJa
                 // 同じ文が OCR ゆれ違いで二重に処理されても |move| は 1 回だけ
                 let sig = slot + "|" + moveEn
@@ -1925,7 +2032,6 @@ func translateBattleMessage(_ text: String) -> Bool {
                     revealedMoves[sp.en, default: []].append(mvJa)
                 }
                 return true
-            }
         }
     }
     // まもる成功: 「<対象>は 攻撃から 身を守った！」(守つた の OCR 崩れも拾う)
@@ -1949,6 +2055,14 @@ func translateBattleMessage(_ text: String) -> Bool {
             break
         }
     }
+    // きあいのタスキで もちこたえた: 持ち物の判明として記録し、専用行を出す
+    // (実例: 2026-11-20 vs Zycloud 戦、グライオンのタスキ発動が日本語のまま漏れた)
+    if t.contains("もちこたえた") {
+        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "きあいのタスキ")
+        if side == "p2" { revealedItems[sp.en] = "きあいのタスキ" }
+        emitLog("|-activate|\(slot): \(sp.en)|item: Focus Sash")
+        return true
+    }
     // 持ち物の判明: 発動・消費などの文脈があるときだけ拾う
     if t.contains("食べ") || t.contains("発動") || t.contains("なくなった") || t.contains("効果で"),
        let itJa = findInDict(in: t, itemDict) {
@@ -1960,7 +2074,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("たおれた") {
         if (monStates[key]?.hpPercent ?? 0) > 0 {
             monStates[key]?.hpPercent = 0
-            emitLog("|faint|\(slot): \(sp.en)")
+            deferFaint(slot: slot, speciesEn: sp.en)
         }
         return true
     }
@@ -2041,6 +2155,7 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
             lastMsgNorm = norm; lastMsgAt = now
         }
     }
+    emitPendingFaints()
 }
 
 // MARK: - 選出画面での相手チーム同定 (タイプアイコン + モデル照合)
@@ -2793,6 +2908,7 @@ func runOnce(image: CGImage) {
     if platesReady && ((expectedPlates >= 4 && allSettled) || turnRawFrames >= 6) {
         commandPhaseSeen = true
         flushPendingDamage()
+        emitPendingFaints()
         currentTurn += 1
         emitLog("|turn|\(currentTurn)")
     }
@@ -2808,7 +2924,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0538"
+let readerBuild = "20261120_0655"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
