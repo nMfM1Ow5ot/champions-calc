@@ -26075,9 +26075,6 @@ var require_dist = __commonJS({
   }
 });
 
-// _entry.mjs
-var import_calc2 = __toESM(require_dist(), 1);
-
 // core.mjs
 var import_calc = __toESM(require_dist(), 1);
 var gen = import_calc.Generations.get(9);
@@ -26319,11 +26316,25 @@ var ABILITY_IMMUNE = [
   [["Volt Absorb", "Lightning Rod", "Motor Drive"], "Electric"],
   [["Sap Sipper"], "Grass"]
 ];
+function effectiveMoveType(atkP, moveObj) {
+  let t = moveObj.type;
+  const ab = atkP.ability;
+  if (ab === "Normalize") t = "Normal";
+  else if (t === "Normal") {
+    if (ab === "Pixilate") t = "Fairy";
+    else if (ab === "Aerilate") t = "Flying";
+    else if (ab === "Refrigerate") t = "Ice";
+    else if (ab === "Galvanize") t = "Electric";
+  }
+  if (ab === "Liquid Voice" && (moveObj.flags || {}).sound) t = "Water";
+  return t;
+}
 function isImmune(atkP, defP, moveObj) {
-  if (TYPE_IMMUNE[moveObj.type] && defP.types.some((t) => TYPE_IMMUNE[moveObj.type].includes(t))) return true;
+  const effType = effectiveMoveType(atkP, moveObj);
+  if (TYPE_IMMUNE[effType] && defP.types.some((t) => TYPE_IMMUNE[effType].includes(t))) return true;
   const breaker = ["Mold Breaker", "Teravolt", "Turboblaze"].includes(atkP.ability);
   if (!breaker) {
-    for (const [abilities, type] of ABILITY_IMMUNE) if (moveObj.type === type && abilities.includes(defP.ability)) return true;
+    for (const [abilities, type] of ABILITY_IMMUNE) if (effType === type && abilities.includes(defP.ability)) return true;
     const fl = moveObj.flags || {};
     if (defP.ability === "Soundproof" && fl.sound) return true;
     if (defP.ability === "Bulletproof" && fl.bullet) return true;
@@ -26478,6 +26489,9 @@ function moveData(name) {
     basePower: m.basePower
   };
 }
+
+// bundle_entry.mjs
+var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
   export_Generations as Generations,
