@@ -2991,12 +2991,38 @@ func detectPreview(image: CGImage) -> Bool {
     return isP
 }
 
+var lastBuildCheckAt = Date.distantPast
+
+// ディスク上の reader.swift のビルド番号 (実行中のものと違えば更新が届いている)
+func diskReaderBuild() -> String? {
+    let url = scriptDir.appendingPathComponent("reader.swift")
+    guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+    guard let r = text.range(of: "let readerBuild = \"") else { return nil }
+    let rest = text[r.upperBound...]
+    guard let end = rest.firstIndex(of: "\"") else { return nil }
+    return String(rest[..<end])
+}
+
+// 新しいリーダーが同期で届いていたら、選出画面のうち (同定が始まる前) に
+// 終了コード 42 で抜ける。起動スクリプト側がそのコードを見て再起動する。
+// 対戦中は絶対に再起動しない (対戦状態が消えてしまうため)
+func maybeRestartForUpdate() {
+    if previewHandled { return }
+    if Date().timeIntervalSince(lastBuildCheckAt) < 5 { return }
+    lastBuildCheckAt = Date()
+    guard let disk = diskReaderBuild(), disk != readerBuild else { return }
+    print("[sync] 新しいリーダー (\(disk)) が届いたため再起動します")
+    fflush(stdout)
+    exit(42)
+}
+
 func runOnce(image: CGImage) {
     // 選出画面はプレート判定より先に判定する。
     // (選出画面の自軍パネルや「0/4」表示をプレートと誤検出しないため)
     if detectPreview(image: image) {
         previewFrames += 1
         lastPreviewSeenAt = Date()
+        maybeRestartForUpdate()
         // 出現アニメーションが落ち着く 2 フレーム目で同定する (1 回だけ)
         if previewFrames >= 2 && !previewHandled {
             previewHandled = true
@@ -3117,7 +3143,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0746"
+let readerBuild = "20261120_0753"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
