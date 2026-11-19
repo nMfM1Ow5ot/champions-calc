@@ -18,7 +18,7 @@
   "data/species_abilities.json": "0c2d670aeb73cdfde1e74da8fe035dd021691964d1654b349f8c6396e53351ad",
   "data/species_moves.json": "e150e7645889ede9cf0ca9d83b660dce6263754511fe883b875052b026fb0948",
   "data/species_types.json": "c1aa4b42837de9767fb125ec9f9ccf41bdbeb0670d19e4670105ba7ee565ceba",
-  "data/type_icons.json": "278a08f018cd44c27311983bd73485fa0ac84e6f28f4320382187b77c3b99ddb",
+  "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "9cd8e3ebf3bd163f0ee546862836cfca028d3253fa43e2f7e96567ce1b01bffc",
   "fetch_champions_dex.mjs": "e879efed1dace75df4afc3894a40e86a84feeb531b1efe595b152d940201e6fa",
   "fetch_species_abilities.mjs": "ecd954023fdab4035ae017e6e275324264879a15a589b5f194588826cf3b3697",
@@ -26,7 +26,7 @@
   "fetch_usage.mjs": "caa940ac838695deed49e52b51d97f288b179d4f845111970500f3540e13ac26",
   "my_team.json": "17b7f06d5e5c85ee82fac52868e60a07e74287673bf1b69e37786383a2dbb46f",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
-  "reader.swift": "daeffcd33f3729f908effd11b9a985810c4731cf94ec1e6ba1dc7910b6d07f91",
+  "reader.swift": "69f903b57f8ba5cb11d370fed449cfca550a97bd0f7f44578b9115a7c3622db8",
   "run_reader.sh": "3f7277aa0244e4e8bef8fe8616cce5d67049da33a0b18f8e12c3e2662729fa18",
   "serve.py": "97312d4a851ea1f900b257d5e51d5d6e5921eaded482d88e0c7c2fb24d7c59e9",
   "start_all.sh": "f0250ec2d7540e9c1dc47583acc76b11c9b774b57f7e8cc8a359d483d914c787",
@@ -35,5 +35,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "af4212e9a6fa7774202cf2eca573248d55eac460beb8937d4940e3f66d071119"
  },
- "rev": "20261120_0754"
+ "rev": "20261120_0801"
 }
