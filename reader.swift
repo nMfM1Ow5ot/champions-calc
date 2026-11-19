@@ -2347,7 +2347,12 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
 // パネル内の 3D モデルを HOME 画像の特徴量 (dHash・色分布・形) と候補内だけで照合。
 // タイプで一意に決まる枠と、照合の差が決定的な枠はそのまま登録。際どい枠は
 // 1 位を仮置きする (候補一覧はターミナルにのみ出す。UI には候補表示しない)。
-// でんき はテンプレート未収録 (ユーザーのスクショに無いため)。アイコンが
+// でんき は当初テンプレート未収録で、黄色バッジが かくとう/いわ 等へ
+// 誤分類され続けていた (ヒートロトム→ウインディ(ヒスイ) 等、タイプで
+// 確定してしまう事故の原因)。テンプレート追加に加え、バッジ色の中央値が
+// 黄色優位なら でんき と確定する色判定を pvClassifyIcon に入れている
+// (黄色は全タイプ中で唯一。白い稲妻グリフとのコントラストが低く、
+// グリフ照合だけでは色項の近いタイプに負けるため)。アイコンが
 // 読めないタイプは「不明」として候補を広げる (誤判定より安全側)。
 
 var previewHandled = false
@@ -2551,6 +2556,22 @@ func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in:
         return st.count % 2 == 1 ? st[st.count / 2] : (st[st.count / 2 - 1] + st[st.count / 2]) / 2
     }
     let rgb = [med(src.map { $0.0 }), med(src.map { $0.1 }), med(src.map { $0.2 })]
+    // でんき色判定: 黄色バッジは全タイプ中で唯一で、 kept 画素の中央値が
+    // 黄色優位 (= 窓の過半がバッジ色) なら でんき と確定する。グリフ
+    // (白い稲妻) と地色 (黄) の輝度差が小さいため、グリフ照合では
+    // かくとう/いわ 等の色の近いタイプに誤分類されていた (実害:
+    // ヒートロトムが ほのお/いわ=ウインディ(ヒスイ) で確定)。
+    // 他タイプの実測中央値はこの範囲に入らない (かくとうは G=127、
+    // むしは R=145、フェアリー/こおりは B が高い)。
+    if rgb[0] >= 195 && rgb[1] >= 145 && rgb[2] <= 135
+        && rgb[0] - rgb[2] >= 110 && rgb[1] - rgb[2] >= 50 && rgb[0] >= rgb[1] - 10 {
+        let cd = sqrt((rgb[0] - 247) * (rgb[0] - 247)
+                    + (rgb[1] - 197) * (rgb[1] - 197)
+                    + (rgb[2] - 28) * (rgb[2] - 28)) / 441.7
+        return ("Electric", true,
+                String(format: "std=%.1f rgb=[%.0f,%.0f,%.0f] Electric(黄色判定)", std, rgb[0], rgb[1], rgb[2]),
+                0.05 + cd * 0.3)
+    }
     let grid = pvResizeGray(gray, s, s, 12, 12)
     var scored: [(String, Double)] = []
     for (t, tp) in pvTypeIcons where tp.rgb.count >= 3 && tp.glyph.count == 144 {
@@ -2571,7 +2592,14 @@ func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in:
 // アイコン 1 枠分: 基準位置の近傍 (3x3) を探索し、最もスコアの良い窓を
 // 採用する。パネルの縦横比はウィンドウ形状で変わるため、固定オフセット
 // だけではアイコンから外れることがある (実機で確認)。
+// ただし「有無」は中心窓だけで判定する: 実機フレームでは有るアイコンは
+// 中心でも std 60+、無い枠は中心 std 13 以下と大きく離れている。一方、
+// 探索窓は隣のアイコンや 3D モデルの端を拾って「無い枠にタイプを
+// 発明」しうる (単タイプが複合と誤読され、候補が 1 種に確定して
+// しまう事故の経路)。中心で無ければ探索しない。
 func pvClassifyIconSearch(_ buf: (data: [UInt8], w: Int, h: Int), _ x0: Int, _ y0: Int, _ s: Int) -> (String?, Bool, String) {
+    let center = pvClassifyIcon(buf, x0, y0, s)
+    if !center.1 { return (center.0, center.1, center.2) }
     var best: (String?, Bool, String, Double)? = nil
     for dy in [-s / 5, 0, s / 5] {
         for dx in [-s / 6, 0, s / 6] {
@@ -3143,7 +3171,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0753"
+let readerBuild = "20261120_0800"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
