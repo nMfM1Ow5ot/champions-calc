@@ -1,0 +1,1661 @@
+{
+ "Aerodactyl": {
+  "types": [
+   "Rock",
+   "Flying"
+  ]
+ },
+ "Alakazam": {
+  "types": [
+   "Psychic"
+  ]
+ },
+ "Arbok": {
+  "types": [
+   "Poison"
+  ]
+ },
+ "Arcanine": {
+  "types": [
+   "Fire"
+  ]
+ },
+ "Beedrill": {
+  "types": [
+   "Bug",
+   "Poison"
+  ]
+ },
+ "Blastoise": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Charizard": {
+  "types": [
+   "Fire",
+   "Flying"
+  ]
+ },
+ "Clefable": {
+  "types": [
+   "Fairy"
+  ]
+ },
+ "Ditto": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Dragonite": {
+  "types": [
+   "Dragon",
+   "Flying"
+  ]
+ },
+ "Farfetch’d": {
+  "types": [
+   "Normal",
+   "Flying"
+  ]
+ },
+ "Flareon": {
+  "types": [
+   "Fire"
+  ]
+ },
+ "Gengar": {
+  "types": [
+   "Ghost",
+   "Poison"
+  ]
+ },
+ "Gyarados": {
+  "types": [
+   "Water",
+   "Flying"
+  ]
+ },
+ "Jolteon": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Kangaskhan": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Machamp": {
+  "types": [
+   "Fighting"
+  ]
+ },
+ "Mr. Mime": {
+  "types": [
+   "Psychic",
+   "Fairy"
+  ]
+ },
+ "Ninetales": {
+  "types": [
+   "Fire"
+  ]
+ },
+ "Persian": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Pidgeot": {
+  "types": [
+   "Normal",
+   "Flying"
+  ]
+ },
+ "Pikachu": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Pinsir": {
+  "types": [
+   "Bug"
+  ]
+ },
+ "Raichu": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Slowbro": {
+  "types": [
+   "Water",
+   "Psychic"
+  ]
+ },
+ "Snorlax": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Starmie": {
+  "types": [
+   "Water",
+   "Psychic"
+  ]
+ },
+ "Tauros": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Vaporeon": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Venusaur": {
+  "types": [
+   "Grass",
+   "Poison"
+  ]
+ },
+ "Victreebel": {
+  "types": [
+   "Grass",
+   "Poison"
+  ]
+ },
+ "Vileplume": {
+  "types": [
+   "Grass",
+   "Poison"
+  ]
+ },
+ "Wigglytuff": {
+  "types": [
+   "Normal",
+   "Fairy"
+  ]
+ },
+ "Ampharos": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Ariados": {
+  "types": [
+   "Bug",
+   "Poison"
+  ]
+ },
+ "Azumarill": {
+  "types": [
+   "Water",
+   "Fairy"
+  ]
+ },
+ "Espeon": {
+  "types": [
+   "Psychic"
+  ]
+ },
+ "Feraligatr": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Forretress": {
+  "types": [
+   "Bug",
+   "Steel"
+  ]
+ },
+ "Heracross": {
+  "types": [
+   "Bug",
+   "Fighting"
+  ]
+ },
+ "Houndoom": {
+  "types": [
+   "Dark",
+   "Fire"
+  ]
+ },
+ "Meganium": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Politoed": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Qwilfish": {
+  "types": [
+   "Water",
+   "Poison"
+  ]
+ },
+ "Scizor": {
+  "types": [
+   "Bug",
+   "Steel"
+  ]
+ },
+ "Skarmory": {
+  "types": [
+   "Steel",
+   "Flying"
+  ]
+ },
+ "Slowking": {
+  "types": [
+   "Water",
+   "Psychic"
+  ]
+ },
+ "Steelix": {
+  "types": [
+   "Steel",
+   "Ground"
+  ]
+ },
+ "Typhlosion": {
+  "types": [
+   "Fire"
+  ]
+ },
+ "Tyranitar": {
+  "types": [
+   "Rock",
+   "Dark"
+  ]
+ },
+ "Umbreon": {
+  "types": [
+   "Dark"
+  ]
+ },
+ "Absol": {
+  "types": [
+   "Dark"
+  ]
+ },
+ "Aggron": {
+  "types": [
+   "Steel",
+   "Rock"
+  ]
+ },
+ "Altaria": {
+  "types": [
+   "Dragon",
+   "Flying"
+  ]
+ },
+ "Banette": {
+  "types": [
+   "Ghost"
+  ]
+ },
+ "Blaziken": {
+  "types": [
+   "Fire",
+   "Fighting"
+  ]
+ },
+ "Camerupt": {
+  "types": [
+   "Fire",
+   "Ground"
+  ]
+ },
+ "Castform": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Castform-Rainy": {
+  "types": [
+   "Water"
+  ],
+  "base": "Castform"
+ },
+ "Castform-Snowy": {
+  "types": [
+   "Ice"
+  ],
+  "base": "Castform"
+ },
+ "Castform-Sunny": {
+  "types": [
+   "Fire"
+  ],
+  "base": "Castform"
+ },
+ "Chimecho": {
+  "types": [
+   "Psychic"
+  ]
+ },
+ "Gardevoir": {
+  "types": [
+   "Psychic",
+   "Fairy"
+  ]
+ },
+ "Glalie": {
+  "types": [
+   "Ice"
+  ]
+ },
+ "Manectric": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Mawile": {
+  "types": [
+   "Steel",
+   "Fairy"
+  ]
+ },
+ "Medicham": {
+  "types": [
+   "Fighting",
+   "Psychic"
+  ]
+ },
+ "Metagross": {
+  "types": [
+   "Steel",
+   "Psychic"
+  ]
+ },
+ "Milotic": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Pelipper": {
+  "types": [
+   "Water",
+   "Flying"
+  ]
+ },
+ "Sableye": {
+  "types": [
+   "Dark",
+   "Ghost"
+  ]
+ },
+ "Salamence": {
+  "types": [
+   "Dragon",
+   "Flying"
+  ]
+ },
+ "Sceptile": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Sharpedo": {
+  "types": [
+   "Water",
+   "Dark"
+  ]
+ },
+ "Swalot": {
+  "types": [
+   "Poison"
+  ]
+ },
+ "Swampert": {
+  "types": [
+   "Water",
+   "Ground"
+  ]
+ },
+ "Torkoal": {
+  "types": [
+   "Fire"
+  ]
+ },
+ "Abomasnow": {
+  "types": [
+   "Grass",
+   "Ice"
+  ]
+ },
+ "Bastiodon": {
+  "types": [
+   "Rock",
+   "Steel"
+  ]
+ },
+ "Empoleon": {
+  "types": [
+   "Water",
+   "Steel"
+  ]
+ },
+ "Froslass": {
+  "types": [
+   "Ice",
+   "Ghost"
+  ]
+ },
+ "Gallade": {
+  "types": [
+   "Psychic",
+   "Fighting"
+  ]
+ },
+ "Garchomp": {
+  "types": [
+   "Dragon",
+   "Ground"
+  ]
+ },
+ "Glaceon": {
+  "types": [
+   "Ice"
+  ]
+ },
+ "Gliscor": {
+  "types": [
+   "Ground",
+   "Flying"
+  ]
+ },
+ "Hippowdon": {
+  "types": [
+   "Ground"
+  ]
+ },
+ "Infernape": {
+  "types": [
+   "Fire",
+   "Fighting"
+  ]
+ },
+ "Leafeon": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Lopunny": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Lucario": {
+  "types": [
+   "Fighting",
+   "Steel"
+  ]
+ },
+ "Luxray": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Mamoswine": {
+  "types": [
+   "Ice",
+   "Ground"
+  ]
+ },
+ "Rampardos": {
+  "types": [
+   "Rock"
+  ]
+ },
+ "Rhyperior": {
+  "types": [
+   "Ground",
+   "Rock"
+  ]
+ },
+ "Roserade": {
+  "types": [
+   "Grass",
+   "Poison"
+  ]
+ },
+ "Rotom": {
+  "types": [
+   "Electric",
+   "Ghost"
+  ]
+ },
+ "Rotom-Mow": {
+  "types": [
+   "Electric",
+   "Grass"
+  ],
+  "base": "Rotom"
+ },
+ "Rotom-Frost": {
+  "types": [
+   "Electric",
+   "Ice"
+  ],
+  "base": "Rotom"
+ },
+ "Rotom-Heat": {
+  "types": [
+   "Electric",
+   "Fire"
+  ],
+  "base": "Rotom"
+ },
+ "Rotom-Fan": {
+  "types": [
+   "Electric",
+   "Flying"
+  ],
+  "base": "Rotom"
+ },
+ "Rotom-Wash": {
+  "types": [
+   "Electric",
+   "Water"
+  ],
+  "base": "Rotom"
+ },
+ "Spiritomb": {
+  "types": [
+   "Ghost",
+   "Dark"
+  ]
+ },
+ "Staraptor": {
+  "types": [
+   "Normal",
+   "Flying"
+  ]
+ },
+ "Torterra": {
+  "types": [
+   "Grass",
+   "Ground"
+  ]
+ },
+ "Toxicroak": {
+  "types": [
+   "Poison",
+   "Fighting"
+  ]
+ },
+ "Weavile": {
+  "types": [
+   "Dark",
+   "Ice"
+  ]
+ },
+ "Audino": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Beartic": {
+  "types": [
+   "Ice"
+  ]
+ },
+ "Chandelure": {
+  "types": [
+   "Ghost",
+   "Fire"
+  ]
+ },
+ "Cofagrigus": {
+  "types": [
+   "Ghost"
+  ]
+ },
+ "Conkeldurr": {
+  "types": [
+   "Fighting"
+  ]
+ },
+ "Eelektross": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Emboar": {
+  "types": [
+   "Fire",
+   "Fighting"
+  ]
+ },
+ "Emolga": {
+  "types": [
+   "Electric",
+   "Flying"
+  ]
+ },
+ "Excadrill": {
+  "types": [
+   "Ground",
+   "Steel"
+  ]
+ },
+ "Garbodor": {
+  "types": [
+   "Poison"
+  ]
+ },
+ "Golurk": {
+  "types": [
+   "Ground",
+   "Ghost"
+  ]
+ },
+ "Hydreigon": {
+  "types": [
+   "Dark",
+   "Dragon"
+  ]
+ },
+ "Krookodile": {
+  "types": [
+   "Ground",
+   "Dark"
+  ]
+ },
+ "Liepard": {
+  "types": [
+   "Dark"
+  ]
+ },
+ "Musharna": {
+  "types": [
+   "Psychic"
+  ]
+ },
+ "Reuniclus": {
+  "types": [
+   "Psychic"
+  ]
+ },
+ "Samurott": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Scolipede": {
+  "types": [
+   "Bug",
+   "Poison"
+  ]
+ },
+ "Scrafty": {
+  "types": [
+   "Dark",
+   "Fighting"
+  ]
+ },
+ "Serperior": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Simipour": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Simisage": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Simisear": {
+  "types": [
+   "Fire"
+  ]
+ },
+ "Stunfisk": {
+  "types": [
+   "Ground",
+   "Electric"
+  ]
+ },
+ "Vanilluxe": {
+  "types": [
+   "Ice"
+  ]
+ },
+ "Volcarona": {
+  "types": [
+   "Bug",
+   "Fire"
+  ]
+ },
+ "Watchog": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Whimsicott": {
+  "types": [
+   "Grass",
+   "Fairy"
+  ]
+ },
+ "Zoroark": {
+  "types": [
+   "Dark"
+  ]
+ },
+ "Aromatisse": {
+  "types": [
+   "Fairy"
+  ]
+ },
+ "Aurorus": {
+  "types": [
+   "Rock",
+   "Ice"
+  ]
+ },
+ "Avalugg": {
+  "types": [
+   "Ice"
+  ]
+ },
+ "Barbaracle": {
+  "types": [
+   "Rock",
+   "Water"
+  ]
+ },
+ "Chesnaught": {
+  "types": [
+   "Grass",
+   "Fighting"
+  ]
+ },
+ "Clawitzer": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Dedenne": {
+  "types": [
+   "Electric",
+   "Fairy"
+  ]
+ },
+ "Delphox": {
+  "types": [
+   "Fire",
+   "Psychic"
+  ]
+ },
+ "Diggersby": {
+  "types": [
+   "Normal",
+   "Ground"
+  ]
+ },
+ "Dragalge": {
+  "types": [
+   "Poison",
+   "Dragon"
+  ]
+ },
+ "Floette": {
+  "types": [
+   "Fairy"
+  ]
+ },
+ "Floette-Eternal": {
+  "types": [
+   "Fairy"
+  ],
+  "base": "Floette"
+ },
+ "Florges": {
+  "types": [
+   "Fairy"
+  ]
+ },
+ "Furfrou": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Gogoat": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Goodra": {
+  "types": [
+   "Dragon"
+  ]
+ },
+ "Gourgeist": {
+  "types": [
+   "Ghost",
+   "Grass"
+  ]
+ },
+ "Gourgeist-Large": {
+  "types": [
+   "Ghost",
+   "Grass"
+  ],
+  "base": "Gourgeist"
+ },
+ "Gourgeist-Small": {
+  "types": [
+   "Ghost",
+   "Grass"
+  ],
+  "base": "Gourgeist"
+ },
+ "Gourgeist-Super": {
+  "types": [
+   "Ghost",
+   "Grass"
+  ],
+  "base": "Gourgeist"
+ },
+ "Greninja": {
+  "types": [
+   "Water",
+   "Dark"
+  ]
+ },
+ "Hawlucha": {
+  "types": [
+   "Fighting",
+   "Flying"
+  ]
+ },
+ "Heliolisk": {
+  "types": [
+   "Electric",
+   "Normal"
+  ]
+ },
+ "Klefki": {
+  "types": [
+   "Steel",
+   "Fairy"
+  ]
+ },
+ "Malamar": {
+  "types": [
+   "Dark",
+   "Psychic"
+  ]
+ },
+ "Meowstic": {
+  "types": [
+   "Psychic"
+  ]
+ },
+ "Meowstic-F": {
+  "types": [
+   "Psychic"
+  ],
+  "base": "Meowstic"
+ },
+ "Noivern": {
+  "types": [
+   "Flying",
+   "Dragon"
+  ]
+ },
+ "Pangoro": {
+  "types": [
+   "Fighting",
+   "Dark"
+  ]
+ },
+ "Pyroar": {
+  "types": [
+   "Fire",
+   "Normal"
+  ]
+ },
+ "Slurpuff": {
+  "types": [
+   "Fairy"
+  ]
+ },
+ "Sylveon": {
+  "types": [
+   "Fairy"
+  ]
+ },
+ "Talonflame": {
+  "types": [
+   "Fire",
+   "Flying"
+  ]
+ },
+ "Trevenant": {
+  "types": [
+   "Ghost",
+   "Grass"
+  ]
+ },
+ "Tyrantrum": {
+  "types": [
+   "Rock",
+   "Dragon"
+  ]
+ },
+ "Vivillon": {
+  "types": [
+   "Bug",
+   "Flying"
+  ]
+ },
+ "Vivillon-Fancy": {
+  "types": [
+   "Bug",
+   "Flying"
+  ],
+  "base": "Vivillon"
+ },
+ "Vivillon-Pokeball": {
+  "types": [
+   "Bug",
+   "Flying"
+  ],
+  "base": "Vivillon"
+ },
+ "Araquanid": {
+  "types": [
+   "Water",
+   "Bug"
+  ]
+ },
+ "Crabominable": {
+  "types": [
+   "Fighting",
+   "Ice"
+  ]
+ },
+ "Decidueye": {
+  "types": [
+   "Grass",
+   "Ghost"
+  ]
+ },
+ "Drampa": {
+  "types": [
+   "Normal",
+   "Dragon"
+  ]
+ },
+ "Golisopod": {
+  "types": [
+   "Bug",
+   "Water"
+  ]
+ },
+ "Greninja-Ash": {
+  "types": [
+   "Water",
+   "Dark"
+  ],
+  "base": "Greninja"
+ },
+ "Greninja-Bond": {
+  "types": [
+   "Water",
+   "Dark"
+  ],
+  "base": "Greninja"
+ },
+ "Incineroar": {
+  "types": [
+   "Fire",
+   "Dark"
+  ]
+ },
+ "Kommo-o": {
+  "types": [
+   "Dragon",
+   "Fighting"
+  ]
+ },
+ "Lycanroc": {
+  "types": [
+   "Rock"
+  ]
+ },
+ "Lycanroc-Dusk": {
+  "types": [
+   "Rock"
+  ],
+  "base": "Lycanroc"
+ },
+ "Lycanroc-Midnight": {
+  "types": [
+   "Rock"
+  ],
+  "base": "Lycanroc"
+ },
+ "Mimikyu": {
+  "types": [
+   "Ghost",
+   "Fairy"
+  ]
+ },
+ "Mimikyu-Busted": {
+  "types": [
+   "Ghost",
+   "Fairy"
+  ],
+  "base": "Mimikyu"
+ },
+ "Mudsdale": {
+  "types": [
+   "Ground"
+  ]
+ },
+ "Ninetales-Alola": {
+  "types": [
+   "Ice",
+   "Fairy"
+  ],
+  "base": "Ninetales"
+ },
+ "Oranguru": {
+  "types": [
+   "Normal",
+   "Psychic"
+  ]
+ },
+ "Passimian": {
+  "types": [
+   "Fighting"
+  ]
+ },
+ "Persian-Alola": {
+  "types": [
+   "Dark"
+  ],
+  "base": "Persian"
+ },
+ "Pikachu-Alola": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Pikachu-Hoenn": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Pikachu-Kalos": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Pikachu-Original": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Pikachu-Partner": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Pikachu-Sinnoh": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Pikachu-Unova": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Primarina": {
+  "types": [
+   "Water",
+   "Fairy"
+  ]
+ },
+ "Raichu-Alola": {
+  "types": [
+   "Electric",
+   "Psychic"
+  ],
+  "base": "Raichu"
+ },
+ "Salazzle": {
+  "types": [
+   "Poison",
+   "Fire"
+  ]
+ },
+ "Toucannon": {
+  "types": [
+   "Normal",
+   "Flying"
+  ]
+ },
+ "Toxapex": {
+  "types": [
+   "Poison",
+   "Water"
+  ]
+ },
+ "Tsareena": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Alcremie": {
+  "types": [
+   "Fairy"
+  ]
+ },
+ "Appletun": {
+  "types": [
+   "Grass",
+   "Dragon"
+  ]
+ },
+ "Cinderace": {
+  "types": [
+   "Fire"
+  ]
+ },
+ "Corviknight": {
+  "types": [
+   "Flying",
+   "Steel"
+  ]
+ },
+ "Dragapult": {
+  "types": [
+   "Dragon",
+   "Ghost"
+  ]
+ },
+ "Falinks": {
+  "types": [
+   "Fighting"
+  ]
+ },
+ "Flapple": {
+  "types": [
+   "Grass",
+   "Dragon"
+  ]
+ },
+ "Grapploct": {
+  "types": [
+   "Fighting"
+  ]
+ },
+ "Grimmsnarl": {
+  "types": [
+   "Dark",
+   "Fairy"
+  ]
+ },
+ "Hatterene": {
+  "types": [
+   "Psychic",
+   "Fairy"
+  ]
+ },
+ "Indeedee": {
+  "types": [
+   "Psychic",
+   "Normal"
+  ]
+ },
+ "Indeedee-F": {
+  "types": [
+   "Psychic",
+   "Normal"
+  ],
+  "base": "Indeedee"
+ },
+ "Inteleon": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Morpeko": {
+  "types": [
+   "Electric",
+   "Dark"
+  ]
+ },
+ "Morpeko-Hangry": {
+  "types": [
+   "Electric",
+   "Dark"
+  ],
+  "base": "Morpeko"
+ },
+ "Mr. Rime": {
+  "types": [
+   "Ice",
+   "Psychic"
+  ]
+ },
+ "Perrserker": {
+  "types": [
+   "Steel"
+  ]
+ },
+ "Pikachu-World": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Pikachu"
+ },
+ "Pincurchin": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Polteageist": {
+  "types": [
+   "Ghost"
+  ]
+ },
+ "Polteageist-Antique": {
+  "types": [
+   "Ghost"
+  ],
+  "base": "Polteageist"
+ },
+ "Rillaboom": {
+  "types": [
+   "Grass"
+  ]
+ },
+ "Runerigus": {
+  "types": [
+   "Ground",
+   "Ghost"
+  ]
+ },
+ "Sandaconda": {
+  "types": [
+   "Ground"
+  ]
+ },
+ "Sirfetch’d": {
+  "types": [
+   "Fighting"
+  ]
+ },
+ "Slowbro-Galar": {
+  "types": [
+   "Poison",
+   "Psychic"
+  ],
+  "base": "Slowbro"
+ },
+ "Slowking-Galar": {
+  "types": [
+   "Poison",
+   "Psychic"
+  ],
+  "base": "Slowking"
+ },
+ "Stunfisk-Galar": {
+  "types": [
+   "Ground",
+   "Steel"
+  ],
+  "base": "Stunfisk"
+ },
+ "Thievul": {
+  "types": [
+   "Dark"
+  ]
+ },
+ "Toxtricity": {
+  "types": [
+   "Electric",
+   "Poison"
+  ]
+ },
+ "Toxtricity-Low-Key": {
+  "types": [
+   "Electric",
+   "Poison"
+  ],
+  "base": "Toxtricity"
+ },
+ "Arcanine-Hisui": {
+  "types": [
+   "Fire",
+   "Rock"
+  ],
+  "base": "Arcanine"
+ },
+ "Avalugg-Hisui": {
+  "types": [
+   "Ice",
+   "Rock"
+  ],
+  "base": "Avalugg"
+ },
+ "Basculegion": {
+  "types": [
+   "Water",
+   "Ghost"
+  ]
+ },
+ "Basculegion-F": {
+  "types": [
+   "Water",
+   "Ghost"
+  ],
+  "base": "Basculegion"
+ },
+ "Decidueye-Hisui": {
+  "types": [
+   "Grass",
+   "Fighting"
+  ],
+  "base": "Decidueye"
+ },
+ "Goodra-Hisui": {
+  "types": [
+   "Steel",
+   "Dragon"
+  ],
+  "base": "Goodra"
+ },
+ "Kleavor": {
+  "types": [
+   "Bug",
+   "Rock"
+  ]
+ },
+ "Overqwil": {
+  "types": [
+   "Dark",
+   "Poison"
+  ]
+ },
+ "Qwilfish-Hisui": {
+  "types": [
+   "Dark",
+   "Poison"
+  ],
+  "base": "Qwilfish"
+ },
+ "Samurott-Hisui": {
+  "types": [
+   "Water",
+   "Dark"
+  ],
+  "base": "Samurott"
+ },
+ "Sneasler": {
+  "types": [
+   "Fighting",
+   "Poison"
+  ]
+ },
+ "Typhlosion-Hisui": {
+  "types": [
+   "Fire",
+   "Ghost"
+  ],
+  "base": "Typhlosion"
+ },
+ "Wyrdeer": {
+  "types": [
+   "Normal",
+   "Psychic"
+  ]
+ },
+ "Zoroark-Hisui": {
+  "types": [
+   "Normal",
+   "Ghost"
+  ],
+  "base": "Zoroark"
+ },
+ "Annihilape": {
+  "types": [
+   "Fighting",
+   "Ghost"
+  ]
+ },
+ "Arboliva": {
+  "types": [
+   "Grass",
+   "Normal"
+  ]
+ },
+ "Archaludon": {
+  "types": [
+   "Steel",
+   "Dragon"
+  ]
+ },
+ "Armarouge": {
+  "types": [
+   "Fire",
+   "Psychic"
+  ]
+ },
+ "Baxcalibur": {
+  "types": [
+   "Dragon",
+   "Ice"
+  ]
+ },
+ "Bellibolt": {
+  "types": [
+   "Electric"
+  ]
+ },
+ "Ceruledge": {
+  "types": [
+   "Fire",
+   "Ghost"
+  ]
+ },
+ "Espathra": {
+  "types": [
+   "Psychic"
+  ]
+ },
+ "Farigiraf": {
+  "types": [
+   "Normal",
+   "Psychic"
+  ]
+ },
+ "Garganacl": {
+  "types": [
+   "Rock"
+  ]
+ },
+ "Gholdengo": {
+  "types": [
+   "Steel",
+   "Ghost"
+  ]
+ },
+ "Glimmora": {
+  "types": [
+   "Rock",
+   "Poison"
+  ]
+ },
+ "Houndstone": {
+  "types": [
+   "Ghost"
+  ]
+ },
+ "Hydrapple": {
+  "types": [
+   "Grass",
+   "Dragon"
+  ]
+ },
+ "Kingambit": {
+  "types": [
+   "Dark",
+   "Steel"
+  ]
+ },
+ "Mabosstiff": {
+  "types": [
+   "Dark"
+  ]
+ },
+ "Maushold": {
+  "types": [
+   "Normal"
+  ]
+ },
+ "Maushold-Four": {
+  "types": [
+   "Normal"
+  ],
+  "base": "Maushold"
+ },
+ "Meowscarada": {
+  "types": [
+   "Grass",
+   "Dark"
+  ]
+ },
+ "Orthworm": {
+  "types": [
+   "Steel"
+  ]
+ },
+ "Palafin": {
+  "types": [
+   "Water"
+  ]
+ },
+ "Palafin-Hero": {
+  "types": [
+   "Water"
+  ],
+  "base": "Palafin"
+ },
+ "Pawmot": {
+  "types": [
+   "Electric",
+   "Fighting"
+  ]
+ },
+ "Quaquaval": {
+  "types": [
+   "Water",
+   "Fighting"
+  ]
+ },
+ "Scovillain": {
+  "types": [
+   "Grass",
+   "Fire"
+  ]
+ },
+ "Sinistcha": {
+  "types": [
+   "Grass",
+   "Ghost"
+  ]
+ },
+ "Sinistcha-Masterpiece": {
+  "types": [
+   "Grass",
+   "Ghost"
+  ],
+  "base": "Sinistcha"
+ },
+ "Skeledirge": {
+  "types": [
+   "Fire",
+   "Ghost"
+  ]
+ },
+ "Squawkabilly": {
+  "types": [
+   "Normal",
+   "Flying"
+  ]
+ },
+ "Squawkabilly-Blue": {
+  "types": [
+   "Normal",
+   "Flying"
+  ],
+  "base": "Squawkabilly"
+ },
+ "Squawkabilly-White": {
+  "types": [
+   "Normal",
+   "Flying"
+  ],
+  "base": "Squawkabilly"
+ },
+ "Squawkabilly-Yellow": {
+  "types": [
+   "Normal",
+   "Flying"
+  ],
+  "base": "Squawkabilly"
+ },
+ "Tauros-Paldea-Aqua": {
+  "types": [
+   "Fighting",
+   "Water"
+  ],
+  "base": "Tauros"
+ },
+ "Tauros-Paldea-Blaze": {
+  "types": [
+   "Fighting",
+   "Fire"
+  ],
+  "base": "Tauros"
+ },
+ "Tauros-Paldea-Combat": {
+  "types": [
+   "Fighting"
+  ],
+  "base": "Tauros"
+ },
+ "Tinkaton": {
+  "types": [
+   "Fairy",
+   "Steel"
+  ]
+ }
+}
