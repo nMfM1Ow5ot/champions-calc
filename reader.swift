@@ -193,14 +193,31 @@ var lastSlots: [String: SlotState] = [:]
 var lastWritten = ""
 // 相手の6体コレクション: 対戦中にプレートで読み取れた相手種族を登場順に蓄積する (見せ合い画面には名前テキストが無いため)
 var oppTeamSeen: [String] = []
+// 選出同定で入ったが、対戦中にまだ実物が観測されていない種族。
+// 選出の推定 (仮置きはもちろん、タイプで「確定」した枠もアイコン誤読なら
+// ありうる) はプレートの名前テキストより弱い証拠なので、未確認の間は
+// 実物が観測された種族で差し替え可能にしておく。観測された種族は
+// ここから外れ、以後差し替えられない。
+var oppUnconfirmed: Set<String> = []
 
 func updateOppTeam() {
     let cur = [lastSlots["oppA"]?.speciesEn, lastSlots["oppB"]?.speciesEn].compactMap { $0 }
-    if cur.count == 2 && oppTeamSeen.count >= 4 && cur.allSatisfy({ !oppTeamSeen.contains($0) }) {
+    for sp in cur { oppUnconfirmed.remove(sp) }  // 場に出た種族は確認済み
+    if cur.count == 2 && oppTeamSeen.count >= 4 && oppUnconfirmed.isEmpty
+        && cur.allSatisfy({ !oppTeamSeen.contains($0) }) {
         oppTeamSeen = []  // 両方とも未見の種族なら新しい対戦とみなしてリセット
     }
-    for sp in cur where !oppTeamSeen.contains(sp) && oppTeamSeen.count < 6 {
-        oppTeamSeen.append(sp)
+    for sp in cur where !oppTeamSeen.contains(sp) {
+        if oppTeamSeen.count < 6 {
+            oppTeamSeen.append(sp)
+        } else if let idx = oppTeamSeen.lastIndex(where: { oppUnconfirmed.contains($0) }) {
+            // 6枠が選出推定で埋まっていると実物が入る余地がなく、仮置きが
+            // 対戦終了まで残り続けていた。未確認の推定枠 (末尾側から) を
+            // 実物で差し替える。確認済みの枠は絶対に差し替えないので、
+            // 実際に登場した種族が順に確定していく
+            oppUnconfirmed.remove(oppTeamSeen[idx])
+            oppTeamSeen[idx] = sp
+        }
     }
 }
 
@@ -3060,6 +3077,7 @@ func runOnce(image: CGImage) {
             if pvDataLoaded, let r = identifyPreview(image: image) {
                 // 選出段階で推定した相手チームを state.json に反映する
                 oppTeamSeen = r.team.compactMap { $0 }
+                oppUnconfirmed = Set(oppTeamSeen)  // 全枠が推定 = 未確認 (実物で差し替え可)
                 startBattleLog()
                 var obj: [String: Any] = [:]
                 obj["mine"] = [Any]()
@@ -3076,6 +3094,7 @@ func runOnce(image: CGImage) {
 
             } else {
                 oppTeamSeen = []
+                oppUnconfirmed = []
                 resetLogState()
                 if hadState {
                     let json = "{\"mine\": [], \"opps\": [], \"oppTeam\": [], \"oppReset\": true, \"field\": {}}"
@@ -3171,7 +3190,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0800"
+let readerBuild = "20261120_0804"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
