@@ -26,4 +26,12 @@ fi
 echo "リーダーを起動します (終了は Ctrl+C で両方止まります)"
 
 # リーダーは表で起動
-swift reader.swift "$@"
+# 終了コード 42 (新しいリーダーが同期で届いた合図) のときだけ再起動する
+while true; do
+  swift reader.swift "$@"
+  code=$?
+  if [ $code -ne 42 ]; then
+    exit $code
+  fi
+  echo "リーダーを再起動します"
+done
