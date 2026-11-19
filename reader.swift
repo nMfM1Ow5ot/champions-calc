@@ -354,6 +354,7 @@ var lastDamageDir: [String: Int] = [:]             // プレート名 -> 最後�
 var lastCritAt: [String: Date] = [:]               // 枠 -> 最後に |-crit| を出した時刻
 var heldLine: [String: (toPct: Int, dir: Int, seq: Int, turn: Int, hpText: String)] = [:]  // プレート名 -> 行動内に保留したダメージ/回復行
 var pendingFaints: [(slot: String, speciesEn: String, at: Date)] = []  // 遅延出力するひんし行 (効果行より後に並べるため)
+var faintedSlots: [String: String] = [:]           // ひんし行を出した枠 -> 種族 (交代が確定するまでプレート読みを無視する)
 var lastSideCondAt: [String: Date] = [:]          // "side:move:phase" -> サイドコンディション告知を処理した時刻
 var commandPhaseSeen = false                      // コマンド選択中 (全プレート表示) かどうか。ターン数え用
 var pendingDamageCount: [String: Int] = [:]       // プレート名 -> 同じ HP% が続いた回数 (3 回で確定)
@@ -805,7 +806,7 @@ func resetLogState() {
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
-    heldLine = [:]; pendingFaints = []; lastSideCondAt = [:]
+    heldLine = [:]; pendingFaints = []; faintedSlots = [:]; lastSideCondAt = [:]
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -890,6 +891,16 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             return false
         }
     }
+    // 段階アニメーションの尾: 同じ行動・同じターンで、直前の出力行と
+    // 同じ向き・わずかな差 (3% 以下) の続きは、行を出さず値だけ取り込む
+    // (実例: 2026-11-20、グラススライドの被弾が 79% と 2% に割れた)
+    if toPct != 0, let lp = lastEmittedPct[plateName],
+       lastDamageSeq[plateName] == actionSeq, lastDamageTurn[plateName] == currentTurn,
+       lastDamageDir[plateName] == dir, toPct != lp, abs(toPct - lp) <= 3 {
+        heldLine[plateName] = nil
+        lastEmittedPct[plateName] = toPct
+        return true
+    }
     heldLine[plateName] = nil
     lastDamageSeq[plateName] = actionSeq
     lastDamageTurn[plateName] = currentTurn
@@ -923,10 +934,25 @@ func deferFaint(slot: String, speciesEn: String) {
     }
 }
 
+// 遅延中のひんし行がまだ有効か: 遅延の間にプレート読みが 0% から回復
+// していたら一時的な誤読、枠の種族が入れ替わっていたら交代だったもの
+// として捨てる (実例: 2026-11-20、交代しただけのイエッサンに |faint| が出た)
+func faintStillValid(_ f: (slot: String, speciesEn: String, at: Date)) -> Bool {
+    let fside = f.slot.hasPrefix("p2") ? "p2" : "p1"
+    if (monStates["\(fside):\(f.speciesEn)"]?.hpPercent ?? 0) > 0 { return false }
+    let plateName = (fside == "p1" ? "mine" : "opp") + (f.slot.hasSuffix("a") ? "A" : "B")
+    if let cur = lastSlots[plateName], cur.speciesEn != f.speciesEn { return false }
+    return true
+}
+
 func emitPendingFaints() {
     let fs = pendingFaints
     pendingFaints = []
-    for f in fs { emitLog("|faint|\(f.slot): \(f.speciesEn)") }
+    for f in fs {
+        if !faintStillValid(f) { continue }
+        faintedSlots[f.slot] = f.speciesEn
+        emitLog("|faint|\(f.slot): \(f.speciesEn)")
+    }
 }
 
 // 推定エンジン用: ダメージイベントを記録する (直近の技に帰属できる場合のみ)
@@ -1011,7 +1037,11 @@ func processPlates(_ hits: [String: SlotState]) {
         let ready = pendingFaints.filter { now.timeIntervalSince($0.at) > 1.5 }
         if !ready.isEmpty {
             pendingFaints.removeAll { now.timeIntervalSince($0.at) > 1.5 }
-            for f in ready { emitLog("|faint|\(f.slot): \(f.speciesEn)") }
+            for f in ready {
+                if !faintStillValid(f) { continue }
+                faintedSlots[f.slot] = f.speciesEn
+                emitLog("|faint|\(f.slot): \(f.speciesEn)")
+            }
         }
     }
     for plate in plates {
@@ -1040,21 +1070,39 @@ func processPlates(_ hits: [String: SlotState]) {
             if (pendingSwitchCount[plate.name] ?? 0) >= 2 {
                 pendingSwitchSpecies[plate.name] = nil
                 pendingSwitchCount[plate.name] = nil
-                if let p = prev { monStates["\(side):\(p.speciesEn)"]?.boosts = [:] }  // 交代でランク変化はリセット
-                pendingDamagePct[plate.name] = nil
-                heldLine[plate.name] = nil
-                lastEmittedPct[plate.name] = s.hpPercent
-                monStates[key]?.hpPercent = s.hpPercent
-                monStates[key]?.hpText = hpTextFor(s)
-                var hp = monStates[key]!.hpText
-                if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
-                emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
-                recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
-                lastSlots[plate.name] = s
+                // 交代要員を選んでいる間は、控え一覧画面のバーが場のプレートと
+                // して読めて、生きている枠にまで交代行が出ることがある
+                // (実例: 2026-11-20、グレンアルマの交代要員選択中に
+                //  オオニューラが p1a に出現し、直後にサーナイトの交代行も
+                //  重複した)。ひんしの枠への交代 (交代要員そのもの) は通す
+                let prefix = plate.name.hasPrefix("mine") ? "mine" : "opp"
+                let replacementBusy = faintedSlots[slot] == nil
+                    && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
+                if !replacementBusy {
+                    if let p = prev { monStates["\(side):\(p.speciesEn)"]?.boosts = [:] }  // 交代でランク変化はリセット
+                    pendingDamagePct[plate.name] = nil
+                    heldLine[plate.name] = nil
+                    lastEmittedPct[plate.name] = s.hpPercent
+                    monStates[key]?.hpPercent = s.hpPercent
+                    monStates[key]?.hpText = hpTextFor(s)
+                    var hp = monStates[key]!.hpText
+                    if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
+                    emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
+                    recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
+                    faintedSlots.removeValue(forKey: slot)
+                    // 0% で登場した (交代直後に技を受けて倒れた等) 場合は
+                    // ひんし行を補う
+                    if s.hpPercent == 0 { deferFaint(slot: slot, speciesEn: s.speciesEn) }
+                    lastSlots[plate.name] = s
+                }
             }
         } else {
             pendingSwitchSpecies[plate.name] = nil
             pendingSwitchCount[plate.name] = nil
+            // ひんし確定済みの枠は、交代が確定するまでプレート読みを無視する
+            // (交代要員選択画面で満タンのバーが読めて「全回復」行が出たり、
+            //  0% に戻って ひんし行が二重に出たりした実例: 2026-11-20)
+            if faintedSlots[slot] == s.speciesEn { continue }
             // 状態 (state.json) は即時更新し、ログ行だけ確定待ちにする
             monStates[key]?.hpPercent = s.hpPercent
             monStates[key]?.hpText = hpTextFor(s)
@@ -1432,7 +1480,9 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
     let key = "\(side):\(speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
     // ゲーム内表記は漢字 (攻撃/防御/特攻/特防/素早さ) が正。ひらがな表記も併記する
-    let stats: [(String, String)] = [("こうげき", "atk"), ("攻撃", "atk"), ("ぼうぎょ", "def"), ("防御", "def"), ("とくこう", "spa"), ("特攻", "spa"), ("とくぼう", "spd"), ("特防", "spd"), ("すばやさ", "spe"), ("素早さ", "spe"), ("めいちゅう", "acc"), ("命中率", "acc"), ("かいひ", "eva"), ("回避率", "eva")]
+    // 「防が下がった」のように 2 文字目が落ちる OCR 崩れも拾う
+    // (「攻が」「防が」は「攻撃が」「防御が」の部分文字列にはならないため誤爆しない)
+    let stats: [(String, String)] = [("こうげき", "atk"), ("攻撃", "atk"), ("攻が", "atk"), ("ぼうぎょ", "def"), ("防御", "def"), ("防が", "def"), ("とくこう", "spa"), ("特攻", "spa"), ("とくぼう", "spd"), ("特防", "spd"), ("すばやさ", "spe"), ("素早さ", "spe"), ("めいちゅう", "acc"), ("命中率", "acc"), ("かいひ", "eva"), ("回避率", "eva")]
     let mag = text.contains("ぐーんと") ? 2 : 1
     if text.contains("すべての") {
         for (_, code) in stats.prefix(5) { applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag) }
@@ -1513,10 +1563,12 @@ func checkFieldText(text: String) -> Bool {
     if (text.contains("不思議") || text.contains("フィールド")) && (text.contains("なくな") || text.contains("消え") || text.contains("きえ") || text.contains("きれ")) { clearTerrain(); return true }
     if text.contains("霧が") && text.contains("はれた") { clearTerrain(); return true }
     if text.contains("電気が") && text.contains("消えた") { clearTerrain(); return true }
-    if text.contains("草が") && text.contains("なくなった") { clearTerrain(); return true }
+    if text.contains("草が") && (text.contains("なくなった") || text.contains("消え") || text.contains("きえ")) { clearTerrain(); return true }
     // フィールドの開始文 (特性サージ系は種族名・特性名が出ず、この文だけが出る。
-    // 「足下が不思議な感じになった」はサイコフィールド専用の文)
-    if (text.contains("足下") || text.contains("足元")) && text.contains("感じ") && text.contains("なった") { setTerrain("Psychic"); return true }
+    // 「足下が不思議な感じになった」はサイコフィールド専用の文。
+    // 「感じになった」はこの文にしか出ないため、足下・不思議が OCR 崩れ
+    // しても拾う (実例: 2026-11-20「下か不態議な感じになった！」の漏れ))
+    if text.contains("感じ") && text.contains("なった") { setTerrain("Psychic"); return true }
     if text.contains("足下が") && text.contains("不思議な感じに") { setTerrain("Psychic"); return true }
     if (text.contains("足下に") || text.contains("足下が")) && text.contains("電気が") && text.contains("かけめぐ") { setTerrain("Electric"); return true }
     if (text.contains("足下に") || text.contains("足下が") || text.contains("足元")) && text.contains("草が") && (text.contains("生い茂") || text.contains("おいしげ") || text.contains("しげった") || text.contains("茂った")) { setTerrain("Grassy"); return true }
@@ -1845,7 +1897,7 @@ func isBoostShapedText(_ text: String) -> Bool {
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
     guard t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") else { return false }
     if t.contains("あがらない") || t.contains("さがらない") || t.contains("上がらない") || t.contains("下がらない") { return false }
-    return ["攻撃", "こうげき", "防御", "ぼうぎょ", "特攻", "とくこう", "特防", "とくぼう", "素早さ", "すばやさ", "命中率", "回避率", "すべての"].contains { t.contains($0) }
+    return ["攻撃", "こうげき", "防御", "ぼうぎょ", "攻が", "防が", "特攻", "とくこう", "特防", "とくぼう", "素早さ", "すばやさ", "命中率", "回避率", "すべての"].contains { t.contains($0) }
 }
 
 // 技告知文の断片か (種族名が欠けて解決できず、「〜の<技名の一部>！」だけが
@@ -2128,6 +2180,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("手助けする") || t.contains("ワイドガード") || t.contains("守られた") || t.contains("身を守った") || t.contains("体勢に入った")
         || t.contains("戻れ") || t.contains("引っこめた") || t.contains("引っ込めた")
         || t.contains("引つこめた") || t.contains("引つ込めた")
+        || t.contains("引っごめた") || t.contains("引つごめた")
         || t.contains("場所を入れ替えた") {
         // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
         // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
@@ -2285,6 +2338,9 @@ func translateBattleMessage(_ text: String) -> Bool {
     // まもる成功: 「<対象>は 攻撃から 身を守った！」(守つた の OCR 崩れも拾う)
     if t.contains("身を守った") || t.contains("身を守つた") || t.contains("守りの入った")
         || (t.contains("体勢") && t.contains("守り") && t.contains("入った")) {
+        let pk = slot + "|protect"
+        if let at = lastSingleActAt[pk], Date().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[pk] = Date()
         emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
         return true
     }
@@ -3317,7 +3373,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0838"
+let readerBuild = "20261120_0852"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
