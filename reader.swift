@@ -357,6 +357,8 @@ var fieldWeatherSetAt = Date.distantPast          // 天候が張られた時刻
 var fieldTerrainSetAt = Date.distantPast          // フィールドが張られた時刻
 var lastSwitchIn: [String: (slot: String, at: Date)] = [:]  // "side:Species" -> 場に出た枠と時刻
 var fieldAbilityDone: [String: Date] = [:]        // "side:Species" -> 特性帰属済みの繰り出し時刻
+var intimidateDone: [String: Date] = [:]          // "side:Species" -> いかく帰属済みの繰り出し時刻
+var lastBoostApply: [String: (seq: Int, turn: Int, at: Date)] = [:]  // "slot|stat|delta" -> 最終適用 (再読での二重適用防止)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
 var lastFallbackAt = Date.distantPast
 
@@ -760,6 +762,8 @@ func resetLogState() {
     lastSwitchIn = [:]
     fieldSeen = ["p1": [], "p2": []]
     fieldAbilityDone = [:]
+    intimidateDone = [:]
+    lastBoostApply = [:]
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
@@ -1171,7 +1175,9 @@ func translateLogEntry(chip: String, text: String, side: String) {
         break
     }
     checkStatusText(text: text, side: side, speciesEn: sp.en, slot: slot)
-    checkBoostText(text: text, side: side, speciesEn: sp.en, slot: slot)
+    // ランク変化はここでは適用しない: 実況メッセージで取り込み済みの変化が
+    // ログ画面のエントリから二重に適用されてしまうため (ログが 2 重に出る
+    // 原因の 1 つ)。ランク変化の取り込みは実況メッセージ経路に一本化する
     checkFieldText(text: text)
 }
 
@@ -1200,6 +1206,27 @@ func setTerrain(_ ui: String) {
 // 張る特性を 1 つだけ持つ場合は、その特性の発動として記録する。ゲーム内では
 // 特性バナーと天候/フィールド文が別々に表示され、バナーを読み落とすことが
 // あるため (例: コータスのひでり、イエッサンのサイコメイカーの 2 回目)。
+// いかくの帰属: 特性名はバナー表示のみでメッセージ文に出ないため、
+// [X's Intimidate] の行は今まで出なかった。「繰り出し直後 (その後まだ
+// 技の文が無い) に相手側へ 攻撃 -1 が入った」場合、その繰り出しが
+// いかく持ちなら特性として帰属する
+func attributeIntimidate(targetSide: String) {
+    let other = targetSide == "p1" ? "p2" : "p1"
+    let now = Date()
+    for (key, sw) in lastSwitchIn where key.hasPrefix("\(other):") {
+        if intimidateDone[key] == sw.at { continue }
+        guard now.timeIntervalSince(sw.at) < 8 else { continue }
+        guard lastMoveMsgAt < sw.at else { continue }   // 繰り出し後に技が使われていたら、その技の効果とみなす
+        let parts = key.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2 else { continue }
+        let en = String(parts[1])
+        guard let pool = speciesAbilityMap[en], pool.contains("Intimidate") else { continue }
+        intimidateDone[key] = sw.at
+        emitAbilityOnce(slot: sw.slot, side: other, speciesEn: en, abilityEn: "Intimidate")
+        if other == "p2" { revealedAbilities[en] = abilityJa2En.first { $0.value == "Intimidate" }?.key ?? "Intimidate" }
+    }
+}
+
 func attributeFieldAbilities() {
     let weatherAb: [String: String] = ["Sun": "Drought", "Rain": "Drizzle", "Sand": "Sand Stream", "Snow": "Snow Warning"]
     let terrainAb: [String: String] = ["Psychic": "Psychic Surge", "Electric": "Electric Surge", "Grassy": "Grassy Surge", "Misty": "Misty Surge"]
@@ -1341,6 +1368,13 @@ func copyBoosts(fromKey: String, toKey: String, slot: String, speciesEn: String)
 }
 
 func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delta: Int) {
+    // 同じ文の OCR ゆれ違いの再読で二重に適用しない: 同じ行動・同じターン・
+    // 4 秒以内の同一変化 (枠・能力・増減) は再読とみなして捨てる
+    // (実例: アーマーキャノンの自己低下といかくの攻撃低下が 2 重に出た)。
+    // 別の技による正当な再変化は |move| を挟むため行動番号が変わり、適用される
+    let bk = "\(slot)|\(stat)|\(delta)"
+    if let lb = lastBoostApply[bk], lb.seq == actionSeq && lb.turn == currentTurn && Date().timeIntervalSince(lb.at) < 4 { return }
+    lastBoostApply[bk] = (seq: actionSeq, turn: currentTurn, at: Date())
     let cur = monStates[key]?.boosts[stat] ?? 0
     let nv = max(-6, min(6, cur + delta))
     if nv == cur { return }
@@ -2100,6 +2134,20 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 動詞は漢字表記 (上がった/下がった) も対象にする
     if t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") {
         let subjects = findAllSpeciesJa(in: t)
+        // いかくの帰属はランク変化の行より先に [特性] 行を出すため、適用前に行う
+        if (t.contains("さがった") || t.contains("下がった")) && (t.contains("攻撃") || t.contains("こうげき")) && !t.contains("ぐーんと") {
+            var targetSides = Set<String>()
+            if subjects.count >= 2 {
+                for e in subjects {
+                    let inOpp = lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en
+                    let inMine = lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en || teamEntries[e.en] != nil
+                    targetSides.insert(inOpp && !inMine ? "p2" : "p1")
+                }
+            } else {
+                targetSides.insert(side)
+            }
+            for ts in targetSides { attributeIntimidate(targetSide: ts) }
+        }
         if subjects.count >= 2 {
             for e in subjects {
                 let inOpp = lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en
@@ -2924,7 +2972,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0655"
+let readerBuild = "20261120_0702"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
