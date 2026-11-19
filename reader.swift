@@ -359,6 +359,9 @@ var lastSwitchIn: [String: (slot: String, at: Date)] = [:]  // "side:Species" ->
 var fieldAbilityDone: [String: Date] = [:]        // "side:Species" -> 特性帰属済みの繰り出し時刻
 var intimidateDone: [String: Date] = [:]          // "side:Species" -> いかく帰属済みの繰り出し時刻
 var lastBoostApply: [String: (seq: Int, turn: Int, at: Date)] = [:]  // "slot|stat|delta" -> 最終適用 (再読での二重適用防止)
+var emittedSwitchKeys: Set<String> = []            // |switch| を出した "side:Species" (ランク変化行の保留判定)
+var heldBoostLines: [String: [(line: String, at: Date)]] = [:]  // 交代行より先に届いたランク変化行の保留
+var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
 var lastFallbackAt = Date.distantPast
 
@@ -669,6 +672,13 @@ func emitLog(_ line: String) {
             battleEvents.append("{\"k\":\"mv\",\"turn\":\(currentTurn),\"label\":\"\(jsonEscape(f[2]))\",\"move\":\"\(jsonEscape(f[3]))\"}")
         }
     }
+    if line.hasPrefix("|switch|") {
+        let sf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if sf.count >= 4 {
+            let sside = sf[2].hasPrefix("p2") ? "p2" : "p1"
+            emittedSwitchKeys.insert("\(sside):\(sf[3].trimmingCharacters(in: .whitespaces))")
+        }
+    }
     // 自軍の繰り出しで正確な HP を初期化する (被ダメ量の算出用)
     if line.hasPrefix("|switch|") {
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
@@ -780,6 +790,10 @@ func resetLogState() {
     turnRawFrames = 0
     pendingStatusFrom = [:]
     pendingMegaStone = [:]
+    pendingMegaSpecies = [:]
+    emittedSwitchKeys = []
+    heldBoostLines = [:]
+    recentAtkDrops = [:]
     lastDamageLabel = ""
     lastDamageAt = Date.distantPast
     lastPendingLabel = ""
@@ -961,6 +975,8 @@ func flushPendingDamage() {
 // プレートの差分をログ行に変換する
 func processPlates(_ hits: [String: SlotState]) {
     if !logStarted { startBattleLog() }
+    // 保留中のランク変化行: 交代行が来なくても 4 秒経ったら出す
+    flushHeldBoostsTimeout()
     // 遅延中のひんし行: 文が来なくても 1.5 秒経ったら出す
     if !pendingFaints.isEmpty {
         let now = Date()
@@ -1271,11 +1287,63 @@ func emitItemOnce(slot: String, side: String, speciesEn: String, itemJa: String)
     emitLog("|-item|\(slot): \(speciesEn)|\(itemJa2En[itemJa] ?? itemJa)")
 }
 
+// メガシンカの完了を状態とログに反映する (キーはベース種族のまま)
+func completeMega(side: String, baseEn: String, megaEn: String) {
+    let key = "\(side):\(baseEn)"
+    if monStates[key] == nil { monStates[key] = MonState() }
+    if monStates[key]?.megaSpecies == megaEn {
+        pendingMegaStone[side] = nil
+        pendingMegaSpecies[side] = nil
+        return
+    }
+    monStates[key]?.megaSpecies = megaEn
+    let slot = slotFor(side: side, speciesEn: baseEn)
+    emitLog("|detailschange|\(slot): \(baseEn)|\(megaEn)")
+    var megaLine = "|-mega|\(slot): \(baseEn)|\(baseEn)"
+    if let stoneJa = pendingMegaStone[side] { megaLine += "|\(itemJa2En[stoneJa] ?? stoneJa)" }
+    emitLog(megaLine)
+    pendingMegaStone[side] = nil
+    pendingMegaSpecies[side] = nil
+}
+
+// メガ完了の文を取りこぼした場合の保険: 反応の文は拾えたのに完了の文だけ
+// 落ちることがある (実例: 2026-11-20 vs Benn 戦のガブリアス)。
+// 反応した時点でメガシンカ自体は確定しているため、その種族が次に技を
+// 使う直前 (またはターン境界) に完了を補う
+func synthesizeMegaIfPending(side: String, speciesEn: String) {
+    guard pendingMegaSpecies[side] == speciesEn else { return }
+    guard (monStates["\(side):\(speciesEn)"]?.megaSpecies ?? "").isEmpty else { return }
+    var cands = speciesDict.filter { $0.en.hasPrefix(speciesEn + "-Mega") }
+    if cands.count > 1, let stoneJa = pendingMegaStone[side], let last = stoneJa.last {
+        let filtered = cands.filter { $0.en.hasSuffix("-Mega-\(last)") }
+        if filtered.count == 1 { cands = filtered }
+    }
+    guard cands.count == 1, let me = cands.first else { return }
+    completeMega(side: side, baseEn: speciesEn, megaEn: me.en)
+}
+
 // 繰り出しの記録 (天候・フィールド特性の帰属判定に使う)
 func recordSwitchIn(side: String, slot: String, speciesEn: String) {
     lastSwitchIn["\(side):\(speciesEn)"] = (slot, Date())
     fieldSeen[side, default: []].insert(speciesEn)
     attributeFieldAbilities()
+    // いかくの遡及帰属: プレート確定がメッセージより遅れ、攻撃 -1 の適用時に
+    // 繰り出しが未記録だった場合は、記録したこの時点で特性行を出す
+    // (実例: 2026-11-20 vs BigGuyMan 戦、ズルズキンの いかく が付かなかった)
+    let key = "\(side):\(speciesEn)"
+    if let sw = lastSwitchIn[key], intimidateDone[key] != sw.at,
+       let pool = speciesAbilityMap[speciesEn], pool.contains("Intimidate") {
+        let other = side == "p1" ? "p2" : "p1"
+        let now = Date()
+        let hasDrop = recentAtkDrops.contains { $0.key.hasPrefix("\(other):") && $0.value.seq == actionSeq && now.timeIntervalSince($0.value.at) < 12 }
+        if hasDrop {
+            intimidateDone[key] = sw.at
+            emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Intimidate")
+            if side == "p2" { revealedAbilities[speciesEn] = abilityJa2En.first { $0.value == "Intimidate" }?.key ?? "Intimidate" }
+        }
+    }
+    // この種族宛てに保留していたランク変化行を、交代行の後に出す
+    flushHeldBoosts(forKey: key)
 }
 
 var fieldSeen: [String: Set<String>] = ["p1": [], "p2": []]   // その対戦で場に出たことのある種族 (ターン判定の交代可否に使う)
@@ -1379,8 +1447,35 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
     let nv = max(-6, min(6, cur + delta))
     if nv == cur { return }
     monStates[key]?.boosts[stat] = nv
-    if delta > 0 { emitLog("|-boost|\(slot): \(speciesEn)|\(stat)|\(delta)") }
-    else { emitLog("|-unboost|\(slot): \(speciesEn)|\(stat)|\(-delta)") }
+    if stat == "atk" && delta < 0 { recentAtkDrops[key] = (Date(), actionSeq) }
+    let line = delta > 0 ? "|-boost|\(slot): \(speciesEn)|\(stat)|\(delta)" : "|-unboost|\(slot): \(speciesEn)|\(stat)|\(-delta)"
+    // 交代行がまだ出ていない種族のランク変化行は、交代行の後に出す
+    // (実例: 2026-11-20 vs Vanille 戦、場に出る前の サイコシード 発動行が
+    //  繰り出し行より先に出た)。状態への適用は即時に行い、行だけ保留する
+    if !emittedSwitchKeys.contains(key) && (monStates[key]?.hpPercent ?? 100) > 0 {
+        heldBoostLines[key, default: []].append((line, Date()))
+    } else {
+        emitLog(line)
+    }
+}
+
+// 保留中のランク変化行を出す (その種族の交代行が出たとき / 時間切れのとき)
+func flushHeldBoosts(forKey key: String) {
+    guard let arr = heldBoostLines.removeValue(forKey: key) else { return }
+    for h in arr { emitLog(h.line) }
+}
+
+func flushHeldBoostsTimeout() {
+    if heldBoostLines.isEmpty { return }
+    let now = Date()
+    for k in Array(heldBoostLines.keys) {
+        guard let arr = heldBoostLines[k] else { continue }
+        let ready = arr.filter { now.timeIntervalSince($0.at) > 4 }
+        if ready.isEmpty { continue }
+        let keep = arr.filter { now.timeIntervalSince($0.at) <= 4 }
+        if keep.isEmpty { heldBoostLines[k] = nil } else { heldBoostLines[k] = keep }
+        for h in ready { emitLog(h.line) }
+    }
 }
 
 // 天候・フィールドの開始/終了の本文パターン
@@ -1396,7 +1491,7 @@ func checkFieldText(text: String) -> Bool {
     if (text.contains("足下") || text.contains("足元")) && text.contains("感じ") && text.contains("なった") { setTerrain("Psychic"); return true }
     if text.contains("足下が") && text.contains("不思議な感じに") { setTerrain("Psychic"); return true }
     if (text.contains("足下に") || text.contains("足下が")) && text.contains("電気が") && text.contains("かけめぐ") { setTerrain("Electric"); return true }
-    if (text.contains("足下に") || text.contains("足下が")) && text.contains("草が") && text.contains("生い茂") { setTerrain("Grassy"); return true }
+    if (text.contains("足下に") || text.contains("足下が") || text.contains("足元")) && text.contains("草が") && (text.contains("生い茂") || text.contains("おいしげ") || text.contains("しげった") || text.contains("茂った")) { setTerrain("Grassy"); return true }
     if text.contains("足下が") && text.contains("霧に") && text.contains("包まれ") { setTerrain("Misty"); return true }
     // 天候の終了文
     if (text.contains("日差し") || text.contains("ひざし")) && text.contains("弱く") { clearWeather(); return true }
@@ -1635,6 +1730,7 @@ func parseLogScreen(image: CGImage) -> Bool {
 var lastMsgNorm = ""
 var lastMsgAt = Date.distantPast
 var pendingMegaStone: [String: String] = [:]   // side -> 反応メッセージで判明したメガストーン (日本語)
+var pendingMegaSpecies: [String: String] = [:]   // side -> 反応メッセージで判明したメガ前の種族 EN
 var trainerMine = ""
 var trainerOpp = ""
 
@@ -1714,6 +1810,14 @@ func findSpeciesJaLoose(in text: String) -> (entry: SpeciesEntry, moveStart: Int
     }
     guard let b = best else { return nil }
     return (b.entry, b.moveStart)
+}
+
+// ランク変化らしい文か (能力名 + 上がった/下がった を含む)
+func isBoostShapedText(_ text: String) -> Bool {
+    let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
+    guard t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") else { return false }
+    if t.contains("あがらない") || t.contains("さがらない") || t.contains("上がらない") || t.contains("下がらない") { return false }
+    return ["攻撃", "こうげき", "防御", "ぼうぎょ", "特攻", "とくこう", "特防", "とくぼう", "素早さ", "すばやさ", "命中率", "回避率", "すべての"].contains { t.contains($0) }
 }
 
 // 2 文の類似度 (最長共通部分列 / 短い方)。|-message| の OCR ゆれ重複の判定用
@@ -1857,6 +1961,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                     emitItemOnce(slot: slotFor(side: side, speciesEn: sp.en), side: side, speciesEn: sp.en, itemJa: itJa)
                     if side == "p2" { revealedItems[sp.en] = itJa }
                     pendingMegaStone[side] = itJa
+                    pendingMegaSpecies[side] = sp.en
                 }
             }
         }
@@ -1871,16 +1976,7 @@ func translateBattleMessage(_ text: String) -> Bool {
             let side = (t.contains("相手の") || t.contains("あいての")) ? "p2" : "p1"
             var baseEn = me.en
             if let r = baseEn.range(of: "-Mega") { baseEn = String(baseEn[..<r.lowerBound]) }
-            let key = "\(side):\(baseEn)"
-            if monStates[key] == nil { monStates[key] = MonState() }
-            if monStates[key]?.megaSpecies != me.en {
-                monStates[key]?.megaSpecies = me.en
-                let slot = slotFor(side: side, speciesEn: baseEn)
-                emitLog("|detailschange|\(slot): \(baseEn)|\(me.en)")
-                var megaLine = "|-mega|\(slot): \(baseEn)|\(baseEn)"
-                if let stoneJa = pendingMegaStone[side] { megaLine += "|\(itemJa2En[stoneJa] ?? stoneJa)" }
-                emitLog(megaLine)
-            }
+            completeMega(side: side, baseEn: baseEn, megaEn: me.en)
         }
         return true
     }
@@ -1996,10 +2092,24 @@ func translateBattleMessage(_ text: String) -> Bool {
         }
         return true
     }
+    // 天候チップの告知文 (実機文面は「すなあらしが Xを 襲う！」。
+    // OCR では「すな砂あらし」と混ざって読まれることがある)
+    if t.contains("襲う") || t.contains("おそう") {
+        if t.contains("砂あらし") || t.contains("すなあらし") || t.contains("砂嵐") {
+            pendingStatusFrom[key] = ("sandstorm", Date())
+            return true
+        }
+        if t.contains("あられ") {
+            pendingStatusFrom[key] = ("hail", Date())
+            return true
+        }
+    }
     // 相性: 「(相手の) <対象>に 効果は いまひとつだ/バツグンだ/ないようだ」
     // (同じ文の再読で二重に出さないよう、枠+種別で 3 秒間抑止する)
     if t.contains("効果は") {
-        let kind = t.contains("いまひとつ") ? "resisted" : t.contains("バツグン") ? "supereffective" : t.contains("ないようだ") ? "immune" : ""
+        // OCR 崩れ (バツグン -> バッグン) に耐えるよう、小さい ッ/っ を寄せた形でも判定する
+        let tk = t.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
+        let kind = tk.contains("いまひとつ") ? "resisted" : tk.contains("バツグン") ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
         if !kind.isEmpty {
             let ekey = "\(slot)|\(kind)"
             if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
@@ -2059,6 +2169,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                 lastMoveLabel = "\(slot): \(sp.en)"
                 lastMoveMsgAt = Date()
                 lastMoveName = moveEn
+                synthesizeMegaIfPending(side: side, speciesEn: sp.en)
                 emitLog("|move|\(slot): \(sp.en)|\(moveEn)")
                 lastMoveSeq = actionSeq
                 applyMoveField(mvJa)
@@ -2069,7 +2180,8 @@ func translateBattleMessage(_ text: String) -> Bool {
         }
     }
     // まもる成功: 「<対象>は 攻撃から 身を守った！」(守つた の OCR 崩れも拾う)
-    if t.contains("身を守った") || t.contains("身を守つた") {
+    if t.contains("身を守った") || t.contains("身を守つた") || t.contains("守りの入った")
+        || (t.contains("体勢") && t.contains("守り") && t.contains("入った")) {
         emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
         return true
     }
@@ -2095,6 +2207,19 @@ func translateBattleMessage(_ text: String) -> Bool {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "きあいのタスキ")
         if side == "p2" { revealedItems[sp.en] = "きあいのタスキ" }
         emitLog("|-activate|\(slot): \(sp.en)|item: Focus Sash")
+        return true
+    }
+    // いのちのたまの反動 (実機文面は「いのちのたまの 効果で 命が少し削られた」。
+    // OCR 崩れで「いのち命が少し削られた」と読まれることがある)
+    if t.contains("命が少し削られた") || (t.contains("削られた") && t.contains("いのち")) {
+        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "いのちのたま")
+        if side == "p2" { revealedItems[sp.en] = "いのちのたま" }
+        return true
+    }
+    // だっしゅつボタンで戻っていく (交代そのものはプレート側で記録する)
+    if t.contains("だっしゅつボタン") || t.contains("しゅつボタン") || (t.contains("ボタン") && t.contains("戻って")) {
+        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "だっしゅつボタン")
+        if side == "p2" { revealedItems[sp.en] = "だっしゅつボタン" }
         return true
     }
     // 持ち物の判明: 発動・消費などの文脈があるときだけ拾う
@@ -2133,7 +2258,10 @@ func translateBattleMessage(_ text: String) -> Bool {
     // ランク変化: 主語が複数の文 (いかく「Aと Bの 攻撃が 下がった！」等) は全員に適用する
     // 動詞は漢字表記 (上がった/下がった) も対象にする
     if t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") {
-        let subjects = findAllSpeciesJa(in: t)
+        // 主語を場のフォルムに寄せる (イエッサン -> イエッサンF 等)。寄せないと
+        // 枠が特定できず、二重適用防止のキーが他方と衝突して変化が丸ごと落ちる
+        // (実例: 2026-11-20 vs BigGuyMan 戦、いかくのイエッサン分が消えた)
+        let subjects = findAllSpeciesJa(in: t).map { fieldAnchoredSpecies($0) }
         // いかくの帰属はランク変化の行より先に [特性] 行を出すため、適用前に行う
         if (t.contains("さがった") || t.contains("下がった")) && (t.contains("攻撃") || t.contains("こうげき")) && !t.contains("ぐーんと") {
             var targetSides = Set<String>()
@@ -2158,6 +2286,8 @@ func translateBattleMessage(_ text: String) -> Bool {
         } else {
             checkBoostText(text: t, side: side, speciesEn: sp.en, slot: slot)
         }
+        // 適用した変化の行が保留中でも、この文は消費済みとして扱う
+        if battleLog.count > before || heldBoostLines.values.contains(where: { !$0.isEmpty }) { return true }
     }
     return battleLog.count > before
 }
@@ -2192,6 +2322,11 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     if text.contains("どうする") || text.contains("選んでください") || text.contains("選ばれました") { lastMsgNorm = norm; lastMsgAt = now; return }
     if translateBattleMessage(text) {
         lastMsgNorm = norm; lastMsgAt = now
+    } else if isBoostShapedText(text) {
+        // ランク変化の文は構造化された経路でのみ扱う。再読で適用が抑止されて
+        // 翻訳関数が false を返した場合に、生文がそのまま漏れるのを防ぐ
+        // (実例: 2026-11-20 vs BigGuyMan 戦の いかく 複合文)
+        lastMsgNorm = norm; lastMsgAt = now
     } else if text.hasSuffix("！") || text.hasSuffix("。") || text.hasSuffix("？") || text.hasSuffix("ました") {
         // 翻訳できない文も、完結した文ならそのまま残す。
         // ただし直前の |-message| と似た文は OCR ゆれの再読として 1 件にまとめる
@@ -2203,6 +2338,7 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
             lastMsgNorm = norm; lastMsgAt = now
         }
     }
+    flushHeldBoostsTimeout()
     emitPendingFaints()
 }
 
@@ -2834,6 +2970,7 @@ var emptyBattleFrames = 0   // プレートが見えないフレームの連続�
 
 // 選出画面の検出 (「選出してください」「選出完了」などの文言を探す)
 var previewLastFrame = false
+var lastPreviewSeenAt = Date.distantPast   // 選出画面を最後に見た時刻 (同定のやり直し判定)
 func detectPreview(image: CGImage) -> Bool {
     let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
     let isP = boxes.contains { $0.text.contains("選出") }
@@ -2859,6 +2996,7 @@ func runOnce(image: CGImage) {
     // (選出画面の自軍パネルや「0/4」表示をプレートと誤検出しないため)
     if detectPreview(image: image) {
         previewFrames += 1
+        lastPreviewSeenAt = Date()
         // 出現アニメーションが落ち着く 2 フレーム目で同定する (1 回だけ)
         if previewFrames >= 2 && !previewHandled {
             previewHandled = true
@@ -2898,8 +3036,14 @@ func runOnce(image: CGImage) {
         inBattle = false
         return
     }
-    previewHandled = false
-    previewFrames = 0
+    // 選出の同定は 1 セッションに 1 回だけ: 選出 -> 読込 -> 選出 のように
+    // 非選出フレームを挟んで同定がやり直されると、ヘッダーが 2 重に出る
+    // (実例: 2026-11-20 vs Benn 戦)。対戦が始まった/終わった、または
+    // 選出画面から 10 秒以上離れたら次の同定を許可する
+    if winLogged || inBattle || Date().timeIntervalSince(lastPreviewSeenAt) > 10 {
+        previewHandled = false
+        previewFrames = 0
+    }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
     if parseLogScreen(image: image) {
         inBattle = true
@@ -2957,6 +3101,7 @@ func runOnce(image: CGImage) {
         commandPhaseSeen = true
         flushPendingDamage()
         emitPendingFaints()
+        for sd in ["p1", "p2"] { if let spEn = pendingMegaSpecies[sd] { synthesizeMegaIfPending(side: sd, speciesEn: spEn) } }
         currentTurn += 1
         emitLog("|turn|\(currentTurn)")
     }
@@ -2972,7 +3117,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0702"
+let readerBuild = "20261120_0746"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
