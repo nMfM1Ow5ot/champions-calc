@@ -1837,6 +1837,24 @@ func isBoostShapedText(_ text: String) -> Bool {
     return ["攻撃", "こうげき", "防御", "ぼうぎょ", "特攻", "とくこう", "特防", "とくぼう", "素早さ", "すばやさ", "命中率", "回避率", "すべての"].contains { t.contains($0) }
 }
 
+// 技告知文の断片か (種族名が欠けて解決できず、「〜の<技名の一部>！」だけが
+// 残った OCR 崩れ)。技そのものは綺麗な読みで記録済みのはずで、断片側は
+// 種族が特定できないため帰属もできない。生文として残さず消費する
+// (実例: 2026-11-20 vs Gmoneys 戦「イトの【ーポイス！」)
+func isMoveFragmentText(_ text: String) -> Bool {
+    let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
+    // 記号と「の」は normalize で落ちる/化けるため、構造判定は生テキストで行う
+    guard t.hasSuffix("！") || t.hasSuffix("!") else { return false }
+    guard t.contains("の") && normalize(t).count <= 16 else { return false }
+    if findSpeciesJa(in: t) != nil { return false }   // 解決できる文は通常経路に任せる
+    if t.contains("たおれた") || t.contains("効果は") || t.contains("回復") { return false }
+    guard let tail = t.split(separator: "の").last.map(String.init) else { return false }
+    // 技名は助詞を含まない短い名詞句。文の形 (助詞入り・長文) は対象外
+    if tail.contains("は") || tail.contains("が") || tail.contains("を") || tail.contains("に") { return false }
+    let cand = normalize(tail.trimmingCharacters(in: CharacterSet(charactersIn: "！!【】")))
+    return cand.count >= 3 && cand.count <= 9
+}
+
 // 2 文の類似度 (最長共通部分列 / 短い方)。|-message| の OCR ゆれ重複の判定用
 func textSimilarity(_ a: String, _ b: String) -> Double {
     let x = Array(a), y = Array(b)
@@ -2067,7 +2085,10 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 効果の確認文・交代の指示文 (出来事そのものは別の行で記録済みのため、
     // 本文だけを |-message| に残さないよう消費する)
     if t.contains("手助けする") || t.contains("ワイドガード") || t.contains("守られた") || t.contains("身を守った") || t.contains("体勢に入った")
-        || t.contains("戻れ") || t.contains("引っこめた") {
+        || t.contains("戻れ") || t.contains("引っこめた") || t.contains("引っ込めた")
+        || t.contains("引つこめた") || t.contains("引つ込めた") {
+        // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
+        // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
         return true
     }
     var sp = findSpeciesJa(in: t)
@@ -2075,6 +2096,17 @@ func translateBattleMessage(_ text: String) -> Bool {
     if sp == nil, let l = findSpeciesJaLoose(in: t) {
         sp = l.entry
         looseMoveStart = l.moveStart
+    }
+    // フィールドに守られた文の断片 (種族名が欠けて解決できない場合):
+    // 対象は特定できないが、フィールドの裏付けだけ取って消費する
+    // (実例: 2026-11-20 vs Ony 戦「クスはサイコフィールドに守られている！」が
+    //  日本語のまま漏れた。通常形は種族解決後の「守られている」分岐が処理する)
+    if sp == nil && t.contains("守られている") {
+        for (ja, en) in [("サイコフィールド", "Psychic"), ("エレキフィールド", "Electric"), ("グラスフィールド", "Grassy"), ("ミストフィールド", "Misty")] where t.contains(ja) {
+            setTerrain(en)
+            break
+        }
+        return true
     }
     guard var sp else { return battleLog.count > before }
     // 緩い照合は場にいない種族を掴むことがある (実例: 2026-11-20 vs Mark 戦、
@@ -2239,6 +2271,27 @@ func translateBattleMessage(_ text: String) -> Bool {
         if side == "p2" { revealedItems[sp.en] = "だっしゅつボタン" }
         return true
     }
+    // せんせいのツメの発動 (実例: 2026-11-20 の対戦で「キュウコンは
+    // せんせいのツメで 行動が はやくなった！」が日本語のまま漏れた)
+    if t.contains("せんせいのツメ") || t.contains("せんせいのつめ") {
+        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "せんせいのツメ")
+        if side == "p2" { revealedItems[sp.en] = "せんせいのツメ" }
+        return true
+    }
+    // 道具を手に入れた (トリック等で相手の道具が移った場合の判明。
+    // 実例: 2026-11-20 vs Gmoneys 戦「イエッサンはこだわりスカーフを
+    // 手に入れた！」が日本語のまま漏れ、道具も判明しなかった)
+    if t.contains("手に入れた"), let itJa = findInDict(in: t, itemDict) {
+        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
+        if side == "p2" { revealedItems[sp.en] = itJa }
+        return true
+    }
+    // トリック等の道具交換そのもの (「おたがいの道具を入れ替えた」。
+    // 道具 は OCR で「道負」と崩れる。交換自体は消費し、移った道具は
+    // 直後の「手に入れた」文で判明させる)
+    if (t.contains("道具") || t.contains("道負")) && t.contains("入れ替えた") {
+        return true
+    }
     // 持ち物の判明: 発動・消費などの文脈があるときだけ拾う
     if t.contains("食べ") || t.contains("発動") || t.contains("なくなった") || t.contains("効果で"),
        let itJa = findInDict(in: t, itemDict) {
@@ -2343,6 +2396,9 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
         // ランク変化の文は構造化された経路でのみ扱う。再読で適用が抑止されて
         // 翻訳関数が false を返した場合に、生文がそのまま漏れるのを防ぐ
         // (実例: 2026-11-20 vs BigGuyMan 戦の いかく 複合文)
+        lastMsgNorm = norm; lastMsgAt = now
+    } else if isMoveFragmentText(text) {
+        // 技告知文の断片 (種族名が欠けた OCR 崩れ) も生文として残さない
         lastMsgNorm = norm; lastMsgAt = now
     } else if text.hasSuffix("！") || text.hasSuffix("。") || text.hasSuffix("？") || text.hasSuffix("ました") {
         // 翻訳できない文も、完結した文ならそのまま残す。
@@ -3190,7 +3246,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0804"
+let readerBuild = "20261120_0813"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
