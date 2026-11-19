@@ -2267,13 +2267,16 @@ func translateBattleMessage(_ text: String) -> Bool {
         emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
         return true
     }
-    // まひ・こおりで動けない (行動失敗。実例: 2026-11-20 の対戦で
+    // 状態異常で動けない (行動失敗。実例: 2026-11-20 の対戦で
     // 「イエツサンは 体がしびれて 動けない！」が日本語のまま漏れた)
-    if (t.contains("しびれて") || t.contains("凍って")) && t.contains("動けない") {
+    let cantCode = (t.contains("しびれて") && t.contains("動けない")) ? "par"
+        : (t.contains("凍って") && t.contains("動けない")) ? "frz"
+        : (t.contains("眠っている") || t.contains("ねむっている")) ? "slp" : ""
+    if !cantCode.isEmpty {
         let cantKey = slot + "|cant"
         if let at = lastSingleActAt[cantKey], Date().timeIntervalSince(at) < 6 { return true }
         lastSingleActAt[cantKey] = Date()
-        emitLog("|-cant|\(slot): \(sp.en)|\(t.contains("しびれて") ? "par" : "frz")")
+        emitLog("|-cant|\(slot): \(sp.en)|\(cantCode)")
         return true
     }
     // このゆびとまれの効果 (OCR ゆれで二重に処理されても 1 回だけ出す)
@@ -3288,7 +3291,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0824"
+let readerBuild = "20261120_0825"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
