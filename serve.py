@@ -3,7 +3,7 @@
 # python3 -m http.server と違い、アクセスログを一切出さない
 # (UI が state.json を 0.5 秒ごとにポーリングするため、標準サーバだとログが溢れる)。
 # サーバは即座に起動し、オンライン版ファイルへの同期は裏で走る
-# (起動時 + 15 秒ごと)。同期が終わる前でも手元のファイルで画面は開ける。
+# (起動時 + 5 秒ごと)。同期が終わる前でも手元のファイルで画面は開ける。
 # 同期でファイルが変わると ui_version.txt が更新され、開いている UI が自動で再読込する。
 import functools
 import http.server
@@ -17,9 +17,9 @@ def run_sync(show_output, force=False):
     cmd = [sys.executable, "sync_ui.py"] + (["--force"] if force else [])
     try:
         if show_output:
-            subprocess.run(cmd, timeout=30)
+            subprocess.run(cmd, timeout=120)
         else:
-            subprocess.run(cmd, timeout=30, capture_output=True)
+            subprocess.run(cmd, timeout=120, capture_output=True)
     except Exception:
         pass
 
@@ -29,7 +29,7 @@ def sync_loop():
     # 先にサーバを立ち上げてから同期するので、ブラウザがすぐ開ける。
     run_sync(True, force=True)
     while True:
-        time.sleep(15)
+        time.sleep(5)
         run_sync(False)
 
 
