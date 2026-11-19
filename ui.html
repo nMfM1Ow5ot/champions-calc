@@ -682,7 +682,8 @@ function playerBar(side) {
   const specs = state[side];
   const rack = specs.map((spec, i) => {
     const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
-    return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', spec.species))}">${spriteImg(spec.species, gen.species.get(spec.species)?.baseSpecies || spec.species, '')}</button>`;
+    const eff = effSpecies(spec);
+    return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', eff))}">${spriteImg(eff, gen.species.get(idOf(eff))?.baseSpecies || eff, '')}</button>`;
   }).join('');
   return `<div class="playerbar">
     <div class="playerinfo">
