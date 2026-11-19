@@ -72,9 +72,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 
 /* ---------- preset box ---------- */
 .presetbox{min-width:20rem; flex:none}
-.presethead{display:flex; justify-content:space-between; align-items:center; margin-bottom:.4rem}
+.presethead{display:flex; align-items:center; gap:.35rem; margin-bottom:.4rem}
 .presethead .part{display:contents}
-.presethead [data-act$=":export"], .presethead [data-act$=":all"]{width:7rem; text-align:center}
+.presethead .tgl{flex:1; min-width:0; white-space:nowrap; text-align:center; font-size:.56rem; letter-spacing:0; padding:.3rem .2rem}
 .ddlabel{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; letter-spacing:.05em; text-transform:uppercase; color:var(--label); margin-left:.5rem; margin-bottom:.4rem}
 .importbox{width:100%; min-height:9rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem; margin-top:.4rem}
 .applybtn{margin-top:.4rem}
@@ -183,7 +183,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .jsonbox summary{font-family:'Work Sans',sans-serif; font-size:1rem; color:var(--dim); cursor:pointer}
 .jsonbox textarea{width:100%; min-height:6rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem; margin-top:.6rem}
 .note{font-size:.85rem; color:var(--faint); line-height:1.6; margin-top:1rem}
-@media (max-width:640px){ .tables{flex-direction:column; align-items:stretch} .metarow{flex-direction:column} .presetbox{min-width:0} }
+@media (max-width:640px){ .tables{flex-direction:column; align-items:stretch} .metarow{flex-direction:column} .presetbox{min-width:0} .presethead{flex-wrap:wrap} }
 </style>
 </head>
 <body>
