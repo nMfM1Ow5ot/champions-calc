@@ -162,11 +162,29 @@ const ABILITY_IMMUNE = [
   [['Water Absorb', 'Dry Skin', 'Storm Drain'], 'Water'], [['Volt Absorb', 'Lightning Rod', 'Motor Drive'], 'Electric'],
   [['Sap Sipper'], 'Grass'],
 ];
+// 攻撃側の特性で技タイプが変わる場合の実効タイプ
+// (@smogon/calc 本体は変換後のタイプで計算するが、事前の無効判定は
+// 変換前のタイプで見ていたため、フェアリースキンのハイパーボイスが
+// ゴーストに「無効」と誤判定された。2026-11-20 ユーザー報告)
+function effectiveMoveType(atkP, moveObj) {
+  let t = moveObj.type;
+  const ab = atkP.ability;
+  if (ab === 'Normalize') t = 'Normal';
+  else if (t === 'Normal') {
+    if (ab === 'Pixilate') t = 'Fairy';
+    else if (ab === 'Aerilate') t = 'Flying';
+    else if (ab === 'Refrigerate') t = 'Ice';
+    else if (ab === 'Galvanize') t = 'Electric';
+  }
+  if (ab === 'Liquid Voice' && (moveObj.flags || {}).sound) t = 'Water';
+  return t;
+}
 function isImmune(atkP, defP, moveObj) {
-  if (TYPE_IMMUNE[moveObj.type] && defP.types.some(t => TYPE_IMMUNE[moveObj.type].includes(t))) return true;
+  const effType = effectiveMoveType(atkP, moveObj);
+  if (TYPE_IMMUNE[effType] && defP.types.some(t => TYPE_IMMUNE[effType].includes(t))) return true;
   const breaker = ['Mold Breaker', 'Teravolt', 'Turboblaze'].includes(atkP.ability);
   if (!breaker) {
-    for (const [abilities, type] of ABILITY_IMMUNE) if (moveObj.type === type && abilities.includes(defP.ability)) return true;
+    for (const [abilities, type] of ABILITY_IMMUNE) if (effType === type && abilities.includes(defP.ability)) return true;
     const fl = moveObj.flags || {};
     if (defP.ability === 'Soundproof' && fl.sound) return true;
     if (defP.ability === 'Bulletproof' && fl.bullet) return true;
