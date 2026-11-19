@@ -73,7 +73,8 @@ body{margin:0;background:var(--bg);color:var(--ink);
 /* ---------- preset box ---------- */
 .presetbox{min-width:20rem; flex:none}
 .presethead{display:flex; justify-content:space-between; align-items:center; margin-bottom:.4rem}
-.presethead .part{display:flex; align-items:center; gap:.8rem}
+.presethead .part{display:contents}
+.presethead [data-act$=":export"], .presethead [data-act$=":all"]{width:7rem; text-align:center}
 .ddlabel{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; letter-spacing:.05em; text-transform:uppercase; color:var(--label); margin-left:.5rem; margin-bottom:.4rem}
 .importbox{width:100%; min-height:9rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem; margin-top:.4rem}
 .applybtn{margin-top:.4rem}
@@ -146,7 +147,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .dmgbtn{justify-self:center; font:inherit; font-size:1.05rem; background:none; border:none; color:var(--ink); cursor:pointer; text-align:left; padding:.2rem .3rem; border-radius:.4rem; white-space:nowrap}
 .dmgbtn:hover{background:rgba(255,255,255,.06)}
 .dmgbtn.copied{color:var(--green)}
-.dmgbtn.immune{color:var(--orange)}
+.dmgbtn.immune{color:#9E9E9E}
 .ko{font-size:1.05rem; white-space:nowrap; justify-self:center}
 .statswrap{flex:1; min-width:0; padding:0 1.2rem}
 .statsgrid{display:grid; grid-template-columns:3.6rem repeat(6, minmax(0,1fr)); column-gap:.8rem; row-gap:.2rem; align-items:center; justify-content:center}
@@ -1080,14 +1081,14 @@ document.addEventListener('click', e => {
     if (what === 'export') {
       if (navigator.clipboard) navigator.clipboard.writeText(exportText(DS(side))).catch(() => {});
       const old = act.textContent;
-      act.textContent = 'コピーしました';
+      act.textContent = 'コピー済み';
       setTimeout(() => { act.textContent = old; }, 1600);
     }
     if (what === 'all') {
       const team = side === 'mine' ? state.mine : state.opps;
       if (navigator.clipboard) navigator.clipboard.writeText(team.map(exportText).join('\n\n')).catch(() => {});
       const old = act.textContent;
-      act.textContent = 'コピーしました';
+      act.textContent = 'コピー済み';
       setTimeout(() => { act.textContent = old; }, 1600);
     }
     return;
