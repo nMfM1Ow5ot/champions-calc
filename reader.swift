@@ -1934,7 +1934,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     // その文のときだけ先行フラッシュを止めて帰属を pending 側に残す
     // (「急所」が OCR 崩れした文も同様に止める)
     let strippedText = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
-    if !strippedText.contains("急所") && !(strippedText.contains("所に") && strippedText.contains("当たった")) { flushPendingDamage() }
+    if !strippedText.contains("急所") && !(strippedText.contains("所に") && strippedText.contains("当たった"))
+        && !strippedText.hasSuffix("に当たった！") && !strippedText.hasSuffix("に当たった!") { flushPendingDamage() }
     // 照合は空白を除いた形で行う (OCR のボックス分割で空白位置が揺れるため)
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
     let nt = normalize(t)
@@ -1984,7 +1985,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 対象は文中の種族名を優先する (範囲技では最後に被弾した枠と急所の
     // 対象が食い違うことがあるため)。種族が取れない場合だけ従来通り
     // 直近にダメージを受けた (受けつつある) 枠に付ける
-    if (t.contains("急所に") || t.contains("所に")) && t.contains("当たった") {
+    if (t.contains("急所に") || t.contains("所に") || t.hasSuffix("に当たった！") || t.hasSuffix("に当たった!")) && t.contains("当たった") {
         var target = ""
         if let csp = findSpeciesJa(in: t) {
             let anch = fieldAnchoredSpecies(csp)
@@ -2064,6 +2065,13 @@ func translateBattleMessage(_ text: String) -> Bool {
     // Vision は小さい「っ」を「つ」と読むことが多いため両方を拾う
     if t.contains("ゆけっ") || t.contains("ゆけつ") {
         if !logStarted || winLogged { startBattleLog() }
+        // 先発の登録は対戦開始時だけ。途中交代の繰り出し文をここで処理すると
+        // 「並び順 = 左右」の前提で誤った枠に |switch| を出してしまう
+        // (実例: 2026-11-20、イエッサンの交代要員オオニューラが p1a に
+        // 誤登録され、プレート確定の p1b と合わせて "Go! Sneasler!" が
+        // 二重に出た)。途中交代はプレート側 (2 フレーム確定) が正しい
+        // 枠で記録するため、文は消費するだけにする
+        if lastSlots["mineA"] != nil && lastSlots["mineB"] != nil { return true }
         var found = findAllSpeciesJa(in: t)
         // 性別・リージョンフォルムは登録チームと突き合わせて確定させる
         found = found.map { e in
@@ -2119,9 +2127,11 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 本文だけを |-message| に残さないよう消費する)
     if t.contains("手助けする") || t.contains("ワイドガード") || t.contains("守られた") || t.contains("身を守った") || t.contains("体勢に入った")
         || t.contains("戻れ") || t.contains("引っこめた") || t.contains("引っ込めた")
-        || t.contains("引つこめた") || t.contains("引つ込めた") {
+        || t.contains("引つこめた") || t.contains("引つ込めた")
+        || t.contains("場所を入れ替えた") {
         // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
         // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
+        // 場所を入れ替えた はアリーバスイッチの結果文 (技そのものは |move| で記録済み)
         return true
     }
     var sp = findSpeciesJa(in: t)
@@ -2141,6 +2151,10 @@ func translateBattleMessage(_ text: String) -> Bool {
         }
         return true
     }
+    // 回復の告知文の断片 (種族名が解決できない場合): 回復そのものは
+    // プレート側で |-heal| を出すため、文は消費するだけにする
+    // (実例: 2026-11-20「シャンデラのかいふく袱力か回復した！」等の漏れ)
+    if sp == nil && t.contains("回復した") { return true }
     guard var sp else { return battleLog.count > before }
     // 緩い照合は場にいない種族を掴むことがある (実例: 2026-11-20 vs Mark 戦、
     // イエッサンの てだすけ の再読が サンド の てだすけ と誤記録された)。
@@ -2154,15 +2168,17 @@ func translateBattleMessage(_ text: String) -> Bool {
     // フォルム表記を場の状態に寄せる (メッセージの名前は雌雄で同一のため、
     // 寄せないと技の判明などが基本フォルム側に記録されてしまう)
     sp = fieldAnchoredSpecies(sp)
-    // 左右: 「相手の」等の前置きを優先し、無ければ場のプレートから推定する
-    let side: String
+    // 左右: 「相手の」等の前置きを優先し、無ければ場のプレートから推定する。
+    // ただし、その種族が片方の場にだけ実在する場合は場の側を正とする
+    // (前置きの OCR 崩れや古い文の再処理で、自分のポケモンが「相手の」
+    // として技・ひんしを二重に記録された実例: 2026-11-20 グレンアルマ)
+    let inMine = lastSlots["mineA"]?.speciesEn == sp.en || lastSlots["mineB"]?.speciesEn == sp.en
+    let inOpp = lastSlots["oppA"]?.speciesEn == sp.en || lastSlots["oppB"]?.speciesEn == sp.en
+    var side: String
     if t.contains("相手の") || t.contains("あいての") { side = "p2" }
     else if t.contains("味方の") || t.contains("じぶんの") { side = "p1" }
-    else {
-        let inMine = lastSlots["mineA"]?.speciesEn == sp.en || lastSlots["mineB"]?.speciesEn == sp.en
-        let inOpp = lastSlots["oppA"]?.speciesEn == sp.en || lastSlots["oppB"]?.speciesEn == sp.en
-        side = inOpp && !inMine ? "p2" : "p1"
-    }
+    else { side = inOpp && !inMine ? "p2" : "p1" }
+    if inMine != inOpp { side = inOpp ? "p2" : "p1" }
     let slot = slotFor(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
@@ -2244,10 +2260,15 @@ func translateBattleMessage(_ text: String) -> Bool {
         }
         if let mvJa = mvJaFound {
                 let moveEn = moveJa2En[mvJa] ?? mvJa
-                // 同じ文が OCR ゆれ違いで二重に処理されても |move| は 1 回だけ
-                let sig = slot + "|" + moveEn
-                if let at = lastMoveSigAt[sig], Date().timeIntervalSince(at) < 6 { return true }
+                // 同じ文が OCR ゆれ違いで二重に処理されても |move| は 1 回だけ。
+                // さらにターン内では同じ枠の同じ技は 1 回だけにする (古い文の
+                // 再処理で同じターンの技が繰り返し出た実例: 2026-11-20、
+                // ひんし後のグレンアルマの アーマーキャノン 等の再演ブロック)
+                let sig = slot + "|" + moveEn + "|t" + String(currentTurn)
+                if lastMoveSigAt[sig] != nil { return true }
+                if let at = lastMoveSigAt[slot + "|" + moveEn], Date().timeIntervalSince(at) < 6 { return true }
                 lastMoveSigAt[sig] = Date()
+                lastMoveSigAt[slot + "|" + moveEn] = Date()
                 lastMoveLabel = "\(slot): \(sp.en)"
                 lastMoveMsgAt = Date()
                 lastMoveName = moveEn
@@ -2343,6 +2364,11 @@ func translateBattleMessage(_ text: String) -> Bool {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
         if side == "p2" { revealedItems[sp.en] = itJa }
     }
+    // 回復の告知文: 回復そのものはプレート側で |-heal| を出すため消費のみ
+    // (グラッシーフィールド等の回復文が OCR 崩れで漏れた実例: 2026-11-20
+    // 「オオニューラのかいふく琳力が回復した！」。持ち物の判明はこの前段の
+    // 持ち物分岐が先に処理する)
+    if t.contains("回復した") { return true }
     // ひんし (プレート側で既に 0% になっている場合も文は消費する。
     // 消費しないと |-message| に化けて同じ文が残り続ける)
     if t.contains("たおれた") {
@@ -3291,7 +3317,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0825"
+let readerBuild = "20261120_0838"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
