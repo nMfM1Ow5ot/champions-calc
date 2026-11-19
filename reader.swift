@@ -661,6 +661,17 @@ func renderLogLine(_ line: String) -> [String] {
             return [f[2] == "p2" ? "(The Tailwind on the opposing team's side stopped blowing.)" : "(The Tailwind stopped blowing.)"]
         }
         return []
+    case "-cant":
+        guard f.count >= 4 else { return [] }
+        let (_, side, species) = renderLabelParts(f[2])
+        let name = "\(renderPrefix(side))\(species)"
+        switch f[3] {
+        case "par": return ["\(name) is paralyzed! It can't move!"]
+        case "frz": return ["\(name) is frozen solid! It can't move!"]
+        case "slp": return ["\(name) is fast asleep."]
+        case "flinch": return ["\(name) flinched and couldn't move!"]
+        default: return []
+        }
     case "-fail":
         return ["But it failed!"]
     case "-message":
@@ -1921,7 +1932,9 @@ func translateBattleMessage(_ text: String) -> Bool {
     let before = battleLog.count
     // 急所の文はダメージ確定 (行の出力) より前に表示されるため、
     // その文のときだけ先行フラッシュを止めて帰属を pending 側に残す
-    if !text.contains("急所") { flushPendingDamage() }
+    // (「急所」が OCR 崩れした文も同様に止める)
+    let strippedText = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
+    if !strippedText.contains("急所") && !(strippedText.contains("所に") && strippedText.contains("当たった")) { flushPendingDamage() }
     // 照合は空白を除いた形で行う (OCR のボックス分割で空白位置が揺れるため)
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
     let nt = normalize(t)
@@ -1965,10 +1978,30 @@ func translateBattleMessage(_ text: String) -> Bool {
         winLogged = true
         return true
     }
-    // 急所: 「急所に 当たった！」— 直近にダメージを受けた (受けつつある) 枠に付ける
-    if t.contains("急所に") && t.contains("当たった") {
-        let target = !lastPendingLabel.isEmpty ? lastPendingLabel
-            : (Date().timeIntervalSince(lastDamageAt) < 6 ? lastDamageLabel : "")
+    // 急所: 「(相手の) Xの 急所に 当たった！」
+    // 「急所」は OCR で「還所」「意所」等に崩れるため、「所に当たった」で
+    // 判定する (実例: 2026-11-20 の対戦で 2 件とも日本語のまま漏れた)。
+    // 対象は文中の種族名を優先する (範囲技では最後に被弾した枠と急所の
+    // 対象が食い違うことがあるため)。種族が取れない場合だけ従来通り
+    // 直近にダメージを受けた (受けつつある) 枠に付ける
+    if (t.contains("急所に") || t.contains("所に")) && t.contains("当たった") {
+        var target = ""
+        if let csp = findSpeciesJa(in: t) {
+            let anch = fieldAnchoredSpecies(csp)
+            let cside: String
+            if t.contains("相手の") || t.contains("あいての") { cside = "p2" }
+            else if t.contains("味方の") || t.contains("じぶんの") { cside = "p1" }
+            else {
+                let inMine = lastSlots["mineA"]?.speciesEn == anch.en || lastSlots["mineB"]?.speciesEn == anch.en
+                let inOpp = lastSlots["oppA"]?.speciesEn == anch.en || lastSlots["oppB"]?.speciesEn == anch.en
+                cside = inOpp && !inMine ? "p2" : "p1"
+            }
+            target = "\(slotFor(side: cside, speciesEn: anch.en)): \(anch.en)"
+        }
+        if target.isEmpty {
+            target = !lastPendingLabel.isEmpty ? lastPendingLabel
+                : (Date().timeIntervalSince(lastDamageAt) < 6 ? lastDamageLabel : "")
+        }
         // 同じ急所文の再読で二重に出さない (枠ごとに 6 秒あける)
         if !target.isEmpty && Date().timeIntervalSince(lastCritAt[target] ?? .distantPast) > 6 {
             lastCritAt[target] = Date()
@@ -2232,6 +2265,15 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("身を守った") || t.contains("身を守つた") || t.contains("守りの入った")
         || (t.contains("体勢") && t.contains("守り") && t.contains("入った")) {
         emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
+        return true
+    }
+    // まひ・こおりで動けない (行動失敗。実例: 2026-11-20 の対戦で
+    // 「イエツサンは 体がしびれて 動けない！」が日本語のまま漏れた)
+    if (t.contains("しびれて") || t.contains("凍って")) && t.contains("動けない") {
+        let cantKey = slot + "|cant"
+        if let at = lastSingleActAt[cantKey], Date().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[cantKey] = Date()
+        emitLog("|-cant|\(slot): \(sp.en)|\(t.contains("しびれて") ? "par" : "frz")")
         return true
     }
     // このゆびとまれの効果 (OCR ゆれで二重に処理されても 1 回だけ出す)
@@ -3246,7 +3288,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0813"
+let readerBuild = "20261120_0824"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
