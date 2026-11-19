@@ -30,7 +30,7 @@
 :root[data-theme="light"] .username{color:rgba(0,0,0,.75)}
 :root[data-theme="light"] .speciesname{color:#111}
 :root[data-theme="light"] .picon:hover{border-color:rgba(0,0,0,.16)}
-:root[data-theme="light"] .picon.sel{border-color:rgba(0,0,0,.32)}
+:root[data-theme="light"] .picon.sel{border-color:rgba(33,150,243,.9)}
 :root[data-theme="light"] .picon.sel:hover{border-color:rgba(33,150,243,.8)}
 :root[data-theme="light"] .hpbar{background:rgba(0,0,0,.15)}
 :root[data-theme="light"] .stbadge.ok{color:rgba(0,0,0,.64); background:#E4E4E7}
@@ -92,7 +92,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .picon.active{background:rgba(33,150,243,.24)}
 .picon.active img{opacity:1}
 .picon:hover{border-color:rgba(255,255,255,.16)}
-.picon.sel{border-color:rgba(255,255,255,.32)}
+.picon.sel{border-color:rgba(33,150,243,.9)}
+.picon.sel:not(.active){background:none}
+.picon.sel:not(.active) img{opacity:1}
 .picon.sel:hover{border-color:rgba(33,150,243,.8)}
 .picon.fnt img{opacity:.3; filter:grayscale(1)}
 
