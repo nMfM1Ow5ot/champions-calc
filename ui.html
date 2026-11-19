@@ -1,0 +1,1702 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ダメ計</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Work+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#2196F3; --blue-tint:#42a6f5; --red:#F44336; --green:#4CAF50; --orange:#FF9800;
+  --bg:#121212; --panel:rgba(255,255,255,.05);
+  --ink:rgba(255,255,255,.87); --dim:rgba(255,255,255,.64); --faint:rgba(255,255,255,.38);
+  --label:rgba(255,255,255,.8);
+  --shadow:0 0 1px rgba(255,255,255,.32), 0 0 16px rgba(0,0,0,.48);
+  --dd-shadow:0 0 1px rgba(255,255,255,.5), 0 0 2px rgba(0,0,0,.3);
+  --dd-shadow-hover:0 0 1px rgba(33,150,243,.95), 0 0 2px rgba(33,150,243,.5);
+}
+*{box-sizing:border-box}
+html{font-size:clamp(9px, min(1.35vh, 1.15vw), 13px)}
+@media (max-width: 1560px){ html{font-size:13px} .movesbox{flex:1.55} .statswrap{flex:1} }
+@media (max-width: 900px){ html{font-size:12px} }
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:'Fira Code','Hiragino Kaku Gothic ProN','Noto Sans JP',monospace;
+  min-height:100vh; display:flex; flex-direction:column}
+.wrap{width:100%; max-width:104rem; margin:0 auto; padding:1.2rem 1.6rem 1.6rem; flex:1; display:flex; flex-direction:column}
+.topbar{display:flex; align-items:baseline; gap:1.2rem; flex-wrap:wrap; margin-bottom:1rem}
+.topbar h1{font-family:'Work Sans',sans-serif; font-size:1.5rem; margin:0; color:#fff; font-weight:700}
+.topbar .cam{display:flex; align-items:center; gap:.6rem; font-size:1rem; color:var(--dim)}
+.topbar button{font:inherit; font-size:1rem; background:var(--panel); color:var(--ink); border:none; border-radius:.5rem; padding:.4rem .8rem; cursor:pointer; box-shadow:var(--dd-shadow)}
+.topbar button:hover{background:rgba(33,150,243,.15); color:#fff}
+#camstat{color:var(--green); font-size:1rem}
+
+/* ---------- PlayerCalc ---------- */
+.playercalc{margin-bottom:.4rem}
+.playerbar{display:flex; align-items:flex-start; justify-content:space-between; gap:1.2rem}
+.playerinfo{display:flex; flex-direction:column; gap:.2rem; min-width:12rem}
+.username{font-family:'Work Sans',sans-serif; font-weight:500; font-size:1.2rem; color:rgba(255,255,255,.75); white-space:nowrap}
+.playeractions{display:flex; align-items:center; gap:.6rem; font-size:.8rem; color:var(--dim)}
+.rack{display:flex; gap:.2rem; flex-wrap:wrap; justify-content:flex-end}
+.picon{position:relative; width:3.8rem; height:3.8rem; border-radius:50%; border:2px solid transparent; background:none; cursor:pointer; padding:0}
+.picon img{width:3.2rem; height:3.2rem; object-fit:contain; opacity:.45}
+.picon.active{background:rgba(33,150,243,.24)}
+.picon.active img{opacity:1}
+.picon:hover{border-color:rgba(255,255,255,.16)}
+.picon.sel{border-color:rgba(255,255,255,.32)}
+.picon.sel:hover{border-color:rgba(33,150,243,.8)}
+.picon.fnt img{opacity:.3; filter:grayscale(1)}
+
+/* ---------- PokeInfo ---------- */
+.pokeinfo{display:flex; gap:1.2rem; margin-top:.8rem}
+.piconbox{width:4rem; height:4rem; flex:none}
+.piconbox img{width:4rem; height:4rem; object-fit:contain}
+.infomain{flex:1; min-width:0}
+.firstline{display:flex; align-items:center; gap:.8rem}
+.speciesname{font-size:1.3rem; font-weight:700; color:#fff; white-space:nowrap}
+.level{font-size:.8rem; color:var(--dim)}
+.typesfield{display:flex; gap:.3rem}
+.typechip{font-size:.8rem; font-weight:700; color:#fff; border-radius:.4rem; padding:.15rem .5rem; text-shadow:0 0 2px rgba(0,0,0,.45); white-space:nowrap}
+.secondline{display:flex; align-items:center; gap:.8rem; margin-top:.5rem}
+.hpbar{width:10rem; height:.4rem; border-radius:1.5rem; background:rgba(255,255,255,.15); overflow:hidden; flex:none}
+.hpbar i{display:block; height:100%; background:var(--blue); border-radius:1.5rem}
+.statusbtn{display:flex; align-items:center; gap:.6rem; background:none; border:none; cursor:pointer; padding:0; font:inherit}
+.hpct{font-size:1rem; color:var(--ink)}
+.hpct input{width:3.4rem; background:none; border:none; outline:none; color:var(--ink); font:inherit; font-size:1rem; text-align:right; padding:0}
+.stbadge{display:inline-flex; align-items:center; justify-content:center; min-width:3.6rem; height:1.3rem; padding:0 .4rem; border-radius:.5rem; font-size:.8rem; font-weight:700; color:#fff; background:#2D2B2A}
+.stbadge.ok{color:rgba(255,255,255,.64); font-weight:500}
+.stbadge.brn{background:#A84331}.stbadge.frz{background:#2C9191}.stbadge.par{background:#DBCB37}
+.stbadge.psn{background:#A735A7}.stbadge.slp{background:#304E7C}.stbadge.tox{background:#802480}.stbadge.fnt{background:#607883}
+.stpop{position:absolute; z-index:50; background:rgba(0,0,0,.975); border-radius:.5rem; box-shadow:var(--dd-shadow); padding:.4rem; display:flex; flex-direction:column; gap:.3rem}
+.stpop button{display:flex; align-items:center; gap:.8rem; background:none; border:none; cursor:pointer; font:inherit; font-size:1rem; color:var(--ink); padding:.3rem .6rem; border-radius:.4rem; text-align:left}
+.stpop button:hover{background:rgba(255,255,255,.15)}
+
+/* ---------- preset box ---------- */
+.presetbox{min-width:20rem; flex:none}
+.presethead{display:flex; justify-content:space-between; align-items:center; margin-bottom:.4rem}
+.presethead .part{display:flex; align-items:center; gap:.8rem}
+.ddlabel{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; letter-spacing:.05em; text-transform:uppercase; color:var(--label); margin-left:.5rem; margin-bottom:.4rem}
+.importbox{width:100%; min-height:9rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem; margin-top:.4rem}
+.applybtn{margin-top:.4rem}
+
+/* ---------- meta row (Ability / Nature / Item) ---------- */
+.metarow{display:flex; gap:1.2rem; margin:.3rem 1.2rem 0}
+.metarow .col{flex:1; min-width:0}
+.oppinfo{font-size:.9rem; color:var(--dim); margin:.6rem 1.2rem 0; line-height:1.5}
+#capStatusText{font-size:1.15rem; color:var(--muted)}
+#capStatusText.ok{color:#4caf50}
+#capStatusText.ng{color:#ef5350}
+.spritewrap{position:relative; display:inline-block; cursor:pointer}
+.formepop{position:absolute; top:calc(100% + 6px); left:0; z-index:45; display:flex; gap:.3rem; background:#f7f7f7; border-radius:.8rem; padding:.55rem; box-shadow:0 4px 18px rgba(0,0,0,.45)}
+.formeopt{display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.4rem .55rem; border-radius:.6rem; background:none; border:none; cursor:pointer}
+.formeopt img{width:44px; height:44px; image-rendering:pixelated}
+.formeopt span{font-size:.85rem; color:#555; letter-spacing:.08em; font-weight:600}
+.formeopt.sel{background:rgba(33,150,243,.30)}
+.formeopt:hover{background:rgba(33,150,243,.18)}
+.oppinfo .corrected{color:var(--green)}
+
+/* ---------- ToggleButton ---------- */
+.tgl{font-family:'Work Sans',sans-serif; font-size:.8rem; text-transform:uppercase; letter-spacing:.03em;
+  background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; padding:.3rem .7rem; cursor:pointer; transition:background-color .15s, color .15s}
+.tgl:hover{background:rgba(255,255,255,.1)}
+.tgl.on{color:var(--blue); background:rgba(33,150,243,.15); box-shadow:0 0 1px rgba(33,150,243,.95), 0 0 3px rgba(33,150,243,.5); font-weight:500}
+.tgl.primary{font-size:1rem; text-transform:none; min-width:6rem; margin:.1rem; padding:.3rem .4rem}
+.fieldcalc .tgl{text-transform:none}
+
+/* ---------- Dropdown (Showdex react-select reproduction) ---------- */
+.sdd{position:relative}
+.sdd.open{z-index:40}
+.sdd-control{display:flex; align-items:center; background:rgba(255,255,255,.05); border-radius:.5rem; box-shadow:var(--dd-shadow); padding:.2rem .5rem; cursor:pointer; transition:background-color .15s, box-shadow .15s}
+.sdd-control:hover{background:rgba(33,150,243,.05); box-shadow:var(--dd-shadow-hover)}
+.sdd.open .sdd-control{background:rgba(255,255,255,.1)}
+.sdd.highlight .sdd-control{background:rgba(33,150,243,.15); box-shadow:var(--dd-shadow-hover)}
+.sdd-value{flex:1; min-width:0; font-size:1rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:.3rem 0}
+.sdd-value.ph{color:rgba(255,255,255,.3)}
+.sdd-input{flex:1; min-width:0; background:none; border:none; outline:none; color:#fff; font:inherit; font-size:1rem; padding:.3rem 0}
+.sdd-input::placeholder{color:rgba(255,255,255,.3)}
+.sdd-clear,.sdd-chev{flex:none; font-size:1rem; line-height:1; color:rgba(255,255,255,.3); padding:0 .2rem; cursor:pointer; transition:color .15s, transform .15s}
+.sdd-clear:hover,.sdd-chev:hover{color:rgba(33,150,243,.95)}
+.sdd.open .sdd-chev{transform:rotate(-180deg)}
+.sdd-menu{position:absolute; top:calc(100% + 2px); left:0; width:100%; min-width:14rem; background:rgba(0,0,0,.975); border-radius:.5rem; box-shadow:var(--dd-shadow); z-index:40; overflow:hidden}
+.sdd-list{max-height:30rem; overflow-y:auto; padding:.2rem 0}
+.sdd-opt{padding:.2rem .3rem; font-size:1rem; color:#fff; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.sdd-opt:hover{background:rgba(255,255,255,.15)}
+.sdd-opt.focused{background:rgba(33,150,243,.25)}
+.sdd-opt.focused:hover{background:rgba(33,150,243,.5)}
+.sdd-opt.selected{background:rgba(33,150,243,.9)}
+.sdd-empty{padding:.2rem .3rem; font-size:1rem; color:rgba(255,255,255,.5)}
+
+.sdd.bare .sdd-control{background:none; box-shadow:none; padding:0}
+.sdd.bare .sdd-control:hover{background:none; box-shadow:none}
+.sdd.bare .sdd-value{font-size:1.3rem; font-weight:700; padding:.1rem 0}
+.sdd.bare .sdd-input{font-size:1.3rem; font-weight:700}
+.sdd.bare{flex:none}
+/* ---------- tables (PokeMoves + PokeStats) ---------- */
+.tables{display:flex; gap:1.2rem; margin-top:1.6rem; align-items:center}
+.movesbox{flex:2; min-width:0; background:rgba(18,18,18,.8); border-radius:1.2rem; box-shadow:var(--shadow); padding:.8rem 1.2rem 1.2rem}
+.movesgrid{display:grid; grid-template-columns:minmax(15rem,1.5fr) minmax(0,1.25fr) minmax(0,1fr); column-gap:1rem; row-gap:.3rem; align-items:center}
+.spreadtgl{display:flex; flex:none; border:1px solid rgba(255,255,255,.18); border-radius:999px; overflow:hidden}
+.spreadtgl button{font:inherit; font-size:.72rem; line-height:1; padding:.24rem .42rem; background:none; border:none; color:var(--label); cursor:pointer; white-space:nowrap}
+.sdd-control .spreadtgl{margin-left:.35rem}
+.spreadtgl button.on{background:rgba(33,150,243,.85); color:#fff; font-weight:700}
+.estval{background:rgba(33,150,243,.15); box-shadow:0 0 2px rgba(33,150,243,.35); border-radius:.35rem; white-space:nowrap; display:block; text-align:center}
+.finalstat.estval{display:block}
+.mvhead{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; letter-spacing:.05em; text-transform:uppercase; color:var(--label); display:flex; align-items:center; gap:.6rem}
+.mvhead.mid{justify-content:center}
+.dmgbtn{justify-self:center; font:inherit; font-size:1.05rem; background:none; border:none; color:var(--ink); cursor:pointer; text-align:left; padding:.2rem .3rem; border-radius:.4rem; white-space:nowrap}
+.dmgbtn:hover{background:rgba(255,255,255,.06)}
+.dmgbtn.copied{color:var(--green)}
+.dmgbtn.immune{color:var(--orange)}
+.ko{font-size:1.05rem; white-space:nowrap; justify-self:center}
+.statswrap{flex:1; min-width:0; padding:0 1.2rem}
+.statsgrid{display:grid; grid-template-columns:3.6rem repeat(6, minmax(0,1fr)); column-gap:.8rem; row-gap:.2rem; align-items:center; justify-content:center}
+.sghead{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; color:var(--ink); text-align:center}
+.sghead.up{color:rgba(244,100,90,.8)} .sghead.down{color:rgba(100,170,244,.8)}
+.sglabel{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; color:var(--label); text-align:center; text-transform:uppercase}
+.sglabel .delta{display:block; font-size:.85rem}
+.sglabel .delta.over{color:var(--orange); font-weight:700}
+.sglabel.warn{color:var(--orange)}
+.evwrap{display:flex; justify-content:center}
+.evfield{display:inline-block; padding:.5rem .1rem; border-radius:1.5rem; transition:background-color .15s}
+.evfield:hover{background:rgba(255,255,255,.05)}
+.evfield:focus-within{background:rgba(255,255,255,.1)}
+.evfield input{width:3.2rem; max-width:100%; background:none; border:none; outline:none; text-align:center; font:inherit; font-size:1rem; color:rgba(255,255,255,.3); padding:0; -moz-appearance:textfield; appearance:textfield}
+.evfield input::-webkit-outer-spin-button, .evfield input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0}
+.evfield input.has{color:var(--blue-tint)}
+.finalstat{font-size:1.1rem; text-align:center}
+.finalstat.pos{color:var(--green)} .finalstat.neg{color:var(--red)}
+.boostcell{display:flex; align-items:center; justify-content:space-between; padding:0 .1rem}
+.bstbtn{width:1.4rem; height:1.4rem; border-radius:50%; border:none; background:rgba(255,255,255,.05); color:var(--dim); cursor:pointer; font-size:1rem; line-height:1; padding:0}
+.bstbtn:hover{background:rgba(255,255,255,.12); color:#fff}
+.bstval{font-size:1rem; min-width:1.4rem; text-align:center}
+.bstval.pos{color:var(--green)} .bstval.neg{color:var(--red)}
+
+/* ---------- FieldCalc ---------- */
+.fieldcalc{max-width:44.8rem; margin:1.6rem auto 1.2rem; width:100%}
+.fieldcalc .frow{display:flex; align-items:flex-start; gap:1rem; margin-top:.8rem}
+.fieldcalc .flabel{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; letter-spacing:.05em; text-transform:uppercase; color:var(--label); width:9rem; flex:none; padding-top:.6rem}
+.fieldcalc .fcontrol{flex:1; min-width:0}
+.fieldcalc .fchips{flex:1; display:flex; flex-wrap:wrap; gap:.2rem}
+
+.jsonbox{margin-top:1.4rem}
+.jsonbox summary{font-family:'Work Sans',sans-serif; font-size:1rem; color:var(--dim); cursor:pointer}
+.jsonbox textarea{width:100%; min-height:6rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem; margin-top:.6rem}
+.note{font-size:.85rem; color:var(--faint); line-height:1.6; margin-top:1rem}
+@media (max-width:640px){ .tables{flex-direction:column; align-items:stretch} .metarow{flex-direction:column} .presetbox{min-width:0} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>チャンピオンズ ダメージ計算</h1>
+    <div class="cam">チーム画面を取り込む
+      <button data-capture="ability">能力画面を撮影</button>
+      <button data-capture="status">ステータス画面を撮影</button><span id="capStatusText"></span>
+      <span id="camstat"></span>
+    </div>
+  </div>
+  <section id="playerMine"></section>
+  <section id="fieldbar" class="fieldcalc"></section>
+  <section id="playerOpp"></section>
+  <div class="jsonbox">
+    <details>
+      <summary>状態JSONを貼り付け（reader の state.json と同じ形式）</summary>
+      <textarea id="jsonin" placeholder='{"mine":[{"species":"Gengar","curHPPercent":100},...],"opps":[...]}'></textarea>
+      <button class="tgl applybtn" id="applyjson">適用</button>
+    </details>
+  </div>
+  <p class="note">相手の型は <span id="regname">レギュレーションM-C</span> の使用率データ（pokedb）から最も使われている型を初期値にしています。判明した情報（技・持ち物・特性）があれば reader が自動で、なければ手動で訂正でき、判明した技だけが青くハイライトされます（特性・持ち物も同様）。相手の型に判明情報が1つでもあれば、SET の表示は相手トレーナー名になります。フレンドガードは、その側のもう1体が特性フレンドガードを持つ想定で、受けるダメージが0.75倍になります。レイアウトと操作系は Showdex（Calcdex）の再現です（1体 vs 1体表示、アイコンで表示するポケモンを切替）。</p>
+</div>
+<script type="module">
+import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData } from './bundle.mjs';
+
+const gen = Generations.get(9);const STATJ = [['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SPA'],['spd','SPD'],['spe','SPE']];
+const TYPE_JA = {Normal:'ノーマル',Fire:'ほのお',Water:'みず',Electric:'でんき',Grass:'くさ',Ice:'こおり',Fighting:'かくとう',Poison:'どく',Ground:'じめん',Flying:'ひこう',Psychic:'エスパー',Bug:'むし',Rock:'いわ',Ghost:'ゴースト',Dragon:'ドラゴン',Dark:'あく',Steel:'はがね',Fairy:'フェアリー'};
+const TYPE_SHORT = {Normal:'NRML',Fire:'FIRE',Water:'WATR',Electric:'ELEC',Grass:'GRASS',Ice:'ICE',Fighting:'FIGHT',Poison:'POISON',Ground:'GROUND',Flying:'FLYING',Psychic:'PSYC',Bug:'BUG',Rock:'ROCK',Ghost:'GHOST',Dragon:'DRAGON',Dark:'DARK',Steel:'STEEL',Fairy:'FARY'};
+const TYPE_COLOR = {Normal:'#8a8a6a',Fire:'#d96f26',Water:'#4f7de0',Electric:'#d9b62a',Grass:'#67b83c',Ice:'#7fc9c6',Fighting:'#b02a24',Poison:'#923a92',Ground:'#c9a94f',Flying:'#8f7fe8',Psychic:'#e84f7f',Bug:'#93a51a',Rock:'#a08f2f',Ghost:'#5f4a8a',Dragon:'#5f2ef0',Dark:'#5f4a3d',Steel:'#9a9ab5',Fairy:'#d685ad'};
+const NATURES = ['Hardy','Lonely','Brave','Adamant','Naughty','Bold','Docile','Relaxed','Impish','Lax','Timid','Hasty','Serious','Jolly','Naive','Modest','Mild','Quiet','Bashful','Rash','Calm','Gentle','Sassy','Careful','Quirky'];
+const NAT_JA = {Hardy:'がんばりや',Lonely:'さみしがり',Brave:'ゆうかん',Adamant:'いじっぱり',Naughty:'やんちゃ',Bold:'ずぶとい',Docile:'すなお',Relaxed:'のんき',Impish:'わんぱく',Lax:'のうてんき',Timid:'おくびょう',Hasty:'せっかち',Serious:'まじめ',Jolly:'ようき',Naive:'むじゃき',Modest:'ひかえめ',Mild:'おっとり',Quiet:'れいせい',Bashful:'てれや',Rash:'うっかりや',Calm:'おだやか',Gentle:'おとなしい',Sassy:'なまいき',Careful:'しんちょう',Quirky:'きまぐれ'};
+const NAT_UPDOWN = {Lonely:['atk','def'],Brave:['atk','spe'],Adamant:['atk','spa'],Naughty:['atk','spd'],Bold:['def','atk'],Relaxed:['def','spe'],Impish:['def','spa'],Lax:['def','spd'],Timid:['spe','atk'],Hasty:['spe','def'],Jolly:['spe','spa'],Naive:['spe','spd'],Modest:['spa','atk'],Mild:['spa','def'],Quiet:['spa','spe'],Rash:['spa','spd'],Calm:['spd','atk'],Gentle:['spd','def'],Sassy:['spd','spe'],Careful:['spd','spa']};
+const itemLabel = en => en ? ((typeof NAMES !== 'undefined' && NAMES._itemEn2ja && NAMES._itemEn2ja[en]) || en) : 'なし';
+
+let NAMES = { species: {}, moves: {}, abilities: {} };
+const idOf = en => String(en).toLowerCase().replace(/[^a-z0-9]/g, '');
+const ja = (table, en) => (NAMES[table] && NAMES[table][idOf(en)]) || en;
+
+const $ = id => document.getElementById(id);
+const state = {
+  field: { weather: '', terrain: '' },
+  side: {
+    mine: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false },
+    opp: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false },
+  },
+  mine: [], opps: [],
+  oppTeam: ['Garchomp', 'Rillaboom'],
+  sel: { mine: 0, opps: 0 },
+  active: { mine: [0, 1], opps: [0, 1] },
+};
+let lastCalc = null;
+let lastStateJson = '';
+const ui = { importing: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
+
+function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
+let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
+function presetSpec(i) {
+  const p = PRESETS[i];
+  return { preset: i, species: p.species, megaSpecies: p.megaSpecies, mega: !!p.megaSpecies && i === 1, item: p.item,
+    ability: p.ability, megaAbility: p.megaAbility, nature: p.nature, sp: { ...p.sp }, moves: [...p.moves], origMoves: [...p.moves],
+    curHPPercent: 100, boosts: blankBoosts(), status: '' };
+}
+// 表示名 (括弧書きのフォルム表記を除いた日本語名) が同じフォルム違いの候補。
+// 例: イエッサン -> [Indeedee, Indeedee-F]、キュウコン -> [Ninetales, Ninetales-Alola]
+function speciesVariants(en) {
+  const idx = NAMES._indexSpecies || [];
+  const disp = jaName => (jaName || '').replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '');
+  const mine = idx.find(e => e.en === en);
+  if (!mine) return [en];
+  const d = disp(mine.ja);
+  const out = [];
+  for (const e of idx) if (disp(e.ja) === d && !out.includes(e.en)) out.push(e.en);
+  return out.length ? out : [en];
+}
+// my_team.json の1体分 (reader の --team モードが書く) をプリセット形式に変換する。
+// stats があれば SP・性格を逆算し、item がメガストーンならメガ形態も導く。
+function myTeamPreset(e) {
+  let species = resolveSpecies(e.species) || e.species;
+  let sd = gen.species.get(idOf(species));
+  if (!sd) return null;
+  let nature, sp, ambiguous = false;
+  let sols = e.stats ? deriveBuild(species, e.stats) : [];
+  if (e.stats && !sols.length) {
+    // 登録名のフォルムでは実数値を再現できない場合、同名のフォルム違い
+    // (性別・リージョン等) で再現できるものを採用する
+    for (const cand of speciesVariants(species)) {
+      if (cand === species) continue;
+      const s = deriveBuild(cand, e.stats);
+      if (s.length) { sols = s; species = cand; sd = gen.species.get(idOf(cand)); break; }
+    }
+  }
+  if (sols.length) {
+    let pick = sols[0];
+    if (e.spHint) {
+      const keys = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+      const m = sols.find(s => keys.every(k => (s.sp[k] || 0) === (e.spHint[k] || 0)));
+      if (m) pick = m;
+    }
+    nature = pick.nature; sp = pick.sp; ambiguous = sols.length > 1;
+  }
+  else { const a = assumedSet(species, 'attacker'); nature = a.nature; sp = a.sp; }
+  const item = e.item ? (resolveItem(e.item) || '') : '';
+  let megaSpecies, megaAbility;
+  if (item) {
+    const it = gen.items.get(idOf(item));
+    if (it && it.megaStone) megaSpecies = Object.values(it.megaStone)[0];
+  }
+  if (!megaSpecies && e.item && /ナイト/.test(e.item)) {
+    const m = String(e.item).replace(/[Ａ-Ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).match(/ナイト([XYZ])?$/);
+    const cand = gen.species.get(idOf(species + '-Mega' + (m && m[1] ? '-' + m[1] : '')));
+    if (cand) megaSpecies = cand.name;
+  }
+  if (megaSpecies) {
+    const msd = gen.species.get(idOf(megaSpecies));
+    if (msd) megaAbility = Object.values(msd.abilities || {})[0];
+  }
+  const ability = (e.ability && resolveAbility(e.ability)) || Object.values(sd.abilities || {})[0] || '';
+  let moves = Array.isArray(e.moves) ? e.moves.map(mv => resolveMove(mv) || mv).filter(Boolean) : [];
+  if (!moves.length) { const u = usageSpec(species, USAGE_SETS); if (u) moves = [...u.moves]; }
+  return { label: ja('species', species), species, megaSpecies, megaAbility, item, ability, nature, sp,
+    moves: moves.slice(0, 4), derivedAmbiguous: ambiguous, derivedFailed: !sols.length };
+}
+// my_team.json を読み直して自チームプリセットに反映する (撮影取り込み後にも使う)
+async function loadMyTeam() {
+  try {
+    const rt = await fetch('./my_team.json', { cache: 'no-store' });
+    if (!rt.ok) return false;
+    const mt = await rt.json();
+    const list = (Array.isArray(mt) ? mt : []).map(myTeamPreset).filter(Boolean);
+    if (!list.length) return false;
+    PRESETS = list;
+    state.mine = list.map((_, i) => presetSpec(i));
+    state.sel.mine = 0;
+    state.active.mine = [0, Math.min(1, list.length - 1)];
+    return true;
+  } catch (e) { return false; }
+}
+// 撮影ボタン: リーダー (localhost:8899) に QuickTime 画面の撮影と解析を頼む
+async function captureTeam(tab) {
+  const st = $('capStatusText');
+  const say = (msg, cls) => { if (st) { st.textContent = msg; st.className = cls || ''; } };
+  say('撮影中…', '');
+  try {
+    const r = await fetch('http://localhost:8899/capture?tab=' + tab);
+    const j = await r.json();
+    if (j.ok) {
+      await loadMyTeam();
+      calcAll();
+      say('撮影成功： ' + (j.message || '取り込みました'), 'ok');
+    } else {
+      say('撮影失敗： ' + (j.error || '画面を確認してください'), 'ng');
+    }
+  } catch (e) {
+    say('撮影失敗： リーダーに接続できません（run_reader.sh を起動してください）', 'ng');
+  }
+}
+let CHAMP = null; // data/champions_dex.json (チャンピオンズ実装済みリスト)
+let CHAMP_MOVES_JA = null;
+function champMoveList() { return CHAMP_MOVES_JA || Object.keys(NAMES._moveJa2en || {}); }
+let USAGE_SETS = null; // data/usage_sets.json の sets (pokedb 使用率トップ型)
+let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
+let USAGE_SEASON = '';
+function oppSpec(speciesEn, kind) {
+  if (kind === 'usage') {
+    const u = usageSpec(speciesEn, USAGE_SETS);
+    if (u) return { ...u, kind, moves: [...u.moves], origMoves: [...u.moves], knownMoves: [],
+      curHPPercent: 100, boosts: blankBoosts(), status: '', corrected: [] };
+  }
+  const a = assumedSet(speciesEn, kind === 'usage' ? 'attacker' : kind);
+  const u = usageSpec(speciesEn, USAGE_SETS);
+  const moves = u ? [...u.moves] : [];
+  return { species: speciesEn, kind, sp: { ...a.sp }, nature: a.nature, ability: a.ability, item: '',
+    moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [] };
+}
+// 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
+function applyRevealed(spec, rev) {
+  if (!rev) return spec;
+  const corr = new Set(spec.corrected || []);
+  if (rev.ability) {
+    const ab = resolveAbility(rev.ability) || rev.ability;
+    if (spec.mega && spec.megaSpecies) {
+      const ms = gen.species.get(idOf(spec.megaSpecies));
+      const mabs = ms ? (Array.isArray(ms.abilities) ? ms.abilities : Object.values(ms.abilities || {})) : [];
+      if (mabs.includes(ab)) spec.megaAbility = ab; else spec.ability = ab;
+    } else spec.ability = ab;
+    corr.add('特性');
+  }
+  if (rev.item != null) {
+    spec.item = rev.item === 'none' || rev.item === '' ? '' : (resolveItem(rev.item) || rev.item);
+    corr.add('持ち物');
+    if (spec.item) {
+      const io = gen.items.get(idOf(spec.item));
+      const ms = io && io.megaStone ? Object.values(io.megaStone)[0] : null;
+      if (ms) {
+        // 持ち物がメガストーンと分かっただけではメガシンカ済みにしない
+        // (実際のメガシンカは state.json の mega 通知で applyMegaFlag が立てる)
+        spec.megaSpecies = ms;
+        const msd = gen.species.get(idOf(ms));
+        if (msd) spec.megaAbility = Array.isArray(msd.abilities) ? msd.abilities[0] : Object.values(msd.abilities || {})[0];
+      }
+    }
+  }
+  if (Array.isArray(rev.moves) && rev.moves.length) {
+    const rms = rev.moves.map(m => resolveMove(m) || m).filter(Boolean);
+    spec.moves = [...new Set([...rms, ...(spec.moves || [])])].slice(0, 4);
+    if (!Array.isArray(spec.knownMoves)) spec.knownMoves = [];
+    for (const m of rms) if (!spec.knownMoves.includes(m)) spec.knownMoves.push(m);
+    corr.add('技');
+  }
+  spec.corrected = [...corr];
+  return spec;
+}
+const z2h = s => String(s).replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+function resolveItem(name) {
+  const t = z2h(String(name).trim());
+  if (NAMES._itemJa2en && NAMES._itemJa2en[t]) return NAMES._itemJa2en[t];
+  const it = gen.items.get(idOf(t));
+  return it ? it.name : null;
+}
+function setEv(side, k, raw, refocus) {
+  const spec = state[side][state.sel[side]];
+  spec.sp[k] = Math.min(32, Math.max(0, parseInt(raw) || 0));
+  if (side === 'opps') markCorrected(spec, 'EV');
+  calcAll();
+  if (refocus) { const el = document.querySelector(`[data-ev="${side}:${k}"]`); if (el) { el.focus(); el.select(); } }
+}
+function markCorrected(spec, label) {
+  if (!spec.corrected) spec.corrected = [];
+  if (!spec.corrected.includes(label)) spec.corrected.push(label);
+}
+state.mine = PRESETS.map((_, i) => presetSpec(i));
+state.sel.mine = 1;
+state.active.mine = [1, 5];
+state.opps = state.oppTeam.map(sp => oppSpec(sp, 'usage'));
+
+const effSpecies = spec => (spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
+function speciesData(spec) { return gen.species.get(idOf(effSpecies(spec))); }
+let SPECIES_ABILITIES = {};
+function abilitiesOf(spec) {
+  const sd = speciesData(spec);
+  let vals;
+  if (spec.mega && spec.megaSpecies) {
+    const msd = gen.species.get(idOf(spec.megaSpecies));
+    vals = msd ? Object.values(msd.abilities || {}) : [];
+  } else {
+    const base = (sd && sd.baseSpecies) || spec.species;
+    const full = SPECIES_ABILITIES[base];
+    if (full && full.length) vals = [...full];
+    else vals = Array.isArray(sd.abilities) ? sd.abilities : Object.values(sd.abilities || {});
+  }
+  if (spec.ability && !vals.includes(spec.ability)) vals.push(spec.ability);
+  return [...new Set(vals)];
+}
+function formesOf(en) {
+  const sd = gen.species.get(idOf(en));
+  if (!sd) return [en];
+  const base = sd.baseSpecies || en;
+  const bsd = gen.species.get(idOf(base));
+  const others = (bsd && bsd.otherFormes) || sd.otherFormes || [];
+  return [base, ...others.filter(f => f !== base)];
+}
+function megaFormesOf(en) { return formesOf(en).filter(f => f.includes('-Mega')); }
+function stoneForForme(forme) {
+  const sd = gen.species.get(idOf(forme));
+  const base = sd?.baseSpecies;
+  if (!base) return null;
+  for (const it of gen.items) {
+    if (it.megaStone && it.megaStone[base] === forme) return it.name;
+  }
+  return null;
+}
+function spriteId(en) {
+  if (en === 'Greninja-Bond') return 'greninja-ash';
+  let s = String(en).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  s = s.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  s = s.replace(/-mega-([xyz])$/, '-mega$1').replace(/^mr-/, 'mr')
+    .replace(/(jangmo|hakamo|kommo)-o$/, '$1o')
+    .replace(/paldea-(blaze|combat|aqua)$/, 'paldea$1')
+    .replace(/-low-key$/, '-lowkey');
+  return s;
+}
+function spriteURL(speciesEn) { return `https://play.pokemonshowdown.com/sprites/gen5/${spriteId(speciesEn)}.png`; }
+function spriteImg(en, baseEn, cls) {
+  return `<img class="${cls}" src="${spriteURL(en)}" data-spr="0" data-sid="${spriteId(en)}" data-base="${spriteId(baseEn || en)}" alt="">`;
+}
+function typeChips(spec) {
+  return speciesData(spec).types.map(t => `<span class="typechip" style="background:${TYPE_COLOR[t] || '#555'}">${TYPE_JA[t] || t}</span>`).join('');
+}
+function natureMark(spec, key) {
+  const ud = NAT_UPDOWN[spec.nature];
+  if (!ud || key === 'hp') return null;
+  if (ud[0] === key) return 'up';
+  if (ud[1] === key) return 'down';
+  return null;
+}
+const fmtPct = v => (Math.round(v * 10) / 10) % 1 === 0 ? String(Math.round(v)) : (Math.round(v * 10) / 10).toFixed(1);
+function koColor(n, guaranteed) { if (n === 1) return guaranteed ? 'g' : 'o'; if (n <= 3) return 'o'; return 'r'; }
+function koFmt(t) {
+  if (!t) return null;
+  let m;
+  if (t === 'guaranteed OHKO') return ['1HKO', 'g'];
+  if ((m = t.match(/^([\d.]+)% chance to OHKO/))) return [`${fmtPct(+m[1])}% 1HKO`, 'g'];
+  if ((m = t.match(/^guaranteed (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], true)];
+  if ((m = t.match(/^([\d.]+)% chance to (\d+)HKO/))) return [`${fmtPct(+m[1])}% ${m[2]}HKO`, koColor(+m[2], false)];
+  if ((m = t.match(/^possible (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], false)];
+  return [t, 'n'];
+}
+
+/* ---------- import / export ---------- */
+function exportText(spec) {
+  const spParts = STATJ.filter(([k]) => (spec.sp[k] || 0) > 0)
+    .map(([k, j]) => `${spec.sp[k]} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
+  const lines = [
+    `${effSpecies(spec)}${spec.item ? ' @ ' + spec.item : ''}`,
+    `Ability: ${spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability}`,
+    'Level: 50',
+    `${spec.nature} Nature`,
+  ];
+  if (spParts.length) lines.push(`SPs: ${spParts.join(' / ')}`);
+  for (const mv of spec.moves || []) if (mv) lines.push(`- ${mv}`);
+  return lines.join('\n');
+}
+function resolveSpecies(name) {
+  const t = z2h(name.trim());
+  if (!t) return null;
+  if (NAMES._ja2en && NAMES._ja2en[t]) return NAMES._ja2en[t];
+  const s = gen.species.get(idOf(t));
+  return s ? s.name : null;
+}
+function resolveMove(name) {
+  const t = z2h(name.trim());
+  if (NAMES._moveJa2en && NAMES._moveJa2en[t]) return NAMES._moveJa2en[t];
+  const m = gen.moves.get(idOf(t));
+  return m ? m.name : null;
+}
+function resolveAbility(name) {
+  const t = z2h(name.trim());
+  if (NAMES._abilityJa2en && NAMES._abilityJa2en[t]) return NAMES._abilityJa2en[t];
+  const a = gen.abilities.get(idOf(t));
+  return a ? a.name : null;
+}
+function parseSet(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
+  if (!lines.length) return null;
+  const out = { moves: [], sp: {} };
+  const head = lines[0].split('@');
+  out.species = resolveSpecies(head[0]);
+  if (!out.species) return null;
+  if (head[1]) out.item = head[1].trim();
+  const statMap = { HP: 'hp', Atk: 'atk', Def: 'def', SpA: 'spa', SpD: 'spd', Spe: 'spe' };
+  for (const line of lines.slice(1)) {
+    let m;
+    if ((m = line.match(/^Ability:\s*(.+)$/i))) out.ability = resolveAbility(m[1]) || m[1].trim();
+    else if ((m = line.match(/^(\w+)\s+Nature$/i))) out.nature = m[1];
+    else if ((m = line.match(/^SPs:\s*(.+)$/i))) for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) out.sp[statMap[p[2]]] = Math.min(32, +p[1]); }
+    else if ((m = line.match(/^EVs:\s*(.+)$/i))) for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) out.sp[statMap[p[2]]] = Math.min(32, Math.round(+p[1] / 8)); }
+    else if (line.startsWith('-')) { const mv = resolveMove(line.slice(1)); if (mv) out.moves.push(mv); }
+  }
+  return out;
+}
+
+/* ---------- displayed spec ---------- */
+const DS = side => state[side][state.sel[side]];
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/* ---------- custom dropdown (Showdex react-select reproduction) ---------- */
+const DDREG = {};
+let openDDId = null;
+let SPECIES_OPTIONS = [], MOVE_OPTIONS = [], ITEM_OPTIONS = [];
+function regDD(id, cfg) { DDREG[id] = cfg; }
+function ddHTML(id) {
+  const d = DDREG[id];
+  if (!d) return '';
+  const opt = d.options.find(o => o.v === d.value);
+  const label = d.valueLabel || (opt ? opt.l : '');
+  return `<div class="sdd${d.highlight ? ' highlight' : ''}${d.bare ? ' bare' : ''}" data-sdd="${id}">
+    <div class="sdd-control" data-ddctl="${id}">
+      <div class="sdd-value${label ? '' : ' ph'}">${esc(label || d.placeholder || '')}</div>
+      ${d.extra || ''}
+      ${d.clearable && d.value ? '<span class="sdd-clear" data-ddclear="' + id + '">✕</span>' : ''}
+      <span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+    </div></div>`;
+}
+function ddListHTML(d, query, focusIdx) {
+  const q = z2h(query || '').toLowerCase();
+  const list = d.options.filter(o => !q || z2h(o.l).toLowerCase().includes(q) || String(o.v).toLowerCase().includes(q));
+  if (!list.length) return { html: '<div class="sdd-empty">該当なし</div>', list };
+  const html = list.map((o, i) => `<div class="sdd-opt${o.v === d.value ? ' selected' : ''}${i === focusIdx ? ' focused' : ''}" data-ddopt="${esc(o.v)}" data-ddidx="${i}">${esc(o.l)}</div>`).join('');
+  return { html, list };
+}
+function openDD(id) {
+  closeDD();
+  const d = DDREG[id];
+  const host = document.querySelector(`[data-sdd="${CSS.escape(id)}"]`);
+  if (!d || !host) return;
+  openDDId = id;
+  host.classList.add('open');
+  const ctl = host.querySelector('.sdd-control');
+  const cur = d.options.find(o => o.v === d.value);
+  ctl.innerHTML = `<input class="sdd-input" data-ddinput="${id}" placeholder="${esc(cur ? cur.l : (d.placeholder || ''))}">
+    ${d.extra || ''}
+    ${d.clearable && d.value ? '<span class="sdd-clear" data-ddclear="' + id + '">✕</span>' : ''}
+    <span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span>`;
+  const menu = document.createElement('div');
+  menu.className = 'sdd-menu';
+  menu.innerHTML = '<div class="sdd-list"></div>';
+  host.appendChild(menu);
+  const input = ctl.querySelector('.sdd-input');
+  let focusIdx = Math.max(0, d.options.findIndex(o => o.v === d.value));
+  const paint = () => {
+    const { html, list } = ddListHTML(d, input.value, focusIdx);
+    menu.querySelector('.sdd-list').innerHTML = html;
+    menu._list = list;
+    const f = menu.querySelector('.sdd-opt.focused');
+    if (f) f.scrollIntoView({ block: 'nearest' });
+  };
+  paint();
+  input.focus();
+  input.addEventListener('input', () => { focusIdx = 0; paint(); });
+  input.addEventListener('keydown', e => {
+    const list = menu._list || [];
+    if (e.key === 'ArrowDown') { e.preventDefault(); focusIdx = Math.min(list.length - 1, focusIdx + 1); paint(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusIdx = Math.max(0, focusIdx - 1); paint(); }
+    else if (e.key === 'Enter') { e.preventDefault(); const o = list[focusIdx] || list[0]; if (o) pickDD(id, o.v); }
+    else if (e.key === 'Escape') { closeDD(); }
+  });
+}
+function closeDD() {
+  if (!openDDId) return;
+  const id = openDDId;
+  openDDId = null;
+  const host = document.querySelector(`[data-sdd="${CSS.escape(id)}"]`);
+  if (host) { host.classList.remove('open'); const m = host.querySelector('.sdd-menu'); if (m) m.remove(); }
+}
+function pickDD(id, v) {
+  const d = DDREG[id];
+  closeDD();
+  if (d && d.onPick) d.onPick(v);
+}
+
+/* ---------- status popover ---------- */
+const STATUS_LIST = [['', '正常', 'OK', 'ok'], ['brn', 'やけど', 'BRN', 'brn'], ['par', 'まひ', 'PAR', 'par'], ['psn', 'どく', 'PSN', 'psn'], ['tox', 'もうどく', 'TOX', 'tox'], ['slp', 'ねむり', 'SLP', 'slp'], ['frz', 'こおり', 'FRZ', 'frz']];
+const STATUS_ABBR = { brn: 'BRN', par: 'PAR', psn: 'PSN', tox: 'TOX', slp: 'SLP', frz: 'FRZ' };
+let stPopEl = null;
+function closeStPop() { if (stPopEl) { stPopEl.remove(); stPopEl = null; } }
+function openStPop(side, anchor) {
+  closeStPop();
+  const spec = DS(side);
+  stPopEl = document.createElement('div');
+  stPopEl.className = 'stpop';
+  stPopEl.innerHTML = STATUS_LIST.map(([v, jaName, abbr, cls]) =>
+    `<button data-statuspick="${side}:${v}"><span class="stbadge ${cls}">${abbr}</span>${jaName}</button>`).join('');
+  document.body.appendChild(stPopEl);
+  const r = anchor.getBoundingClientRect();
+  stPopEl.style.left = (window.scrollX + r.left) + 'px';
+  stPopEl.style.top = (window.scrollY + r.bottom + 4) + 'px';
+}
+function statusBadgeHTML(spec) {
+  if ((spec.curHPPercent ?? 100) <= 0) return '<span class="stbadge fnt">RIP</span>';
+  if (spec.status) return `<span class="stbadge ${spec.status}">${STATUS_ABBR[spec.status] || ''}</span>`;
+  return '<span class="stbadge ok">OK</span>';
+}
+
+
+function dispStat(spec, key, raw, sideKey) {
+  if (key === 'hp') return [raw.hp, ''];
+  let v = raw[key];
+  const b = spec.boosts[key] || 0;
+  if (b > 0) v = Math.floor(v * (2 + b) / 2); else if (b < 0) v = Math.floor(v * 2 / (2 - b));
+  // 特性・道具による補正: ゲーム式 (@smogon/calc の atMods/dfMods) に合わせ、
+  // ランク補正後の値に補正を 4096 固定小数点で連鎖させ、最後に pokeRound
+  // (.5 は切り下げ) で 1 回だけ丸める。特性→道具の順も calc と同じ
+  const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
+  let modChain = 4096;
+  const pushMod = m => { modChain = Math.floor((modChain * m + 2048) / 4096); };
+  if (key === 'atk' && (ab === 'Huge Power' || ab === 'Pure Power')) pushMod(8192);
+  else if (key === 'atk' && ab === 'Gorilla Tactics') pushMod(6144);
+  if (key === 'def' && ab === 'Fur Coat') pushMod(8192);
+  if (key === 'spd' && ab === 'Ice Scales') pushMod(8192);
+  if (key === 'atk' && spec.item === 'Choice Band') pushMod(6144);
+  if (key === 'spa' && spec.item === 'Choice Specs') pushMod(6144);
+  if (modChain !== 4096) { const x = v * modChain / 4096; v = (x % 1 > 0.5) ? Math.ceil(x) : Math.floor(x); }
+  if (key === 'spe') {
+    if (spec.item === 'Choice Scarf') v = Math.floor(v * 1.5);
+    if (state.side[sideKey].tailwind) v *= 2;
+    if (spec.status === 'par') v = Math.floor(v / 2);
+  }
+  return [v, v > raw[key] ? 'green' : v < raw[key] ? 'red' : ''];
+}
+
+/* ---------- panel parts (1 vs 1, Showdex PlayerCalc structure) ---------- */
+function playerBar(side) {
+  const isOpp = side === 'opps';
+  const specs = state[side];
+  const rack = specs.map((spec, i) => {
+    const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
+    return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', spec.species))}">${spriteImg(spec.species, gen.species.get(spec.species)?.baseSpecies || spec.species, '')}</button>`;
+  }).join('');
+  return `<div class="playerbar">
+    <div class="playerinfo">
+      <div class="username">${isOpp ? '相手' : '自分'}</div>
+      <div class="playeractions"><button class="tgl on" data-noop="1">AUTO</button></div>
+    </div>
+    <div class="rack">${rack}</div>
+  </div>`;
+}
+function presetBox(side) {
+  const spec = DS(side);
+  let dd = '';
+  if (side === 'mine') {
+    regDD('preset:mine', {
+      options: PRESETS.map((p, i) => ({ v: String(i), l: p.label })),
+      value: String(state.sel.mine),
+      onPick: v => { state.sel.mine = +v; calcAll(); },
+    });
+    dd = ddHTML('preset:mine');
+  } else {
+    regDD('preset:opps', {
+      options: [
+        { v: 'usage', l: '使用率トップ型（pokedb）' },
+        { v: 'attacker', l: '火力特化型' },
+        { v: 'bulky', l: '耐久型' },
+        { v: 'none', l: '素の種族値' },
+        { v: 'custom', l: 'カスタム' },
+      ],
+      value: spec.kind || 'usage',
+      valueLabel: (spec.corrected && spec.corrected.length && oppTrainerName) ? oppTrainerName : '',
+      onPick: v => {
+        const keep = DS('opps');
+        const ns = oppSpec(keep.species, v);
+        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+        state.opps[state.sel.opps] = ns;
+        calcAll();
+      },
+    });
+    dd = ddHTML('preset:opps');
+  }
+  const imp = ui.importing[side];
+  return `<div class="presetbox">
+    <div class="presethead">
+      <div class="part"><span class="ddlabel" style="margin:0">SET</span><button class="tgl on" data-noop="1">AUTO</button></div>
+      <div class="part">
+        <button class="tgl" data-act="${side}:import">読み込み</button>
+        <button class="tgl" data-act="${side}:export">書き出し</button>
+        <button class="tgl" data-act="${side}:all">すべて書き出し</button>
+      </div>
+    </div>
+    ${dd}
+    ${imp ? `<textarea class="importbox" data-importbox="${side}" placeholder="Showdown形式のセットを貼り付け">${esc(imp === true ? '' : imp)}</textarea>
+      <button class="tgl applybtn" data-applyimport="${side}">この内容で読み込む</button>` : ''}
+  </div>`;
+}
+function pokeInfo(side) {
+  const spec = DS(side);
+  const eff = effSpecies(spec);
+  const sd = speciesData(spec);
+  let nameHTML;
+  if (side === 'opps') {
+    regDD('species:opps', {
+      options: SPECIES_OPTIONS, value: spec.species, bare: true,
+      valueLabel: ja('species', eff),
+      onPick: v => {
+        if (!v || v === spec.species) return;
+        const keep = DS('opps');
+        const ns = oppSpec(v, keep.kind || 'usage');
+        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+        state.opps[state.sel.opps] = ns;
+        state.oppTeam[state.sel.opps] = v;
+        calcAll();
+      },
+    });
+    nameHTML = ddHTML('species:opps');
+  } else {
+    nameHTML = `<span class="speciesname">${esc(ja('species', eff))}</span>`;
+  }
+  const hp = Math.max(0, Math.min(100, Math.round(spec.curHPPercent ?? 100)));
+  return `<div class="pokeinfo">
+    <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
+    <div class="infomain">
+      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span></div>
+      <div class="secondline">
+        <div class="hpbar"><i style="width:${hp}%"></i></div>
+        <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
+        <button class="statusbtn" data-statusbtn="${side}">${statusBadgeHTML(spec)}</button>
+      </div>
+    </div>
+    ${presetBox(side)}
+  </div>`;
+}
+function metaRow(side) {
+  const spec = DS(side);
+  const corr = f => side === 'opps' && (spec.corrected || []).includes(f);
+  const abs = abilitiesOf(spec);
+  if (spec.ability && !abs.includes(spec.ability)) abs.push(spec.ability);
+  if (spec.mega && spec.megaAbility && !abs.includes(spec.megaAbility)) abs.push(spec.megaAbility);
+  regDD(`ability:${side}`, {
+    options: abs.map(a => ({ v: a, l: ja('abilities', a) })),
+    value: (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability, highlight: corr('特性'),
+    onPick: v => { if (spec.mega && spec.megaAbility) spec.megaAbility = v; else spec.ability = v; if (side === 'opps') markCorrected(spec, '特性'); calcAll(); },
+  });
+  regDD(`nature:${side}`, {
+    options: NATURES.map(n => ({ v: n, l: NAT_JA[n] || n })),
+    value: spec.nature, highlight: corr('性格'),
+    onPick: v => { spec.nature = v; if (side === 'opps') markCorrected(spec, '性格'); calcAll(); },
+  });
+  regDD(`item:${side}`, {
+    options: ITEM_OPTIONS, value: spec.item || '', clearable: true, placeholder: 'なし',
+    valueLabel: spec.item ? (NAMES._itemEn2ja[idOf(spec.item)] || spec.item) : '',
+    highlight: corr('持ち物'),
+    onPick: v => { spec.item = v || ''; if (side === 'opps') markCorrected(spec, '持ち物'); calcAll(); },
+  });
+  return `<div class="metarow">
+    <div class="col"><div class="ddlabel">特性</div>${ddHTML(`ability:${side}`)}</div>
+    <div class="col"><div class="ddlabel">性格</div>${ddHTML(`nature:${side}`)}</div>
+    <div class="col"><div class="ddlabel">持ち物</div>${ddHTML(`item:${side}`)}</div>
+  </div>`;
+}
+function oppInfoLine() {
+  const spec = DS('opps');
+  const rates = spec.usageRates || spec.rates;
+  if (spec.kind !== 'usage' || !rates) return '';
+  const corr = spec.corrected || [];
+  const parts = [];
+  if (rates.ability && !corr.includes('特性')) parts.push(`特性 ${ja('abilities', spec.ability)} ${rates.ability}%`);
+  else if (rates.ability) parts.push(`特性 ${ja('abilities', spec.ability)}`);
+  if (rates.item && !corr.includes('持ち物')) parts.push(`持ち物 ${spec.item ? (NAMES._itemEn2ja[idOf(spec.item)] || spec.item) : 'なし'} ${rates.item}%`);
+  else if (rates.item) parts.push(`持ち物 ${spec.item ? (NAMES._itemEn2ja[idOf(spec.item)] || spec.item) : 'なし'}`);
+  if (rates.patternLabel && !corr.includes('EV')) parts.push(`EV型 ${rates.patternLabel} ${rates.pattern || ''}%`);
+  const head = `pokedb 使用率トップ型${USAGE_SEASON ? `（${USAGE_SEASON}）` : ''}: `;
+  const corrLine = corr.length ? `<br><span class="corrected">判明情報で訂正済み: ${corr.join('・')}</span>` : '';
+  return `<div class="oppinfo">${head}${parts.join(' / ')}${corrLine}</div>`;
+}
+function megaFormeOf(speciesEn) {
+  for (const suf of ['-Mega', '-Mega-X', '-Mega-Y', '-Mega-Z']) {
+    const c = gen.species.get(idOf(speciesEn + suf));
+    if (c) return c.name;
+  }
+  return null;
+}
+// その技が現在のフィールドで範囲技になるか (ワイドフォースはサイコフィールド+接地時のみ)
+function spreadCapable(side, moveName) {
+  if (!moveName) return false;
+  const md = moveData(moveName);
+  if (!md || md.category === 'Status') return false;
+  if (md.name === 'Expanding Force') {
+    if (state.field.terrain !== 'Psychic') return false;
+    const spec = DS(side);
+    const sd = gen.species.get(idOf(effSpecies(spec)));
+    if (!sd) return false;
+    if ((sd.types || []).includes('Flying')) return false;
+    const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
+    if (ab === 'Levitate' || spec.item === 'Air Balloon') return false;
+    return true;
+  }
+  return md.target === 'allAdjacentFoes' || md.target === 'allAdjacent';
+}
+// 単体/全体の現在モード: 手動選択があればそれ、なければ相手の場の残数で決める
+function spreadMode(side, moveName) {
+  const sel = ui.spreadSel[side][moveName];
+  if (sel) return sel;
+  const foeSide = side === 'mine' ? 'opps' : 'mine';
+  const alive = (state.active[foeSide] || []).filter(i => (state[foeSide][i]?.curHPPercent ?? 100) > 0).length;
+  return alive >= 2 ? 'spread' : 'single';
+}
+function movesBox(side, res) {
+  const spec = DS(side);
+  const canMega = spec.megaSpecies || megaFormeOf(spec.species);
+  const megaSuffix = spec.mega && spec.megaSpecies ? (spec.megaSpecies.match(/-(X|Y|Z)$/)?.[1] || '') : '';
+  const head = `<div class="mvhead">技${canMega ? ` <button class="tgl${spec.mega ? ' on' : ''}" data-mega="${side}">メガ${megaSuffix}</button>` : ''}</div>
+    <div class="mvhead mid">ダメージ <button class="tgl${ui.crit[side] ? ' on' : ''}" data-crit="${side}">CRIT</button></div>
+    <div class="mvhead mid">KO %</div>`;
+  const rows = [0, 1, 2, 3].map(mi => {
+    regDD(`move:${side}:${mi}`, {
+      options: MOVE_OPTIONS, value: spec.moves[mi] || '', clearable: true, placeholder: '（技なし）',
+      extra: (() => {
+        const mv0 = spec.moves[mi];
+        if (!spreadCapable(side, mv0)) return '';
+        const mode = spreadMode(side, mv0);
+        return `<span class="spreadtgl"><button data-spread="${side}:${mi}:single" class="${mode === 'single' ? 'on' : ''}">単体</button><button data-spread="${side}:${mi}:spread" class="${mode === 'spread' ? 'on' : ''}">全体</button></span>`;
+      })(),
+      highlight: side === 'opps' && !!spec.moves[mi] && (spec.knownMoves || []).includes(spec.moves[mi]),
+      onPick: v => { const old = spec.moves[mi]; spec.moves[mi] = v || ''; if (side === 'opps') { markCorrected(spec, '技'); if (!Array.isArray(spec.knownMoves)) spec.knownMoves = []; if (v && !spec.knownMoves.includes(v)) spec.knownMoves.push(v); if (old && old !== v && !spec.moves.includes(old)) spec.knownMoves = spec.knownMoves.filter(m => m !== old); } calcAll(); },
+    });
+    const mr = res && res.moveResults ? res.moveResults[mi] : null;
+    const r = mr && mr.vs ? mr.vs[0] : null;
+    let dmg = '—', cls = '', ko = '', koStyle = '';
+    if (r) {
+      if (r.status) { dmg = 'N/A'; }
+      else if (r.immune) { dmg = 'IMMUNE'; cls = 'immune'; }
+      else if (r.error) { dmg = '—'; }
+      else {
+        dmg = `${fmtPct(r.minPct)} – ${fmtPct(r.maxPct)}%`;
+        const kf = koFmt(r.ko);
+        if (kf) { ko = kf[0]; const c = { g: '#4CAF50', o: '#FF9800', r: '#F44336' }[kf[1]]; if (c) koStyle = ` style="color:${c}"`; }
+      }
+    }
+    const foe = DS(side === 'mine' ? 'opps' : 'mine');
+    const mvName = spec.moves[mi];
+    const copyText = (r && !r.status && !r.immune && mvName) ? `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: ${dmg} ${ko}` : '';
+    return `${ddHTML(`move:${side}:${mi}`)}
+      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}"` : ''}>${dmg}</button>
+      <span class="ko"${koStyle}>${ko}</span>`;
+  }).join('');
+  return `<div class="movesbox"><div class="movesgrid">${head}${rows}</div></div>`;
+}
+function statsGrid(side, statArr) {
+  const spec = DS(side);
+  const heads = STATJ.map(([k, en]) => {
+    const m = natureMark(spec, k);
+    return `<div class="sghead ${m || ''}">${m === 'up' ? '+' : m === 'down' ? '-' : ''}${en}</div>`;
+  }).join('');
+  const total = STATJ.reduce((s, [k]) => s + (spec.sp[k] || 0), 0);
+  const over = total > 66;
+  const delta = total < 66 ? `<span class="delta">${66 - total}↓</span>` : over ? `<span class="delta over">${total - 66}↑</span>` : '';
+  const evRow = STATJ.map(([k]) => {
+    const est = side === 'opps' ? spec.estSp?.[k] : null;
+    if (est) {
+      const txt = est[0] === est[1] ? String(est[0]) : `${est[0]}-${est[1]}`;
+      return `<div class="evwrap"><span class="estval" style="${rangeFont(txt, 1, 3.6)}" title="推定">${txt}</span></div>`;
+    }
+    return `<div class="evwrap"><span class="evfield"><input data-ev="${side}:${k}" type="number" min="0" max="32" value="${spec.sp[k] || 0}" class="${(spec.sp[k] || 0) > 0 ? 'has' : ''}"></span></div>`;
+  }).join('');
+  const finals = STATJ.map(([k]) => {
+    if (!statArr) return '<div class="finalstat">—</div>';
+    const est = side === 'opps' ? spec.estStat?.[k] : null;
+    if (est) {
+      const txt = est[0] === est[1] ? String(est[0]) : `${est[0]}-${est[1]}`;
+      return `<div class="finalstat estval" style="${rangeFont(txt, 1.1, 3.3)}" title="推定">${txt}</div>`;
+    }
+    const [v, cn] = dispStat(spec, k, statArr, side === 'mine' ? 'mine' : 'opp');
+    return `<div class="finalstat ${cn === 'green' ? 'pos' : cn === 'red' ? 'neg' : ''}">${v}</div>`;
+  }).join('');
+  const boosts = STATJ.map(([k]) => {
+    if (k === 'hp') return '<div></div>';
+    const b = spec.boosts[k] || 0;
+    return `<div class="boostcell"><button class="bstbtn" data-boost="${side}:${k}:-1">−</button><span class="bstval ${b > 0 ? 'pos' : b < 0 ? 'neg' : ''}">${b > 0 ? '+' + b : b}</span><button class="bstbtn" data-boost="${side}:${k}:1">+</button></div>`;
+  }).join('');
+  return `<div class="statswrap"><div class="statsgrid">
+    <div></div>${heads}
+    <div class="sglabel ${over ? 'warn' : ''}">努力値${delta}</div>${evRow}
+    <div></div>${finals}
+    <div class="sglabel">ランク</div>${boosts}
+  </div></div>`;
+}
+function formePopHTML(side) {
+  const spec = DS(side);
+  const eff = effSpecies(spec);
+  const formes = formesOf(spec.species);
+  if (formes.length < 2) return '';
+  const base = formes[0];
+  const opts = formes.map(f => {
+    const label = f === base ? 'BASE' : f.replace(base + '-', '').toUpperCase();
+    return `<button class="formeopt ${f === eff ? 'sel' : ''}" data-formepick="${side}:${f}">${spriteImg(f, base, '')}<span>${esc(label)}</span></button>`;
+  }).join('');
+  return `<span class="formepop">${opts}</span>`;
+}
+function renderPanel(side) {
+  if (!DS(side)) {
+    return `<div class="playercalc">${playerBar(side)}<div class="oppinfo" style="margin-top:1.2rem">相手のチームはリセットされました。対戦が始まると自動で読み取ります。</div></div>`;
+  }
+  const res = !lastCalc ? null : side === 'mine' ? lastCalc.results[0] : lastCalc.oppResults[0];
+  const statArr = !lastCalc ? null : side === 'mine' ? lastCalc.stats.mine[0] : lastCalc.stats.opps[0];
+  return `<div class="playercalc">
+    ${playerBar(side)}
+    ${pokeInfo(side)}
+    ${metaRow(side)}
+    ${side === 'opps' ? oppInfoLine() : ''}
+    <div class="tables">${movesBox(side, res)}${statsGrid(side, statArr)}</div>
+  </div>`;
+}
+
+/* ---------- field ---------- */
+function sideChips(which) {
+  const s = state.side[which];
+  const defs = [['light', 'ひかりのかべ'], ['reflect', 'リフレクター'], ['veil', 'オーロラベール'], ['tailwind', 'おいかぜ'], ['hand', 'てだすけ'], ['guard', 'フレンドガード']];
+  return defs.map(([k, label]) => `<button class="tgl primary${s[k] ? ' on' : ''}" data-sidechip="${which}:${k}">${label}</button>`).join('');
+}
+function renderField() {
+  regDD('weather', {
+    options: [{ v: '', l: 'なし' }, { v: 'Sun', l: 'はれ' }, { v: 'Rain', l: 'あめ' }, { v: 'Sand', l: 'すなあらし' }, { v: 'Snow', l: 'ゆき' }, { v: 'Harsh Sunshine', l: 'つよいひざし' }, { v: 'Heavy Rain', l: 'つよいあめ' }, { v: 'Strong Winds', l: 'らんきりゅう' }],
+    value: state.field.weather || '',
+    onPick: v => { state.field.weather = v; calcAll(); },
+  });
+  regDD('terrain', {
+    options: [{ v: '', l: 'なし' }, { v: 'Electric', l: 'エレキフィールド' }, { v: 'Grassy', l: 'グラスフィールド' }, { v: 'Psychic', l: 'サイコフィールド' }, { v: 'Misty', l: 'ミストフィールド' }],
+    value: state.field.terrain || '',
+    onPick: v => { state.field.terrain = v; calcAll(); },
+  });
+  return `
+    <div class="frow"><div class="flabel">天候</div><div class="fcontrol">${ddHTML('weather')}</div></div>
+    <div class="frow"><div class="flabel">フィールド</div><div class="fcontrol">${ddHTML('terrain')}</div></div>
+    <div class="frow"><div class="flabel">↑ 自分の場</div><div class="fchips">${sideChips('mine')}</div></div>
+    <div class="frow"><div class="flabel">↓ 相手の場</div><div class="fchips">${sideChips('opp')}</div></div>`;
+}
+
+/* ---------- calc ---------- */
+function renderAll() {
+  if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) {
+    try { document.activeElement.blur(); } catch (e) { /* noop */ }
+  }
+  openDDId = null;
+  closeStPop();
+  document.getElementById('playerMine').innerHTML = renderPanel('mine');
+  document.getElementById('fieldbar').innerHTML = renderField();
+  document.getElementById('playerOpp').innerHTML = renderPanel('opps');
+}
+function calcAll() {
+  ui.formePop = null;
+  if (!DS('mine') || !DS('opps')) { lastCalc = null; renderAll(); return; }
+  const atkSide = { isHelpingHand: !!state.side.mine.hand };
+  const defSide = { isLightScreen: !!state.side.opp.light, isReflect: !!state.side.opp.reflect, isAuroraVeil: !!state.side.opp.veil, isFriendGuard: !!state.side.opp.guard };
+  const oppAtkSide = { isHelpingHand: !!state.side.opp.hand };
+  const oppDefSide = { isLightScreen: !!state.side.mine.light, isReflect: !!state.side.mine.reflect, isAuroraVeil: !!state.side.mine.veil, isFriendGuard: !!state.side.mine.guard };
+  const singleMoves = { mine: [], opps: [] };
+  for (const sd of ['mine', 'opps']) {
+    for (const mv of DS(sd).moves || []) {
+      if (mv && spreadCapable(sd, mv) && spreadMode(sd, mv) === 'single') singleMoves[sd].push(mv);
+    }
+  }
+  lastCalc = calcMatchup({
+    mine: [DS('mine')], opps: [DS('opps')],
+    field: { weather: state.field.weather, terrain: state.field.terrain, attackerSide: atkSide, defenderSide: defSide, oppAttackerSide: oppAtkSide, oppDefenderSide: oppDefSide },
+    crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
+    singleMoves,
+  });
+  renderAll();
+}
+
+/* ---------- import (adapted to displayed spec) ---------- */
+function applyImport(side, parsed) {
+  if (!parsed.species) return;
+  const idx = state.sel[side];
+  const keep = state[side][idx];
+  const megaSpecies = megaFromItem(parsed.item) || parsed.megaSpecies || null;
+  const megaAbility = megaSpecies ? (gen.species.get(megaSpecies)?.abilities?.[0] || null) : null;
+  state[side][idx] = {
+    species: parsed.species, kind: 'custom',
+    sp: { ...parsed.sp }, nature: parsed.nature || keep.nature,
+    ability: parsed.ability || keep.ability, item: parsed.item || '',
+    moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
+    curHPPercent: keep.curHPPercent, boosts: keep.boosts, status: keep.status,
+    megaSpecies, megaAbility, mega: !!megaSpecies && keep.mega,
+    knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
+    note: 'Imported set', corrected: ['読み込み'],
+  };
+  if (side === 'opps') state.oppTeam[idx] = parsed.species;
+}
+function megaFromItem(itemEn) {
+  if (!itemEn) return null;
+  const it = gen.items.get(itemEn);
+  if (it && it.megaStone) return Object.values(it.megaStone)[0];
+  return null;
+}
+
+/* ---------- events ---------- */
+document.addEventListener('mousedown', e => {
+  const spb = e.target.closest('[data-spread]');
+  if (spb) {
+    e.preventDefault(); e.stopPropagation();
+    ui.spreadGuard = Date.now();
+    const [sd, mi, mode] = spb.dataset.spread.split(':');
+    const spec = DS(sd);
+    const mv = spec && spec.moves[+mi];
+    if (mv) ui.spreadSel[sd][mv] = mode;
+    calcAll();
+    return;
+  }
+  const clear = e.target.closest('[data-ddclear]');
+  if (clear) { e.preventDefault(); e.stopPropagation(); pickDD(clear.dataset.ddclear, ''); return; }
+  const opt = e.target.closest('[data-ddopt]');
+  if (opt) { e.preventDefault(); const host = opt.closest('[data-sdd]'); if (host) pickDD(host.dataset.sdd, opt.dataset.ddopt); return; }
+  const ctl = e.target.closest('[data-ddctl]');
+  if (ctl) {
+    const id = ctl.dataset.ddctl;
+    if (openDDId === id) { /* already open: keep open (input focus) */ const inp = ctl.querySelector('.sdd-input'); if (inp && e.target !== inp) { e.preventDefault(); inp.focus(); } }
+    else openDD(id);
+    return;
+  }
+  if (!e.target.closest('.sdd')) closeDD();
+  if (!e.target.closest('.stpop') && !e.target.closest('[data-statusbtn]')) closeStPop();
+  if (ui.formePop && !e.target.closest('[data-forme]') && !e.target.closest('.formepop')) { ui.formePop = null; renderAll(); }
+});
+document.addEventListener('click', e => {
+  const t = e.target;
+  const icon = t.closest('[data-icon]');
+  if (icon) { const [side, i] = icon.dataset.icon.split(':'); state.sel[side] = +i; calcAll(); return; }
+  const cap = t.closest('[data-capture]');
+  if (cap) { captureTeam(cap.dataset.capture); return; }
+  const act = t.closest('[data-act]');
+  if (act) {
+    const [side, what] = act.dataset.act.split(':');
+    if (what === 'import') { ui.importing[side] = ui.importing[side] ? false : true; renderAll(); const ta = document.querySelector(`[data-importbox="${side}"]`); if (ta) ta.focus(); }
+    if (what === 'export') {
+      if (navigator.clipboard) navigator.clipboard.writeText(exportText(DS(side))).catch(() => {});
+      const old = act.textContent;
+      act.textContent = 'コピーしました';
+      setTimeout(() => { act.textContent = old; }, 1600);
+    }
+    if (what === 'all') {
+      const team = side === 'mine' ? state.mine : state.opps;
+      if (navigator.clipboard) navigator.clipboard.writeText(team.map(exportText).join('\n\n')).catch(() => {});
+      const old = act.textContent;
+      act.textContent = 'コピーしました';
+      setTimeout(() => { act.textContent = old; }, 1600);
+    }
+    return;
+  }
+  const ai = t.closest('[data-applyimport]');
+  if (ai) {
+    const side = ai.dataset.applyimport;
+    const ta = document.querySelector(`[data-importbox="${side}"]`);
+    const parsed = parseSet(ta ? ta.value : '');
+    ui.importing[side] = false;
+    applyImport(side, parsed);
+    calcAll();
+    return;
+  }
+  const fp = t.closest('[data-formepick]');
+  if (fp) {
+    const [side, forme] = fp.dataset.formepick.split(':');
+    const spec = DS(side);
+    const base = gen.species.get(idOf(spec.species))?.baseSpecies || spec.species;
+    if (forme === base) {
+      spec.mega = false;
+      if (spec.species !== base) {
+        // フォルム違い (イルカマン等) は種族自体をベースに戻す
+        spec.species = base;
+        spec.megaSpecies = undefined;
+        const list = abilitiesOf(spec);
+        if (list.length && !list.includes(spec.ability)) spec.ability = list[0];
+      }
+    }
+    else if (forme.includes('-Mega')) {
+      spec.megaSpecies = forme;
+      spec.mega = true;
+      const sd = gen.species.get(idOf(forme));
+      if (sd) spec.megaAbility = Object.values(sd.abilities)[0];
+      const stone = stoneForForme(forme);
+      if (stone) spec.item = stone;
+    } else {
+      spec.species = forme;
+      spec.mega = false;
+      spec.megaSpecies = undefined;
+      const list = abilitiesOf(spec);
+      if (list.length && !list.includes(spec.ability)) spec.ability = list[0];
+    }
+    ui.formePop = null;
+    calcAll();
+    return;
+  }
+  const fo = t.closest('[data-forme]');
+  if (fo) { const side = fo.dataset.forme; ui.formePop = ui.formePop === side ? null : side; renderAll(); return; }
+  const mg = t.closest('[data-mega]');
+  if (mg) {
+    const spec = DS(mg.dataset.mega);
+    const formes = megaFormesOf(spec.species);
+    if (formes.length) {
+      if (!spec.mega) { spec.mega = true; spec.megaSpecies = formes[0]; }
+      else {
+        const i = formes.indexOf(spec.megaSpecies);
+        if (i >= 0 && i < formes.length - 1) spec.megaSpecies = formes[i + 1];
+        else spec.mega = false;
+      }
+      if (spec.mega) {
+        const sd = gen.species.get(idOf(spec.megaSpecies));
+        if (sd) spec.megaAbility = Object.values(sd.abilities)[0];
+        const stone = stoneForForme(spec.megaSpecies);
+        if (stone) spec.item = stone;
+      }
+    }
+    calcAll();
+    return;
+  }
+  const cr = t.closest('[data-crit]');
+  if (cr) { const side = cr.dataset.crit; ui.crit[side] = !ui.crit[side]; calcAll(); return; }
+  const spb = t.closest('[data-spread]');
+  if (spb) {
+    if (Date.now() - (ui.spreadGuard || 0) < 1000) return;
+    const [sd, mi, mode] = spb.dataset.spread.split(':');
+    const spec = DS(sd);
+    const mv = spec && spec.moves[+mi];
+    if (mv) ui.spreadSel[sd][mv] = mode;
+    calcAll();
+    return;
+  }
+  const bs = t.closest('[data-boost]');
+  if (bs) {
+    const [side, k, d] = bs.dataset.boost.split(':');
+    const spec = DS(side);
+    spec.boosts[k] = Math.max(-6, Math.min(6, (spec.boosts[k] || 0) + (+d)));
+    calcAll();
+    return;
+  }
+  const chip = t.closest('[data-sidechip]');
+  if (chip) {
+    const [which, k] = chip.dataset.sidechip.split(':');
+    state.side[which][k] = !state.side[which][k];
+    calcAll();
+    return;
+  }
+  const sb = t.closest('[data-statusbtn]');
+  if (sb) { openStPop(sb.dataset.statusbtn, sb); return; }
+  const sp = t.closest('[data-statuspick]');
+  if (sp) {
+    const [side, v] = sp.dataset.statuspick.split(':');
+    DS(side).status = v;
+    closeStPop();
+    calcAll();
+    return;
+  }
+  const cp = t.closest('[data-copy]');
+  if (cp) {
+    if (navigator.clipboard) navigator.clipboard.writeText(cp.dataset.copy);
+    cp.classList.add('copied');
+    setTimeout(() => cp.classList.remove('copied'), 700);
+    return;
+  }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.matches('[data-hpnum]')) {
+    const spec = DS(t.dataset.hpnum);
+    spec.curHPPercent = Math.max(0, Math.min(100, Math.round(+t.value || 0)));
+    calcAll();
+    return;
+  }
+  if (t.matches('[data-ev]')) {
+    const [side, k] = t.dataset.ev.split(':');
+    const prevSide = state.sel[side];
+    setEv(side, k, t.value, false);
+    return;
+  }
+});
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t.matches && t.matches('[data-ev]') && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    const [side, k] = t.dataset.ev.split(':');
+    const spec = DS(side);
+    const step = (e.shiftKey ? 4 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+    setEv(side, k, (spec.sp[k] || 0) + step, true);
+  }
+  if (t.matches && t.matches('[data-hpnum]') && e.key === 'Enter') t.blur();
+});
+document.addEventListener('focusin', e => {
+  if (e.target.matches && e.target.matches('[data-ev]')) e.target.select();
+});
+$('applyjson').addEventListener('click', () => {
+  try { applyState(JSON.parse($('jsonin').value)); } catch (err) { /* ignore */ }
+});
+
+/* ---------- state.json 連携 ---------- */
+const lastActiveKey = { mine: '', opps: '' };
+function applyRevealedPreserving(spec, rev) {
+  let fresh = oppSpec(spec.species, 'usage');
+  // フォルム違い (イルカマン(ヒーロー)等) には使用率データが無いため、
+  // ベース種族の使用率型を流用し種族だけ差し替える (想定型が毎回変わらないように)
+  if (!usageSpec(spec.species, USAGE_SETS)) {
+    const base = gen.species.get(idOf(spec.species))?.baseSpecies;
+    if (base && base !== spec.species && usageSpec(base, USAGE_SETS)) {
+      fresh = oppSpec(base, 'usage');
+      fresh.species = spec.species;
+    }
+  }
+  applyRevealed(fresh, rev);
+  for (const f of spec.corrected || []) {
+    if (f === '特性') fresh.ability = spec.ability;
+    if (f === '性格') fresh.nature = spec.nature;
+    if (f === '持ち物') { fresh.item = spec.item; fresh.megaSpecies = spec.megaSpecies; fresh.megaAbility = spec.megaAbility; fresh.mega = spec.mega; }
+    if (f === '技') fresh.moves = [...spec.moves];
+    if (f === 'EV') fresh.sp = { ...spec.sp };
+    if (!fresh.corrected.includes(f)) fresh.corrected.push(f);
+  }
+  // 手動で切り替えたメガシンカ状態は再構築で消さない
+  if (spec.mega && !fresh.mega) { fresh.mega = true; fresh.megaSpecies = spec.megaSpecies; fresh.megaAbility = spec.megaAbility; }
+  if (!fresh.megaSpecies && spec.megaSpecies) fresh.megaSpecies = spec.megaSpecies;
+  fresh.knownMoves = [...new Set([...(fresh.knownMoves || []), ...(spec.knownMoves || [])])];
+  fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status;
+  return fresh;
+}
+// リーダーがメガシンカを検出したら、その枠をメガ種族として計算する
+function applyMegaFlag(spec, en) {
+  if (!en.mega || spec.mega) return;
+  spec.mega = true;
+  if (en.megaSpecies) spec.megaSpecies = en.megaSpecies;
+  if (!spec.megaSpecies) spec.megaSpecies = megaFormeOf(spec.species);
+  if (spec.megaSpecies) {
+    const msd = gen.species.get(idOf(spec.megaSpecies));
+    if (msd) spec.megaAbility = Array.isArray(msd.abilities) ? msd.abilities[0] : Object.values(msd.abilities || {})[0];
+  }
+}
+/* ---------- 相手の型推定エンジン ---------- */
+// reader が state.json に流すイベント (技の使用順と、ダメージ+その時の状況) を
+// 自チームの正確な数値と照らし合わせ、相手の実数値・努力値・性格の範囲を絞り込む。
+// モデル化できない要素 (未判明の持ち物・特性など) を含むイベントは、候補が
+// 空になった時点で矛盾として捨てるため、推定が壊れることはない。
+const INF_BLACKLIST = new Set(['Foul Play', 'Gyro Ball', 'Electro Ball', 'Endeavor', 'Final Gambit', 'Seismic Toss', 'Night Shade', 'Dragon Rage', 'Sonic Boom', 'Super Fang', "Nature's Madness", 'Fissure', 'Horn Drill', 'Guillotine', 'Sheer Cold', 'Counter', 'Mirror Coat', 'Metal Burst', 'Comeuppance', 'Pain Split']);
+let inference, infCtx, infLastMove, infDirty;
+function resetInference() {
+  inference = { seen: 0, bySpecies: {} };
+  infCtx = { tailwindTurn: { p1: -99, p2: -99 }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, hhTurn: { p1: -99, p2: -99 } };
+  infLastMove = null;
+  infDirty = false;
+}
+resetInference();
+function infEntry(species) {
+  if (!inference.bySpecies[species]) inference.bySpecies[species] = { pairs: { atk: null, spa: null, def: null, spd: null, spe: null }, hpSps: null, used: 0, dropped: 0 };
+  return inference.bySpecies[species];
+}
+const labelSide = label => (label.startsWith('p1') ? 'p1' : 'p2');
+const labelSpecies = label => { const i = label.indexOf(':'); return i >= 0 ? label.slice(i + 1).trim() : ''; };
+// 推定レンジ表示のはみ出し防止: 基準フォントで budget 文字分まで、超えたら比例縮小
+function rangeFont(txt, base, budget) {
+  const l = String(txt).length;
+  return l <= budget ? '' : `font-size:${(base * budget / l).toFixed(2)}rem;`;
+}
+function infMySpec(species, ev, isAtk) {
+  const spec = state.mine.find(x => x.species === species);
+  if (!spec) return null;
+  const mega = isAtk ? ev.atkMega : ev.defMega;
+  return { ...spec, mega: !!mega || !!spec.mega, megaSpecies: mega || spec.megaSpecies,
+    boosts: { ...(isAtk ? ev.atkB : ev.defB) }, status: (isAtk ? ev.atkS : ev.defS) || '',
+    curHPPercent: isAtk ? ev.atkHp : ev.defHp };
+}
+function infOppBase(species, ev, isAtk) {
+  const pi = state.oppTeam.indexOf(species);
+  const spec = pi >= 0 ? state.opps[pi] : oppSpec(species, 'usage');
+  if (!spec) return null;
+  const mega = isAtk ? ev.atkMega : ev.defMega;
+  return { ...spec, mega: !!mega, megaSpecies: mega || undefined,
+    boosts: { ...(isAtk ? ev.atkB : ev.defB) }, status: (isAtk ? ev.atkS : ev.defS) || '',
+    curHPPercent: isAtk ? ev.atkHp : ev.defHp, estSp: undefined, estStat: undefined, estNature: undefined };
+}
+// 推定に使う相手 spec の候補: 持ち物が未判明なら「持ち物なし」も併せて候補にする
+// (こだわり系・いのちのたま・とつげきチョッキ等の未判明補正で推定が外れるのを防ぐ)
+function infBases(species, ev, isAtk) {
+  const base = infOppBase(species, ev, isAtk);
+  if (!base) return [];
+  const pi = state.oppTeam.indexOf(species);
+  const panel = pi >= 0 ? state.opps[pi] : null;
+  const itemKnown = !!panel && (panel.corrected || []).includes('持ち物');
+  const out = [base];
+  if (!itemKnown && base.item) out.push({ ...base, item: '' });
+  return out;
+}
+function infSideConds(ev) {
+  const t = ev.turn;
+  const active = (setTurn, dur) => typeof setTurn === 'number' && t - setTurn >= 0 && t - setTurn < dur;
+  const ds = infCtx.screenTurn[labelSide(ev.def)] || {};
+  const atkSideKey = labelSide(ev.atk);
+  const hh = infCtx.hhTurn[atkSideKey] === t;
+  if (hh) infCtx.hhTurn[atkSideKey] = -99;
+  return {
+    atkSide: { isHelpingHand: hh },
+    defSide: { isReflect: active(ds.reflect, 5), isLightScreen: active(ds.light, 5), isAuroraVeil: active(ds.veil, 5) },
+  };
+}
+// 候補集合への交差適用 (空になるイベントは矛盾として捨てる)
+function infIntersect(species, statKey, feasible, hpSps) {
+  const e = infEntry(species);
+  if (!feasible || !feasible.size) { e.dropped++; return; }
+  const next = e.pairs[statKey] ? new Set([...e.pairs[statKey]].filter(x => feasible.has(x))) : feasible;
+  if (!next.size) { e.dropped++; return; }
+  let nh = null;
+  if (hpSps) {
+    nh = e.hpSps ? new Set([...e.hpSps].filter(x => hpSps.has(x))) : hpSps;
+    if (!nh.size) { e.dropped++; return; }
+  }
+  e.pairs[statKey] = next;
+  if (hpSps) e.hpSps = nh;
+  e.used++;
+  infDirty = true;
+}
+function infProcessDamage(ev) {
+  const md = moveData(ev.move);
+  if (!md || md.category === 'Status' || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
+  const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
+  const oppIsAtk = labelSide(ev.atk) === 'p2';
+  let target = md.target;
+  if (md.name === 'Expanding Force' && ev.t === 'Psychic') target = 'allAdjacentFoes';
+  let targets = 1;
+  if (target === 'allAdjacentFoes') targets = ev.defAlive || 1;
+  else if (target === 'allAdjacent') targets = (ev.defAlive || 1) + Math.max(0, (ev.atkAlive || 1) - 1);
+  const gameType = targets >= 2 ? 'Doubles' : 'Singles';
+  const conds = infSideConds(ev);
+  const opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
+  if (oppIsAtk) {
+    // 相手の攻撃 -> 自分の正確な被ダメ量から相手の攻撃 (or Body Press は防御) を絞る
+    if (typeof ev.amt !== 'number' || ev.amt <= 0) return;
+    const statKey = md.name === 'Body Press' ? 'def' : (md.category === 'Physical' ? 'atk' : 'spa');
+    const defSpec = infMySpec(defSpecies, ev, false);
+    const bases = infBases(atkSpecies, ev, true);
+    const table = statTable(atkSpecies);
+    if (!defSpec || !bases.length || !table) return;
+    const byValue = new Map();
+    for (const row of table[statKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
+    const feasible = new Set();
+    for (const base of bases) {
+      for (const rows of byValue.values()) {
+        const rep = rows[0];
+        const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
+        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+        if (rolls.includes(ev.amt)) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
+      }
+    }
+    infIntersect(atkSpecies, statKey, feasible, null);
+  } else {
+    // 自分の攻撃 -> 相手の HP% の減少から相手の HP と防御 (or 特防) を共同で絞る
+    if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
+    const defKey = md.category === 'Physical' ? 'def' : 'spd';
+    const atkSpec = infMySpec(atkSpecies, ev, true);
+    const bases = infBases(defSpecies, ev, false);
+    const table = statTable(defSpecies);
+    if (!atkSpec || !bases.length || !table) return;
+    const hpBySp = new Map();
+    for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
+    const byValue = new Map();
+    for (const row of table[defKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
+    const feasPairs = new Set(), feasHp = new Set();
+    for (const base of bases) {
+      for (const rows of byValue.values()) {
+        const rep = rows[0];
+        const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
+        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+        if (!rolls.length) continue;
+        for (const [spHp, hpVal] of hpBySp) {
+          if (rolls.some(r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct))) {
+            for (const r of rows) feasPairs.add(r.nature + '|' + r.sp);
+            feasHp.add(spHp);
+          }
+        }
+      }
+    }
+    infIntersect(defSpecies, defKey, feasPairs, feasHp);
+  }
+}
+const WEATHER_SPE = { Chlorophyll: 'Sun', 'Swift Swim': 'Rain', 'Sand Rush': 'Sand', 'Slush Rush': 'Snow' };
+function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, terrain) {
+  let v = statVal;
+  const b = boosts?.spe || 0;
+  v = b >= 0 ? Math.floor(v * (2 + b) / 2) : Math.floor(v * 2 / (2 - b));
+  if (item === 'Choice Scarf') v = Math.floor(v * 1.5);
+  if (ability && WEATHER_SPE[ability] === weather) v *= 2;
+  if (ability === 'Surge Surfer' && terrain === 'Electric') v *= 2;
+  if (tailwind) v *= 2;
+  if (status === 'par') v = Math.floor(v / 2);
+  return v;
+}
+function infProcessMove(ev) {
+  const side = labelSide(ev.label);
+  if (ev.move === 'Tailwind') infCtx.tailwindTurn[side] = ev.turn;
+  else if (ev.move === 'Trick Room') infCtx.trickRoomTurn = ev.turn;
+  else if (ev.move === 'Reflect') infCtx.screenTurn[side].reflect = ev.turn;
+  else if (ev.move === 'Light Screen') infCtx.screenTurn[side].light = ev.turn;
+  else if (ev.move === 'Aurora Veil') infCtx.screenTurn[side].veil = ev.turn;
+  else if (ev.move === 'Helping Hand') infCtx.hhTurn[side] = ev.turn;
+  const prev = infLastMove;
+  infLastMove = { turn: ev.turn, side, species: labelSpecies(ev.label), move: ev.move };
+  if (!prev || prev.turn !== ev.turn || prev.side === side) return;
+  const mdA = moveData(prev.move), mdB = moveData(ev.move);
+  if (!mdA || !mdB || mdA.priority !== mdB.priority) return;
+  const firstIsOpp = prev.side === 'p2';
+  const oppSpecies = firstIsOpp ? prev.species : labelSpecies(ev.label);
+  const mySpecies = firstIsOpp ? labelSpecies(ev.label) : prev.species;
+  const mySpec = state.mine.find(x => x.species === mySpecies);
+  const pi = state.oppTeam.indexOf(oppSpecies);
+  const oppSpec = pi >= 0 ? state.opps[pi] : null;
+  const table = statTable(oppSpecies);
+  if (!mySpec || !oppSpec || !table) return;
+  const myTable = statTable(mySpecies);
+  const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
+  if (!myRow) return;
+  const tw = s => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
+  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.item, mySpec.status, tw('p1'), mySpec.ability, state.field.weather, state.field.terrain);
+  const trick = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+  const itemKnown = (oppSpec.corrected || []).includes('持ち物');
+  const abKnown = (oppSpec.corrected || []).includes('特性');
+  const feasible = new Set();
+  for (const row of table.spe) {
+    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? oppSpec.item : '', oppSpec.status, tw('p2'), abKnown ? oppSpec.ability : '', state.field.weather, state.field.terrain);
+    // 通常: 先に動いた方が速い (同速の両勝ちはありうる)。トリックルーム下では逆
+    const ok = trick ? (firstIsOpp ? eff <= myEff : eff >= myEff) : (firstIsOpp ? eff >= myEff : eff <= myEff);
+    if (ok) feasible.add(row.nature + '|' + row.sp);
+  }
+  infIntersect(oppSpecies, 'spe', feasible, null);
+}
+// 推定結果のビュー (性格の交差 + 各能力の SP/実数値レンジ)
+function estView(species) {
+  const e = inference.bySpecies[species];
+  if (!e) return null;
+  const keys = ['atk', 'spa', 'def', 'spd', 'spe'].filter(k => e.pairs[k]);
+  if (!keys.length && !e.hpSps) return null;
+  const table = statTable(species);
+  if (!table) return null;
+  let natures = null;
+  for (const k of keys) {
+    const ns = new Set([...e.pairs[k]].map(x => x.split('|')[0]));
+    natures = natures ? new Set([...natures].filter(n => ns.has(n))) : ns;
+  }
+  if (natures && !natures.size) natures = null;
+  const view = { nature: natures && natures.size === 1 ? [...natures][0] : null, sp: {}, stat: {} };
+  for (const k of keys) {
+    const rows = table[k].filter(r => e.pairs[k].has(r.nature + '|' + r.sp) && (!natures || natures.has(r.nature)));
+    if (!rows.length) continue;
+    view.sp[k] = [Math.min(...rows.map(r => r.sp)), Math.max(...rows.map(r => r.sp))];
+    view.stat[k] = [Math.min(...rows.map(r => r.value)), Math.max(...rows.map(r => r.value))];
+  }
+  if (e.hpSps) {
+    const rows = table.hp.filter(r => e.hpSps.has(r.sp));
+    view.sp.hp = [Math.min(...e.hpSps), Math.max(...e.hpSps)];
+    view.stat.hp = [Math.min(...rows.map(r => r.value)), Math.max(...rows.map(r => r.value))];
+  }
+  return view;
+}
+// 推定を相手パネルの判明情報として反映する (計算用 SP は範囲内に寄せる)
+function attachEstimate(spec) {
+  const view = estView(spec.species);
+  spec.estSp = view ? view.sp : null;
+  spec.estStat = view ? view.stat : null;
+  spec.estNature = view ? view.nature : null;
+  if (!view) return;
+  if (view.nature) { spec.nature = view.nature; markCorrected(spec, '性格'); }
+  for (const k of Object.keys(view.sp)) {
+    const [lo, hi] = view.sp[k];
+    spec.sp[k] = Math.max(lo, Math.min(hi, spec.sp[k] || 0));
+    markCorrected(spec, 'EV');
+  }
+}
+
+function applyState(j) {
+  if (!j || typeof j !== 'object') return;
+  let changed = false;
+  if (typeof j.oppTrainer === 'string' && j.oppTrainer && j.oppTrainer !== oppTrainerName) {
+    oppTrainerName = j.oppTrainer;
+    changed = true;
+  }
+  if (j.oppReset) {
+    resetInference();
+    oppTrainerName = '';
+    state.oppTeam = [];
+    state.opps = [];
+    state.sel.opps = 0;
+    state.active.opps = [];
+    lastActiveKey.opps = '';
+    changed = true;
+  }
+  if (Array.isArray(j.mine)) {
+    const idxs = [];
+    for (const en of j.mine) {
+      if (!en) continue;
+      const spName = resolveSpecies(en.species) || en.species;
+      const pi = state.mine.findIndex(s => s.species === spName);
+      if (pi < 0) continue;
+      if (typeof en.curHPPercent === 'number') state.mine[pi].curHPPercent = en.curHPPercent;
+      if (typeof en.status === 'string') state.mine[pi].status = en.status;
+      // boosts キーが無い = 場に出ている以上ランクは 0 (reader は非0の時だけ送る)。
+      // キーが無い時に旧値を残すと、交代でリセットされたはずのランクが
+      // 再登場時に蘇ってしまうため、欠落は 0 として扱う
+      state.mine[pi].boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
+      applyMegaFlag(state.mine[pi], en);
+      idxs.push(pi); changed = true;
+    }
+    if (idxs.length) {
+      const key = idxs.join(',');
+      if (key !== lastActiveKey.mine) { state.active.mine = idxs.slice(0, 2); state.sel.mine = idxs[0]; lastActiveKey.mine = key; }
+    }
+  }
+  if (Array.isArray(j.oppTeam) && j.oppTeam.length) {
+    const names = j.oppTeam.map(s => (s ? resolveSpecies(s) || s : null)).filter(Boolean).slice(0, 6);
+    if (names.length && names.join() !== state.oppTeam.join()) {
+      const old = {};
+      state.oppTeam.forEach((sp, i) => { old[sp] = state.opps[i]; });
+      state.oppTeam = names;
+      state.opps = names.map(sp => old[sp] || oppSpec(sp, 'usage'));
+      if (state.sel.opps >= names.length) state.sel.opps = 0;
+      state.active.opps = [0, Math.min(1, names.length - 1)];
+      lastActiveKey.opps = '';
+      changed = true;
+    }
+  }
+  if (Array.isArray(j.opps)) {
+    const idxs = [];
+    for (const en of j.opps) {
+      if (!en) continue;
+      const spName = resolveSpecies(en.species) || en.species;
+      let pi = state.oppTeam.indexOf(spName);
+      if (pi < 0 && state.oppTeam.length < 6) {
+        state.oppTeam.push(spName);
+        state.opps.push(oppSpec(spName, 'usage'));
+        pi = state.oppTeam.length - 1;
+      }
+      if (pi < 0) continue;
+      let spec = state.opps[pi];
+      if (en.revealed) { spec = applyRevealedPreserving(spec, en.revealed); state.opps[pi] = spec; }
+      if (typeof en.curHPPercent === 'number') spec.curHPPercent = en.curHPPercent;
+      if (typeof en.status === 'string') spec.status = en.status;
+      // mine 側と同様、boosts 欠落は 0 として扱う (交代リセットの反映漏れ防止)
+      spec.boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
+      applyMegaFlag(spec, en);
+      idxs.push(pi); changed = true;
+    }
+    if (idxs.length) {
+      const key = idxs.join(',');
+      if (key !== lastActiveKey.opps) { state.active.opps = idxs.slice(0, 2); state.sel.opps = idxs[0]; lastActiveKey.opps = key; }
+    }
+  }
+  if (j.oppRevealed && typeof j.oppRevealed === 'object') {
+    // 場に出ていない相手について判明した分も、その項目だけ随時反映する
+    for (const [spRaw, rev] of Object.entries(j.oppRevealed)) {
+      if (!rev) continue;
+      const spName = resolveSpecies(spRaw) || spRaw;
+      const pi = state.oppTeam.indexOf(spName);
+      if (pi < 0) continue;
+      state.opps[pi] = applyRevealedPreserving(state.opps[pi], rev);
+      changed = true;
+    }
+  }
+  if (j.field && typeof j.field === 'object') { Object.assign(state.field, j.field); changed = true; }
+  if (Array.isArray(j.events)) {
+    if (j.events.length < inference.seen) resetInference();
+    for (let i = inference.seen; i < j.events.length; i++) {
+      const ev = j.events[i];
+      if (!ev || typeof ev !== 'object') continue;
+      if (ev.k === 'mv') infProcessMove(ev);
+      else if (ev.k === 'dmg') infProcessDamage(ev);
+    }
+    inference.seen = j.events.length;
+    if (infDirty) { infDirty = false; changed = true; }
+  }
+  for (const spec of state.opps) if (spec) attachEstimate(spec);
+  if (changed) calcAll();
+}
+let lastStateText = '';
+let uiVersionSeen = null;
+async function poll() {
+  try {
+    const rv = await fetch('./ui_version.txt', { cache: 'no-store' });
+    if (rv.ok) {
+      const v = (await rv.text()).trim();
+      if (uiVersionSeen === null) uiVersionSeen = v;
+      else if (v && v !== uiVersionSeen) { location.reload(); return; }
+    }
+  } catch (e) { /* ローカルコピーのみで動作 */ }
+  try {
+    const r = await fetch('./state.json', { cache: 'no-store' });
+    if (r.ok) {
+      const txt = await r.text();
+      if (txt !== lastStateText) { lastStateText = txt; applyState(JSON.parse(txt)); }
+    }
+  } catch (e) { /* not running under a server */ }
+}
+
+/* ---------- init ---------- */
+(async function init() {
+  try {
+    const r = await fetch('./data/names_ja.json');
+    if (r.ok) {
+      NAMES = await r.json();
+      NAMES._ja2en = {};
+      NAMES._indexSpecies = (await (await fetch('./data/names_index.json')).json()).species;
+      // 同じJA名に複数のフォルムがある場合は先勝ち (索引は基本フォルムが先頭)
+      for (const e of NAMES._indexSpecies) { const k = z2h(e.ja); if (!(k in NAMES._ja2en)) NAMES._ja2en[k] = e.en; }
+      NAMES._moveJa2en = {};
+      for (const [id, jaName] of Object.entries(NAMES.moves)) { const mv = [...gen.moves].find(m => idOf(m.name) === id); if (mv) NAMES._moveJa2en[z2h(jaName)] = mv.name; }
+      NAMES._abilityJa2en = {};
+      for (const [id, jaName] of Object.entries(NAMES.abilities)) { const ab = [...gen.abilities].find(a => idOf(a.name) === id); if (ab) NAMES._abilityJa2en[z2h(jaName)] = ab.name; }
+      NAMES._itemEn2ja = {};
+      try {
+        const ij = await (await fetch('./data/items_ja.json')).json();
+        NAMES._itemJa2en = ij;
+        for (const [jaName, en] of Object.entries(ij)) NAMES._itemEn2ja[idOf(en)] = jaName;
+      } catch (e) { /* items_ja optional */ }
+    }
+  } catch (e) { /* names are optional */ }
+  try {
+    const u = await (await fetch('./data/usage_sets.json')).json();
+    USAGE_SETS = u.sets || {};
+    USAGE_SEASON = u.season || '';
+    state.opps = state.oppTeam.map(sp => oppSpec(sp, 'usage'));
+  } catch (e) { /* usage sets optional */ }
+  try {
+    const sa = await (await fetch('./data/species_abilities.json')).json();
+    SPECIES_ABILITIES = sa || {};
+  } catch (e) { /* species abilities optional */ }
+  try {
+    const cd = await (await fetch('./data/champions_dex.json')).json();
+    CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
+  } catch (e) { /* champions dex optional */ }
+  try {
+    const rg = await (await fetch('./data/regulation.json')).json();
+    if (rg && rg.regulation) { const el = document.getElementById('regname'); if (el) el.textContent = 'レギュレーション' + rg.regulation; }
+  } catch (e) { /* regulation optional */ }
+  // dropdown option lists
+  const seen = new Set();
+  SPECIES_OPTIONS = Object.entries(NAMES._ja2en || {})
+    .filter(([, en]) => !CHAMP.species.size || CHAMP.species.has(en))
+    .filter(([, en]) => { if (seen.has(en)) return false; seen.add(en); return true; })
+    .map(([jaName, en]) => ({ v: en, l: jaName }))
+    .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  MOVE_OPTIONS = [{ v: '', l: '（技なし）' }].concat(
+    Object.entries(NAMES._moveJa2en || {})
+      .filter(([, en]) => !CHAMP.moves.size || CHAMP.moves.has(en))
+      .map(([jaName, en]) => ({ v: en, l: jaName }))
+      .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
+  ITEM_OPTIONS = [{ v: '', l: 'なし' }].concat(
+    [...gen.items].map(it => it.name)
+      .filter(en => !CHAMP.items.size || CHAMP.items.has(en))
+      .map(en => ({ v: en, l: (NAMES._itemEn2ja || {})[idOf(en)] || en }))
+      .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
+  await loadMyTeam();
+  calcAll();
+  setInterval(poll, 500);
+})();
+</script>
+</body>
+</html>
