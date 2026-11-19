@@ -965,8 +965,8 @@ function statsGrid(side, statArr) {
     if (!statArr) return '<div class="finalstat">—</div>';
     const est = side === 'opps' ? spec.estStat?.[k] : null;
     if (est) {
-      const txt = est[0] === est[1] ? String(est[0]) : `${est[0]}-${est[1]}`;
-      return `<div class="finalstat estval" style="${rangeFont(txt, 1.1, 3.3)}" title="推定">${txt}</div>`;
+      const txt = est[0] === est[1] ? String(est[0]) : `${est[1]}*`;
+      return `<div class="finalstat estval" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}">${txt}</div>`;
     }
     const [v, cn] = dispStat(spec, k, statArr, side === 'mine' ? 'mine' : 'opp');
     return `<div class="finalstat ${cn === 'green' ? 'pos' : cn === 'red' ? 'neg' : ''}">${v}</div>`;
