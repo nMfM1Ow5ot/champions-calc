@@ -284,8 +284,8 @@ const $ = id => document.getElementById(id);
 const state = {
   field: { weather: '', terrain: '' },
   side: {
-    mine: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false },
-    opp: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false },
+    mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false },
+    opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false },
   },
   mine: [], opps: [],
   oppTeam: ['Garchomp', 'Rillaboom'],
@@ -409,14 +409,27 @@ function champMoveList() { return CHAMP_MOVES_JA || Object.keys(NAMES._moveJa2en
 let USAGE_SETS = null; // data/usage_sets.json の sets (pokedb 使用率トップ型)
 let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
 let USAGE_SEASON = '';
+// 使用率型の解決: フォルム名 (イルカマン(ヒーロー)等) には使用率データが
+// 無いため、ベース種族の型を流用し種族名だけ差し替える
+// (これが無いとフォルム表示のパネルは技が全部「（技なし）」になる)
+function usageFor(speciesEn) {
+  const direct = usageSpec(speciesEn, USAGE_SETS);
+  if (direct) return direct;
+  const base = gen.species.get(idOf(speciesEn))?.baseSpecies;
+  if (base && base !== speciesEn) {
+    const bu = usageSpec(base, USAGE_SETS);
+    if (bu) return { ...bu, species: speciesEn };
+  }
+  return null;
+}
 function oppSpec(speciesEn, kind) {
   if (kind === 'usage') {
-    const u = usageSpec(speciesEn, USAGE_SETS);
+    const u = usageFor(speciesEn);
     if (u) return { ...u, kind, moves: [...u.moves], origMoves: [...u.moves], knownMoves: [],
       curHPPercent: 100, boosts: blankBoosts(), status: '', corrected: [] };
   }
   const a = assumedSet(speciesEn, kind === 'usage' ? 'attacker' : kind);
-  const u = usageSpec(speciesEn, USAGE_SETS);
+  const u = usageFor(speciesEn);
   const moves = u ? [...u.moves] : [];
   return { species: speciesEn, kind, sp: { ...a.sp }, nature: a.nature, ability: a.ability, item: '',
     moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [],
@@ -1374,7 +1387,7 @@ function resetInference() {
   // 対戦イベントから自動反映したサイドコンディション (おいかぜ・壁・てだすけ) の
   // セットされたターン。新しい対戦では場の状態ごとリセットする
   autoSideTurn = { mine: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 }, opp: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 } };
-  state.side = { mine: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false }, opp: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false } };
+  state.side = { mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false }, opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false } };
 }
 // 技の使用イベントからサイドコンディションをチップ状態へ反映する
 function setAutoSide(sideP, key, turn) {
