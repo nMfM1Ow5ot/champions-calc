@@ -31,7 +31,7 @@
 :root[data-theme="light"] .speciesname{color:#111}
 :root[data-theme="light"] .picon:hover{border-color:rgba(0,0,0,.16)}
 :root[data-theme="light"] .picon.sel{border-color:rgba(33,150,243,.9)}
-:root[data-theme="light"] .picon.seen:not(.active):not(.sel){border-color:rgba(0,0,0,.45)}
+:root[data-theme="light"] .picon.seen:not(.active):not(.sel){background:#fff; border-color:rgba(0,0,0,.16)}
 :root[data-theme="light"] .picon.sel:hover{border-color:rgba(33,150,243,.8)}
 :root[data-theme="light"] .hpbar{background:rgba(0,0,0,.15)}
 :root[data-theme="light"] .stbadge.ok{color:rgba(0,0,0,.64); background:#E4E4E7}
@@ -96,7 +96,8 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .picon.sel{border-color:rgba(33,150,243,.9)}
 .picon.sel:not(.active){background:none}
 .picon.sel:not(.active) img{opacity:1}
-.picon.seen:not(.active):not(.sel){background:none; border-color:rgba(255,255,255,.55)}
+.picon.seen:not(.active):not(.sel){background:rgba(255,255,255,.88); border-color:transparent}
+.picon.seen:not(.active):not(.fnt) img{opacity:1}
 .picon.sel:hover{border-color:rgba(33,150,243,.8)}
 .picon.fnt img{opacity:.3; filter:grayscale(1)}
 
