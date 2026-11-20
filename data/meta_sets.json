@@ -1,0 +1,4889 @@
+{
+ "version": 1,
+ "updated": "2026-11-20",
+ "sets": [
+  {
+   "species": "Excadrill",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Sand Rush",
+   "moves": [
+    "High Horsepower",
+    "Iron Head",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Champion",
+   "player": "Javier Varela",
+   "date": "2026-11-01",
+   "weight": 0.964
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Good as Gold",
+   "moves": [
+    "Shadow Ball",
+    "Make It Rain",
+    "Nasty Plot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Champion",
+   "player": "Javier Varela",
+   "date": "2026-11-01",
+   "weight": 0.964
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Competitive",
+   "moves": [
+    "Scald",
+    "Ice Beam",
+    "Icy Wind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Champion",
+   "player": "Javier Varela",
+   "date": "2026-11-01",
+   "weight": 0.964
+  },
+  {
+   "species": "Sinistcha",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Rocky Helmet",
+   "ability": "Hospitality",
+   "moves": [
+    "Matcha Gotcha",
+    "Strength Sap",
+    "Rage Powder",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Champion",
+   "player": "Javier Varela",
+   "date": "2026-11-01",
+   "weight": 0.964
+  },
+  {
+   "species": "Staraptor",
+   "forme": "Staraptor-Mega",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Staraptite",
+   "ability": "Intimidate",
+   "moves": [
+    "Brave Bird",
+    "Close Combat",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Champion",
+   "player": "Javier Varela",
+   "date": "2026-11-01",
+   "weight": 0.964
+  },
+  {
+   "species": "Tyranitar",
+   "forme": "Tyranitar-Mega",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Tyranitarite",
+   "ability": "Sand Stream",
+   "moves": [
+    "Rock Slide",
+    "Knock Off",
+    "Dragon Dance",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Champion",
+   "player": "Javier Varela",
+   "date": "2026-11-01",
+   "weight": 0.964
+  },
+  {
+   "species": "Charizard",
+   "forme": "Charizard-Mega-Y",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Charizardite Y",
+   "ability": "Blaze",
+   "moves": [
+    "Weather Ball",
+    "Protect",
+    "Heat Wave",
+    "Solar Beam"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Champion",
+   "player": "Kyle Livinghouse",
+   "date": "2026-10-25",
+   "weight": 0.951
+  },
+  {
+   "species": "Froslass",
+   "forme": "Froslass-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Froslassite",
+   "ability": "Cursed Body",
+   "moves": [
+    "Blizzard",
+    "Aurora Veil",
+    "Shadow Ball",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Champion",
+   "player": "Kyle Livinghouse",
+   "date": "2026-10-25",
+   "weight": 0.951
+  },
+  {
+   "species": "Garchomp",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Rough Skin",
+   "moves": [
+    "Rock Slide",
+    "Earthquake",
+    "Dragon Claw",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Champion",
+   "player": "Kyle Livinghouse",
+   "date": "2026-10-25",
+   "weight": 0.951
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Chople Berry",
+   "ability": "Defiant",
+   "moves": [
+    "Sucker Punch",
+    "Iron Head",
+    "Kowtow Cleave",
+    "Low Kick"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Champion",
+   "player": "Kyle Livinghouse",
+   "date": "2026-10-25",
+   "weight": 0.951
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Dire Claw",
+    "Rock Tomb",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Champion",
+   "player": "Kyle Livinghouse",
+   "date": "2026-10-25",
+   "weight": 0.951
+  },
+  {
+   "species": "Whimsicott",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Prankster",
+   "moves": [
+    "Protect",
+    "Encore",
+    "Moonblast",
+    "Tailwind"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Champion",
+   "player": "Kyle Livinghouse",
+   "date": "2026-10-25",
+   "weight": 0.951
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Protect",
+    "Electro Shot",
+    "Dragon Pulse",
+    "Flash Cannon"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Champion",
+   "player": "Kiran Singh",
+   "date": "2026-10-11",
+   "weight": 0.926
+  },
+  {
+   "species": "Charizard",
+   "forme": "Charizard-Mega-Y",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Charizardite Y",
+   "ability": "Blaze",
+   "moves": [
+    "Weather Ball",
+    "Heat Wave",
+    "Hurricane",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Champion",
+   "player": "Kiran Singh",
+   "date": "2026-10-11",
+   "weight": 0.926
+  },
+  {
+   "species": "Garchomp",
+   "forme": "Garchomp-Mega-Z",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Garchompite Z",
+   "ability": "Rough Skin",
+   "moves": [
+    "Draco Meteor",
+    "Earth Power",
+    "Power Gem",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Champion",
+   "player": "Kiran Singh",
+   "date": "2026-10-11",
+   "weight": 0.926
+  },
+  {
+   "species": "Grimmsnarl",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Light Clay",
+   "ability": "Prankster",
+   "moves": [
+    "Spirit Break",
+    "Reflect",
+    "Light Screen",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Champion",
+   "player": "Kiran Singh",
+   "date": "2026-10-11",
+   "weight": 0.926
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Drizzle",
+   "moves": [
+    "Hurricane",
+    "Weather Ball",
+    "Tailwind",
+    "Wide Guard"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Champion",
+   "player": "Kiran Singh",
+   "date": "2026-10-11",
+   "weight": 0.926
+  },
+  {
+   "species": "Venusaur",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Chlorophyll",
+   "moves": [
+    "Protect",
+    "Sleep Powder",
+    "Sludge Bomb",
+    "Leaf Storm"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Champion",
+   "player": "Kiran Singh",
+   "date": "2026-10-11",
+   "weight": 0.926
+  },
+  {
+   "species": "Garchomp",
+   "forme": "Garchomp-Mega-Z",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Garchompite Z",
+   "ability": "Rough Skin",
+   "moves": [
+    "Dragon Pulse",
+    "Earth Power",
+    "Power Gem",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Champion",
+   "player": "Eric Rios",
+   "date": "2026-09-26",
+   "weight": 0.9
+  },
+  {
+   "species": "Grimmsnarl",
+   "forme": null,
+   "nature": "Sassy",
+   "sps": null,
+   "item": "Light Clay",
+   "ability": "Prankster",
+   "moves": [
+    "Spirit Break",
+    "Light Screen",
+    "Reflect",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Champion",
+   "player": "Kiran Singh",
+   "date": "2026-09-26",
+   "weight": 0.9
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Impish",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Parting Shot",
+    "Fake Out",
+    "Flare Blitz",
+    "Darkest Lariat"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Champion",
+   "player": "Eric Rios",
+   "date": "2026-09-26",
+   "weight": 0.9
+  },
+  {
+   "species": "Raichu",
+   "forme": "Raichu-Mega-Y",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Raichunite Y",
+   "ability": "Lightning Rod",
+   "moves": [
+    "Zap Cannon",
+    "Focus Blast",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Champion",
+   "player": "Eric Rios",
+   "date": "2026-09-26",
+   "weight": 0.9
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Miracle Seed",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Grassy Glide",
+    "Wood Hammer",
+    "Fake Out",
+    "U-turn"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Champion",
+   "player": "Eric Rios",
+   "date": "2026-09-26",
+   "weight": 0.9
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Rocky Helmet",
+   "ability": "Flame Body",
+   "moves": [
+    "Overheat",
+    "Struggle Bug",
+    "Rage Powder",
+    "Tailwind"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Champion",
+   "player": "Eric Rios",
+   "date": "2026-09-26",
+   "weight": 0.9
+  },
+  {
+   "species": "Dragonite",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Inner Focus",
+   "moves": [
+    "Dragon Claw",
+    "Low Kick",
+    "Extreme Speed",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Alpensee Tour #74 Champion",
+   "player": "Oleksandr Polishchuk",
+   "date": "2026-09-10",
+   "weight": 0.873
+  },
+  {
+   "species": "Gengar",
+   "forme": "Gengar-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Gengarite",
+   "ability": "Cursed Body",
+   "moves": [
+    "Perish Song",
+    "Shadow Ball",
+    "Sludge Bomb",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Alpensee Tour #74 Champion",
+   "player": "Oleksandr Polishchuk",
+   "date": "2026-09-10",
+   "weight": 0.873
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Relaxed",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Parting Shot",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Alpensee Tour #74 Champion",
+   "player": "Oleksandr Polishchuk",
+   "date": "2026-09-10",
+   "weight": 0.873
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Sassy",
+   "sps": null,
+   "item": "Eject Button",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Grassy Glide",
+    "U-turn",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Alpensee Tour #74 Champion",
+   "player": "Oleksandr Polishchuk",
+   "date": "2026-09-10",
+   "weight": 0.873
+  },
+  {
+   "species": "Scrafty",
+   "forme": null,
+   "nature": "Impish",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Intimidate",
+   "moves": [
+    "Close Combat",
+    "Knock Off",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Alpensee Tour #74 Champion",
+   "player": "Oleksandr Polishchuk",
+   "date": "2026-09-10",
+   "weight": 0.873
+  },
+  {
+   "species": "Snorlax",
+   "forme": null,
+   "nature": "Relaxed",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Thick Fat",
+   "moves": [
+    "Yawn",
+    "Encore",
+    "Fissure",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Alpensee Tour #74 Champion",
+   "player": "Oleksandr Polishchuk",
+   "date": "2026-09-10",
+   "weight": 0.873
+  },
+  {
+   "species": "Arcanine",
+   "forme": "Arcanine-Hisui",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Rock Head",
+   "moves": [
+    "Flare Blitz",
+    "Head Smash",
+    "Extreme Speed",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "r/VGC Regulation M-C Kickoff Cup Champion",
+   "player": "Ryan Loseto",
+   "date": "2026-09-09",
+   "weight": 0.871
+  },
+  {
+   "species": "Basculegion",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Mystic Water",
+   "ability": "Adaptability",
+   "moves": [
+    "Wave Crash",
+    "Last Respects",
+    "Aqua Jet",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "r/VGC Regulation M-C Kickoff Cup Champion",
+   "player": "Ryan Loseto",
+   "date": "2026-09-09",
+   "weight": 0.871
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Wood Hammer",
+    "Grassy Glide",
+    "U-turn",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "r/VGC Regulation M-C Kickoff Cup Champion",
+   "player": "Ryan Loseto",
+   "date": "2026-09-09",
+   "weight": 0.871
+  },
+  {
+   "species": "Salamence",
+   "forme": "Salamence-Mega",
+   "nature": "Naive",
+   "sps": null,
+   "item": "Salamencite",
+   "ability": "Aerilate",
+   "moves": [
+    "Hyper Voice",
+    "Double-Edge",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "r/VGC Regulation M-C Kickoff Cup Champion",
+   "player": "Ryan Loseto",
+   "date": "2026-09-09",
+   "weight": 0.871
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Grassy Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Dire Claw",
+    "Close Combat",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "r/VGC Regulation M-C Kickoff Cup Champion",
+   "player": "Ryan Loseto",
+   "date": "2026-09-09",
+   "weight": 0.871
+  },
+  {
+   "species": "Floette",
+   "forme": "Floette-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Floettite",
+   "ability": "Flower Veil",
+   "moves": [
+    "Dazzling Gleam",
+    "Draining Kiss",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Finalist",
+   "player": "Jude Lee",
+   "date": "2026-11-01",
+   "weight": 0.819
+  },
+  {
+   "species": "Garchomp",
+   "forme": "Garchomp-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Garchompite",
+   "ability": "Rough Skin",
+   "moves": [
+    "Stomping Tantrum",
+    "Scale Shot",
+    "Protect",
+    "Rock Slide"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Finalist",
+   "player": "Jude Lee",
+   "date": "2026-11-01",
+   "weight": 0.819
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Sassy",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Fake Out",
+    "Parting Shot",
+    "Helping Hand"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Finalist",
+   "player": "Jude Lee",
+   "date": "2026-11-01",
+   "weight": 0.819
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Defiant",
+   "moves": [
+    "Kowtow Cleave",
+    "Swords Dance",
+    "Sucker Punch",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Finalist",
+   "player": "Jude Lee",
+   "date": "2026-11-01",
+   "weight": 0.819
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Miracle Seed",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Wood Hammer",
+    "High Horsepower",
+    "Fake Out",
+    "Grassy Glide"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Finalist",
+   "player": "Jude Lee",
+   "date": "2026-11-01",
+   "weight": 0.819
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Poison Touch",
+   "moves": [
+    "Dire Claw",
+    "Fake Out",
+    "Coaching",
+    "Close Combat"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Finalist",
+   "player": "Jude Lee",
+   "date": "2026-11-01",
+   "weight": 0.819
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Sassy",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Psychic",
+    "Trick Room",
+    "Helping Hand",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Finalist",
+   "player": "Sebastian Liu Li",
+   "date": "2026-09-26",
+   "weight": 0.765
+  },
+  {
+   "species": "Garchomp",
+   "forme": "Garchomp-Mega-Z",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Garchompite Z",
+   "ability": "Rough Skin",
+   "moves": [
+    "Draco Meteor",
+    "Flamethrower",
+    "Power Gem",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Finalist",
+   "player": "Sebastian Liu Li",
+   "date": "2026-09-26",
+   "weight": 0.765
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Chople Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Darkest Lariat",
+    "Parting Shot",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Finalist",
+   "player": "Sebastian Liu Li",
+   "date": "2026-09-26",
+   "weight": 0.765
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Gunk Shot",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Finalist",
+   "player": "Sebastian Liu Li",
+   "date": "2026-09-26",
+   "weight": 0.765
+  },
+  {
+   "species": "Sylveon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Fairy Feather",
+   "ability": "Pixilate",
+   "moves": [
+    "Hyper Voice",
+    "Hyper Beam",
+    "Yawn",
+    "Detect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Finalist",
+   "player": "Sebastian Liu Li",
+   "date": "2026-09-26",
+   "weight": 0.765
+  },
+  {
+   "species": "Torkoal",
+   "forme": null,
+   "nature": "Quiet",
+   "sps": null,
+   "item": "Charcoal",
+   "ability": "Drought",
+   "moves": [
+    "Eruption",
+    "Earth Power",
+    "Weather Ball",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Finalist",
+   "player": "Sebastian Liu Li",
+   "date": "2026-09-26",
+   "weight": 0.765
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Dragon Pulse",
+    "Snarl",
+    "Electro Shot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Finalist",
+   "player": "Aditya Subramanian",
+   "date": "2026-09-22",
+   "weight": 0.759
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Psychic",
+    "Trick Room",
+    "Protect",
+    "Grass Knot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Finalist",
+   "player": "Aditya Subramanian",
+   "date": "2026-09-22",
+   "weight": 0.759
+  },
+  {
+   "species": "Golisopod",
+   "forme": "Golisopod-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Golisopite",
+   "ability": "Emergency Exit",
+   "moves": [
+    "Leech Life",
+    "Drill Run",
+    "Iron Head",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Finalist",
+   "player": "Aditya Subramanian",
+   "date": "2026-09-22",
+   "weight": 0.759
+  },
+  {
+   "species": "Politoed",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Mystic Water",
+   "ability": "Drizzle",
+   "moves": [
+    "Muddy Water",
+    "Ice Beam",
+    "Weather Ball",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Finalist",
+   "player": "Aditya Subramanian",
+   "date": "2026-09-22",
+   "weight": 0.759
+  },
+  {
+   "species": "Basculegion",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Adaptability",
+   "moves": [
+    "Wave Crash",
+    "Last Respects",
+    "Aqua Jet",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 4",
+   "player": "Michael Kelsch",
+   "date": "2026-11-01",
+   "weight": 0.675
+  },
+  {
+   "species": "Salamence",
+   "forme": "Salamence-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Salamencite",
+   "ability": "Intimidate",
+   "moves": [
+    "Hyper Voice",
+    "Draco Meteor",
+    "Flamethrower",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 4",
+   "player": "Michael Kelsch",
+   "date": "2026-11-01",
+   "weight": 0.675
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Gunk Shot",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 4",
+   "player": "Michael Kelsch",
+   "date": "2026-11-01",
+   "weight": 0.675
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Dragon Pulse",
+    "Flash Cannon",
+    "Electro Shot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Witsarut Buadit",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Electro Shot",
+    "Dragon Pulse",
+    "Aura Sphere",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Nattanon Wongwiwatchai",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Basculegion",
+   "forme": "Basculegion-F",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Choice Scarf",
+   "ability": "Adaptability",
+   "moves": [
+    "Muddy Water",
+    "Ice Beam",
+    "Shadow Ball",
+    "Icy Wind"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Nattanon Wongwiwatchai",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Golisopod",
+   "forme": "Golisopod-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Golisopite",
+   "ability": "Emergency Exit",
+   "moves": [
+    "Leech Life",
+    "Sucker Punch",
+    "Swords Dance",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Nattanon Wongwiwatchai",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Drizzle",
+   "moves": [
+    "Weather Ball",
+    "Hurricane",
+    "Tailwind",
+    "Wide Guard"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Witsarut Buadit",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Drizzle",
+   "moves": [
+    "Hurricane",
+    "Weather Ball",
+    "Helping Hand",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Nattanon Wongwiwatchai",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Raichu",
+   "forme": "Raichu-Mega-X",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Raichunite X",
+   "ability": "Lightning Rod",
+   "moves": [
+    "Volt Tackle",
+    "Fake Out",
+    "Feint",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Nattanon Wongwiwatchai",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Electric Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Dire Claw",
+    "Close Combat",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Thailand Premier Ball League Top 4",
+   "player": "Nattanon Wongwiwatchai",
+   "date": "2026-10-25",
+   "weight": 0.666
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Good as Gold",
+   "moves": [
+    "Make It Rain",
+    "Shadow Ball",
+    "Power Gem",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 4",
+   "player": "JJ Miller",
+   "date": "2026-10-11",
+   "weight": 0.648
+  },
+  {
+   "species": "Sinistcha",
+   "forme": null,
+   "nature": "Relaxed",
+   "sps": null,
+   "item": "Colbur Berry",
+   "ability": "Hospitality",
+   "moves": [
+    "Matcha Gotcha",
+    "Rage Powder",
+    "Trick Room",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 4",
+   "player": "JJ Miller",
+   "date": "2026-10-11",
+   "weight": 0.648
+  },
+  {
+   "species": "Swampert",
+   "forme": "Swampert-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Swampertite",
+   "ability": "Torrent",
+   "moves": [
+    "Wave Crash",
+    "Ice Punch",
+    "Earthquake",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 4",
+   "player": "JJ Miller",
+   "date": "2026-10-11",
+   "weight": 0.648
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Flash Cannon",
+    "Dragon Pulse",
+    "Electro Shot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 4",
+   "player": "Joshua Sutherland-Smith",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Basculegion",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Choice Scarf",
+   "ability": "Adaptability",
+   "moves": [
+    "Wave Crash",
+    "Last Respects",
+    "Flip Turn",
+    "Aqua Jet"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 4",
+   "player": "Joshua Sutherland-Smith",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Charizard",
+   "forme": "Charizard-Mega-Y",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Charizardite Y",
+   "ability": "Blaze",
+   "moves": [
+    "Heat Wave",
+    "Weather Ball",
+    "Ancient Power",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Yvar Vlieger",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Dragonite",
+   "forme": "Dragonite-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Dragoninite",
+   "ability": "Inner Focus",
+   "moves": [
+    "Dragon Pulse",
+    "Heat Wave",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Eden Batchelor",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Floette",
+   "forme": "Floette-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Floettite",
+   "ability": "Flower Veil",
+   "moves": [
+    "Moonblast",
+    "Dazzling Gleam",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 4",
+   "player": "Joshua Sutherland-Smith",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Floette",
+   "forme": "Floette-Mega",
+   "nature": "Bold",
+   "sps": null,
+   "item": "Floettite",
+   "ability": "Flower Veil",
+   "moves": [
+    "Draining Kiss",
+    "Dazzling Gleam",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Eden Batchelor",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Floette",
+   "forme": "Floette-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Floettite",
+   "ability": "Flower Veil",
+   "moves": [
+    "Dazzling Gleam",
+    "Draining Kiss",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 4",
+   "player": "Jude Lee",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Snarl",
+    "Fake Out",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 4",
+   "player": "Joshua Sutherland-Smith",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Impish",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Throat Chop",
+    "Parting Shot",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Eden Batchelor",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Indeedee",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Psychic Surge",
+   "moves": [
+    "Expanding Force",
+    "Energy Ball",
+    "Imprison",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Yvar Vlieger",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Chople Berry",
+   "ability": "Defiant",
+   "moves": [
+    "Kowtow Cleave",
+    "Sucker Punch",
+    "Iron Head",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Yvar Vlieger",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Kommo-o",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Soundproof",
+   "moves": [
+    "Clanging Scales",
+    "Aura Sphere",
+    "Clangorous Soul",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Yvar Vlieger",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Meowstic",
+   "forme": "Meowstic-F-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Meowsticite",
+   "ability": "Competitive",
+   "moves": [
+    "Expanding Force",
+    "Thunderbolt",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Yvar Vlieger",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Drizzle",
+   "moves": [
+    "Weather Ball",
+    "Hurricane",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 4",
+   "player": "Joshua Sutherland-Smith",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Psychic Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Dire Claw",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 4",
+   "player": "Yvar Vlieger",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Dire Claw",
+    "Close Combat",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 4",
+   "player": "Joshua Sutherland-Smith",
+   "date": "2026-09-26",
+   "weight": 0.63
+  },
+  {
+   "species": "Dragonite",
+   "forme": "Dragonite-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Dragoninite",
+   "ability": "Multiscale",
+   "moves": [
+    "Dragon Pulse",
+    "Heat Wave",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 8",
+   "player": "Brian Hough",
+   "date": "2026-10-11",
+   "weight": 0.509
+  },
+  {
+   "species": "Garchomp",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Choice Scarf",
+   "ability": "Rough Skin",
+   "moves": [
+    "Dragon Claw",
+    "Stomping Tantrum",
+    "Rock Slide",
+    "Earthquake"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 8",
+   "player": "Brian Hough",
+   "date": "2026-10-11",
+   "weight": 0.509
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Darkest Lariat",
+    "Fake Out",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 8",
+   "player": "Brian Hough",
+   "date": "2026-10-11",
+   "weight": 0.509
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Competitive",
+   "moves": [
+    "Muddy Water",
+    "Coil",
+    "Hypnosis",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Top 8",
+   "player": "Sahil Shaikh",
+   "date": "2026-10-11",
+   "weight": 0.509
+  },
+  {
+   "species": "Salamence",
+   "forme": "Salamence-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Salamencite",
+   "ability": "Intimidate",
+   "moves": [
+    "Hyper Voice",
+    "Draco Meteor",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "VR October Challenge #2 Top 8",
+   "player": "Sahil Shaikh",
+   "date": "2026-10-11",
+   "weight": 0.509
+  },
+  {
+   "species": "Charizard",
+   "forme": "Charizard-Mega-Y",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Charizardite Y",
+   "ability": "Blaze",
+   "moves": [
+    "Protect",
+    "Heat Wave",
+    "Weather Ball",
+    "Ancient Power"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 8",
+   "player": "Juan Manuel Odriozola",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Floette",
+   "forme": "Floette-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Floettite",
+   "ability": "Flower Veil",
+   "moves": [
+    "Moonblast",
+    "Dazzling Gleam",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 8",
+   "player": "Keigo Tanizawa",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Glimmora",
+   "forme": "Glimmora-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Glimmoranite",
+   "ability": "Toxic Debris",
+   "moves": [
+    "Spiky Shield",
+    "Sludge Bomb",
+    "Power Gem",
+    "Earth Power"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 8",
+   "player": "Valentijn Visser",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Defiant",
+   "moves": [
+    "Sucker Punch",
+    "Iron Head",
+    "Kowtow Cleave",
+    "Low Kick"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 8",
+   "player": "Keigo Tanizawa",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Dire Claw",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 8",
+   "player": "Keigo Tanizawa",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Sylveon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Fairy Feather",
+   "ability": "Pixilate",
+   "moves": [
+    "Detect",
+    "Yawn",
+    "Hyper Voice",
+    "Quick Attack"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 8",
+   "player": "Juan Manuel Odriozola",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Toxapex",
+   "forme": null,
+   "nature": "Relaxed",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Regenerator",
+   "moves": [
+    "Baneful Bunker",
+    "Wide Guard",
+    "Toxic",
+    "Infestation"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 8",
+   "player": "Juan Manuel Odriozola",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Venusaur",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Chlorophyll",
+   "moves": [
+    "Protect",
+    "Leaf Storm",
+    "Sludge Bomb",
+    "Earth Power"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 8",
+   "player": "Juan Manuel Odriozola",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Grassy Seed",
+   "ability": "Flame Body",
+   "moves": [
+    "Protect",
+    "Heat Wave",
+    "Giga Drain",
+    "Quiver Dance"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 8",
+   "player": "Valentijn Visser",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Rocky Helmet",
+   "ability": "Flame Body",
+   "moves": [
+    "Overheat",
+    "Rage Powder",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 8",
+   "player": "Keigo Tanizawa",
+   "date": "2026-09-26",
+   "weight": 0.495
+  },
+  {
+   "species": "Ceruledge",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Grassy Seed",
+   "ability": "Flash Fire",
+   "moves": [
+    "Protect",
+    "Bitter Blade",
+    "Swords Dance",
+    "Shadow Sneak"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 8",
+   "player": "Lorenzo Arce",
+   "date": "2026-09-22",
+   "weight": 0.491
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Competitive",
+   "moves": [
+    "Coil",
+    "Hypnosis",
+    "Ice Beam",
+    "Muddy Water"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 8",
+   "player": "Lorenzo Arce",
+   "date": "2026-09-22",
+   "weight": 0.491
+  },
+  {
+   "species": "Excadrill",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Sand Rush",
+   "moves": [
+    "High Horsepower",
+    "Iron Head",
+    "Rock Tomb",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 16",
+   "player": "Evan Graham",
+   "date": "2026-10-18",
+   "weight": 0.375
+  },
+  {
+   "species": "Gengar",
+   "forme": "Gengar-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Gengarite",
+   "ability": "Cursed Body",
+   "moves": [
+    "Sludge Bomb",
+    "Shadow Ball",
+    "Substitute",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 16",
+   "player": "Evan Graham",
+   "date": "2026-10-18",
+   "weight": 0.375
+  },
+  {
+   "species": "Hippowdon",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Sand Stream",
+   "moves": [
+    "High Horsepower",
+    "Stone Edge",
+    "Yawn",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 16",
+   "player": "Evan Graham",
+   "date": "2026-10-18",
+   "weight": 0.375
+  },
+  {
+   "species": "Kommo-o",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Dragon Fang",
+   "ability": "Soundproof",
+   "moves": [
+    "Clanging Scales",
+    "Aura Sphere",
+    "Clangorous Soul",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 16",
+   "player": "Evan Graham",
+   "date": "2026-10-18",
+   "weight": 0.375
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Fake Out",
+    "Wood Hammer",
+    "Grassy Glide",
+    "High Horsepower"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 16",
+   "player": "Evan Graham",
+   "date": "2026-10-18",
+   "weight": 0.375
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Electro Shot",
+    "Dragon Pulse",
+    "Snarl",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 16",
+   "player": "Finn Seipold",
+   "date": "2026-09-26",
+   "weight": 0.36
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Quiet",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Twin Beam",
+    "Helping Hand",
+    "Trick Room",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 16",
+   "player": "Finn Seipold",
+   "date": "2026-09-26",
+   "weight": 0.36
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Drizzle",
+   "moves": [
+    "Weather Ball",
+    "Hurricane",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 16",
+   "player": "Finn Seipold",
+   "date": "2026-09-26",
+   "weight": 0.36
+  },
+  {
+   "species": "Salamence",
+   "forme": "Salamence-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Salamencite",
+   "ability": "Intimidate",
+   "moves": [
+    "Protect",
+    "Hyper Voice",
+    "Draco Meteor",
+    "Tailwind"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 16",
+   "player": "Koen van Cann",
+   "date": "2026-09-26",
+   "weight": 0.36
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Grassy Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Protect",
+    "Dire Claw",
+    "Close Combat",
+    "Acrobatics"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 16",
+   "player": "Koen van Cann",
+   "date": "2026-09-26",
+   "weight": 0.36
+  },
+  {
+   "species": "Altaria",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Haban Berry",
+   "ability": "Cloud Nine",
+   "moves": [
+    "Ice Beam",
+    "Tailwind",
+    "Will-O-Wisp",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Dylan Matthews",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Arcanine",
+   "forme": "Arcanine-Hisui",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Rock Head",
+   "moves": [
+    "Rock Slide",
+    "Flare Blitz",
+    "Head Smash",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Dylan Matthews",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Protect",
+    "Electro Shot",
+    "Dragon Pulse",
+    "Aura Sphere"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Billy Helm",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Delphox",
+   "forme": "Delphox-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Delphoxite",
+   "ability": "Blaze",
+   "moves": [
+    "Heat Wave",
+    "Psychic",
+    "Nasty Plot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Justin Tang",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Dragapult",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Infiltrator",
+   "moves": [
+    "Draco Meteor",
+    "Shadow Ball",
+    "Will-O-Wisp",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Dylan Matthews",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Passho Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Protect",
+    "Fake Out",
+    "Throat Chop",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Billy Helm",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Indeedee",
+   "forme": "Indeedee-F",
+   "nature": "Bold",
+   "sps": null,
+   "item": "Rocky Helmet",
+   "ability": "Psychic Surge",
+   "moves": [
+    "Psychic",
+    "Follow Me",
+    "Helping Hand",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Dylan Matthews",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Metagross",
+   "forme": "Metagross-Mega",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Metagrossite",
+   "ability": "Clear Body",
+   "moves": [
+    "Psychic Fangs",
+    "Body Press",
+    "Psych Up",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Dylan Matthews",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Psychic Seed",
+   "ability": "Competitive",
+   "moves": [
+    "Muddy Water",
+    "Coil",
+    "Hypnosis",
+    "Recover"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Dylan Matthews",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Politoed",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Drizzle",
+   "moves": [
+    "Protect",
+    "Weather Ball",
+    "Perish Song",
+    "Encore"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Billy Helm",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Miracle Seed",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Protect",
+    "Fake Out",
+    "Grassy Glide",
+    "U-turn"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Billy Helm",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Sinistcha",
+   "forme": "Sinistcha-Masterpiece",
+   "nature": "Bold",
+   "sps": null,
+   "item": "Colbur Berry",
+   "ability": "Hospitality",
+   "moves": [
+    "Matcha Gotcha",
+    "Rage Powder",
+    "Trick Room",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Justin Tang",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Poison Touch",
+   "moves": [
+    "Fake Out",
+    "Close Combat",
+    "Poison Jab",
+    "Quick Guard"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 16",
+   "player": "Justin Tang",
+   "date": "2026-09-22",
+   "weight": 0.357
+  },
+  {
+   "species": "Aerodactyl",
+   "forme": "Aerodactyl-Mega",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Aerodactylite",
+   "ability": "Unnerve",
+   "moves": [
+    "Rock Slide",
+    "Dual Wingbeat",
+    "Tailwind",
+    "Wide Guard"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Gabriele Karol Lopez",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Annihilape",
+   "forme": null,
+   "nature": "Brave",
+   "sps": null,
+   "item": "Spell Tag",
+   "ability": "Defiant",
+   "moves": [
+    "Rage Fist",
+    "Drain Punch",
+    "Encore",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Nikolaj Høj Nielsen",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Armarouge",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Flash Fire",
+   "moves": [
+    "Armor Cannon",
+    "Psyshock",
+    "Wide Guard",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Jonne Veenstra",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Psychic",
+    "Thunderbolt",
+    "Trick Room",
+    "Beat Up"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Nikolaj Høj Nielsen",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Psychic",
+    "Thunderbolt",
+    "Protect",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Gabriele Karol Lopez",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Froslass",
+   "forme": "Froslass-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Froslassite",
+   "ability": "Cursed Body",
+   "moves": [
+    "Blizzard",
+    "Shadow Ball",
+    "Aurora Veil",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Jonne Veenstra",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Garchomp",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Rough Skin",
+   "moves": [
+    "Stomping Tantrum",
+    "Dragon Claw",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Nikolaj Høj Nielsen",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Garchomp",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Rough Skin",
+   "moves": [
+    "Dragon Claw",
+    "Earthquake",
+    "Rock Tomb",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Gabriele Karol Lopez",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Glimmora",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Toxic Debris",
+   "moves": [
+    "Sludge Bomb",
+    "Power Gem",
+    "Earth Power",
+    "Spiky Shield"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Jonne Veenstra",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Glimmora",
+   "forme": "Glimmora-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Glimmoranite",
+   "ability": "Toxic Debris",
+   "moves": [
+    "Sludge Bomb",
+    "Power Gem",
+    "Spiky Shield",
+    "Earth Power"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Leonardo Bonanomi",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Sassy",
+   "sps": null,
+   "item": "Chople Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Snarl",
+    "Fake Out",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Nikolaj Høj Nielsen",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Defiant",
+   "moves": [
+    "Kowtow Cleave",
+    "Sucker Punch",
+    "Iron Head",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Jonne Veenstra",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Miracle Seed",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Wood Hammer",
+    "Grassy Glide",
+    "Superpower",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Leonardo Bonanomi",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Staraptor",
+   "forme": "Staraptor-Mega",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Staraptite",
+   "ability": "Intimidate",
+   "moves": [
+    "Brave Bird",
+    "Close Combat",
+    "Roost",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Jonne Veenstra",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Sylveon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Fairy Feather",
+   "ability": "Pixilate",
+   "moves": [
+    "Hyper Voice",
+    "Hyper Beam",
+    "Yawn",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Nikolaj Høj Nielsen",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Sylveon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Fairy Feather",
+   "ability": "Pixilate",
+   "moves": [
+    "Hyper Voice",
+    "Hyper Beam",
+    "Quick Attack",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Gabriele Karol Lopez",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Charti Berry",
+   "ability": "Flame Body",
+   "moves": [
+    "Overheat",
+    "Struggle Bug",
+    "Rage Powder",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Leonardo Bonanomi",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Whimsicott",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Fairy Feather",
+   "ability": "Prankster",
+   "moves": [
+    "Moonblast",
+    "Tailwind",
+    "Charm",
+    "Encore"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 32",
+   "player": "Jonne Veenstra",
+   "date": "2026-11-01",
+   "weight": 0.289
+  },
+  {
+   "species": "Garchomp",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Rough Skin",
+   "moves": [
+    "Rock Slide",
+    "Stomping Tantrum",
+    "Dragon Claw",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 32",
+   "player": "Eliott Oblinger",
+   "date": "2026-10-18",
+   "weight": 0.282
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Fake Out",
+    "Flare Blitz",
+    "Darkest Lariat",
+    "Snarl"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 32",
+   "player": "Eliott Oblinger",
+   "date": "2026-10-18",
+   "weight": 0.282
+  },
+  {
+   "species": "Indeedee",
+   "forme": "Indeedee-F",
+   "nature": "Bold",
+   "sps": null,
+   "item": "Rocky Helmet",
+   "ability": "Psychic Surge",
+   "moves": [
+    "Psychic",
+    "Follow Me",
+    "Helping Hand",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 32",
+   "player": "Eliott Oblinger",
+   "date": "2026-10-18",
+   "weight": 0.282
+  },
+  {
+   "species": "Metagross",
+   "forme": "Metagross-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Metagrossite",
+   "ability": "Clear Body",
+   "moves": [
+    "Psychic Fangs",
+    "Steel Roller",
+    "Brick Break",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 32",
+   "player": "Eliott Oblinger",
+   "date": "2026-10-18",
+   "weight": 0.282
+  },
+  {
+   "species": "Primarina",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Liquid Voice",
+   "moves": [
+    "Hyper Voice",
+    "Moonblast",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 32",
+   "player": "Luca Schianchi",
+   "date": "2026-10-18",
+   "weight": 0.282
+  },
+  {
+   "species": "Whimsicott",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Prankster",
+   "moves": [
+    "Moonblast",
+    "Tailwind",
+    "Encore",
+    "Sunny Day"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 32",
+   "player": "Eliott Oblinger",
+   "date": "2026-10-18",
+   "weight": 0.282
+  },
+  {
+   "species": "Aerodactyl",
+   "forme": "Aerodactyl-Mega",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Aerodactylite",
+   "ability": "Unnerve",
+   "moves": [
+    "Rock Slide",
+    "Dual Wingbeat",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Josiah Kim",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Armarouge",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Flash Fire",
+   "moves": [
+    "Expanding Force",
+    "Armor Cannon",
+    "Heat Wave",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Ethan Rauchwerk",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Basculegion",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Adaptability",
+   "moves": [
+    "Wave Crash",
+    "Last Respects",
+    "Aqua Jet",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Jacob Acker",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Charizard",
+   "forme": "Charizard-Mega-Y",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Charizardite Y",
+   "ability": "Blaze",
+   "moves": [
+    "Protect",
+    "Heat Wave",
+    "Weather Ball",
+    "Solar Beam"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Joey McGinley",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Delphox",
+   "forme": "Delphox-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Delphoxite",
+   "ability": "Blaze",
+   "moves": [
+    "Heat Wave",
+    "Psychic",
+    "Encore",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Jacob Acker",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Helping Hand",
+    "Psychic",
+    "Protect",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Josiah Kim",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Garchomp",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Rough Skin",
+   "moves": [
+    "Stomping Tantrum",
+    "Dragon Claw",
+    "Earthquake",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Josiah Kim",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Garchomp",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Rough Skin",
+   "moves": [
+    "Protect",
+    "Dragon Claw",
+    "Stomping Tantrum",
+    "Rock Tomb"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Joey McGinley",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Occa Berry",
+   "ability": "Defiant",
+   "moves": [
+    "Kowtow Cleave",
+    "Iron Head",
+    "Sucker Punch",
+    "Low Kick"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Jacob Acker",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Competitive",
+   "moves": [
+    "Muddy Water",
+    "Coil",
+    "Recover",
+    "Hypnosis"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Ethan Rauchwerk",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Pyroar",
+   "forme": "Pyroar-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Pyroarite",
+   "ability": "Unnerve",
+   "moves": [
+    "Protect",
+    "Heat Wave",
+    "Overheat",
+    "Solar Beam"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Matthew Woodruff",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Psychic Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Fake Out",
+    "Rock Slide",
+    "Dire Claw"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Ethan Rauchwerk",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Poison Touch",
+   "moves": [
+    "Close Combat",
+    "Dire Claw",
+    "Fake Out",
+    "Feint"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Jacob Acker",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Sylveon",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Fairy Feather",
+   "ability": "Pixilate",
+   "moves": [
+    "Hyper Voice",
+    "Hyper Beam",
+    "Quick Attack",
+    "Detect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Josiah Kim",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Torkoal",
+   "forme": null,
+   "nature": "Quiet",
+   "sps": null,
+   "item": "Charcoal",
+   "ability": "Drought",
+   "moves": [
+    "Protect",
+    "Helping Hand",
+    "Weather Ball",
+    "Eruption"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 32",
+   "player": "Matthew Woodruff",
+   "date": "2026-10-11",
+   "weight": 0.278
+  },
+  {
+   "species": "Baxcalibur",
+   "forme": "Baxcalibur-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Baxcalibrite",
+   "ability": "Thermal Exchange",
+   "moves": [
+    "Glaive Rush",
+    "Ice Shard",
+    "Swords Dance",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 32",
+   "player": "Christopher Gibson",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Gengar",
+   "forme": "Gengar-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Gengarite",
+   "ability": "Cursed Body",
+   "moves": [
+    "Sludge Bomb",
+    "Shadow Ball",
+    "Icy Wind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 32",
+   "player": "Drew Bliss",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Grassy Seed",
+   "ability": "Good as Gold",
+   "moves": [
+    "Shadow Ball",
+    "Make It Rain",
+    "Nasty Plot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 32",
+   "player": "Arthur Glandier",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Indeedee",
+   "forme": "Indeedee-F",
+   "nature": "Relaxed",
+   "sps": null,
+   "item": "Rocky Helmet",
+   "ability": "Psychic Surge",
+   "moves": [
+    "Follow Me",
+    "Helping Hand",
+    "Trick Room",
+    "Psychic"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 32",
+   "player": "Drew Bliss",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Grassy Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Dire Claw",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 32",
+   "player": "Florian Temme",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Naive",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Unburden",
+   "moves": [
+    "Fake Out",
+    "Dire Claw",
+    "Close Combat",
+    "Coaching"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 32",
+   "player": "Christopher Gibson",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Psychic Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Dire Claw",
+    "Protect",
+    "Throat Chop"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 32",
+   "player": "Drew Bliss",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Starmie",
+   "forme": "Starmie-Mega",
+   "nature": "Hasty",
+   "sps": null,
+   "item": "Starminite",
+   "ability": "Natural Cure",
+   "moves": [
+    "Liquidation",
+    "Expanding Force",
+    "Ice Beam",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 32",
+   "player": "Drew Bliss",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Rocky Helmet",
+   "ability": "Flame Body",
+   "moves": [
+    "Heat Wave",
+    "Tailwind",
+    "Rage Powder",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Brisbane Regional Championships Top 32",
+   "player": "Christopher Gibson",
+   "date": "2026-09-26",
+   "weight": 0.27
+  },
+  {
+   "species": "Excadrill",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Sand Rush",
+   "moves": [
+    "High Horsepower",
+    "Swords Dance",
+    "Iron Head",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Brennan Burkhardt",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Gardevoir",
+   "forme": "Gardevoir-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Gardevoirite",
+   "ability": "Synchronize",
+   "moves": [
+    "Hyper Voice",
+    "Expanding Force",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Mason Cutler",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Good as Gold",
+   "moves": [
+    "Make It Rain",
+    "Shadow Ball",
+    "Nasty Plot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Brennan Burkhardt",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Kommo-o",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Soundproof",
+   "moves": [
+    "Clanging Scales",
+    "Aura Sphere",
+    "Flamethrower",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Mason Cutler",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Primarina",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Liquid Voice",
+   "moves": [
+    "Moonblast",
+    "Hyper Voice",
+    "Dazzling Gleam",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Brennan Burkhardt",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Pyroar",
+   "forme": "Pyroar-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Pyroarite",
+   "ability": "Unnerve",
+   "moves": [
+    "Heat Wave",
+    "Overheat",
+    "Scorching Sands",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Mason Cutler",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Salamence",
+   "forme": "Salamence-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Salamencite",
+   "ability": "Intimidate",
+   "moves": [
+    "Hyper Voice",
+    "Flamethrower",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Brennan Burkhardt",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Sinistcha",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Hospitality",
+   "moves": [
+    "Matcha Gotcha",
+    "Rage Powder",
+    "Trick Room",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Brennan Burkhardt",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Tyranitar",
+   "forme": "Tyranitar-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Tyranitarite",
+   "ability": "Sand Stream",
+   "moves": [
+    "Rock Slide",
+    "Knock Off",
+    "Low Kick",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 32",
+   "player": "Brennan Burkhardt",
+   "date": "2026-09-22",
+   "weight": 0.268
+  },
+  {
+   "species": "Archaludon",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Stamina",
+   "moves": [
+    "Dragon Pulse",
+    "Electro Shot",
+    "Snarl",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Danilo Modugno",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Basculegion",
+   "forme": "Basculegion-F",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Swift Swim",
+   "moves": [
+    "Muddy Water",
+    "Shadow Ball",
+    "Ice Beam",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Danilo Modugno",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Blaziken",
+   "forme": "Blaziken-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Blazikenite",
+   "ability": "Speed Boost",
+   "moves": [
+    "Close Combat",
+    "Flare Blitz",
+    "Rock Slide",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Nicolò Venturin",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Delphox",
+   "forme": "Delphox-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Delphoxite",
+   "ability": "Blaze",
+   "moves": [
+    "Protect",
+    "Heat Wave",
+    "Psyshock",
+    "Nasty Plot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Carlos Caño",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Golisopod",
+   "forme": "Golisopod-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Golisopite",
+   "ability": "Emergency Exit",
+   "moves": [
+    "Iron Head",
+    "Leech Life",
+    "Sucker Punch",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Danilo Modugno",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Damp Rock",
+   "ability": "Drizzle",
+   "moves": [
+    "Weather Ball",
+    "Hurricane",
+    "Helping Hand",
+    "Wide Guard"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Danilo Modugno",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Drizzle",
+   "moves": [
+    "Protect",
+    "Hurricane",
+    "Weather Ball",
+    "Wide Guard"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Carlos Caño",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Raichu",
+   "forme": "Raichu-Mega-X",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Raichunite X",
+   "ability": "Lightning Rod",
+   "moves": [
+    "Volt Tackle",
+    "Volt Switch",
+    "Fake Out",
+    "Feint"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Danilo Modugno",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Occa Berry",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Wood Hammer",
+    "Grassy Glide",
+    "Fake Out",
+    "U-turn"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Nicolò Venturin",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Sinistcha",
+   "forme": "Sinistcha-Masterpiece",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Hospitality",
+   "moves": [
+    "Matcha Gotcha",
+    "Shadow Ball",
+    "Rage Powder",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Carlos Caño",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Electric Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Poison Jab",
+    "Close Combat",
+    "Swords Dance",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Danilo Modugno",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Electric Seed",
+   "ability": "Unburden",
+   "moves": [
+    "Dire Claw",
+    "Close Combat",
+    "Swords Dance",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 64",
+   "player": "Alejandro Iglesias",
+   "date": "2026-11-01",
+   "weight": 0.193
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Good as Gold",
+   "moves": [
+    "Make It Rain",
+    "Shadow Ball",
+    "Protect",
+    "Nasty Plot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Top 64",
+   "player": "René León",
+   "date": "2026-10-25",
+   "weight": 0.19
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Fake Out",
+    "Flare Blitz",
+    "Throat Chop",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 64",
+   "player": "Mattia Vinti",
+   "date": "2026-10-18",
+   "weight": 0.188
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Electric Seed",
+   "ability": "Competitive",
+   "moves": [
+    "Scald",
+    "Icy Wind",
+    "Ice Beam",
+    "Recover"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 64",
+   "player": "Lorenzo Colombo",
+   "date": "2026-10-18",
+   "weight": 0.188
+  },
+  {
+   "species": "Raichu",
+   "forme": "Raichu-Mega-X",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Raichunite X",
+   "ability": "Lightning Rod",
+   "moves": [
+    "Fake Out",
+    "Volt Tackle",
+    "Surf",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 64",
+   "player": "Lorenzo Colombo",
+   "date": "2026-10-18",
+   "weight": 0.188
+  },
+  {
+   "species": "Sinistcha",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Coba Berry",
+   "ability": "Hospitality",
+   "moves": [
+    "Matcha Gotcha",
+    "Rage Powder",
+    "Trick Room",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 64",
+   "player": "Mattia Vinti",
+   "date": "2026-10-18",
+   "weight": 0.188
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Poison Touch",
+   "moves": [
+    "Close Combat",
+    "Dire Claw",
+    "Quick Guard",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 64",
+   "player": "Mattia Vinti",
+   "date": "2026-10-18",
+   "weight": 0.188
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Fake Out",
+    "Close Combat",
+    "Gunk Shot",
+    "Rock Slide"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 64",
+   "player": "Lorenzo Colombo",
+   "date": "2026-10-18",
+   "weight": 0.188
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Charti Berry",
+   "ability": "Flame Body",
+   "moves": [
+    "Overheat",
+    "Rage Powder",
+    "Struggle Bug",
+    "Tailwind"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 64",
+   "player": "Lorenzo Colombo",
+   "date": "2026-10-18",
+   "weight": 0.188
+  },
+  {
+   "species": "Annihilape",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Choice Scarf",
+   "ability": "Defiant",
+   "moves": [
+    "Close Combat",
+    "Phantom Force",
+    "Ice Punch",
+    "U-turn"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Santino Tarquinio",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Basculegion",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Adaptability",
+   "moves": [
+    "Last Respects",
+    "Wave Crash",
+    "Aqua Jet",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Jimmy Friedle",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Camerupt",
+   "forme": "Camerupt-Mega",
+   "nature": "Quiet",
+   "sps": null,
+   "item": "Cameruptite",
+   "ability": "Solid Rock",
+   "moves": [
+    "Heat Wave",
+    "Fire Blast",
+    "Earth Power",
+    "Ancient Power"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Jimmy Friedle",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Charizard",
+   "forme": "Charizard-Mega-Y",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Charizardite Y",
+   "ability": "Blaze",
+   "moves": [
+    "Heat Wave",
+    "Ancient Power",
+    "Focus Blast",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Elijah Peeples",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Silk Scarf",
+   "ability": "Armor Tail",
+   "moves": [
+    "Psychic",
+    "Trick Room",
+    "Imprison",
+    "Hyper Voice"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Elijah Peeples",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Wise Glasses",
+   "ability": "Armor Tail",
+   "moves": [
+    "Expanding Force",
+    "Thunderbolt",
+    "Sunny Day",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Jimmy Friedle",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Floette",
+   "forme": "Floette-Mega",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Floettite",
+   "ability": "Flower Veil",
+   "moves": [
+    "Light of Ruin",
+    "Moonblast",
+    "Dazzling Gleam",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Becca Gammage",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Gardevoir",
+   "forme": "Gardevoir-Mega",
+   "nature": "Quiet",
+   "sps": null,
+   "item": "Gardevoirite",
+   "ability": "Trace",
+   "moves": [
+    "Hyper Voice",
+    "Expanding Force",
+    "Calm Mind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Jimmy Friedle",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Good as Gold",
+   "moves": [
+    "Make It Rain",
+    "Shadow Ball",
+    "Protect",
+    "Focus Blast"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Elijah Peeples",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Throat Chop",
+    "Parting Shot",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Connor Sparks",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Sassy",
+   "sps": null,
+   "item": "Chople Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Protect",
+    "Fake Out",
+    "Darkest Lariat",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Santino Tarquinio",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Kommo-o",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Bulletproof",
+   "moves": [
+    "Protect",
+    "Clangorous Soul",
+    "Clanging Scales",
+    "Aura Sphere"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Santino Tarquinio",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Kommo-o",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Soundproof",
+   "moves": [
+    "Clanging Scales",
+    "Aura Sphere",
+    "Clangorous Soul",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Alex Archambault",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": null,
+   "ability": "Drizzle",
+   "moves": [
+    "Hurricane",
+    "Helping Hand",
+    "Wide Guard",
+    "Tailwind"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Becca Gammage",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Politoed",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Drizzle",
+   "moves": [
+    "Protect",
+    "Perish Song",
+    "Encore",
+    "Muddy Water"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Santino Tarquinio",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Raichu",
+   "forme": "Raichu-Mega-X",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Raichunite X",
+   "ability": "Lightning Rod",
+   "moves": [
+    "Volt Tackle",
+    "Volt Switch",
+    "Fake Out",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Ryne Garrett",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Raichu",
+   "forme": "Raichu-Mega-Y",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Raichunite Y",
+   "ability": "Lightning Rod",
+   "moves": [
+    "Zap Cannon",
+    "Focus Blast",
+    "Encore",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Connor Sparks",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Rillaboom",
+   "forme": null,
+   "nature": "Brave",
+   "sps": null,
+   "item": "Eject Button",
+   "ability": "Grassy Surge",
+   "moves": [
+    "Protect",
+    "Fake Out",
+    "Grassy Glide",
+    "U-turn"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Santino Tarquinio",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Venusaur",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Chlorophyll",
+   "moves": [
+    "Sludge Bomb",
+    "Energy Ball",
+    "Sleep Powder",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Elijah Peeples",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Watchog",
+   "forme": null,
+   "nature": "Impish",
+   "sps": null,
+   "item": "Chople Berry",
+   "ability": "Analytic",
+   "moves": [
+    "Ice Punch",
+    "Detect",
+    "Low Kick",
+    "Thunder Wave"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 64",
+   "player": "Elijah Peeples",
+   "date": "2026-10-11",
+   "weight": 0.185
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Relaxed",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Psychic",
+    "Rain Dance",
+    "Helping Hand",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 64",
+   "player": "Nick Holmer",
+   "date": "2026-09-26",
+   "weight": 0.18
+  },
+  {
+   "species": "Grapploct",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Technician",
+   "moves": [
+    "Storm Throw",
+    "Stomping Tantrum",
+    "Mach Punch",
+    "Detect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 64",
+   "player": "Nick Holmer",
+   "date": "2026-09-26",
+   "weight": 0.18
+  },
+  {
+   "species": "Kangaskhan",
+   "forme": "Kangaskhan-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Kangaskhanite",
+   "ability": "Scrappy",
+   "moves": [
+    "Double-Edge",
+    "Hammer Arm",
+    "Crunch",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 64",
+   "player": "Nick Holmer",
+   "date": "2026-09-26",
+   "weight": 0.18
+  },
+  {
+   "species": "Mawile",
+   "forme": "Mawile-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Mawilite",
+   "ability": "Hyper Cutter",
+   "moves": [
+    "Iron Head",
+    "Play Rough",
+    "Sucker Punch",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 64",
+   "player": "Nick Holmer",
+   "date": "2026-09-26",
+   "weight": 0.18
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Damp Rock",
+   "ability": "Drizzle",
+   "moves": [
+    "Weather Ball",
+    "Hurricane",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Frankfurt Regional Championships Top 64",
+   "player": "Nick Holmer",
+   "date": "2026-09-26",
+   "weight": 0.18
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Good as Gold",
+   "moves": [
+    "Make It Rain",
+    "Shadow Ball",
+    "Focus Blast",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 64",
+   "player": "Michael Maus",
+   "date": "2026-09-22",
+   "weight": 0.179
+  },
+  {
+   "species": "Noivern",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Infiltrator",
+   "moves": [
+    "Draco Meteor",
+    "Super Fang",
+    "Tailwind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 64",
+   "player": "Michael Maus",
+   "date": "2026-09-22",
+   "weight": 0.179
+  },
+  {
+   "species": "Venusaur",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Wide Lens",
+   "ability": "Chlorophyll",
+   "moves": [
+    "Leaf Storm",
+    "Sludge Bomb",
+    "Sleep Powder",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Baltimore Regional Championships Top 64",
+   "player": "Michael Maus",
+   "date": "2026-09-22",
+   "weight": 0.179
+  },
+  {
+   "species": "Garchomp",
+   "forme": "Garchomp-Mega-Z",
+   "nature": "Timid",
+   "sps": null,
+   "item": "Garchompite Z",
+   "ability": "Rough Skin",
+   "moves": [
+    "Earth Power",
+    "Power Gem",
+    "Draco Meteor",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 128",
+   "player": "Filip Idczak",
+   "date": "2026-11-01",
+   "weight": 0.145
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Darkest Lariat",
+    "Parting Shot",
+    "Helping Hand",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 128",
+   "player": "Filip Idczak",
+   "date": "2026-11-01",
+   "weight": 0.145
+  },
+  {
+   "species": "Sinistcha",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Kasib Berry",
+   "ability": "Hospitality",
+   "moves": [
+    "Protect",
+    "Matcha Gotcha",
+    "Trick Room",
+    "Rage Powder"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Gdańsk Regional Championships Top 128",
+   "player": "Campbell Hodgins",
+   "date": "2026-11-01",
+   "weight": 0.145
+  },
+  {
+   "species": "Gengar",
+   "forme": "Gengar-Mega",
+   "nature": "Modest",
+   "sps": null,
+   "item": "Gengarite",
+   "ability": "Cursed Body",
+   "moves": [
+    "Sludge Bomb",
+    "Shadow Ball",
+    "Substitute",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Top 128",
+   "player": "Andrew Armstrong",
+   "date": "2026-10-25",
+   "weight": 0.143
+  },
+  {
+   "species": "Indeedee",
+   "forme": "Indeedee-F",
+   "nature": "Relaxed",
+   "sps": null,
+   "item": "Psychic Seed",
+   "ability": "Psychic Surge",
+   "moves": [
+    "Psychic",
+    "Follow Me",
+    "Baton Pass",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Top 128",
+   "player": "Andrew Armstrong",
+   "date": "2026-10-25",
+   "weight": 0.143
+  },
+  {
+   "species": "Politoed",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Choice Scarf",
+   "ability": "Drizzle",
+   "moves": [
+    "Weather Ball",
+    "Muddy Water",
+    "Ice Beam",
+    "Icy Wind"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Top 128",
+   "player": "Andrew Armstrong",
+   "date": "2026-10-25",
+   "weight": 0.143
+  },
+  {
+   "species": "Sinistcha",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Occa Berry",
+   "ability": "Hospitality",
+   "moves": [
+    "Protect",
+    "Matcha Gotcha",
+    "Rage Powder",
+    "Trick Room"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Top 128",
+   "player": "Leoncio Barrón",
+   "date": "2026-10-25",
+   "weight": 0.143
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Close Combat",
+    "Gunk Shot",
+    "Throat Chop",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Top 128",
+   "player": "Andrew Armstrong",
+   "date": "2026-10-25",
+   "weight": 0.143
+  },
+  {
+   "species": "Starmie",
+   "forme": "Starmie-Mega",
+   "nature": "Hasty",
+   "sps": null,
+   "item": "Starminite",
+   "ability": "Natural Cure",
+   "moves": [
+    "Liquidation",
+    "Expanding Force",
+    "Flip Turn",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Puebla Regional Championships Top 128",
+   "player": "Andrew Armstrong",
+   "date": "2026-10-25",
+   "weight": 0.143
+  },
+  {
+   "species": "Annihilape",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Choice Scarf",
+   "ability": "Defiant",
+   "moves": [
+    "Phantom Force",
+    "Shadow Claw",
+    "Close Combat",
+    "Rock Tomb"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 128",
+   "player": "Filippo Badioli",
+   "date": "2026-10-18",
+   "weight": 0.141
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Careful",
+   "sps": null,
+   "item": "Passho Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Throat Chop",
+    "Parting Shot",
+    "Fake Out"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 128",
+   "player": "Evan Jeannin",
+   "date": "2026-10-18",
+   "weight": 0.141
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Bold",
+   "sps": null,
+   "item": "Charti Berry",
+   "ability": "Flame Body",
+   "moves": [
+    "Protect",
+    "Rage Powder",
+    "Overheat",
+    "Struggle Bug"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Nice Regional Championships Top 128",
+   "player": "Marcos López",
+   "date": "2026-10-18",
+   "weight": 0.141
+  },
+  {
+   "species": "Aerodactyl",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Unnerve",
+   "moves": [
+    "Rock Slide",
+    "Tailwind",
+    "Protect",
+    "Dual Wingbeat"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Matt Schmucker",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Basculegion",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Adaptability",
+   "moves": [
+    "Liquidation",
+    "Last Respects",
+    "Aqua Jet",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Lev Shkolnikov",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Basculegion",
+   "forme": null,
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Choice Scarf",
+   "ability": "Adaptability",
+   "moves": [
+    "Last Respects",
+    "Wave Crash",
+    "Icy Wind",
+    "Soak"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Lauri Halonen",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Dragapult",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Clear Body",
+   "moves": [
+    "Draco Meteor",
+    "Shadow Ball",
+    "Will-O-Wisp",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Garrett Wilson",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Farigiraf",
+   "forme": null,
+   "nature": "Quiet",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Armor Tail",
+   "moves": [
+    "Psychic",
+    "Helping Hand",
+    "Trick Room",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Ryan Reagan",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Gholdengo",
+   "forme": null,
+   "nature": "Timid",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Good as Gold",
+   "moves": [
+    "Make It Rain",
+    "Shadow Ball",
+    "Nasty Plot",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 256",
+   "player": "James Messerly",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Golisopod",
+   "forme": "Golisopod-Mega",
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Golisopite",
+   "ability": "Emergency Exit",
+   "moves": [
+    "Leech Life",
+    "Iron Head",
+    "Sucker Punch",
+    "Swords Dance"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Ryan Reagan",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Flare Blitz",
+    "Darkest Lariat",
+    "Fake Out",
+    "Parting Shot"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Matt Schmucker",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Incineroar",
+   "forme": null,
+   "nature": "Impish",
+   "sps": null,
+   "item": "Chople Berry",
+   "ability": "Intimidate",
+   "moves": [
+    "Fake Out",
+    "Parting Shot",
+    "Flare Blitz",
+    "Darkest Lariat"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Ryan Reagan",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Indeedee",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Psychic Surge",
+   "moves": [
+    "Expanding Force",
+    "Mystical Fire",
+    "Helping Hand",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Garrett Wilson",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Life Orb",
+   "ability": "Defiant",
+   "moves": [
+    "Kowtow Cleave",
+    "Sucker Punch",
+    "Low Kick",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Lev Shkolnikov",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Kingambit",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Defiant",
+   "moves": [
+    "Kowtow Cleave",
+    "Sucker Punch",
+    "Iron Head",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Lauri Halonen",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Metagross",
+   "forme": "Metagross-Mega",
+   "nature": "Jolly",
+   "sps": null,
+   "item": "Metagrossite",
+   "ability": "Clear Body",
+   "moves": [
+    "Steel Roller",
+    "Psychic Fangs",
+    "Stomping Tantrum",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Garrett Wilson",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Competitive",
+   "moves": [
+    "Scald",
+    "Light Screen",
+    "Ice Beam",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Garrett Wilson",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Milotic",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Grassy Seed",
+   "ability": "Competitive",
+   "moves": [
+    "Muddy Water",
+    "Ice Beam",
+    "Icy Wind",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 256",
+   "player": "James Messerly",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Pelipper",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Focus Sash",
+   "ability": "Drizzle",
+   "moves": [
+    "Weather Ball",
+    "Hurricane",
+    "Wide Guard",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Ryan Reagan",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Sneasler",
+   "forme": null,
+   "nature": "Adamant",
+   "sps": null,
+   "item": "White Herb",
+   "ability": "Unburden",
+   "moves": [
+    "Dire Claw",
+    "Close Combat",
+    "Fake Out",
+    "Quick Guard"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Lev Shkolnikov",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Modest",
+   "sps": null,
+   "item": "Leftovers",
+   "ability": "Flame Body",
+   "moves": [
+    "Heat Wave",
+    "Giga Drain",
+    "Quiver Dance",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Lauri Halonen",
+   "date": "2026-10-11",
+   "weight": 0.139
+  },
+  {
+   "species": "Volcarona",
+   "forme": null,
+   "nature": "Calm",
+   "sps": null,
+   "item": "Sitrus Berry",
+   "ability": "Flame Body",
+   "moves": [
+    "Overheat",
+    "Rage Powder",
+    "Struggle Bug",
+    "Protect"
+   ],
+   "source": "victoryroad",
+   "sourceLabel": "Louisville Regional Championships Top 128",
+   "player": "Anthony Londergan",
+   "date": "2026-10-11",
+   "weight": 0.139
+  }
+ ]
+}
