@@ -355,6 +355,7 @@ var lastCritAt: [String: Date] = [:]               // 枠 -> 最後に |-crit| �
 var heldLine: [String: (toPct: Int, dir: Int, seq: Int, turn: Int, hpText: String)] = [:]  // プレート名 -> 行動内に保留したダメージ/回復行
 var pendingFaints: [(slot: String, speciesEn: String, at: Date)] = []  // 遅延出力するひんし行 (効果行より後に並べるため)
 var faintedSlots: [String: String] = [:]           // ひんし行を出した枠 -> 種族 (交代が確定するまでプレート読みを無視する)
+var grassyHealTurn: [String: Int] = [:]            // プレート名 -> グラッシーフィールド回復を帰属したターン (1 ターン 1 回まで)
 var lastSideCondAt: [String: Date] = [:]          // "side:move:phase" -> サイドコンディション告知を処理した時刻
 var commandPhaseSeen = false                      // コマンド選択中 (全プレート表示) かどうか。ターン数え用
 var pendingDamageCount: [String: Int] = [:]       // プレート名 -> 同じ HP% が続いた回数 (3 回で確定)
@@ -534,6 +535,13 @@ func renderLogLine(_ line: String) -> [String] {
         guard f.count >= 4 else { return [] }
         let (_, side, species) = renderLabelParts(f[2])
         if let pct = renderPct(of: f[3]) { renderLastPct[f[2]] = pct }
+        // 発生源が付いている回復は「(Leftovers)」のように後ろへ付ける
+        if f.count >= 5 && f[4].hasPrefix("[from] ") {
+            renderBerryAt[f[2]] = nil
+            var src = String(f[4].dropFirst("[from] ".count))
+            if src.hasPrefix("item: ") { src = String(src.dropFirst("item: ".count)) }
+            return ["\(renderPrefix(side))\(species) had its HP restored. (\(src))"]
+        }
         if let b = renderBerryAt[f[2]], Date().timeIntervalSince(b.at) < 6 {
             renderBerryAt[f[2]] = nil
             return ["\(renderPrefix(side))\(species) restored HP using its \(b.item)!"]
@@ -808,7 +816,7 @@ func resetLogState() {
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
-    heldLine = [:]; pendingFaints = []; faintedSlots = [:]; lastSideCondAt = [:]
+    heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -859,6 +867,34 @@ func slotId(_ plateName: String) -> String {
 func hpTextFor(_ s: SlotState) -> String {
     if let c = s.hpCur, let m = s.hpMax { return "\(c)/\(m)" }
     return "\(s.hpPercent)/100"
+}
+
+// 回復の発生源の推定 (プレート回復行に [from] を付けるため)。
+// - オボンのみ: HP が 50% 以下から約 25% 回復 (きのみは被弾直後に発動する)
+// - たべのこし / グラッシーフィールド: ターン終了時に約 1/16 (6%) 回復。
+//   グラッシーが出ているターンは、そのターンの 1 回目の 6% 回復を
+//   フィールド側に、2 回目を たべのこし に帰属する
+// 判明済みの持ち物・特性と矛盾する場合は帰属しない (あめうけざら/
+// アイスボディの 1/16 回復を たべのこし と誤認しないため)
+func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int, toPct: Int) -> (label: String, itemJa: String?)? {
+    let delta = toPct - fromPct
+    guard delta > 0 else { return nil }
+    let knownItem = revealedItems[speciesEn] ?? (teamEntries[speciesEn]?["item"] as? String)
+    if fromPct <= 50 && (20...30).contains(delta) {
+        if knownItem == nil || knownItem == "オボンのみ" { return ("item: Sitrus Berry", "オボンのみ") }
+        return nil
+    }
+    if (4...8).contains(delta) {
+        let abilityJa = revealedAbilities[speciesEn] ?? (teamEntries[speciesEn]?["ability"] as? String)
+        if abilityJa == "あめうけざら" || abilityJa == "アイスボディ" { return nil }
+        if logFieldTerrain == "Grassy" && grassyHealTurn[plateName] != currentTurn {
+            grassyHealTurn[plateName] = currentTurn
+            return ("Grassy Terrain", nil)
+        }
+        if knownItem == nil || knownItem == "たべのこし" { return ("item: Leftovers", "たべのこし") }
+        return nil
+    }
+    return nil
 }
 
 // ダメージ/回復行を 1 件出す (確定待ちの消化と新規確定の両方から呼ばれる)
@@ -920,7 +956,17 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         emitLog(line)
         recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, hpText: hpText)
     } else if toPct > effFrom {
-        emitLog("|-heal|\(slot): \(speciesEn)|\(hpText)")
+        // 回復の発生源 (オボンのみ/たべのこし/グラッシーフィールド) が
+        // 推定できれば [from] を付け、持ち物なら判明としても記録する
+        let src = healSource(plateName: plateName, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
+        if let itemJa = src?.itemJa {
+            let srcSide = key.hasPrefix("p2") ? "p2" : "p1"
+            emitItemOnce(slot: slot, side: srcSide, speciesEn: speciesEn, itemJa: itemJa)
+            if srcSide == "p2" { revealedItems[speciesEn] = itemJa }
+        }
+        var line = "|-heal|\(slot): \(speciesEn)|\(hpText)"
+        if let src { line += "|[from] \(src.label)" }
+        emitLog(line)
     }
     if toPct == 0 { deferFaint(slot: slot, speciesEn: speciesEn) }
     return true
@@ -3405,7 +3451,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0904"
+let readerBuild = "20261120_0922"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
