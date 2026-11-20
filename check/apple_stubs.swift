@@ -28,6 +28,7 @@ public class CGContext {
     public func translateBy(x: CGFloat, y: CGFloat) {}
     public func scaleBy(x: CGFloat, y: CGFloat) {}
     public func draw(_ image: CGImage, in rect: CGRect) {}
+    public func makeImage() -> CGImage? { nil }
 }
 public typealias CGWindowID = UInt32
 public struct CGWindowListOption: OptionSet {
