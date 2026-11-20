@@ -33,25 +33,33 @@
 - レギュレーション自体が変わったら、`data/regulation.json` の `rule` を pokedb の新しいルール番号に書き換えてから実行する。
 - UI の種族/持ち物/技の候補は `data/champions_dex.json` でフィルタされる (直接入力すれば候補外でも計算データにあるものは使える)。
 
-## state.json の形式 (Mac側プログラム → UI)
+## state.json の仕様 (Mac側プログラム → UI)
+
+### 原則
+- state.json に入れるのは「対戦画面から知りうる情報」だけ。相手の正確なHP実数など、画面で知りえないものは入れない (HPはプレート表示のパーセントのみ)。
+- 推定値 (相手の想定型など) は UI 側でのみ扱い、state.json には混ぜない。state.json の値はすべて画面からの観測と、観測した出来事からルールで導ける事実 (残りターン数など) のみ。
+- 出しうるキーの正本は reader.swift 内のスキーマ定義 (`stateTopKeys` 等)。実際に生成した state.json のキーがスキーマの範囲内であることを検証ハーネスで機械チェックしている。
+
+### スキーマ概要
 ```json
 {
-  "mine": [
-    {"species": "Garchomp", "mega": true, "curHPPercent": 78, "boosts": {"spa": 1}},
-    {"species": "Incineroar", "curHPPercent": 100}
-  ],
-  "oppTeam": ["Garchomp", "Incineroar", "Rillaboom", "Volcarona", "Greninja", "Kingambit"],
-  "opps": [
-    {"species": "Garchomp", "curHPPercent": 62, "status": "tox", "revealed": {"moves": ["じだんだ"], "item": "こだわりスカーフ", "ability": "すながくれ"}},
-    {"species": "Rillaboom", "curHPPercent": 100}
-  ],
-  "field": {"weather": "Rain", "terrain": "Grassy", "tailwindMine": false, "tailwindOpp": true}
+  "mine":  [ {モンスター}, ... ],   // 自分の場の2体 (無ければ空)
+  "opps":  [ {モンスター}, ... ],   // 相手の場の2体
+  "oppTeam": ["Sneasler", ...],      // 相手の選出 (判明した順)
+  "oppRevealed": { "Sneasler": {"moves": [...], "item": "...", "ability": "..."} },
+  "oppTrainer": "相手の名前",
+  "events": [ {"k": "mv", "turn": 3, "label": "p2a: Sneasler", "move": "Fake Out"}, ... ],
+  "field": {"terrain": "Psychic", "weather": "Rain", "terrainTurnsLeft": 3, "weatherTurnsLeft": 4, "trickRoomTurnsLeft": 2},
+  "sideConditions": { "p1": {"Tailwind": 2}, "p2": {"Reflect": 4} }
 }
 ```
-- species は英語名 (Showdown表記) が基本。日本語名でもよい (UI側で解決する)。
-- `oppTeam` は相手の6体。相手パネルのアイコン列に表示され、クリックで計算相手を切り替える。reader.swift は対戦中にプレートで読み取れた相手種族を登場順に自動で蓄積して書き込む (見せ合い画面には名前テキストが無いため、対戦開始直後は場の2体から埋まっていく)。
-- 相手の型はデフォルトで pokedb の使用率トップ型 (`usage`)。`setKind` で attacker / bulky / none / custom も指定可。
-- `revealed` は対戦画面で判明した情報 (技・持ち物・特性、日本語名可)。想定型の該当項目だけが実測値に差し替わり、パネルに「判明情報で訂正済み」と表示される。手動で直した項目も state.json の更新で保持される。
+- モンスター: `species` (英語名・Showdown表記), `curHPPercent`, `status` (任意), `boosts`, `mega`/`megaSpecies` (任意), `unburden`/`itemLost` (任意), 相手のみ `revealed` {moves/item/ability} (任意)。
+- `boosts` は常時7能力すべてをそろえて出す: `{"atk":0,"def":0,"spa":0,"spd":0,"spe":0,"acc":0,"eva":0}` (0も省略しない)。
+- `field` の `terrain`/`weather` は常時送る (空文字 = なし)。`terrainTurnsLeft`/`weatherTurnsLeft`/`trickRoomTurnsLeft` は継続中のみ付く追加キーで、残りターン数 (現在のターンを含めてあと何ターン持続するか) を表す。基本継続は天気・フィールド・トリックルームとも5ターンで数え、道具による延長 (岩・ねんど等) は画面から知りえないため数えない。
+- `sideConditions` は継続中のサイド状態だけをサイドごとに {状態名(英語): 残りターン} で送る。対象は Reflect / Light Screen / Aurora Veil (5ターン), Tailwind (4ターン), Mist / Safeguard (5ターン)。何も無ければキー自体を出さない。
+- `oppTeam` は相手の6体。相手パネルのアイコン列に表示され、クリックで計算相手を切り替える。reader.swift は見せ合い画面の画像識別で書き込み、対戦中にプレートで読み取れた相手種族も登場順に蓄積する。
+- 相手の型はデフォルトで pokedb の使用率トップ型 (`usage`)。`setKind` で attacker / bulky / none / custom も指定可 (これは UI 側の想定であり state.json には含まれない)。
+- `revealed` / `oppRevealed` は対戦画面で判明した情報 (技・持ち物・特性、日本語名可)。想定型の該当項目だけが実測値に差し替わり、パネルに「判明情報で訂正済み」と表示される。手動で直した項目も state.json の更新で保持される。
 - 自分側は登録済み構築 (TEAM_PRESETS) に一致する種族のみ自動反映される。
 
 ## 検証
