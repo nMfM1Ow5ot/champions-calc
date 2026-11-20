@@ -383,6 +383,7 @@ var lastSwitchIn: [String: (slot: String, at: Date)] = [:]  // "side:Species" ->
 var fieldAbilityDone: [String: Date] = [:]        // "side:Species" -> 特性帰属済みの繰り出し時刻
 var intimidateDone: [String: Date] = [:]          // "side:Species" -> いかく帰属済みの繰り出し時刻
 var lastBoostApply: [String: (seq: Int, turn: Int, at: Date)] = [:]  // "slot|stat|delta" -> 最終適用 (再読での二重適用防止)
+var boostPathAt: [String: (at: Date, salvage: Bool)] = [:]  // "side:種族|stat|delta" -> 経路 (正規/サルベージ) をまたぐ二重適用防止
 var emittedSwitchKeys: Set<String> = []            // |switch| を出した "side:Species" (ランク変化行の保留判定)
 var pendingUnburden: Set<String> = []              // 交代行が出る前にシード消費を検知した種族 (かるわざ発動を交代行の後に出す)
 var unburdenActive: Set<String> = []               // かるわざ発動中 (state.json の unburden フラグ用。交代で解除)
@@ -826,6 +827,7 @@ func resetLogState() {
     fieldAbilityDone = [:]
     intimidateDone = [:]
     lastBoostApply = [:]
+    boostPathAt = [:]
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
@@ -1337,6 +1339,10 @@ func validatedSide(forSpecies en: String, claimed: String) -> String {
 
 func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
     guard let sp0 = findSpeciesJa(in: text) else {
+        // 主語が解決できないエントリでも、確度の高い信号だけは救済する。
+        // ランク変化は直近ターンのエントリだけ (古いエントリからの適用は
+        // 実況経路の一本化方針に反し、二重適用の危険があるため)
+        _ = salvageFromText(text, allowBoost: turn >= currentTurn - 1)
         if debugMode { print("    -> 種族名が本文に無いため取り込めませんでした") }
         return
     }
@@ -1671,14 +1677,20 @@ func copyBoosts(fromKey: String, toKey: String, slot: String, speciesEn: String)
     }
 }
 
-func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delta: Int) {
+func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delta: Int, viaSalvage: Bool = false) {
     // 同じ文の OCR ゆれ違いの再読で二重に適用しない: 同じ行動・同じターン・
     // 4 秒以内の同一変化 (枠・能力・増減) は再読とみなして捨てる
     // (実例: アーマーキャノンの自己低下といかくの攻撃低下が 2 重に出た)。
     // 別の技による正当な再変化は |move| を挟むため行動番号が変わり、適用される
     let bk = "\(slot)|\(stat)|\(delta)"
     if let lb = lastBoostApply[bk], lb.seq == actionSeq && lb.turn == currentTurn && Date().timeIntervalSince(lb.at) < 4 { return }
+    // 経路をまたぐ二重適用の防止: サルベージ層と正規経路が同じ出来事を
+    // 別々に拾った場合、逆経路で 25 秒以内に記録済みの同一変化は捨てる
+    // (emitItemOnce の 25 秒ウィンドウと同型)。同経路の再変化は対象外
+    let pk = "\(key)|\(stat)|\(delta)"
+    if let prev = boostPathAt[pk], prev.salvage != viaSalvage, Date().timeIntervalSince(prev.at) < 25 { return }
     lastBoostApply[bk] = (seq: actionSeq, turn: currentTurn, at: Date())
+    boostPathAt[pk] = (at: Date(), salvage: viaSalvage)
     let cur = monStates[key]?.boosts[stat] ?? 0
     let nv = max(-6, min(6, cur + delta))
     if nv == cur { return }
@@ -2088,6 +2100,115 @@ func findSpeciesJaLoose(in text: String) -> (entry: SpeciesEntry, moveStart: Int
 }
 
 // ランク変化らしい文か (能力名 + 上がった/下がった を含む)
+// MARK: - サルベージ層 (部分救済)
+// 翻訳に失敗した文でも、断片から確度の高い信号だけを拾って状態に反映する
+// 共通処理。拾うのは: (1) 主語の種族が場の中で一意に定まるランク変化、
+// (2) 種族に依存しない場の状態、(3) 対象が一意な状態異常、(4) 対象が
+// 一意な持ち物の消費。種族が一意でない・方向や量が確定しないものは
+// 推測で入れない。状態を更新した場合は対応するプロトコル行も出し、
+// ログと state.json の内容を一致させる
+
+// 救済の主語解決: 本文の種族名 (崩れは loose 照合まで) が場の 1 枠に
+// 一意に対応するときだけ返す。同種族が両サイドにいる場合は定まらない
+func salvageSubject(in t: String) -> (side: String, slot: String, speciesEn: String)? {
+    let sp0 = findSpeciesJa(in: t) ?? findSpeciesJaLoose(in: t)?.entry
+    guard let sp0 else { return nil }
+    let sp = fieldAnchoredSpecies(sp0)
+    let hits = lastSlots.filter { $0.value.speciesEn == sp.en }
+    guard hits.count == 1, let plate = hits.first else { return nil }
+    let side = plate.key.hasPrefix("mine") ? "p1" : "p2"
+    return (side, slotFor(side: side, speciesEn: sp.en), sp.en)
+}
+
+func salvageBoost(in t: String) -> Bool {
+    // 否定文 (もう上がらない等) では発火しない
+    if t.contains("上がらない") || t.contains("あがらない") || t.contains("下がらない") || t.contains("さがらない") { return false }
+    let up = t.contains("上がった") || t.contains("上がつた") || t.contains("あがった") || t.contains("あがつた")
+    let down = t.contains("下がった") || t.contains("下がつた") || t.contains("さがった") || t.contains("さがつた")
+    guard up != down else { return false }  // 方向が確定しないものは入れない
+    // 「目一杯上がった」は上限まで = 量が文から確定しないため入れない
+    if t.contains("目一杯") || t.contains("めいっぱい") { return false }
+    // 能力名 (特攻・特防を先に見る: 「特攻」は「攻撃」を含むため)
+    let stats: [(String, String)] = [("特攻", "spa"), ("とくこう", "spa"), ("トクコウ", "spa"), ("特防", "spd"), ("とくぼう", "spd"), ("トクボウ", "spd"),
+                                     ("攻撃", "atk"), ("こうげき", "atk"), ("コウゲキ", "atk"), ("防御", "def"), ("ぼうぎょ", "def"), ("ボウギョ", "def"),
+                                     ("素早さ", "spe"), ("すばやさ", "spe"), ("スバヤサ", "spe"), ("命中率", "acc"), ("回避率", "eva")]
+    guard let stat = stats.first(where: { t.contains($0.0) })?.1 else { return false }
+    guard let subj = salvageSubject(in: t) else { return false }
+    var mag = 1
+    if up && t.contains("ぐーんと") { mag = 2 }
+    if down && t.contains("がくっと") { mag = 2 }
+    let key = "\(subj.side):\(subj.speciesEn)"
+    if monStates[key] == nil { monStates[key] = MonState() }
+    applyBoost(key: key, slot: subj.slot, speciesEn: subj.speciesEn, stat: stat, delta: up ? mag : -mag, viaSalvage: true)
+    return true
+}
+
+func salvageStatus(in t: String) -> Bool {
+    // 状態異常の語 + 付与の手がかり (または回復の なおった) があり、対象が
+    // 一意なときだけ、正規の状態処理に委ねる。checkStatusText は現在値と
+    // 違うときだけ反映・出力するため、二重に効くことはない
+    let hasCode = t.contains("もうどく") || t.contains("どく") || t.contains("やけど") || t.contains("まひ")
+        || t.contains("ねむ") || t.contains("こおり") || t.contains("こおった")
+    let cured = t.contains("なおった")
+    let cues = ["おかされた", "あびた", "なった", "おった", "ついた", "しまった", "ねむった"]
+    guard cured || (hasCode && cues.contains(where: { t.contains($0) })) else { return false }
+    guard let subj = salvageSubject(in: t) else { return false }
+    checkStatusText(text: t, side: subj.side, speciesEn: subj.speciesEn, slot: subj.slot)
+    return true
+}
+
+func salvageItem(in t: String) -> Bool {
+    guard t.contains("食べた") || t.contains("たべた") || t.contains("なくなった") || t.contains("失くなった")
+        || t.contains("失った") || t.contains("うしなった") else { return false }
+    // きのみ・シード類の名前が本文にあるか (正規化して itemDict の値と照合)
+    let nt = normalize(t)
+    guard let itemJa = itemDict.values.first(where: { ($0.contains("のみ") || $0.contains("シード")) && nt.contains(normalize($0)) }) else { return false }
+    guard let subj = salvageSubject(in: t) else { return false }
+    let key = "\(subj.side):\(subj.speciesEn)"
+    if monStates[key] == nil { monStates[key] = MonState() }
+    emitItemOnce(slot: subj.slot, side: subj.side, speciesEn: subj.speciesEn, itemJa: itemJa)
+    if subj.side == "p2" { revealedItems[subj.speciesEn] = itemJa }
+    noteItemLost(slot: subj.slot, side: subj.side, speciesEn: subj.speciesEn)
+    return true
+}
+
+func salvageField(in t: String) -> Bool {
+    // 天気・フィールドは正規の照合をそのまま使う (setter は冪等)
+    if checkFieldText(text: t) { return true }
+    // サイドコンディションの告知 (種族に依存しない)。開始/終了の語が
+    // 明確な場合だけ反映し、重複は lastSideCondAt で抑える (正規経路と共有)
+    let scSide = (t.contains("相手") || t.contains("あいて")) ? "p2" : "p1"
+    let conds: [(String, String)] = [("リフレクター", "Reflect"), ("ひかりのかべ", "Light Screen"), ("光の壁", "Light Screen"),
+                                     ("オーロラベール", "Aurora Veil"), ("しろいきり", "Mist"), ("白い霧", "Mist"),
+                                     ("しんぴのまもり", "Safeguard"), ("神秘の守り", "Safeguard"),
+                                     ("追い風", "Tailwind"), ("おいかぜ", "Tailwind")]
+    guard let cond = conds.first(where: { t.contains($0.0) }) else { return false }
+    let start = t.contains("現れた") || t.contains("現れ") || t.contains("張った") || t.contains("張られた")
+        || t.contains("包まれた") || t.contains("つつまれた") || t.contains("覆われた") || t.contains("吹き始") || t.contains("ふきはじ")
+    let end = t.contains("消えた") || t.contains("なくなった") || t.contains("消え去った") || t.contains("はれた")
+        || t.contains("止ん") || t.contains("やん") || t.contains("終わ")
+    guard start != end else { return false }  // 開始か終了か確定しないものは入れない
+    let k = "\(scSide):\(cond.1):\(start ? "start" : "end")"
+    if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+        lastSideCondAt[k] = Date()
+        emitLog("|-\(start ? "sidestart" : "sideend")|\(scSide)|move: \(cond.1)")
+    }
+    return true
+}
+
+// 救済の入口。拾えた (または重複と分かった) 場合は true = 文を消費する。
+// allowBoost=false は古いログエントリ用: ランク変化は実況経路に一本化する
+// 方針 (translateLogEntry の末尾コメント参照) のため、古いエントリからは
+// 適用しない
+func salvageFromText(_ text: String, allowBoost: Bool = true) -> Bool {
+    let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
+    if salvageField(in: t) { return true }
+    if allowBoost && salvageBoost(in: t) { return true }
+    if salvageStatus(in: t) { return true }
+    if salvageItem(in: t) { return true }
+    return false
+}
+
 func isBoostShapedText(_ text: String) -> Bool {
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
     guard t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") || t.contains("あがつた") || t.contains("さがつた") || t.contains("上がつた") || t.contains("下がつた") else { return false }
@@ -2755,9 +2876,13 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     if text.contains("どうする") || text.contains("選んでください") || text.contains("選ばれました") { lastMsgNorm = norm; lastMsgAt = now; return }
     if translateBattleMessage(text) {
         lastMsgNorm = norm; lastMsgAt = now
+    } else if salvageFromText(text) {
+        // サルベージ層: 翻訳に失敗した文から、確度の高い信号だけを拾って
+        // 状態に反映した (拾えた場合も、重複と分かった場合も消費する)
+        lastMsgNorm = norm; lastMsgAt = now
     } else if isBoostShapedText(text) {
-        // ランク変化の文は構造化された経路でのみ扱う。再読で適用が抑止されて
-        // 翻訳関数が false を返した場合に、生文がそのまま漏れるのを防ぐ
+        // ランク変化の形をした文で、サルベージでも帰属できなかったものは
+        // 生文として残さない (帰属できない以上、推測で状態には入れない)
         // (実例: 2026-11-20 vs BigGuyMan 戦の いかく 複合文)
         lastMsgNorm = norm; lastMsgAt = now
     } else if isMoveFragmentText(text) {
@@ -3684,7 +3809,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1043"
+let readerBuild = "20261120_1111"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
