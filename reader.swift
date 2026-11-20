@@ -1692,6 +1692,29 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
             if t2.contains(normalize(e.ja)) && (best == nil || e.ja.count > best!.ja.count) { best = e }
         }
     }
+    // 濁点ゆれで名前が崩れた場合 (サーナイト→ザーナイト、ドラパルト→
+    // ドラパルド等) は、両辺の濁点を畳んだ形でも照合する。通常照合で
+    // 何も見つからなかった場合だけ使う (検証 R2 で検出)
+    if best == nil {
+        let ft = foldDakuten(t)
+        for e in speciesDict where !e.ja.isEmpty {
+            if ft.contains(foldDakuten(normalize(e.ja))) && (best == nil || e.ja.count > best!.ja.count) { best = e }
+        }
+    }
+    // さらに「ー」落ちまで重なった場合 (サーナイト→ザナイト) は、長音も
+    // 落として照合する。カラカラ/ガラガラ のような衝突があるため、場か
+    // チームで裏付けが取れた候補だけを採る (検証 R2 で検出)
+    if best == nil {
+        let ft = foldDakuten(t).replacingOccurrences(of: "ー", with: "")
+        for e in speciesDict where !e.ja.isEmpty {
+            let nk = foldDakuten(normalize(e.ja)).replacingOccurrences(of: "ー", with: "")
+            guard ft.contains(nk) else { continue }
+            let anch = fieldAnchoredSpecies(e)
+            let backed = lastSlots.values.contains { $0.speciesEn == anch.en }
+                || teamEntries[anch.en] != nil || oppTeamSeen.contains(anch.en)
+            if backed && (best == nil || e.ja.count > best!.ja.count) { best = e }
+        }
+    }
     return best
 }
 
@@ -1720,7 +1743,7 @@ func checkStatusText(text: String, side: String, speciesEn: String, slot: String
         }
         return
     }
-    let cues = ["おかされた", "あびた", "なった", "おった", "ついた", "しまった", "しまつた", "ねむった"]
+    let cues = ["おかされた", "あびた", "なった", "なつた", "おった", "おつた", "ついた", "しまった", "しまつた", "ねむった", "ねむつた"]
     guard cues.contains(where: { text.contains($0) }) else { return }
     var code: String? = nil
     if text.contains("もうどく") { code = "tox" }
@@ -2040,8 +2063,9 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
     let stats: [(String, String)] = [("こうげき", "atk"), ("攻撃", "atk"), ("攻が", "atk"), ("ぼうぎょ", "def"), ("防御", "def"), ("防が", "def"), ("とくこう", "spa"), ("特攻", "spa"), ("とくぼう", "spd"), ("特防", "spd"), ("すばやさ", "spe"), ("素早さ", "spe"), ("めいちゅう", "acc"), ("命中率", "acc"), ("かいひ", "eva"), ("回避率", "eva"),
                                      ("コウゲキ", "atk"), ("ボウギョ", "def"), ("トクコウ", "spa"), ("トクボウ", "spd"), ("スバヤサ", "spe"), ("メイチュウ", "acc"), ("カイヒ", "eva")]
     // 「がくっと下がった」も 2 段階 (従来は ぐーんと しか見ておらず、がくっと
-    // の低下が 1 段階として記録されていた。検証 R1 #32/#88 で検出)
-    let mag = (text.contains("ぐーんと") || text.contains("がくっと")) ? 2 : 1
+    // の低下が 1 段階として記録されていた。検証 R1 #32/#88 で検出。
+    // がくっと 自体が「がくつと」に崩れた形も 2 段階とする: 検証 R2 #89/#91)
+    let mag = (text.contains("ぐーんと") || text.contains("がくっと") || text.contains("がくつと")) ? 2 : 1
     if text.contains("すべての") {
         for (_, code) in stats.prefix(5) { applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag) }
         return
@@ -2428,20 +2452,27 @@ var trainerOpp = ""
 // 長い名前を優先し、重なった一致 (メガゲンガー中のゲンガー等) は除く。
 func findAllSpeciesJa(in text: String) -> [SpeciesEntry] {
     let t = normalize(text)
-    var covered: [Range<String.Index>] = []
-    var found: [(Range<String.Index>, SpeciesEntry)] = []
-    for e in speciesDict.filter({ !$0.ja.isEmpty }).sorted(by: { $0.ja.count > $1.ja.count }) {
-        let nj = normalize(e.ja)
-        var start = t.startIndex
-        while start < t.endIndex, let r = t.range(of: nj, range: start..<t.endIndex) {
-            if !covered.contains(where: { $0.lowerBound < r.upperBound && r.lowerBound < $0.upperBound }) {
-                found.append((r, e))
-                covered.append(r)
+    func scan(_ s: String, _ normOf: (SpeciesEntry) -> String) -> [SpeciesEntry] {
+        var covered: [Range<String.Index>] = []
+        var found: [(Range<String.Index>, SpeciesEntry)] = []
+        for e in speciesDict.filter({ !$0.ja.isEmpty }).sorted(by: { $0.ja.count > $1.ja.count }) {
+            let nj = normOf(e)
+            var start = s.startIndex
+            while start < s.endIndex, let r = s.range(of: nj, range: start..<s.endIndex) {
+                if !covered.contains(where: { $0.lowerBound < r.upperBound && r.lowerBound < $0.upperBound }) {
+                    found.append((r, e))
+                    covered.append(r)
+                }
+                start = r.upperBound
             }
-            start = r.upperBound
         }
+        return found.sorted { $0.0.lowerBound < $1.0.lowerBound }.map { $0.1 }
     }
-    return found.sorted { $0.0.lowerBound < $1.0.lowerBound }.map { $0.1 }
+    let exact = scan(t) { normalize($0.ja) }
+    if !exact.isEmpty { return exact }
+    // 濁点ゆれで全滅した場合だけ、両辺を畳んだ形で再照合する (検証 R2)。
+    // foldDakuten は 1 文字→1 文字の置換なので範囲の位置は変わらない
+    return scan(foldDakuten(t)) { foldDakuten(normalize($0.ja)) }
 }
 
 // 編集距離 (緩い種族名照合用)
@@ -2542,7 +2573,7 @@ func salvageBoost(in t: String) -> Bool {
     guard let subj = salvageSubject(in: t) else { return false }
     var mag = 1
     if up && t.contains("ぐーんと") { mag = 2 }
-    if down && t.contains("がくっと") { mag = 2 }
+    if down && (t.contains("がくっと") || t.contains("がくつと")) { mag = 2 }
     let key = "\(subj.side):\(subj.speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
     applyBoost(key: key, slot: subj.slot, speciesEn: subj.speciesEn, stat: stat, delta: up ? mag : -mag, viaSalvage: true)
@@ -2556,7 +2587,7 @@ func salvageStatus(in t: String) -> Bool {
     let hasCode = t.contains("もうどく") || t.contains("どく") || t.contains("やけど") || t.contains("まひ")
         || t.contains("ねむ") || t.contains("こおり") || t.contains("こおった")
     let cured = t.contains("なおった") || t.contains("なおつた")
-    let cues = ["おかされた", "あびた", "なった", "おった", "ついた", "しまった", "しまつた", "ねむった"]
+    let cues = ["おかされた", "あびた", "なった", "なつた", "おった", "おつた", "ついた", "しまった", "しまつた", "ねむった", "ねむつた"]
     guard cured || (hasCode && cues.contains(where: { t.contains($0) })) else { return false }
     guard let subj = salvageSubject(in: t) else { return false }
     checkStatusText(text: t, side: subj.side, speciesEn: subj.speciesEn, slot: subj.slot)
@@ -2568,7 +2599,10 @@ func salvageItem(in t: String) -> Bool {
         || t.contains("失った") || t.contains("うしなった") else { return false }
     // きのみ・シード類の名前が本文にあるか (正規化して itemDict の値と照合)
     let nt = normalize(t)
-    guard let itemJa = itemDict.values.first(where: { ($0.contains("のみ") || $0.contains("シード")) && nt.contains(normalize($0)) }) else { return false }
+    // 濁点ゆれ (キーのみ→ギーのみ等) は両辺を畳んだ形でも照合する (検証 R2 #17)
+    let itemJa = itemDict.values.first(where: { ($0.contains("のみ") || $0.contains("シード")) && nt.contains(normalize($0)) })
+        ?? itemDict.values.first(where: { ($0.contains("のみ") || $0.contains("シード")) && foldDakuten(nt).contains(foldDakuten(normalize($0))) })
+    guard let itemJa else { return false }
     guard let subj = salvageSubject(in: t) else { return false }
     let key = "\(subj.side):\(subj.speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
@@ -4269,7 +4303,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1319"
+let readerBuild = "20261120_1355"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
