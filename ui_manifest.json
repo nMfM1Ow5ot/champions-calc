@@ -4,7 +4,7 @@
   "audit_items_ja.mjs": "b536fff2ca001daed9e79d2c8859484339f41e32c702bade0d5c62dd39136b4a",
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
   "bundle.mjs": "de7449d352651c0a426632a032ffd4caa153fb93e86ad27b293081ffa7ef5d42",
-  "check/apple_stubs.swift": "962ab19bf2ba75d0264d63089e597c6929dd2e85baedb807bc688626ae69d234",
+  "check/apple_stubs.swift": "71635ad1349461b2c8c5eccb49aaa9cc85789f4f3d2a131050259accdac4be75",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
   "core.mjs": "932ac23d425c01ce8e87ae76b65b81a7b94cafeb7333782da15356bcfdc970ca",
   "data/base_stats.json": "967d4708cea08931efb07e20824f0aff5fe111b155989b352b9108205f3ea955",
@@ -26,7 +26,7 @@
   "fetch_usage.mjs": "caa940ac838695deed49e52b51d97f288b179d4f845111970500f3540e13ac26",
   "my_team.json": "17b7f06d5e5c85ee82fac52868e60a07e74287673bf1b69e37786383a2dbb46f",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
-  "reader.swift": "c03e9e8917cb2276da7b4dbdcbb7e291f3fdab49f3da67d79bc48b78ff188e7d",
+  "reader.swift": "909b5124738562edc6ace5f546c39854a320aad5ee6fc44d93813f3d6e7b37d3",
   "run_reader.sh": "3f7277aa0244e4e8bef8fe8616cce5d67049da33a0b18f8e12c3e2662729fa18",
   "serve.py": "517c471e60cb9e7a999e31b4edec2857754fb99a6d7cf9c92bae7d2d4cbbe1e0",
   "start_all.sh": "f0250ec2d7540e9c1dc47583acc76b11c9b774b57f7e8cc8a359d483d914c787",
@@ -35,5 +35,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "af4212e9a6fa7774202cf2eca573248d55eac460beb8937d4940e3f66d071119"
  },
- "rev": "20261120_1017"
+ "rev": "20261120_1024"
 }
