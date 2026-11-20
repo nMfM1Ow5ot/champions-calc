@@ -5,8 +5,12 @@
 # サーバは即座に起動し、オンライン版ファイルへの同期は裏で走る
 # (起動時 + 5 秒ごと)。同期が終わる前でも手元のファイルで画面は開ける。
 # 同期でファイルが変わると ui_version.txt が更新され、開いている UI が自動で再読込する。
+# 同期で serve.py 自身が更新された場合は、プロセスを自動で再起動して
+# 新しいコードを読み直す (start_all.sh の再実行は不要)。
 import functools
+import hashlib
 import http.server
+import os
 import subprocess
 import sys
 import threading
@@ -24,13 +28,40 @@ def run_sync(show_output, force=False):
         pass
 
 
+SELF_PATH = os.path.abspath(__file__)
+
+
+def self_hash():
+    try:
+        with open(SELF_PATH, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
+
+
+START_HASH = self_hash()
+
+
+def maybe_restart_self():
+    # 同期で serve.py 自身が差し替わっていたら、新しいコードで起動し直す。
+    # 起動時点のハッシュと比べるので、差し替えがなければ何も起きない。
+    # exec で同じプロセスを置き換えるため、start_all.sh 側の管理
+    # (バックグラウンド起動・終了時の trap) はそのまま効く。
+    current = self_hash()
+    if current is not None and START_HASH is not None and current != START_HASH:
+        print("[sync] serve.py が更新されたため、サーバを自動で再起動します", flush=True)
+        os.execv(sys.executable, [sys.executable, SELF_PATH] + sys.argv[1:])
+
+
 def sync_loop():
     # 起動時の同期はサーバ開始をブロックしないよう、このスレッド側で行う。
     # 先にサーバを立ち上げてから同期するので、ブラウザがすぐ開ける。
     run_sync(True, force=True)
+    maybe_restart_self()
     while True:
         time.sleep(5)
         run_sync(False)
+        maybe_restart_self()
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
