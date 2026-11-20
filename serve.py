@@ -231,6 +231,20 @@ def upload_logs_once():
             _log_last_error = msg
 
 
+def check_log_token():
+    """起動時に github_log_token.txt の所在を確認する (2026-11-20 ユーザー指示)。
+    無くても起動は続けるが、試合ログの自動送信だけが無効になる旨を明示する。"""
+    try:
+        ok = os.path.isfile(LOG_TOKEN_PATH) and os.path.getsize(LOG_TOKEN_PATH) > 0
+    except OSError:
+        ok = False
+    if ok:
+        print("[log] github_log_token.txt を確認しました (試合ログの自動送信: 有効)", flush=True)
+    else:
+        print("[log] github_log_token.txt が見つかりません。試合ログの自動送信は無効です "
+              "(対戦・計算には影響しません)。使う場合はこのフォルダに置いてください", flush=True)
+
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -241,6 +255,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    check_log_token()
     threading.Thread(target=sync_loop, daemon=True).start()
     handler = functools.partial(QuietHandler, directory=".")
     try:
