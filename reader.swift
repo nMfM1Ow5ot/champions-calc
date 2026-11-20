@@ -3056,7 +3056,9 @@ func translateBattleMessage(_ text: String) -> Bool {
         let tk = t.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
         // 「バツグン」が平仮名 (ばつぐん) で読まれた場合は正規化形でも判定する (検証 R1 #66)
         let ntk = nt.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
-        let kind = tk.contains("いまひとつ") ? "resisted" : (tk.contains("バツグン") || ntk.contains("バツグン")) ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
+        // バツグン自体の濁点ゆれ (パツグン/バツクン等) は畳んだ形でも判定する (検証 R3)
+        let ftk = foldDakuten(tk)
+        let kind = tk.contains("いまひとつ") ? "resisted" : (tk.contains("バツグン") || ntk.contains("バツグン") || ftk.contains("ハツクン")) ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
         if !kind.isEmpty {
             let ekey = "\(slot)|\(kind)"
             if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
@@ -3086,6 +3088,12 @@ func translateBattleMessage(_ text: String) -> Bool {
         var cand: String? = nil
         if let r = nt.range(of: normalize(sp.ja + "の")) {
             cand = String(nt[r.upperBound...])
+        } else if let r = foldDakuten(nt).range(of: foldDakuten(normalize(sp.ja + "の"))) {
+            // 種族名が濁点ゆれで解決された場合 (アヤシシ→アヤシジ等) は、
+            // 畳んだ形で位置を求めて元の文から切り出す (検証 R3 #35)
+            let fnt = foldDakuten(nt)
+            let off = fnt.distance(from: fnt.startIndex, to: r.upperBound)
+            cand = String(nt[nt.index(nt.startIndex, offsetBy: off)...])
         } else if let ms = looseMoveStart {
             // 種族名が OCR で崩れている場合は、緩い照合で得た位置から切り出す
             let chars = Array(nt)
@@ -3106,10 +3114,13 @@ func translateBattleMessage(_ text: String) -> Bool {
             if onField, let hit = moveNameOrig.keys.filter({ nt.contains($0) }).max(by: { $0.count < $1.count }) {
                 mvJaFound = moveNameOrig[hit]
             }
-            if mvJaFound == nil && onField, let lr = nt.range(of: "の", options: .backwards) {
+            if mvJaFound == nil && onField, let lr = nt.range(of: "ノ", options: .backwards) {
                 // 最後の「の」以降を技名候補として緩く照合する (濁点・半濁点の
                 // OCR ゆれ対策。実例: 「あいて相手のゾロアークのハイパーポイス！」
                 // = ハイパーボイス が日本語のまま漏れた、2026-11-20 vs Foxy2905 戦)
+                // ※ nt は正規化済みで「の」は「ノ」になっている。従来は「の」で
+                // 探していたためこのフォールバックは一度も発火していなかった
+                // (検証 R3 で検出)
                 let tail = String(nt[lr.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "！!"))
                 if tail.count >= 3 { mvJaFound = moveNameLoose(tail) }
             }
@@ -4303,7 +4314,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1355"
+let readerBuild = "20261120_1426"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
