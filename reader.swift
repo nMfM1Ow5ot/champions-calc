@@ -1138,8 +1138,81 @@ func resetLogState() {
     lastSlots = [:]
 }
 
+// MARK: - 試合ごとのログアーカイブ (自動送信の下準備)
+// battle.log / battle_protocol.log は常に「現在の試合」だけを保持し、
+// 次の試合が始まると上書きされる。試合ごとに logs/ へ複写して残し、
+// serve.py が暗号化して送信する (送信済み管理も serve.py 側)。
+// 保存タイミングは 3 つ:
+//  1. 勝敗が確定したとき (final)
+//  2. 次の試合の startBattleLog で前試合が未保存だったとき (interrupted)
+//  3. reader 起動時、前回セッションの残留ログがあったとき (interrupted)
+//     — タスクキル・電池切れ・クラッシュで強制中断された試合の救済。
+//     battle.log は emitLog のたびに全行書き直されるため、中断時点までの
+//     内容はディスクに残っている
+var battleArchiveId = ""        // 現在の試合のアーカイブ名 (開始時刻ベース)
+var battleArchived = false      // 現在の試合を logs/ へ保存済みか
+let logsDirURL = scriptDir.appendingPathComponent("logs")
+
+func battleStamp(for date: Date = Date()) -> String {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    f.dateFormat = "yyyyMMdd_HHmmss"
+    return f.string(from: date)
+}
+
+func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String) {
+    guard protocolLines.contains("|start") else { return }
+    try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+    let base = "battle_\(id)_\(final ? "final" : "interrupted")"
+    let protoText = protocolLines.joined(separator: "\n") + "\n"
+    let dispText = displayLines.joined(separator: "\n") + "\n"
+    try? protoText.write(to: logsDirURL.appendingPathComponent(base + "_protocol.log"), atomically: true, encoding: .utf8)
+    try? dispText.write(to: logsDirURL.appendingPathComponent(base + ".log"), atomically: true, encoding: .utf8)
+    print("[log] 試合ログを保存しました: logs/\(base).log / logs/\(base)_protocol.log")
+    fflush(stdout)
+}
+
+// 現在進行中の試合を logs/ へ保存する (勝敗確定時は final: true)
+func archiveCurrentBattle(final: Bool) {
+    guard logStarted, !battleArchived, !battleLog.isEmpty else { return }
+    archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog,
+                      id: battleArchiveId.isEmpty ? battleStamp() : battleArchiveId)
+    battleArchived = true
+}
+
+// 起動時: 前回セッションの残留ログが未保存の試合なら救済する
+func salvageLeftoverLogs() {
+    guard let proto = try? String(contentsOf: protocolLogURL, encoding: .utf8) else { return }
+    let lines = proto.split(separator: "\n").map(String.init)
+    guard lines.count >= 5, lines.contains("|start") else { return }
+    // 同じ内容が保存済みなら二重に作らない
+    if let names = try? FileManager.default.contentsOfDirectory(atPath: logsDirURL.path) {
+        for name in names where name.hasSuffix("_protocol.log") {
+            if let saved = try? String(contentsOf: logsDirURL.appendingPathComponent(name), encoding: .utf8), saved == proto {
+                return
+            }
+        }
+    }
+    var stamp = battleStamp()
+    if let attrs = try? FileManager.default.attributesOfItem(atPath: protocolLogURL.path),
+       let mtime = attrs[.modificationDate] as? Date {
+        stamp = battleStamp(for: mtime)
+    }
+    let disp = (try? String(contentsOf: battleLogURL, encoding: .utf8)) ?? ""
+    let dispLines = disp.isEmpty ? [] : disp.split(separator: "\n").map(String.init)
+    archiveBattleLogs(final: lines.contains(where: { $0.hasPrefix("|win|") }),
+                      protocolLines: lines, displayLines: dispLines, id: stamp + "_salvage")
+}
+
 func startBattleLog() {
+    // 前の試合が未保存のまま新しい試合が始まる場合は、先に前試合を残す
+    if logStarted && !battleArchived && !battleLog.isEmpty {
+        archiveCurrentBattle(final: winLogged)
+    }
     resetLogState()
+    battleArchiveId = battleStamp()
+    battleArchived = false
     battleLog = []
     emitLog("|gametype|doubles")
     for sp in teamOrder { emitLog("|poke|p1|\(sp)") }
@@ -2593,6 +2666,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         else { emitLog("|win|\(oppName.isEmpty ? "p2" : oppName)") }
         if !oppName.isEmpty { trainerOpp = oppName }
         winLogged = true
+        archiveCurrentBattle(final: true)
         return true
     }
     if t.contains("あきらめた") {
@@ -2602,6 +2676,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         emitPendingFaints()
         emitLog("|win|\(oppGaveUp ? (trainerMine.isEmpty ? "p1" : trainerMine) : (trainerOpp.isEmpty ? "p2" : trainerOpp))")
         winLogged = true
+        archiveCurrentBattle(final: true)
         return true
     }
     // 急所: 「(相手の) Xの 急所に 当たった！」
@@ -4061,7 +4136,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1156"
+let readerBuild = "20261120_1202"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -4819,6 +4894,10 @@ if let tab = teamScreenTab {
     }
     exit(0)
 }
+
+// 前回セッションが強制終了していた場合、残留した試合ログを先に救済する
+// (この後の処理で battle.log が上書きされる前に logs/ へ逃がす)
+salvageLeftoverLogs()
 
 startCaptureServer()
 if teamMode {
