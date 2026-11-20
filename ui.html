@@ -732,6 +732,7 @@ function dispStat(spec, key, raw, sideKey) {
   if (modChain !== 4096) { const x = v * modChain / 4096; v = (x % 1 > 0.5) ? Math.ceil(x) : Math.floor(x); }
   if (key === 'spe') {
     if (spec.item === 'Choice Scarf') v = Math.floor(v * 1.5);
+    if (spec.unburden && ab === 'Unburden') v *= 2;
     if (state.side[sideKey].tailwind) v *= 2;
     if (spec.status === 'par') v = Math.floor(v / 2);
   }
