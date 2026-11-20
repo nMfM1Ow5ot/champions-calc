@@ -888,7 +888,7 @@ func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int,
         if knownItem == nil || knownItem == "オボンのみ" { return ("item: Sitrus Berry", "オボンのみ") }
         return nil
     }
-    if (4...8).contains(delta) {
+    if (3...8).contains(delta) {
         let abilityJa = revealedAbilities[speciesEn] ?? (teamEntries[speciesEn]?["ability"] as? String)
         if abilityJa == "あめうけざら" || abilityJa == "アイスボディ" { return nil }
         if logFieldTerrain == "Grassy" && grassyHealTurn[plateName] != currentTurn {
@@ -1274,7 +1274,21 @@ func checkStatusText(text: String, side: String, speciesEn: String, slot: String
     }
 }
 
-func translateLogEntry(chip: String, text: String, side: String) {
+// ログ画面のチップ色から決めた side の検証: 色の読み違いで自分の
+// ポケモンの技や ひんし が相手側に付いた実例があるため (2026-11-20、
+// サーナイトの ハイパーボイス と ひんし が p2a に付いた)、場・チームの
+// 実態と矛盾する場合は実態側を優先する
+func validatedSide(forSpecies en: String, claimed: String) -> String {
+    let inMine = lastSlots["mineA"]?.speciesEn == en || lastSlots["mineB"]?.speciesEn == en
+    let inOpp = lastSlots["oppA"]?.speciesEn == en || lastSlots["oppB"]?.speciesEn == en
+    if inMine != inOpp { return inMine ? "p1" : "p2" }
+    let teamMine = teamEntries[en] != nil
+    let teamOpp = oppTeamSeen.contains(en)
+    if teamMine != teamOpp { return teamMine ? "p1" : "p2" }
+    return claimed
+}
+
+func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
     guard let sp0 = findSpeciesJa(in: text) else {
         if debugMode { print("    -> 種族名が本文に無いため取り込めませんでした") }
         return
@@ -1282,13 +1296,20 @@ func translateLogEntry(chip: String, text: String, side: String) {
     // ログ画面の種族名は雌雄表記が同一のため、場のフォルムに寄せる
     // (寄せないと「イエッサン」のような基本フォルム名で記録される)
     let sp = fieldAnchoredSpecies(sp0)
+    let side = validatedSide(forSpecies: sp.en, claimed: side)
     let slot = slotFor(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
     switch chip {
     case "技":
         if let mvJa = findInDict(in: text, moveNameOrig) {
-            emitLog("|move|\(slot): \(sp.en)|\(moveJa2En[mvJa] ?? mvJa)")
+            // 実況メッセージ側で記録済みの (枠・技・ターン) は二重に出さない
+            // (実例: 2026-11-20、まもる が実況とログ画面の両方から出た)
+            let moveEn = moveJa2En[mvJa] ?? mvJa
+            let sig = slot + "|" + moveEn + "|t" + String(turn)
+            if lastMoveSigAt[sig] != nil { break }
+            lastMoveSigAt[sig] = Date()
+            emitLog("|move|\(slot): \(sp.en)|\(moveEn)")
             applyMoveField(mvJa)
             if side == "p2" && !(revealedMoves[sp.en]?.contains(mvJa) ?? false) {
                 revealedMoves[sp.en, default: []].append(mvJa)
@@ -1313,6 +1334,11 @@ func translateLogEntry(chip: String, text: String, side: String) {
                 hpText = "0/100"
             }
             if let np = newPct, let cur = monStates[key]?.hpPercent, np != cur {
+                // 1 エントリで 55 ポイントを超える回復はあり得ない
+                // (最大でも じこさいせい/ねがいの 50%)。隣の行の値を
+                // 拾った誤読とみて取り込まない (実例: 2026-11-20、
+                // 残り 4 のイエッサンが「全回復」として取り込まれた)
+                if np > cur && np - cur > 55 { break }
                 monStates[key]?.hpPercent = np
                 monStates[key]?.hpText = hpText
                 if np < cur { emitLog("|-damage|\(slot): \(sp.en)|\(hpText)") }
@@ -1901,7 +1927,7 @@ func parseLogScreen(image: CGImage) -> Bool {
         logSeenEntries.insert(key)
         let side = logChipSide(buf, chip, joined)
         if debugMode { print("  [\(hit.label)] side=\(side) text=\(joined)") }
-        translateLogEntry(chip: hit.label, text: joined, side: side)
+        translateLogEntry(chip: hit.label, text: joined, side: side, turn: tn)
     }
     return true
 }
@@ -2263,6 +2289,9 @@ func translateBattleMessage(_ text: String) -> Bool {
     // あくびで眠気を誘った文 (対象は次のターン終了時に眠る。眠気そのものは
     // 状態として持たないため、漏らさず消費だけする)
     if (t.contains("眠気") || t.contains("ねむけ")) && (t.contains("誘った") || t.contains("誘つた") || t.contains("さそった") || t.contains("さそつた")) { return true }
+    // やどりぎのたねを植えつけた文 (吸収のダメージ/回復はプレート側で
+    // 行が出るため、植えつけ自体は消費だけする)
+    if t.contains("植えつけ") || t.contains("植え付け") { return true }
     // サイドコンディション (おいかぜ) の告知文: 種族名を含まないため、
     // 種族照合より前にここで処理する (実例: 2026-11-20 vs Zycloud 戦、
     // 「あいて相手にかぜおはし追い風が吹き始めた！」が日本語のまま漏れた)
@@ -3498,7 +3527,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0928"
+let readerBuild = "20261120_0948"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
