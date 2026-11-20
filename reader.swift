@@ -358,6 +358,7 @@ var faintedSlots: [String: String] = [:]           // ひんし行を出した�
 var lastSideCondAt: [String: Date] = [:]          // "side:move:phase" -> サイドコンディション告知を処理した時刻
 var commandPhaseSeen = false                      // コマンド選択中 (全プレート表示) かどうか。ターン数え用
 var pendingDamageCount: [String: Int] = [:]       // プレート名 -> 同じ HP% が続いた回数 (3 回で確定)
+var pendingDamageSince: [String: Date] = [:]       // プレート名 -> その HP% が最初に現れた時刻 (段階アニメーションの途中値と区別する)
 var winLogged = false                             // このバトルで勝敗が確定したか
 var lastLogEventAt = Date.distantPast              // 最後にログ行が出た時刻 (開始直後の監視継続用)
 var lastMoveSigAt: [String: Date] = [:]           // "枠|技EN" -> |move| を出した時刻 (OCR ゆれでの二重出力防止)
@@ -784,6 +785,7 @@ func resetLogState() {
     lastMsgAt = Date.distantPast
     pendingDamagePct = [:]
     pendingDamageCount = [:]
+    pendingDamageSince = [:]
     lastEmittedPct = [:]
     winLogged = false
     lastMoveSigAt = [:]
@@ -1007,12 +1009,17 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
     battleEvents.append(ev)
 }
 
-// 確定待ちのダメージをすべて吐き出す (新しいメッセージやターンの開始前に呼ぶ)
-func flushPendingDamage() {
+// 確定待ちのダメージをすべて吐き出す (新しいメッセージやターンの開始前に呼ぶ)。
+// 値が現れてから 1.2 秒経っていないプレートは、HP バーの段階アニメーション
+// 途中かもしれないため force でない限り吐かない (途中値で吐くと 1 発の被弾が
+// 53%+20% のように 2 行に割れる。実例: 2026-11-20 の複数対戦)
+func flushPendingDamage(force: Bool = false) {
     for plate in plates {
         guard let pend = pendingDamagePct[plate.name], let s = lastSlots[plate.name] else { continue }
+        if !force, let since = pendingDamageSince[plate.name], Date().timeIntervalSince(since) < 1.2 { continue }
         pendingDamagePct[plate.name] = nil
         pendingDamageCount[plate.name] = nil
+        pendingDamageSince[plate.name] = nil
         heldLine[plate.name] = nil
         let side = plate.name.hasPrefix("mine") ? "p1" : "p2"
         let key = "\(side):\(s.speciesEn)"
@@ -1117,14 +1124,17 @@ func processPlates(_ hits: [String: SlotState]) {
                 emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
                                fromPct: emitted, toPct: s.hpPercent, hpText: monStates[key]!.hpText)
             } else if pendingDamagePct[plate.name] == s.hpPercent {
-                // 同じ値が 3 回続いた = アニメーションが落ち着いた
-                // (段階的に減るアニメーションの途中値は 2 回続くことがあるため)
+                // 同じ値が 3 回続き、かつ現れてから 1.2 秒経った = アニメーションが
+                // 落ち着いた (段階アニメーションは途中で 1 秒近く止まることが
+                // あり、回数だけでは途中値を確定してしまうため時間でも見る)
                 let n = (pendingDamageCount[plate.name] ?? 1) + 1
-                if n >= 3 {
+                let stable = Date().timeIntervalSince(pendingDamageSince[plate.name] ?? .distantPast) >= 1.2
+                if n >= 3 && stable {
                     if emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
                                       fromPct: emitted, toPct: s.hpPercent, hpText: monStates[key]!.hpText) {
                         pendingDamagePct[plate.name] = nil
                         pendingDamageCount[plate.name] = nil
+                        pendingDamageSince[plate.name] = nil
                     } else {
                         // 同一行動内の段階値として保留 (値は保持する)
                         pendingDamageCount[plate.name] = 3
@@ -1135,6 +1145,7 @@ func processPlates(_ hits: [String: SlotState]) {
             } else {
                 pendingDamagePct[plate.name] = s.hpPercent
                 pendingDamageCount[plate.name] = 1
+                pendingDamageSince[plate.name] = Date()
                 lastPendingLabel = "\(slot): \(s.speciesEn)"
             }
             lastSlots[plate.name] = s
@@ -1206,10 +1217,13 @@ func checkStatusText(text: String, side: String, speciesEn: String, slot: String
 }
 
 func translateLogEntry(chip: String, text: String, side: String) {
-    guard let sp = findSpeciesJa(in: text) else {
+    guard let sp0 = findSpeciesJa(in: text) else {
         if debugMode { print("    -> 種族名が本文に無いため取り込めませんでした") }
         return
     }
+    // ログ画面の種族名は雌雄表記が同一のため、場のフォルムに寄せる
+    // (寄せないと「イエッサン」のような基本フォルム名で記録される)
+    let sp = fieldAnchoredSpecies(sp0)
     let slot = slotFor(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
@@ -1333,8 +1347,11 @@ func attributeFieldAbilities() {
         let fieldOnes = pool.filter { allField.contains($0) }
         guard fieldOnes.count == 1, let ab = fieldOnes.first else { continue }
         var matched = false
-        if weatherAb[logFieldWeather] == ab && now.timeIntervalSince(fieldWeatherSetAt) < 12 && now.timeIntervalSince(sw.at) < 12 { matched = true }
-        if terrainAb[logFieldTerrain] == ab && now.timeIntervalSince(fieldTerrainSetAt) < 12 && now.timeIntervalSince(sw.at) < 12 { matched = true }
+        // 窓は 30 秒: フィールド文 (即時) とプレート確定 (2 フレーム+演出の
+        // バックログ) の間隔が 12 秒を超えることがある (実例: 2026-11-20、
+        // イエッサンのサイコメイカー括弧行が落ちた)
+        if weatherAb[logFieldWeather] == ab && now.timeIntervalSince(fieldWeatherSetAt) < 30 && now.timeIntervalSince(sw.at) < 30 { matched = true }
+        if terrainAb[logFieldTerrain] == ab && now.timeIntervalSince(fieldTerrainSetAt) < 30 && now.timeIntervalSince(sw.at) < 30 { matched = true }
         if matched {
             fieldAbilityDone[key] = sw.at
             emitAbilityOnce(slot: sw.slot, side: side, speciesEn: en, abilityEn: ab)
@@ -2375,16 +2392,31 @@ func translateBattleMessage(_ text: String) -> Bool {
     // きあいのタスキで もちこたえた: 持ち物の判明として記録し、専用行を出す
     // (実例: 2026-11-20 vs Zycloud 戦、グライオンのタスキ発動が日本語のまま漏れた)
     if t.contains("もちこたえた") {
+        let sk = slot + "|sash"
+        if let at = lastSingleActAt[sk], Date().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[sk] = Date()
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "きあいのタスキ")
         if side == "p2" { revealedItems[sp.en] = "きあいのタスキ" }
         emitLog("|-activate|\(slot): \(sp.en)|item: Focus Sash")
         return true
     }
     // いのちのたまの反動 (実機文面は「いのちのたまの 効果で 命が少し削られた」。
-    // OCR 崩れで「いのち命が少し削られた」と読まれることがある)
+    // OCR 崩れで「いのち命が少し削られた」と読まれることがある)。
+    // 判明の帰属は「直近に技を使った枠」と一致する場合だけに限る: 種族名の
+    // 誤読で無関係なポケモンに判明が付いた実例がある (2026-11-20、エーフィの
+    // 反動がカメックス/イエッサンに付いた)。反動は使用者自身にしか起きない
     if t.contains("命が少し削られた") || (t.contains("削られた") && t.contains("いのち")) {
-        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "いのちのたま")
-        if side == "p2" { revealedItems[sp.en] = "いのちのたま" }
+        if lastMoveLabel == "\(slot): \(sp.en)" && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
+            emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "いのちのたま")
+            if side == "p2" { revealedItems[sp.en] = "いのちのたま" }
+        }
+        return true
+    }
+    // タイプ軽減きのみの発動 (「<対象>へのダメージを オッカのみが弱めた！」。
+    // 実例: 2026-11-20、クレッフィのオッカのみ文が日本語のまま漏れた)
+    if t.contains("弱めた"), let itJa = findInDict(in: t, itemDict) {
+        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
+        if side == "p2" { revealedItems[sp.en] = itJa }
         return true
     }
     // だっしゅつボタンで戻っていく (交代そのものはプレート側で記録する)
@@ -3355,7 +3387,7 @@ func runOnce(image: CGImage) {
     if platesReady { turnRawFrames += 1 } else { turnRawFrames = 0 }
     if platesReady && ((expectedPlates >= 4 && allSettled) || turnRawFrames >= 6) {
         commandPhaseSeen = true
-        flushPendingDamage()
+        flushPendingDamage(force: true)
         emitPendingFaints()
         for sd in ["p1", "p2"] { if let spEn = pendingMegaSpecies[sd] { synthesizeMegaIfPending(side: sd, speciesEn: spEn) } }
         currentTurn += 1
@@ -3373,7 +3405,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0852"
+let readerBuild = "20261120_0904"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
