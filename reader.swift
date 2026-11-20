@@ -2552,7 +2552,7 @@ func findSpeciesJaLoose(in text: String) -> (entry: SpeciesEntry, moveStart: Int
 func salvageSubject(in t: String) -> (side: String, slot: String, speciesEn: String)? {
     let sp0 = findSpeciesJa(in: t) ?? findSpeciesJaLoose(in: t)?.entry
     guard let sp0 else { return nil }
-    let sp = fieldAnchoredSpecies(sp0)
+    let sp = anchoredSpeciesForText(sp0, text: t)
     let hits = lastSlots.filter { $0.value.speciesEn == sp.en }
     guard hits.count == 1, let plate = hits.first else { return nil }
     let side = plate.key.hasPrefix("mine") ? "p1" : "p2"
@@ -2756,7 +2756,24 @@ func moveNameLoose(_ cand: String) -> String? {
         if d < fBestDist { fBestDist = d; fBestKey = key; fTie = false }
         else if d == fBestDist { fTie = true }
     }
-    guard let bk = fBestKey, !fTie else { return nil }
+    if let bk = fBestKey, !fTie { return moveNameOrig[bk] }
+    // 第3パス: 長音も落として畳んだ形で照合する (ワンダルム→ワンダールーム
+    // のような長音2連落ち対策。検証 最終監査 seed31 #54)。この変換でも
+    // 技名は全件衝突しないことを辞書で確認済み。距離は 1 までに絞る
+    let stripLong: (String) -> String = { $0.replacingOccurrences(of: "ー", with: "") }
+    let dc = Array(stripLong(foldDakuten(cand)))
+    var dBestKey: String? = nil
+    var dBestDist = Int.max
+    var dTie = false
+    for key in moveNameOrig.keys {
+        let dk = stripLong(foldDakuten(key))
+        if abs(dk.count - dc.count) > 1 { continue }
+        let d = levenshtein(Array(dk), dc)
+        if d > 1 { continue }
+        if d < dBestDist { dBestDist = d; dBestKey = key; dTie = false }
+        else if d == dBestDist { dTie = true }
+    }
+    guard let bk = dBestKey, !dTie else { return nil }
     return moveNameOrig[bk]
 }
 
@@ -3038,8 +3055,9 @@ func translateBattleMessage(_ text: String) -> Bool {
         if !onField.contains(sp.en) && onField.isDisjoint(with: grp) { return battleLog.count > before }
     }
     // フォルム表記を場の状態に寄せる (メッセージの名前は雌雄で同一のため、
-    // 寄せないと技の判明などが基本フォルム側に記録されてしまう)
-    sp = fieldAnchoredSpecies(sp)
+    // 寄せないと技の判明などが基本フォルム側に記録されてしまう)。
+    // 「相手の」の手がかりがある場合は相手側のフォルムを優先する
+    sp = anchoredSpeciesForText(sp, text: t)
     // 左右: 「相手の」等の前置きを優先し、無ければ場のプレートから推定する。
     // ただし、その種族が片方の場にだけ実在する場合は場の側を正とする
     // (前置きの OCR 崩れや古い文の再処理で、自分のポケモンが「相手の」
@@ -3114,6 +3132,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 事故の防止。検証 R5: カイリキーのひんし文から かいりき を誤検出)
     if (t.hasSuffix("！") || t.hasSuffix("!")) && !t.contains("たおれた") {
         var cand: String? = nil
+        // 長音落ちまで畳んだ変換 (種族名・技名とも全件衝突なしを確認済み)
+        let deepFold: (String) -> String = { foldDakuten($0.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")).replacingOccurrences(of: "ー", with: "") }
         if let r = nt.range(of: normalize(sp.ja + "の")) {
             cand = String(nt[r.upperBound...])
         } else if let r = foldDakuten(nt).range(of: foldDakuten(normalize(sp.ja + "の"))) {
@@ -3122,6 +3142,12 @@ func translateBattleMessage(_ text: String) -> Bool {
             let fnt = foldDakuten(nt)
             let off = fnt.distance(from: fnt.startIndex, to: r.upperBound)
             cand = String(nt[nt.index(nt.startIndex, offsetBy: off)...])
+        } else if let r = deepFold(nt).range(of: deepFold(normalize(sp.ja + "の"))) {
+            // 種族名の長音落ちまで重なった場合 (サーナイト→サナイト) は
+            // 変換空間で切り出し、そのまま渡す (moveNameLoose 第3パスが
+            // 同じ空間で照合する。検証 最終監査 seed32 vhard:
+            // かみなりパンチ→かみなり の誤読対策)
+            cand = String(deepFold(nt)[r.upperBound...])
         } else if let ms = looseMoveStart {
             // 種族名が OCR で崩れている場合は、緩い照合で得た位置から切り出す
             let chars = Array(nt)
@@ -4360,7 +4386,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1548"
+let readerBuild = "20261120_1616"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -4677,6 +4703,22 @@ func fieldAnchoredSpecies(_ e: SpeciesEntry) -> SpeciesEntry {
     let m = anchoredSpecies(e, mine: true)
     if m.en != e.en { return m }
     return anchoredSpecies(e, mine: false)
+}
+
+// 文の左右の手がかり (「相手の」) がある場合は、その側の場のフォルムを
+// 優先して寄せる。同ーフォルム違いが両軍にいる場合 (自分のイエッサン♀と
+// 相手のイエッサン♂等)、無条件の場走査では自分の側が先に当たってしまい、
+// 相手のひんしが自分のポケモンに誤帰属する (検証 最終監査 seed31 #43)
+func anchoredSpeciesForText(_ e: SpeciesEntry, text: String) -> SpeciesEntry {
+    let grp = formeGroup(e)
+    if grp.count > 1 {
+        let oppFirst = text.contains("相手の") || text.contains("あいての")
+        let order = oppFirst ? ["oppA", "oppB", "mineA", "mineB"] : ["mineA", "mineB", "oppA", "oppB"]
+        for key in order {
+            if let s = lastSlots[key], let m = grp.first(where: { $0.en == s.speciesEn }) { return m }
+        }
+    }
+    return fieldAnchoredSpecies(e)
 }
 
 func formeGroup(_ e: SpeciesEntry) -> [SpeciesEntry] {
