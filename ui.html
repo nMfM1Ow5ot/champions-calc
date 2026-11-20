@@ -313,7 +313,7 @@ function confirmNewBattle() {
 // さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
 const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
-const ui = { importing: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
+const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
 
 function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
 let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
@@ -663,6 +663,11 @@ function parseSet(text) {
   return out;
 }
 
+function parseTeam(text) {
+  // Showdown のチーム書き出し形式: セット同士は空行区切り。読めないセットは読み飛ばす
+  return text.split(/\n\s*\n/).map(parseSet).filter(Boolean).slice(0, 6);
+}
+
 /* ---------- displayed spec ---------- */
 const DS = side => state[side][state.sel[side]];
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -843,11 +848,13 @@ function presetBox(side) {
     dd = ddHTML('preset:opps');
   }
   const imp = ui.importing[side];
+  const impAll = ui.importingAll[side];
   return `<div class="presetbox">
     <div class="presethead">
       <div class="part"><span class="ddlabel" style="margin:0">SET</span><button class="tgl on" data-noop="1">AUTO</button></div>
       <div class="part">
         <button class="tgl" data-act="${side}:import">読み込み</button>
+        <button class="tgl" data-act="${side}:importall">すべて読み込み</button>
         <button class="tgl" data-act="${side}:export">書き出し</button>
         <button class="tgl" data-act="${side}:all">すべて書き出し</button>
       </div>
@@ -855,6 +862,8 @@ function presetBox(side) {
     ${dd}
     ${imp ? `<textarea class="importbox" data-importbox="${side}" placeholder="Showdown形式のセットを貼り付け">${esc(imp === true ? '' : imp)}</textarea>
       <button class="tgl applybtn" data-applyimport="${side}">この内容で読み込む</button>` : ''}
+    ${impAll ? `<textarea class="importbox" data-importallbox="${side}" placeholder="Showdown形式のチームを貼り付け（最大6体・空行区切り）">${esc(impAll === true ? '' : impAll)}</textarea>
+      <button class="tgl applybtn" data-applyimportall="${side}">この内容で全て読み込む</button>` : ''}
   </div>`;
 }
 function pokeInfo(side) {
@@ -1198,6 +1207,29 @@ function applyImport(side, parsed) {
   };
   if (side === 'opps') state.oppTeam[idx] = parsed.species;
 }
+function applyImportAll(side, list) {
+  if (!list.length) return;
+  list.forEach((parsed, idx) => {
+    const megaSpecies = megaFromItem(parsed.item) || parsed.megaSpecies || null;
+    const megaAbility = megaSpecies ? (gen.species.get(megaSpecies)?.abilities?.[0] || null) : null;
+    state[side][idx] = {
+      species: parsed.species, kind: 'custom',
+      sp: { ...parsed.sp }, nature: parsed.nature || 'Serious',
+      ability: parsed.ability || abilitiesOf({ species: parsed.species })[0] || '', item: parsed.item || '',
+      moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
+      curHPPercent: 100, boosts: blankBoosts(), status: '',
+      megaSpecies, megaAbility, mega: false,
+      knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
+      note: 'Imported set', corrected: ['読み込み'],
+    };
+    if (side === 'opps') state.oppTeam[idx] = parsed.species;
+  });
+  state.sel[side] = 0;
+  state.active[side] = [0, Math.min(1, state[side].length - 1)];
+  faintLock[side].clear();
+  revivalPending[side] = 0;
+  if (side === 'opps') resetInference();
+}
 function megaFromItem(itemEn) {
   if (!itemEn) return null;
   const it = gen.items.get(itemEn);
@@ -1242,7 +1274,8 @@ document.addEventListener('click', e => {
   const act = t.closest('[data-act]');
   if (act) {
     const [side, what] = act.dataset.act.split(':');
-    if (what === 'import') { ui.importing[side] = ui.importing[side] ? false : true; renderAll(); const ta = document.querySelector(`[data-importbox="${side}"]`); if (ta) ta.focus(); }
+    if (what === 'import') { ui.importing[side] = ui.importing[side] ? false : true; if (ui.importing[side]) ui.importingAll[side] = false; renderAll(); const ta = document.querySelector(`[data-importbox="${side}"]`); if (ta) ta.focus(); }
+    if (what === 'importall') { ui.importingAll[side] = ui.importingAll[side] ? false : true; if (ui.importingAll[side]) ui.importing[side] = false; renderAll(); const ta = document.querySelector(`[data-importallbox="${side}"]`); if (ta) ta.focus(); }
     if (what === 'export') {
       if (navigator.clipboard) navigator.clipboard.writeText(exportText(DS(side))).catch(() => {});
       const old = act.textContent;
@@ -1265,6 +1298,16 @@ document.addEventListener('click', e => {
     const parsed = parseSet(ta ? ta.value : '');
     ui.importing[side] = false;
     applyImport(side, parsed);
+    calcAll();
+    return;
+  }
+  const aia = t.closest('[data-applyimportall]');
+  if (aia) {
+    const side = aia.dataset.applyimportall;
+    const ta = document.querySelector(`[data-importallbox="${side}"]`);
+    const list = parseTeam(ta ? ta.value : '');
+    ui.importingAll[side] = false;
+    applyImportAll(side, list);
     calcAll();
     return;
   }
