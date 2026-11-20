@@ -22,6 +22,7 @@ for (const sp of gen.species) {
 
 // PokeAPI のスラッグが一般規則と異なる種族
 const SLUG_SPECIAL = {
+  'Pyroar': 'pyroar-male',
   'Indeedee': 'indeedee-male', 'Indeedee-F': 'indeedee-female',
   'Meowstic': 'meowstic-male', 'Meowstic-F': 'meowstic-female',
   'Basculegion': 'basculegion-male', 'Basculegion-F': 'basculegion-female',
