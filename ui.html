@@ -31,6 +31,7 @@
 :root[data-theme="light"] .speciesname{color:#111}
 :root[data-theme="light"] .picon:hover{border-color:rgba(0,0,0,.16)}
 :root[data-theme="light"] .picon.sel{border-color:rgba(33,150,243,.9)}
+:root[data-theme="light"] .picon.seen:not(.active):not(.sel){border-color:rgba(0,0,0,.45)}
 :root[data-theme="light"] .picon.sel:hover{border-color:rgba(33,150,243,.8)}
 :root[data-theme="light"] .hpbar{background:rgba(0,0,0,.15)}
 :root[data-theme="light"] .stbadge.ok{color:rgba(0,0,0,.64); background:#E4E4E7}
@@ -95,6 +96,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .picon.sel{border-color:rgba(33,150,243,.9)}
 .picon.sel:not(.active){background:none}
 .picon.sel:not(.active) img{opacity:1}
+.picon.seen:not(.active):not(.sel){background:none; border-color:rgba(255,255,255,.55)}
 .picon.sel:hover{border-color:rgba(33,150,243,.8)}
 .picon.fnt img{opacity:.3; filter:grayscale(1)}
 
@@ -291,6 +293,8 @@ const state = {
   active: { mine: [0, 1], opps: [0, 1] },
 };
 let lastCalc = null;
+// 場に出たことがある (選出されて登場した) ポケモンの記録。場を離れたらリングだけで示す
+const seenActive = { mine: new Set(), opps: new Set() };
 let lastStateJson = '';
 const ui = { importing: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
 
@@ -374,6 +378,7 @@ async function loadMyTeam() {
     state.mine = list.map((_, i) => presetSpec(i));
     state.sel.mine = 0;
     state.active.mine = [0, Math.min(1, list.length - 1)];
+    seenActive.mine.clear();
     return true;
   } catch (e) { return false; }
 }
@@ -734,8 +739,9 @@ function dispStat(spec, key, raw, sideKey) {
 function playerBar(side) {
   const isOpp = side === 'opps';
   const specs = state[side];
+  for (const ai of state.active[side]) seenActive[side].add(ai);
   const rack = specs.map((spec, i) => {
-    const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
+    const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', seenActive[side].has(i) ? 'seen' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
     const eff = effSpecies(spec);
     return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', eff))}">${spriteImg(eff, gen.species.get(idOf(eff))?.baseSpecies || eff, '')}</button>`;
   }).join('');
@@ -1585,6 +1591,8 @@ function applyState(j) {
     state.sel.opps = 0;
     state.active.opps = [];
     lastActiveKey.opps = '';
+    seenActive.mine.clear();
+    seenActive.opps.clear();
     changed = true;
   }
   if (Array.isArray(j.mine)) {
