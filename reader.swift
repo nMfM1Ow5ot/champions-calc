@@ -356,6 +356,7 @@ var currentTurn = 0
 // 繰り出しで張られた場合は 1 として数える) を記録し、writeState が
 // 現在ターンとの差から残りターンを出す。追跡は emitLog のフックで行う
 // (プロトコル行が全ての状態変化の正本であるため)
+var eventSlotSpecies: [String: String] = [:]  // slot -> その枠にいる種族 (プロトコル行からのみ追跡する)
 var fieldWeatherSetTurn = 0
 var fieldTerrainSetTurn = 0
 var fieldTrickRoomSetTurn = 0
@@ -783,9 +784,143 @@ func renderLogLine(_ line: String) -> [String] {
     }
 }
 
-func emitLog(_ line: String) {
-    if line.hasPrefix("|move|") || line.hasPrefix("|turn|") { actionSeq += 1 }
-    trackFieldEvent(line)
+// MARK: - イベント適用 (状態の正本)
+// プロトコル行を状態へ畳み込む単一の適用経路。検出側は行を出すことに
+// 専念し、状態はこちらでのみ変える。保存した battle_protocol.log を
+// この関数に再生すれば、対戦中の状態が再構築できる (ハーネスで検証)
+let weatherUiByLogName: [String: String] = ["Rain Dance": "Rain", "Sunny Day": "Sun", "Sandstorm": "Sand", "Snow": "Snow"]
+
+func applyEvent(_ line: String) {
+    trackFieldEvent(line)  // 残りターン管理 (開始ターンの記録)
+    if line.hasPrefix("|turn|") {
+        if let n = Int(line.dropFirst(6)) { currentTurn = n }
+    } else if line.hasPrefix("|-weather|") {
+        let name = String(line.dropFirst(10))
+        if name == "none" { logFieldWeather = "" }
+        else if let ui = weatherUiByLogName[name] { logFieldWeather = ui }
+    } else if line.hasPrefix("|-fieldstart|move: ") {
+        let name = String(line.dropFirst(19))
+        if name == "Trick Room" { logTrickRoom = true }
+        else if name.hasSuffix(" Terrain") { logFieldTerrain = String(name.dropLast(8)) }
+    } else if line.hasPrefix("|-fieldend|move: ") {
+        let name = String(line.dropFirst(17))
+        if name == "Trick Room" { logTrickRoom = false }
+        else if name.hasSuffix(" Terrain") { logFieldTerrain = "" }
+    } else if line.hasPrefix("|-status|") || line.hasPrefix("|-curestatus|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]) {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if monStates[key] == nil { monStates[key] = MonState() }
+            monStates[key]?.status = line.hasPrefix("|-status|") ? f[3] : ""
+        }
+    } else if line.hasPrefix("|-boost|") || line.hasPrefix("|-unboost|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 5, let ss = parseSlotSpecies(f[2]), let n = Int(f[4]) {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if monStates[key] == nil { monStates[key] = MonState() }
+            let delta = line.hasPrefix("|-boost|") ? n : -n
+            let cur = monStates[key]?.boosts[f[3]] ?? 0
+            monStates[key]?.boosts[f[3]] = max(-6, min(6, cur + delta))
+        }
+    } else if line.hasPrefix("|-damage|") || line.hasPrefix("|-heal|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]) {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if monStates[key] == nil { monStates[key] = MonState() }
+            let hp = f[3].split(separator: "/")
+            if hp.count == 2, let a = Int(hp[0].trimmingCharacters(in: .whitespaces)),
+               let b = Int(hp[1].trimmingCharacters(in: .whitespaces)) {
+                monStates[key]?.hpPercent = b > 0 ? Int((Double(a) / Double(b) * 100).rounded()) : a
+                monStates[key]?.hpText = f[3]
+            }
+            // オボンのみ回復行は「消費した」ことも含む (再生で復元できるように)
+            if line.hasPrefix("|-heal|"), f.count >= 5, f[4].contains("item: Sitrus Berry") {
+                itemLostActive.insert(key)
+            }
+        }
+    } else if line.hasPrefix("|faint|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 3, let ss = parseSlotSpecies(f[2]) {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if monStates[key] == nil { monStates[key] = MonState() }
+            monStates[key]?.hpPercent = 0
+        }
+    } else if line.hasPrefix("|switch|") || line.hasPrefix("|drag|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]) {
+            // その枠にいた前の種族は交代でランク変化・かるわざが解除される
+            if let prev = eventSlotSpecies[ss.slot], prev != ss.speciesEn {
+                let pk = "\(ss.side):\(prev)"
+                monStates[pk]?.boosts = [:]
+                unburdenActive.remove(pk)
+            }
+            eventSlotSpecies[ss.slot] = ss.speciesEn
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if monStates[key] == nil { monStates[key] = MonState() }
+            monStates[key]?.boosts = [:]  // 入場時はランク変化なし
+        }
+    } else if line.hasPrefix("|detailschange|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]) {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if monStates[key] == nil { monStates[key] = MonState() }
+            monStates[key]?.megaSpecies = f[3].split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? f[3]
+        }
+    } else if line.hasPrefix("|-ability|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]) {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if ss.side == "p2" { revealedAbilities[ss.speciesEn] = abilityJa2En.first { $0.value == f[3] }?.key ?? f[3] }
+            // かるわざ の発動行は「持ち物を失った」ことの帰結として出す
+            // 行なので、再生時もこの行から両方の状態を復元できる
+            if f[3] == "Unburden" { unburdenActive.insert(key); itemLostActive.insert(key) }
+        }
+    } else if line.hasPrefix("|-item|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]), ss.side == "p2" {
+            revealedItems[ss.speciesEn] = itemJa2En.first { $0.value == f[3] }?.key ?? f[3]
+        }
+    } else if line.hasPrefix("|move|") {
+        // 相手の技は判明情報として記録する (行は英語名のため和名に戻す)
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]), ss.side == "p2" {
+            let mvJa = moveJa2En.first { $0.value == f[3] }?.key ?? f[3]
+            if !(revealedMoves[ss.speciesEn]?.contains(mvJa) ?? false) {
+                revealedMoves[ss.speciesEn, default: []].append(mvJa)
+            }
+        }
+    } else if line.hasPrefix("|-enditem|") {
+        // 持ち物の消費・喪失 (画面に文が出ない推論イベントのため、ログには
+        // 残さず applyEvent への直接適用だけで状態に反映する経路)
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 3, let ss = parseSlotSpecies(f[2]) {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            itemLostActive.insert(key)
+            let abilityJa = ss.side == "p1" ? (teamEntries[ss.speciesEn]?["ability"] as? String) : revealedAbilities[ss.speciesEn]
+            if abilityJa == "かるわざ" { unburdenActive.insert(key) }
+        }
+    }
+}
+
+// "p2a: Sneasler" -> (slot, side, speciesEn)
+func parseSlotSpecies(_ s: String) -> (slot: String, side: String, speciesEn: String)? {
+    let parts = s.split(separator: ":", maxSplits: 1)
+    guard parts.count == 2 else { return nil }
+    let slot = parts[0].trimmingCharacters(in: .whitespaces)
+    let sp = parts[1].trimmingCharacters(in: .whitespaces)
+    guard slot.hasPrefix("p1") || slot.hasPrefix("p2"), !sp.isEmpty else { return nil }
+    return (slot, String(slot.prefix(2)), sp)
+}
+
+func emitLog(_ line: String) { emitLog(line, applyNow: true) }
+
+// applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
+// (交代行の後に出す保留ランク行など。適用は applyEvent で発生時に行う)
+func emitLog(_ line: String, applyNow: Bool) {
+    if applyNow {
+        if line.hasPrefix("|move|") || line.hasPrefix("|turn|") { actionSeq += 1 }
+        applyEvent(line)
+    }
     battleLog.append(line)
     // 推定エンジン用イベント (技の使用順)
     if line.hasPrefix("|move|") {
@@ -933,6 +1068,7 @@ func resetLogState() {
     fieldTerrainSetTurn = 0
     fieldTrickRoomSetTurn = 0
     sideCondSetTurns = [:]
+    eventSlotSpecies = [:]
     logStarted = false
     lastSlots = [:]
 }
@@ -967,11 +1103,11 @@ func hpTextFor(_ s: SlotState) -> String {
 // ため、消費の事実から推定するしかない。自軍はチーム登録の特性で確定
 // でき、相手は特性が判明済みのときだけ記録する (推測では記録しない)
 func noteItemLost(slot: String, side: String, speciesEn: String) {
-    // 消費・喪失の事実自体は特性によらず記録する (UI が持ち物なしとして扱うため)
-    itemLostActive.insert("\(side):\(speciesEn)")
+    // 消費・喪失の状態反映は applyEvent (|-enditem|) が行う。この行自体は
+    // 画面に表示される出来事ではないため、ログには残さず直接適用する
+    applyEvent("|-enditem|\(slot): \(speciesEn)")
     let abilityJa = side == "p1" ? (teamEntries[speciesEn]?["ability"] as? String) : revealedAbilities[speciesEn]
     guard abilityJa == "かるわざ" else { return }
-    unburdenActive.insert("\(side):\(speciesEn)")
     emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Unburden")
 }
 
@@ -1067,8 +1203,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         let src = healSource(plateName: plateName, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
         if let itemJa = src?.itemJa {
             let srcSide = key.hasPrefix("p2") ? "p2" : "p1"
-            emitItemOnce(slot: slot, side: srcSide, speciesEn: speciesEn, itemJa: itemJa)
-            if srcSide == "p2" { revealedItems[speciesEn] = itemJa }
+            emitItemOnce(slot: slot, side: srcSide, speciesEn: speciesEn, itemJa: itemJa)  // 判明登録は applyEvent が行う
             // オボンのみは回復と同時に消費される (たべのこしは消費されない)
             if itemJa == "オボンのみ" { noteItemLost(slot: slot, side: srcSide, speciesEn: speciesEn) }
         }
@@ -1240,10 +1375,8 @@ func processPlates(_ hits: [String: SlotState]) {
                 let replacementBusy = faintedSlots[slot] == nil
                     && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
                 if !replacementBusy {
-                    if let p = prev {
-                        monStates["\(side):\(p.speciesEn)"]?.boosts = [:]  // 交代でランク変化はリセット
-                        unburdenActive.remove("\(side):\(p.speciesEn)")  // かるわざも交代で解除
-                    }
+                    // 前の種族のランク変化・かるわざの解除は、下の |switch| 行の
+                    // applyEvent が行う (交代に伴う状態変化は行から導く)
                     // 入場時点の HP と前回出場時の HP の差は、交代で入った
                     // 直後に受けた技 (や さいせいさいぼう の回復) の分。
                     // 交代行の HP に吸収されて被ダメ行が出ないため、後で補う
@@ -1377,8 +1510,7 @@ func checkStatusText(text: String, side: String, speciesEn: String, slot: String
     if monStates[key] == nil { monStates[key] = MonState() }
     if text.contains("なおった") {
         if let cur = monStates[key]?.status, !cur.isEmpty {
-            monStates[key]?.status = ""
-            emitLog("|-curestatus|\(slot): \(speciesEn)|\(cur)")
+            emitLog("|-curestatus|\(slot): \(speciesEn)|\(cur)")  // 状態への反映は applyEvent が行う
         }
         return
     }
@@ -1392,8 +1524,7 @@ func checkStatusText(text: String, side: String, speciesEn: String, slot: String
     else if text.contains("ねむ") { code = "slp" }
     else if text.contains("こおり") || text.contains("こおった") { code = "frz" }
     if let code, monStates[key]?.status != code {
-        monStates[key]?.status = code
-        emitLog("|-status|\(slot): \(speciesEn)|\(code)")
+        emitLog("|-status|\(slot): \(speciesEn)|\(code)")  // 状態への反映は applyEvent が行う
     }
 }
 
@@ -1436,11 +1567,8 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
             let sig = slot + "|" + moveEn + "|t" + String(turn)
             if lastMoveSigAt[sig] != nil { break }
             lastMoveSigAt[sig] = Date()
-            emitLog("|move|\(slot): \(sp.en)|\(moveEn)")
+            emitLog("|move|\(slot): \(sp.en)|\(moveEn)")  // 判明登録は applyEvent が行う
             applyMoveField(mvJa)
-            if side == "p2" && !(revealedMoves[sp.en]?.contains(mvJa) ?? false) {
-                revealedMoves[sp.en, default: []].append(mvJa)
-            }
         } else if debugMode {
             print("    -> 技名が辞書に見つかりませんでした")
         }
@@ -1466,8 +1594,7 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
                 // 拾った誤読とみて取り込まない (実例: 2026-11-20、
                 // 残り 4 のイエッサンが「全回復」として取り込まれた)
                 if np > cur && np - cur > 55 { break }
-                monStates[key]?.hpPercent = np
-                monStates[key]?.hpText = hpText
+                // 状態への反映は emitLog -> applyEvent が行う (行の HP 表記から)
                 if np < cur { emitLog("|-damage|\(slot): \(sp.en)|\(hpText)") }
                 else { emitLog("|-heal|\(slot): \(sp.en)|\(hpText)") }
                 if np == 0 { emitLog("|faint|\(slot): \(sp.en)") }
@@ -1475,18 +1602,15 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
         }
     case "ひんし":
         if (monStates[key]?.hpPercent ?? 0) > 0 {
-            monStates[key]?.hpPercent = 0
-            emitLog("|faint|\(slot): \(sp.en)")
+            emitLog("|faint|\(slot): \(sp.en)")  // 状態への反映は applyEvent が行う
         }
     case "持ち物":
         if let itJa = findInDict(in: text, itemDict) {
-            emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
-            if side == "p2" { revealedItems[sp.en] = itJa }
+            emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)  // 判明登録は applyEvent が行う
         }
     case "特性":
         if let abJa = findInDict(in: text, abilityDict) {
-            emitLog("|-ability|\(slot): \(sp.en)|\(abilityJa2En[abJa] ?? abJa)")
-            if side == "p2" { revealedAbilities[sp.en] = abJa }
+            emitLog("|-ability|\(slot): \(sp.en)|\(abilityJa2En[abJa] ?? abJa)")  // 判明登録は applyEvent が行う
         }
     default:
         break
@@ -1501,21 +1625,18 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
 // 天候・フィールドの setter (ログ行は変化したときだけ出す)
 func setWeather(_ ui: String, _ logName: String) {
     if logFieldWeather == ui { return }
-    logFieldWeather = ui
     fieldWeatherSetAt = Date()
-    emitLog("|-weather|\(logName)")
+    emitLog("|-weather|\(logName)")  // 状態への反映は applyEvent が行う
     attributeFieldAbilities()
 }
 func clearWeather() {
     if logFieldWeather.isEmpty { return }
-    logFieldWeather = ""
     emitLog("|-weather|none")
 }
 func setTerrain(_ ui: String) {
     if logFieldTerrain == ui { return }
-    logFieldTerrain = ui
     fieldTerrainSetAt = Date()
-    emitLog("|-fieldstart|move: \(ui) Terrain")
+    emitLog("|-fieldstart|move: \(ui) Terrain")  // 状態への反映は applyEvent が行う
     attributeFieldAbilities()
 }
 
@@ -1539,8 +1660,7 @@ func attributeIntimidate(targetSide: String) {
         let en = String(parts[1])
         guard let pool = speciesAbilityMap[en], pool.contains("Intimidate") else { continue }
         intimidateDone[key] = sw.at
-        emitAbilityOnce(slot: sw.slot, side: other, speciesEn: en, abilityEn: "Intimidate")
-        if other == "p2" { revealedAbilities[en] = abilityJa2En.first { $0.value == "Intimidate" }?.key ?? "Intimidate" }
+        emitAbilityOnce(slot: sw.slot, side: other, speciesEn: en, abilityEn: "Intimidate")  // 判明登録は applyEvent が行う
     }
 }
 
@@ -1566,7 +1686,6 @@ func attributeFieldAbilities() {
         if matched {
             fieldAbilityDone[key] = sw.at
             emitAbilityOnce(slot: sw.slot, side: side, speciesEn: en, abilityEn: ab)
-            if side == "p2" { revealedAbilities[en] = abilityJa2En.first { $0.value == ab }?.key ?? ab }
         }
     }
 }
@@ -1600,7 +1719,7 @@ func completeMega(side: String, baseEn: String, megaEn: String) {
         pendingMegaSpecies[side] = nil
         return
     }
-    monStates[key]?.megaSpecies = megaEn
+    // megaSpecies への反映は |detailschange| 行の applyEvent が行う
     let slot = slotFor(side: side, speciesEn: baseEn)
     emitLog("|detailschange|\(slot): \(baseEn)|\(megaEn)")
     var megaLine = "|-mega|\(slot): \(baseEn)|\(baseEn)"
@@ -1642,8 +1761,7 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
         let hasDrop = recentAtkDrops.contains { $0.key.hasPrefix("\(other):") && $0.value.seq == actionSeq && now.timeIntervalSince($0.value.at) < 12 }
         if hasDrop {
             intimidateDone[key] = sw.at
-            emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Intimidate")
-            if side == "p2" { revealedAbilities[speciesEn] = abilityJa2En.first { $0.value == "Intimidate" }?.key ?? "Intimidate" }
+            emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Intimidate")  // 判明登録は applyEvent が行う
         }
     }
     // この種族宛てに保留していたランク変化行を、交代行の後に出す
@@ -1677,8 +1795,7 @@ func awaitingReplacement(_ platePrefix: String, _ side: String) -> Bool {
 func clearTerrain() {
     if logFieldTerrain.isEmpty { return }
     let old = logFieldTerrain
-    logFieldTerrain = ""
-    emitLog("|-fieldend|move: \(old) Terrain")
+    emitLog("|-fieldend|move: \(old) Terrain")  // 状態への反映は applyEvent が行う
 }
 
 // 技そのものが天候・フィールドを張る場合
@@ -1744,7 +1861,7 @@ func copyBoosts(fromKey: String, toKey: String, slot: String, speciesEn: String)
         let target = src[stat] ?? 0
         let cur = monStates[toKey]?.boosts[stat] ?? 0
         if target == cur { continue }
-        monStates[toKey]?.boosts[stat] = target
+        // 状態への反映は emitLog -> applyEvent が行う (差分行から目標値になる)
         let delta = target - cur
         if delta > 0 { emitLog("|-boost|\(slot): \(speciesEn)|\(stat)|\(delta)") }
         else { emitLog("|-unboost|\(slot): \(speciesEn)|\(stat)|\(-delta)") }
@@ -1768,9 +1885,11 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
     let cur = monStates[key]?.boosts[stat] ?? 0
     let nv = max(-6, min(6, cur + delta))
     if nv == cur { return }
-    monStates[key]?.boosts[stat] = nv
     if stat == "atk" && delta < 0 { recentAtkDrops[key] = (Date(), actionSeq) }
     let line = delta > 0 ? "|-boost|\(slot): \(speciesEn)|\(stat)|\(delta)" : "|-unboost|\(slot): \(speciesEn)|\(stat)|\(-delta)"
+    // 状態への適用は発生時点で applyEvent が行う。行の表示は交代行の後まで
+    // 保留することがあるため、追記時は再適用しない (applyNow: false)
+    applyEvent(line)
     // 交代行がまだ出ていない種族のランク変化行は、交代行の後に出す
     // (実例: 2026-11-20 vs Vanille 戦、場に出る前の サイコシード 発動行が
     //  繰り出し行より先に出た)。状態への適用は即時に行い、行だけ保留する
@@ -1781,7 +1900,7 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
         //  サイコシード発動行が p1a で出た (実際は p1b))
         heldBoostLines[key, default: []].append((stat, delta, Date()))
     } else {
-        emitLog(line)
+        emitLog(line, applyNow: false)
     }
     // 地形シードの消費: 対応する地形が出ているとき、その地形のシードが
     // 上げる能力が +1 されたらシードを消費したとみなす (持ち物がその
@@ -1806,7 +1925,7 @@ func boostLine(slot: String, speciesEn: String, stat: String, delta: Int) -> Str
 func flushHeldBoosts(forKey key: String, slot: String) {
     guard let arr = heldBoostLines.removeValue(forKey: key) else { return }
     let speciesEn = String(key.dropFirst(3))
-    for h in arr { emitLog(boostLine(slot: slot, speciesEn: speciesEn, stat: h.stat, delta: h.delta)) }
+    for h in arr { emitLog(boostLine(slot: slot, speciesEn: speciesEn, stat: h.stat, delta: h.delta), applyNow: false) }
 }
 
 func flushHeldBoostsTimeout() {
@@ -1823,7 +1942,7 @@ func flushHeldBoostsTimeout() {
         if keep.isEmpty { heldBoostLines[k] = nil } else { heldBoostLines[k] = keep }
         let speciesEn = String(k.dropFirst(3))
         let slot = slotFor(side: String(k.prefix(2)), speciesEn: speciesEn)
-        for h in ready { emitLog(boostLine(slot: slot, speciesEn: speciesEn, stat: h.stat, delta: h.delta)) }
+        for h in ready { emitLog(boostLine(slot: slot, speciesEn: speciesEn, stat: h.stat, delta: h.delta), applyNow: false) }
     }
 }
 
@@ -1837,11 +1956,10 @@ func checkFieldText(text: String) -> Bool {
     if text.contains("草が") && (text.contains("なくなった") || text.contains("消え") || text.contains("きえ")) { clearTerrain(); return true }
     // トリックルーム (地形・天候とは別枠のフィールド効果)
     if text.contains("時空") && (text.contains("ゆがめ") || text.contains("歪め")) {
-        if !logTrickRoom { logTrickRoom = true; emitLog("|-fieldstart|move: Trick Room") }
+        if !logTrickRoom { emitLog("|-fieldstart|move: Trick Room") }
         return true
     }
     if logTrickRoom && (text.contains("ゆがみ") || text.contains("時空")) && (text.contains("戻った") || text.contains("もどった")) {
-        logTrickRoom = false
         emitLog("|-fieldend|move: Trick Room")
         return true
     }
@@ -2240,8 +2358,7 @@ func salvageItem(in t: String) -> Bool {
     guard let subj = salvageSubject(in: t) else { return false }
     let key = "\(subj.side):\(subj.speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
-    emitItemOnce(slot: subj.slot, side: subj.side, speciesEn: subj.speciesEn, itemJa: itemJa)
-    if subj.side == "p2" { revealedItems[subj.speciesEn] = itemJa }
+    emitItemOnce(slot: subj.slot, side: subj.side, speciesEn: subj.speciesEn, itemJa: itemJa)  // 判明登録は applyEvent が行う
     noteItemLost(slot: subj.slot, side: subj.side, speciesEn: subj.speciesEn)
     return true
 }
@@ -2471,8 +2588,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                 let stoneCand = String(t[r.upperBound...].prefix(while: { $0 != "と" }))
                 if let itJa = itemDict[normalize(stoneCand)] {
                     emitItemOnce(slot: slotFor(side: side, speciesEn: sp.en), side: side, speciesEn: sp.en, itemJa: itJa)
-                    if side == "p2" { revealedItems[sp.en] = itJa }
-                    pendingMegaStone[side] = itJa
+                                pendingMegaStone[side] = itJa
                     pendingMegaSpecies[side] = sp.en
                 }
             }
@@ -2725,10 +2841,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                 synthesizeMegaIfPending(side: side, speciesEn: sp.en)
                 emitLog("|move|\(slot): \(sp.en)|\(moveEn)")
                 lastMoveSeq = actionSeq
-                applyMoveField(mvJa)
-                if side == "p2" && !(revealedMoves[sp.en]?.contains(mvJa) ?? false) {
-                    revealedMoves[sp.en, default: []].append(mvJa)
-                }
+                applyMoveField(mvJa)  // 判明登録は |move| 行の applyEvent が行う
                 return true
         }
     }
@@ -2765,7 +2878,6 @@ func translateBattleMessage(_ text: String) -> Bool {
         if nt.contains(normalize(sp.ja + "の") + norm) {
             emitAbilityOnce(slot: slot, side: side, speciesEn: sp.en, abilityEn: abilityJa2En[orig] ?? orig)
             applyAbilityField(orig)
-            if side == "p2" { revealedAbilities[sp.en] = orig }
             break
         }
     }
@@ -2776,7 +2888,6 @@ func translateBattleMessage(_ text: String) -> Bool {
         if let at = lastSingleActAt[sk], Date().timeIntervalSince(at) < 6 { return true }
         lastSingleActAt[sk] = Date()
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "きあいのタスキ")
-        if side == "p2" { revealedItems[sp.en] = "きあいのタスキ" }
         emitLog("|-activate|\(slot): \(sp.en)|item: Focus Sash")
         noteItemLost(slot: slot, side: side, speciesEn: sp.en)
         return true
@@ -2789,7 +2900,6 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("命が少し削られた") || (t.contains("削られた") && t.contains("いのち")) {
         if lastMoveLabel == "\(slot): \(sp.en)" && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
             emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "いのちのたま")
-            if side == "p2" { revealedItems[sp.en] = "いのちのたま" }
         }
         return true
     }
@@ -2797,21 +2907,18 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 実例: 2026-11-20、クレッフィのオッカのみ文が日本語のまま漏れた)
     if t.contains("弱めた"), let itJa = findInDict(in: t, itemDict) {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
-        if side == "p2" { revealedItems[sp.en] = itJa }
         noteItemLost(slot: slot, side: side, speciesEn: sp.en)
         return true
     }
     // だっしゅつボタンで戻っていく (交代そのものはプレート側で記録する)
     if t.contains("だっしゅつボタン") || t.contains("しゅつボタン") || (t.contains("ボタン") && t.contains("戻って")) {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "だっしゅつボタン")
-        if side == "p2" { revealedItems[sp.en] = "だっしゅつボタン" }
         return true
     }
     // せんせいのツメの発動 (実例: 2026-11-20 の対戦で「キュウコンは
     // せんせいのツメで 行動が はやくなった！」が日本語のまま漏れた)
     if t.contains("せんせいのツメ") || t.contains("せんせいのつめ") {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "せんせいのツメ")
-        if side == "p2" { revealedItems[sp.en] = "せんせいのツメ" }
         return true
     }
     // 道具を手に入れた (トリック等で相手の道具が移った場合の判明。
@@ -2819,7 +2926,6 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 手に入れた！」が日本語のまま漏れ、道具も判明しなかった)
     if t.contains("手に入れた"), let itJa = findInDict(in: t, itemDict) {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
-        if side == "p2" { revealedItems[sp.en] = itJa }
         return true
     }
     // トリック等の道具交換そのもの (「おたがいの道具を入れ替えた」。
@@ -2832,7 +2938,6 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("食べ") || t.contains("発動") || t.contains("なくなった") || t.contains("効果で"),
        let itJa = findInDict(in: t, itemDict) {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
-        if side == "p2" { revealedItems[sp.en] = itJa }
         // 消費・喪失が伴う文脈なら かるわざ の判定へ (きのみを食べた /
         // 軽減きのみの発動 / 持ち物がなくなった)
         if t.contains("なくなった") || ((itemJa2En[itJa] ?? "").hasSuffix("Berry") && (t.contains("食べ") || t.contains("発動"))) {
@@ -2860,7 +2965,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                                    fromPct: lastEmittedPct[pn] ?? (monStates[key]?.hpPercent ?? 100),
                                    toPct: 0, hpText: fhp, force: true)
             }
-            monStates[key]?.hpPercent = 0
+            // HP 0 への反映は被ダメ行 (と後続の ひんし行) の applyEvent が行う
             deferFaint(slot: slot, speciesEn: sp.en)
         }
         return true
@@ -3883,7 +3988,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1124"
+let readerBuild = "20261120_1139"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
