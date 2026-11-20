@@ -26,7 +26,7 @@
   "fetch_usage.mjs": "caa940ac838695deed49e52b51d97f288b179d4f845111970500f3540e13ac26",
   "my_team.json": "17b7f06d5e5c85ee82fac52868e60a07e74287673bf1b69e37786383a2dbb46f",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
-  "reader.swift": "909b5124738562edc6ace5f546c39854a320aad5ee6fc44d93813f3d6e7b37d3",
+  "reader.swift": "aa69c22d93331e441095f5bbd736faba16e2240fdc085af39df354ebb8b2b18d",
   "run_reader.sh": "3f7277aa0244e4e8bef8fe8616cce5d67049da33a0b18f8e12c3e2662729fa18",
   "serve.py": "517c471e60cb9e7a999e31b4edec2857754fb99a6d7cf9c92bae7d2d4cbbe1e0",
   "start_all.sh": "f0250ec2d7540e9c1dc47583acc76b11c9b774b57f7e8cc8a359d483d914c787",
@@ -35,5 +35,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "af4212e9a6fa7774202cf2eca573248d55eac460beb8937d4940e3f66d071119"
  },
- "rev": "20261120_1024"
+ "rev": "20261120_1028"
 }
