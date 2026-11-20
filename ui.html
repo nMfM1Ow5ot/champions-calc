@@ -299,6 +299,26 @@ const seenActive = { mine: new Set(), opps: new Set() };
 const faintLock = { mine: new Set(), opps: new Set() };
 // さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
 const revivalPending = { mine: 0, opps: 0 };
+// 場に連続して出ている種族の滞在開始時刻 (ms)。対戦開始直後などに一瞬だけ
+// 「場に出ている」と誤って届いた種族は、選出扱い (白リング) にしないための判定に使う
+const activeSince = { mine: new Map(), opps: new Map() };
+const SEEN_MIN_MS = 2500;
+function trackActive(side, spName, hp) {
+  const now = Date.now();
+  if (!activeSince[side].has(spName)) activeSince[side].set(spName, now);
+  if (hp <= 0) { seenActive[side].add(spName); return; }
+  if (now - activeSince[side].get(spName) >= SEEN_MIN_MS) seenActive[side].add(spName);
+}
+function sweepActives(side, currentSpecies) {
+  const now = Date.now();
+  const cur = new Set(currentSpecies);
+  for (const [sp, since] of [...activeSince[side]]) {
+    if (!cur.has(sp)) {
+      if (now - since >= SEEN_MIN_MS) seenActive[side].add(sp);
+      activeSince[side].delete(sp);
+    }
+  }
+}
 let lastStateJson = '';
 const ui = { importing: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
 
@@ -384,6 +404,7 @@ async function loadMyTeam() {
     state.active.mine = [0, Math.min(1, list.length - 1)];
     seenActive.mine.clear();
     faintLock.mine.clear();
+    activeSince.mine.clear();
     return true;
   } catch (e) { return false; }
 }
@@ -1624,6 +1645,8 @@ function applyState(j) {
     faintLock.opps.clear();
     revivalPending.mine = 0;
     revivalPending.opps = 0;
+    activeSince.mine.clear();
+    activeSince.opps.clear();
     changed = true;
   }
   if (Array.isArray(j.mine)) {
@@ -1633,7 +1656,7 @@ function applyState(j) {
       const spName = resolveSpecies(en.species) || en.species;
       const pi = state.mine.findIndex(s => s.species === spName);
       if (pi < 0) continue;
-      seenActive.mine.add(spName);
+      trackActive('mine', spName, typeof en.curHPPercent === 'number' ? en.curHPPercent : 100);
       if (typeof en.curHPPercent === 'number') {
         if (en.curHPPercent <= 0) { state.mine[pi].curHPPercent = 0; faintLock.mine.add(spName); }
         else if (!faintLock.mine.has(spName)) state.mine[pi].curHPPercent = en.curHPPercent;
@@ -1647,6 +1670,7 @@ function applyState(j) {
       applyMegaFlag(state.mine[pi], en);
       idxs.push(pi); changed = true;
     }
+    sweepActives('mine', j.mine.map(en => en && (resolveSpecies(en.species) || en.species)).filter(Boolean));
     if (idxs.length) {
       const key = idxs.join(',');
       if (key !== lastActiveKey.mine) { state.active.mine = idxs.slice(0, 2); state.sel.mine = idxs[0]; lastActiveKey.mine = key; }
@@ -1661,6 +1685,7 @@ function applyState(j) {
       state.opps = names.map(sp => old[sp] || oppSpec(sp, 'usage'));
       for (const sp of [...seenActive.opps]) if (!names.includes(sp)) seenActive.opps.delete(sp);
       for (const sp of [...faintLock.opps]) if (!names.includes(sp)) faintLock.opps.delete(sp);
+      for (const sp of [...activeSince.opps.keys()]) if (!names.includes(sp)) activeSince.opps.delete(sp);
       if (state.sel.opps >= names.length) state.sel.opps = 0;
       state.active.opps = [0, Math.min(1, names.length - 1)];
       lastActiveKey.opps = '';
@@ -1681,7 +1706,7 @@ function applyState(j) {
       if (pi < 0) continue;
       let spec = state.opps[pi];
       if (en.revealed) { spec = applyRevealedPreserving(spec, en.revealed); state.opps[pi] = spec; }
-      seenActive.opps.add(spName);
+      trackActive('opps', spName, typeof en.curHPPercent === 'number' ? en.curHPPercent : 100);
       if (typeof en.curHPPercent === 'number') {
         if (en.curHPPercent <= 0) { spec.curHPPercent = 0; faintLock.opps.add(spName); }
         else if (!faintLock.opps.has(spName)) spec.curHPPercent = en.curHPPercent;
@@ -1693,6 +1718,7 @@ function applyState(j) {
       applyMegaFlag(spec, en);
       idxs.push(pi); changed = true;
     }
+    sweepActives('opps', j.opps.map(en => en && (resolveSpecies(en.species) || en.species)).filter(Boolean));
     if (idxs.length) {
       const key = idxs.join(',');
       if (key !== lastActiveKey.opps) { state.active.opps = idxs.slice(0, 2); state.sel.opps = idxs[0]; lastActiveKey.opps = key; }
