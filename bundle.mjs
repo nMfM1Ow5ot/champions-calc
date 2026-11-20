@@ -26271,8 +26271,11 @@ function toPokemon(spec) {
     evs: spToEvs(spec.sp),
     boosts: spec.boosts || void 0,
     status: spec.status || "",
-    curHP: spec.curHP
+    curHP: spec.curHP,
     // 実数 (undefined = 満タン)
+    // かるわざ発動中 (持ち物を失った) のときだけ素早さ2倍がかかる。
+    // abilityOn は他の特性にも効くフラグのため、かるわざ以外では渡さない
+    abilityOn: ability === "Unburden" && spec.unburden ? true : void 0
   });
   return p;
 }
@@ -26280,6 +26283,7 @@ function boostedSpe(p, tailwind) {
   let v = p.stats.spe;
   const b = p.boosts && p.boosts.spe || 0;
   v = b >= 0 ? Math.floor(v * (2 + b) / 2) : Math.floor(v * 2 / (2 - b));
+  if (p.ability === "Unburden" && p.abilityOn) v *= 2;
   if (tailwind) v *= 2;
   if (p.status === "par") v = Math.floor(v / 2);
   return v;
