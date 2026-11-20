@@ -70,6 +70,22 @@ func looseText(_ s: String) -> String {
     return String(recomposed.map { small[$0] ?? $0 })
 }
 
+// 濁点・半濁点を落とした形 (OCR の濁点ゆれ対策: スバヤサ→スパヤサ、
+// トクコウ→トグゴウ のような崩れを、能力名の照合だけ両辺を畳んで吸収する)
+func foldDakuten(_ s: String) -> String {
+    let map: [Character: Character] = ["ガ": "カ", "ギ": "キ", "グ": "ク", "ゲ": "ケ", "ゴ": "コ",
+        "ザ": "サ", "ジ": "シ", "ズ": "ス", "ゼ": "セ", "ゾ": "ソ",
+        "ダ": "タ", "ヂ": "チ", "ヅ": "ツ", "デ": "テ", "ド": "ト",
+        "バ": "ハ", "ビ": "ヒ", "ブ": "フ", "ベ": "ヘ", "ボ": "ホ",
+        "パ": "ハ", "ピ": "ヒ", "プ": "フ", "ペ": "ヘ", "ポ": "ホ",
+        "が": "か", "ぎ": "き", "ぐ": "く", "げ": "け", "ご": "こ",
+        "ざ": "さ", "じ": "し", "ず": "す", "ぜ": "せ", "ぞ": "そ",
+        "だ": "た", "ぢ": "ち", "づ": "つ", "で": "て", "ど": "と",
+        "ば": "は", "び": "ひ", "ぶ": "ふ", "べ": "へ", "ぼ": "ほ",
+        "ぱ": "は", "ぴ": "ひ", "ぷ": "ふ", "ぺ": "へ", "ぽ": "ほ"]
+    return String(s.map { map[$0] ?? $0 })
+}
+
 func loadDict() {
     guard let data = try? Data(contentsOf: indexURL),
           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1668,6 +1684,14 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
     for e in speciesDict where !e.ja.isEmpty {
         if t.contains(normalize(e.ja)) && (best == nil || e.ja.count > best!.ja.count) { best = e }
     }
+    // 「メガ」が「メカ」に崩れると基本フォルムに落ちて状態の記録先キーが
+    // ずれるため、メカ→メガに直した文でも照合する (検証 R1 #83 で検出)
+    if t.contains("メカ") {
+        let t2 = t.replacingOccurrences(of: "メカ", with: "メガ")
+        for e in speciesDict where !e.ja.isEmpty {
+            if t2.contains(normalize(e.ja)) && (best == nil || e.ja.count > best!.ja.count) { best = e }
+        }
+    }
     return best
 }
 
@@ -1690,13 +1714,13 @@ func slotFor(side: String, speciesEn: String) -> String {
 func checkStatusText(text: String, side: String, speciesEn: String, slot: String) {
     let key = "\(side):\(speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
-    if text.contains("なおった") {
+    if text.contains("なおった") || text.contains("なおつた") {
         if let cur = monStates[key]?.status, !cur.isEmpty {
             emitLog("|-curestatus|\(slot): \(speciesEn)|\(cur)")  // 状態への反映は applyEvent が行う
         }
         return
     }
-    let cues = ["おかされた", "あびた", "なった", "おった", "ついた", "しまった", "ねむった"]
+    let cues = ["おかされた", "あびた", "なった", "おった", "ついた", "しまった", "しまつた", "ねむった"]
     guard cues.contains(where: { text.contains($0) }) else { return }
     var code: String? = nil
     if text.contains("もうどく") { code = "tox" }
@@ -2013,8 +2037,11 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
     // ゲーム内表記は漢字 (攻撃/防御/特攻/特防/素早さ) が正。ひらがな表記も併記する
     // 「防が下がった」のように 2 文字目が落ちる OCR 崩れも拾う
     // (「攻が」「防が」は「攻撃が」「防御が」の部分文字列にはならないため誤爆しない)
-    let stats: [(String, String)] = [("こうげき", "atk"), ("攻撃", "atk"), ("攻が", "atk"), ("ぼうぎょ", "def"), ("防御", "def"), ("防が", "def"), ("とくこう", "spa"), ("特攻", "spa"), ("とくぼう", "spd"), ("特防", "spd"), ("すばやさ", "spe"), ("素早さ", "spe"), ("めいちゅう", "acc"), ("命中率", "acc"), ("かいひ", "eva"), ("回避率", "eva")]
-    let mag = text.contains("ぐーんと") ? 2 : 1
+    let stats: [(String, String)] = [("こうげき", "atk"), ("攻撃", "atk"), ("攻が", "atk"), ("ぼうぎょ", "def"), ("防御", "def"), ("防が", "def"), ("とくこう", "spa"), ("特攻", "spa"), ("とくぼう", "spd"), ("特防", "spd"), ("すばやさ", "spe"), ("素早さ", "spe"), ("めいちゅう", "acc"), ("命中率", "acc"), ("かいひ", "eva"), ("回避率", "eva"),
+                                     ("コウゲキ", "atk"), ("ボウギョ", "def"), ("トクコウ", "spa"), ("トクボウ", "spd"), ("スバヤサ", "spe"), ("メイチュウ", "acc"), ("カイヒ", "eva")]
+    // 「がくっと下がった」も 2 段階 (従来は ぐーんと しか見ておらず、がくっと
+    // の低下が 1 段階として記録されていた。検証 R1 #32/#88 で検出)
+    let mag = (text.contains("ぐーんと") || text.contains("がくっと")) ? 2 : 1
     if text.contains("すべての") {
         for (_, code) in stats.prefix(5) { applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag) }
         return
@@ -2023,13 +2050,15 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
     // 1 文で 2 つ上がる技があるため、最初の 1 つで打ち切らない)。
     // フリガナ+漢字の二重表記は同一コードとして 1 回だけ数える
     var applied = Set<String>()
+    let foldedText = foldDakuten(text)
     for (ja, code) in stats where !applied.contains(code) {
         // 「攻が」「防が」の 1 字落ちフォールバックは「特攻が」「特防が」の
         // 部分文字列でもあるため、特攻/特防の文では使わない
         // (実例: 2026-11-20、サイコキネシスの特防低下に防御低下まで付いた)
-        if ja == "攻が" && text.contains("特攻が") { continue }
-        if ja == "防が" && text.contains("特防が") { continue }
-        guard text.contains(ja) else { continue }
+        if ja == "攻が" && (text.contains("特攻が") || foldedText.contains("特攻か")) { continue }
+        if ja == "防が" && (text.contains("特防が") || foldedText.contains("特防か")) { continue }
+        // 濁点ゆれ (スパヤサ等) は両辺を畳んだ形でも照合する (検証 R1)
+        guard text.contains(ja) || foldedText.contains(foldDakuten(ja)) else { continue }
         applied.insert(code)
         applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag)
     }
@@ -2135,7 +2164,7 @@ func checkFieldText(text: String) -> Bool {
     if (text.contains("不思議") || text.contains("フィールド")) && (text.contains("なくな") || text.contains("消え") || text.contains("きえ") || text.contains("きれ")) { clearTerrain(); return true }
     if text.contains("霧が") && text.contains("はれた") { clearTerrain(); return true }
     if text.contains("電気が") && text.contains("消えた") { clearTerrain(); return true }
-    if text.contains("草が") && (text.contains("なくなった") || text.contains("消え") || text.contains("きえ")) { clearTerrain(); return true }
+    if text.contains("草が") && (text.contains("なくな") || text.contains("消え") || text.contains("きえ")) { clearTerrain(); return true }
     // トリックルーム (地形・天候とは別枠のフィールド効果)
     if text.contains("時空") && (text.contains("ゆがめ") || text.contains("歪め")) {
         if !logTrickRoom { emitLog("|-fieldstart|move: Trick Room") }
@@ -2506,7 +2535,10 @@ func salvageBoost(in t: String) -> Bool {
     let stats: [(String, String)] = [("特攻", "spa"), ("とくこう", "spa"), ("トクコウ", "spa"), ("特防", "spd"), ("とくぼう", "spd"), ("トクボウ", "spd"),
                                      ("攻撃", "atk"), ("こうげき", "atk"), ("コウゲキ", "atk"), ("防御", "def"), ("ぼうぎょ", "def"), ("ボウギョ", "def"),
                                      ("素早さ", "spe"), ("すばやさ", "spe"), ("スバヤサ", "spe"), ("命中率", "acc"), ("回避率", "eva")]
-    guard let stat = stats.first(where: { t.contains($0.0) })?.1 else { return false }
+    // 濁点ゆれ (スパヤサ等) は両辺を畳んだ形でも照合する (検証 R1)
+    let stat = stats.first(where: { t.contains($0.0) })?.1
+        ?? stats.first(where: { foldDakuten(t).contains(foldDakuten($0.0)) })?.1
+    guard let stat else { return false }
     guard let subj = salvageSubject(in: t) else { return false }
     var mag = 1
     if up && t.contains("ぐーんと") { mag = 2 }
@@ -2523,8 +2555,8 @@ func salvageStatus(in t: String) -> Bool {
     // 違うときだけ反映・出力するため、二重に効くことはない
     let hasCode = t.contains("もうどく") || t.contains("どく") || t.contains("やけど") || t.contains("まひ")
         || t.contains("ねむ") || t.contains("こおり") || t.contains("こおった")
-    let cured = t.contains("なおった")
-    let cues = ["おかされた", "あびた", "なった", "おった", "ついた", "しまった", "ねむった"]
+    let cured = t.contains("なおった") || t.contains("なおつた")
+    let cues = ["おかされた", "あびた", "なった", "おった", "ついた", "しまった", "しまつた", "ねむった"]
     guard cured || (hasCode && cues.contains(where: { t.contains($0) })) else { return false }
     guard let subj = salvageSubject(in: t) else { return false }
     checkStatusText(text: t, side: subj.side, speciesEn: subj.speciesEn, slot: subj.slot)
@@ -2753,9 +2785,15 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 対象は文中の種族名を優先する (範囲技では最後に被弾した枠と急所の
     // 対象が食い違うことがあるため)。種族が取れない場合だけ従来通り
     // 直近にダメージを受けた (受けつつある) 枠に付ける
-    if (t.contains("急所に") || t.contains("所に") || t.hasSuffix("に当たった！") || t.hasSuffix("に当たった!") || t.hasSuffix("にたった！") || t.hasSuffix("にたった!")) && (t.contains("当たった") || t.contains("たった")) {
+    if (t.contains("急所に") || t.contains("所に") || t.hasSuffix("に当たった！") || t.hasSuffix("に当たった!") || t.hasSuffix("にたった！") || t.hasSuffix("にたった!") || t.hasSuffix("に当たつた！") || t.hasSuffix("にたつた！")) && (t.contains("当たった") || t.contains("たった") || t.contains("当たつた") || t.contains("たつた")) {
         var target = ""
-        if let csp = findSpeciesJa(in: t) {
+        // 種族名が崩れている場合は緩い照合も試す (場にいる種族に限る)
+        var critEntry = findSpeciesJa(in: t)
+        if critEntry == nil, let loose = findSpeciesJaLoose(in: t) {
+            let anch = fieldAnchoredSpecies(loose.entry)
+            if lastSlots.values.contains(where: { $0.speciesEn == anch.en }) { critEntry = loose.entry }
+        }
+        if let csp = critEntry {
             let anch = fieldAnchoredSpecies(csp)
             let cside: String
             if t.contains("相手の") || t.contains("あいての") { cside = "p2" }
@@ -2982,7 +3020,9 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("効果は") {
         // OCR 崩れ (バツグン -> バッグン) に耐えるよう、小さい ッ/っ を寄せた形でも判定する
         let tk = t.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
-        let kind = tk.contains("いまひとつ") ? "resisted" : tk.contains("バツグン") ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
+        // 「バツグン」が平仮名 (ばつぐん) で読まれた場合は正規化形でも判定する (検証 R1 #66)
+        let ntk = nt.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
+        let kind = tk.contains("いまひとつ") ? "resisted" : (tk.contains("バツグン") || ntk.contains("バツグン")) ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
         if !kind.isEmpty {
             let ekey = "\(slot)|\(kind)"
             if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
@@ -3127,7 +3167,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         return true
     }
     // だっしゅつボタンで戻っていく (交代そのものはプレート側で記録する)
-    if t.contains("だっしゅつボタン") || t.contains("しゅつボタン") || (t.contains("ボタン") && t.contains("戻って")) {
+    if t.contains("だっしゅつボタン") || t.contains("しゅつボタン") || (t.contains("だっしゅつ") && t.contains("ボダン")) || (t.contains("ボタン") && (t.contains("戻って") || t.contains("もどって"))) {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "だっしゅつボタン")
         return true
     }
@@ -3205,14 +3245,17 @@ func translateBattleMessage(_ text: String) -> Bool {
         return true
     }
     // ランク変化: 主語が複数の文 (いかく「Aと Bの 攻撃が 下がった！」等) は全員に適用する
-    // 動詞は漢字表記 (上がった/下がった) も対象にする
-    if t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") {
+    // 動詞は漢字表記 (上がった/下がった) も対象にする。小さい「っ」が「つ」に
+    // 崩れた形もここで拾う (checkBoostText 自体は対応済みだが、この入口の
+    // 判定に無かったため崩れた文が正規経路に入れなかった。検証 R1 で検出)
+    if t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった")
+        || t.contains("あがつた") || t.contains("さがつた") || t.contains("上がつた") || t.contains("下がつた") {
         // 主語を場のフォルムに寄せる (イエッサン -> イエッサンF 等)。寄せないと
         // 枠が特定できず、二重適用防止のキーが他方と衝突して変化が丸ごと落ちる
         // (実例: 2026-11-20 vs BigGuyMan 戦、いかくのイエッサン分が消えた)
         let subjects = findAllSpeciesJa(in: t).map { fieldAnchoredSpecies($0) }
         // いかくの帰属はランク変化の行より先に [特性] 行を出すため、適用前に行う
-        if (t.contains("さがった") || t.contains("下がった")) && (t.contains("攻撃") || t.contains("こうげき")) && !t.contains("ぐーんと") {
+        if (t.contains("さがった") || t.contains("下がった") || t.contains("さがつた") || t.contains("下がつた")) && (t.contains("攻撃") || t.contains("こうげき") || t.contains("コウゲキ")) && !t.contains("ぐーんと") {
             var targetSides = Set<String>()
             if subjects.count >= 2 {
                 for e in subjects {
@@ -4226,7 +4269,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1247"
+let readerBuild = "20261120_1319"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
