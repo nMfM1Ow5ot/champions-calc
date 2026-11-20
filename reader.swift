@@ -2064,8 +2064,9 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
                                      ("コウゲキ", "atk"), ("ボウギョ", "def"), ("トクコウ", "spa"), ("トクボウ", "spd"), ("スバヤサ", "spe"), ("メイチュウ", "acc"), ("カイヒ", "eva")]
     // 「がくっと下がった」も 2 段階 (従来は ぐーんと しか見ておらず、がくっと
     // の低下が 1 段階として記録されていた。検証 R1 #32/#88 で検出。
-    // がくっと 自体が「がくつと」に崩れた形も 2 段階とする: 検証 R2 #89/#91)
-    let mag = (text.contains("ぐーんと") || text.contains("がくっと") || text.contains("がくつと")) ? 2 : 1
+    // がくっと 自体が「がくつと」に崩れた形も 2 段階とする: 検証 R2 #89/#91。
+    // ぐーんと の長音が落ちた「ぐんと」も 2 段階とする: 検証 R4 #13/#45)
+    let mag = (text.contains("ぐーんと") || text.contains("ぐんと") || text.contains("がくっと") || text.contains("がくつと")) ? 2 : 1
     if text.contains("すべての") {
         for (_, code) in stats.prefix(5) { applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag) }
         return
@@ -2572,7 +2573,7 @@ func salvageBoost(in t: String) -> Bool {
     guard let stat else { return false }
     guard let subj = salvageSubject(in: t) else { return false }
     var mag = 1
-    if up && t.contains("ぐーんと") { mag = 2 }
+    if up && (t.contains("ぐーんと") || t.contains("ぐんと")) { mag = 2 }
     if down && (t.contains("がくっと") || t.contains("がくつと")) { mag = 2 }
     let key = "\(subj.side):\(subj.speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
@@ -4314,7 +4315,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1426"
+let readerBuild = "20261120_1443"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
