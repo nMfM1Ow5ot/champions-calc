@@ -1499,13 +1499,14 @@ function infProcessDamage(ev) {
   }
 }
 const WEATHER_SPE = { Chlorophyll: 'Sun', 'Swift Swim': 'Rain', 'Sand Rush': 'Sand', 'Slush Rush': 'Snow' };
-function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, terrain) {
+function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, terrain, unburden) {
   let v = statVal;
   const b = boosts?.spe || 0;
   v = b >= 0 ? Math.floor(v * (2 + b) / 2) : Math.floor(v * 2 / (2 - b));
   if (item === 'Choice Scarf') v = Math.floor(v * 1.5);
   if (ability && WEATHER_SPE[ability] === weather) v *= 2;
   if (ability === 'Surge Surfer' && terrain === 'Electric') v *= 2;
+  if (unburden) v *= 2;
   if (tailwind) v *= 2;
   if (status === 'par') v = Math.floor(v / 2);
   return v;
@@ -1535,13 +1536,13 @@ function infProcessMove(ev) {
   const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
   if (!myRow) return;
   const tw = s => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
-  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.item, mySpec.status, tw('p1'), mySpec.ability, state.field.weather, state.field.terrain);
+  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.item, mySpec.status, tw('p1'), mySpec.ability, state.field.weather, state.field.terrain, !!mySpec.unburden);
   const trick = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
   const itemKnown = (oppSpec.corrected || []).includes('持ち物');
   const abKnown = (oppSpec.corrected || []).includes('特性');
   const feasible = new Set();
   for (const row of table.spe) {
-    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? oppSpec.item : '', oppSpec.status, tw('p2'), abKnown ? oppSpec.ability : '', state.field.weather, state.field.terrain);
+    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? oppSpec.item : '', oppSpec.status, tw('p2'), abKnown ? oppSpec.ability : '', state.field.weather, state.field.terrain, !!oppSpec.unburden);
     // 通常: 先に動いた方が速い (同速の両勝ちはありうる)。トリックルーム下では逆
     const ok = trick ? (firstIsOpp ? eff <= myEff : eff >= myEff) : (firstIsOpp ? eff >= myEff : eff <= myEff);
     if (ok) feasible.add(row.nature + '|' + row.sp);
@@ -1702,9 +1703,12 @@ function applyState(j) {
       // キーが無い時に旧値を残すと、交代でリセットされたはずのランクが
       // 再登場時に蘇ってしまうため、欠落は 0 として扱う
       state.mine[pi].boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
+      state.mine[pi].unburden = !!en.unburden;
       applyMegaFlag(state.mine[pi], en);
       idxs.push(pi); changed = true;
     }
+    // 場に出ていないポケモンの かるわざ は解除されたものとして扱う (交代でリセットされるため)
+    state.mine.forEach((s, i) => { if (!idxs.includes(i)) s.unburden = false; });
     if (idxs.length) {
       const key = idxs.join(',');
       if (key !== lastActiveKey.mine) { state.active.mine = idxs.slice(0, 2); state.sel.mine = idxs[0]; lastActiveKey.mine = key; }
@@ -1746,9 +1750,12 @@ function applyState(j) {
       if (typeof en.status === 'string') spec.status = en.status;
       // mine 側と同様、boosts 欠落は 0 として扱う (交代リセットの反映漏れ防止)
       spec.boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
+      spec.unburden = !!en.unburden;
       applyMegaFlag(spec, en);
       idxs.push(pi); changed = true;
     }
+    // 場に出ていないポケモンの かるわざ は解除されたものとして扱う (交代でリセットされるため)
+    state.opps.forEach((s, i) => { if (!idxs.includes(i)) s.unburden = false; });
     if (idxs.length) {
       const key = idxs.join(',');
       if (key !== lastActiveKey.opps) { state.active.opps = idxs.slice(0, 2); state.sel.opps = idxs[0]; lastActiveKey.opps = key; }
