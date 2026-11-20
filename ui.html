@@ -1278,8 +1278,12 @@ function applyImportAll(side, list) {
     };
     if (side === 'opps') state.oppTeam[idx] = mp ? mp.species : parsed.species;
   });
+  // インポートした数より後ろのスロットは空きにする (読み込み前のチームを残さない)。
+  // 相手側は oppTeam も切り詰めないと、次の state.json 適用で旧メンバーが復活する
+  state[side].length = list.length;
+  if (side === 'opps') state.oppTeam.length = list.length;
   state.sel[side] = 0;
-  state.active[side] = [0, Math.min(1, state[side].length - 1)];
+  state.active[side] = [0, Math.min(1, list.length - 1)];
   faintLock[side].clear();
   revivalPending[side] = 0;
   if (side === 'opps') resetInference();
