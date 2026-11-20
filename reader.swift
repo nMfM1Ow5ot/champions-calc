@@ -1703,11 +1703,15 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
     }
     // さらに「ー」落ちまで重なった場合 (サーナイト→ザナイト) は、長音も
     // 落として照合する。カラカラ/ガラガラ のような衝突があるため、場か
-    // チームで裏付けが取れた候補だけを採る (検証 R2 で検出)
+    // チームで裏付けが取れた候補だけを採る (検証 R2 で検出)。
+    // ッ→ツも畳む (イエッサン→イエツザン の二重ゆれ対策、検証 hard R7)。
+    // この変換 (畳み+ッ→ツ+長音落ち) の衝突は全件フォルム違いのみで
+    // あることを辞書全件で確認済み
     if best == nil {
-        let ft = foldDakuten(t).replacingOccurrences(of: "ー", with: "")
+        let tsuFold: (String) -> String = { $0.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ") }
+        let ft = tsuFold(foldDakuten(t)).replacingOccurrences(of: "ー", with: "")
         for e in speciesDict where !e.ja.isEmpty {
-            let nk = foldDakuten(normalize(e.ja)).replacingOccurrences(of: "ー", with: "")
+            let nk = tsuFold(foldDakuten(normalize(e.ja))).replacingOccurrences(of: "ー", with: "")
             guard ft.contains(nk) else { continue }
             let anch = fieldAnchoredSpecies(e)
             let backed = lastSlots.values.contains { $0.speciesEn == anch.en }
@@ -2732,7 +2736,23 @@ func moveNameLoose(_ cand: String) -> String? {
         if d < bestDist { bestDist = d; bestKey = key; tie = false }
         else if d == bestDist { tie = true }
     }
-    guard let bk = bestKey, !tie else { return nil }
+    if let bk = bestKey, !tie { return moveNameOrig[bk] }
+    // 第2パス: 濁点を畳んだ形同士の編集距離 (シザグロス→シザークロスのように
+    // 長音落ち+濁点ゆれが重なると素の距離では届かない。検証 hard R7 #24)。
+    // 技名は畳んでも全件衝突しないことを辞書で確認済み。同点は従来通り棄却
+    let fc = Array(foldDakuten(cand))
+    var fBestKey: String? = nil
+    var fBestDist = Int.max
+    var fTie = false
+    for key in moveNameOrig.keys {
+        let fk = foldDakuten(key)
+        if abs(fk.count - fc.count) > maxDist { continue }
+        let d = levenshtein(Array(fk), fc)
+        if d > maxDist { continue }
+        if d < fBestDist { fBestDist = d; fBestKey = key; fTie = false }
+        else if d == fBestDist { fTie = true }
+    }
+    guard let bk = fBestKey, !fTie else { return nil }
     return moveNameOrig[bk]
 }
 
@@ -3229,7 +3249,11 @@ func translateBattleMessage(_ text: String) -> Bool {
         return true
     }
     // だっしゅつボタンで戻っていく (交代そのものはプレート側で記録する)
-    if t.contains("だっしゅつボタン") || t.contains("しゅつボタン") || (t.contains("だっしゅつ") && t.contains("ボダン")) || (t.contains("ボタン") && (t.contains("戻って") || t.contains("もどって"))) {
+    // 「だつしゅつポタン」のような二重ゆれは、正規化 (カナ統一) してから
+    // ッ→ツ+濁点畳みにした形でも判定する (検証 hard R7 #90。素の文で畳むと
+    // 前半ひらがな/後半カタカナで割れて一致しないため、正規化を先に掛ける)
+    let ejFold = foldDakuten(normalize(t).replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ"))
+    if t.contains("だっしゅつボタン") || t.contains("しゅつボタン") || (t.contains("だっしゅつ") && t.contains("ボダン")) || (t.contains("ボタン") && (t.contains("戻って") || t.contains("もどって"))) || ejFold.contains("タツシュツホタン") {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "だっしゅつボタン")
         return true
     }
@@ -4331,7 +4355,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1450"
+let readerBuild = "20261120_1524"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
