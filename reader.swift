@@ -259,6 +259,18 @@ func parsePlate(image: CGImage, plate: Plate) -> SlotState? {
 
 func jsonEscape(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: "\\\"") }
 
+// MARK: - state.json スキーマ (正本)
+// writeState が出しうるキーは、ここに列挙したものだけとする。キーを
+// 追加・変更するときは必ずここを更新すること (ハーネスが、実際に生成
+// した state.json のキーと突き合わせて検証する。aurora/veil のような
+// キー名の食い違いを機械で検出するため)
+let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "oppReset", "oppPreview"]
+let stateMonKeys: Set<String> = ["species", "curHPPercent", "status", "unburden", "itemLost", "mega", "megaSpecies", "boosts", "revealed"]
+let stateBoostKeys: [String] = ["atk", "def", "spa", "spd", "spe", "acc", "eva"]  // boosts は常時この7能力をそろえて出す
+let stateRevealedKeys: Set<String> = ["moves", "item", "ability"]
+let stateFieldKeys: Set<String> = ["terrain", "weather", "terrainTurnsLeft", "weatherTurnsLeft", "trickRoomTurnsLeft"]
+// sideConditions は { "p1": { 状態名(EN): 残りターン, ... }, "p2": {...} } の形
+
 func writeState() {
     // state.json はバトルログ由来の状態 (monStates) から生成する
     func slotJSON(_ key: String) -> String? {
@@ -270,13 +282,9 @@ func writeState() {
         if unburdenActive.contains("\(side):\(s.speciesEn)") { e += ", \"unburden\": true" }
         if itemLostActive.contains("\(side):\(s.speciesEn)") { e += ", \"itemLost\": true" }
         if let st, !st.megaSpecies.isEmpty { e += ", \"mega\": true, \"megaSpecies\": \"\(jsonEscape(st.megaSpecies))\"" }
-        if let st, !st.boosts.isEmpty {
-            let bs = ["atk", "def", "spa", "spd", "spe"].compactMap { k -> String? in
-                guard let v = st.boosts[k], v != 0 else { return nil }
-                return "\"\(k)\": \(v)"
-            }
-            if !bs.isEmpty { e += ", \"boosts\": {\(bs.joined(separator: ", "))}" }
-        }
+        // boosts は常に全7能力をそろえて出す (0 のものも省略しない)
+        let bs = stateBoostKeys.map { "\"\($0)\": \(st?.boosts[$0] ?? 0)" }
+        e += ", \"boosts\": {\(bs.joined(separator: ", "))}"
         if side == "p2" {
             var rev: [String] = []
             if let mv = revealedMoves[s.speciesEn], !mv.isEmpty {
@@ -305,11 +313,31 @@ func writeState() {
     }
     let revJson = revAll.isEmpty ? "" : ", \"oppRevealed\": {\(revAll.joined(separator: ", "))}"
     // フィールドは両キー常時送る (空文字 = なし)。片方だけ送ると UI 側に
-    // 終了したはずの天候・フィールドが残り続けるため
-    let field = "{\"terrain\": \"\(logFieldTerrain)\", \"weather\": \"\(logFieldWeather)\"}"
+    // 終了したはずの天候・フィールドが残り続けるため。残りターンは
+    // 継続中のものだけ追加キーで送る (期限切れ・未設定ではキーを出さない)
+    var fieldParts = ["\"terrain\": \"\(logFieldTerrain)\"", "\"weather\": \"\(logFieldWeather)\""]
+    let wLeft = turnsLeft(setTurn: fieldWeatherSetTurn, duration: fieldDurations)
+    if !logFieldWeather.isEmpty && wLeft > 0 { fieldParts.append("\"weatherTurnsLeft\": \(wLeft)") }
+    let tLeft = turnsLeft(setTurn: fieldTerrainSetTurn, duration: fieldDurations)
+    if !logFieldTerrain.isEmpty && tLeft > 0 { fieldParts.append("\"terrainTurnsLeft\": \(tLeft)") }
+    let rLeft = turnsLeft(setTurn: fieldTrickRoomSetTurn, duration: fieldDurations)
+    if logTrickRoom && rLeft > 0 { fieldParts.append("\"trickRoomTurnsLeft\": \(rLeft)") }
+    let field = "{\(fieldParts.joined(separator: ", "))}"
+    // サイド状態 (壁・おいかぜ等) は継続中のものだけ、サイドごとに
+    // 状態名 -> 残りターン で送る
+    var scParts: [String] = []
+    for sd in ["p1", "p2"] {
+        guard let conds = sideCondSetTurns[sd] else { continue }
+        let active = conds.compactMap { (name, st) -> String? in
+            let left = turnsLeft(setTurn: st, duration: sideCondDurations[name] ?? 5)
+            return left > 0 ? "\"\(name)\": \(left)" : nil
+        }.sorted()
+        if !active.isEmpty { scParts.append("\"\(sd)\": {\(active.joined(separator: ", "))}") }
+    }
+    let scJson = scParts.isEmpty ? "" : ", \"sideConditions\": {\(scParts.joined(separator: ", "))}"
     let trainer = trainerOpp.isEmpty ? "" : ", \"oppTrainer\": \"\(jsonEscape(trainerOpp))\""
     let eventsJson = ", \"events\": [\(battleEvents.joined(separator: ", "))]"
-    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(eventsJson), \"field\": \(field)}"
+    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(eventsJson), \"field\": \(field)\(scJson)}"
     if json == lastWritten { return }
     lastWritten = json
     try? json.write(to: outURL, atomically: true, encoding: .utf8)
@@ -324,6 +352,47 @@ let battleLogURL = scriptDir.appendingPathComponent("battle.log")
 var battleLog: [String] = []
 var logStarted = false
 var currentTurn = 0
+// 場・サイド状態の残りターン管理: 開始した実効ターン (対戦開始前の
+// 繰り出しで張られた場合は 1 として数える) を記録し、writeState が
+// 現在ターンとの差から残りターンを出す。追跡は emitLog のフックで行う
+// (プロトコル行が全ての状態変化の正本であるため)
+var fieldWeatherSetTurn = 0
+var fieldTerrainSetTurn = 0
+var fieldTrickRoomSetTurn = 0
+var sideCondSetTurns: [String: [String: Int]] = [:]  // side -> 状態名(EN) -> 実効開始ターン
+let sideCondDurations: [String: Int] = ["Reflect": 5, "Light Screen": 5, "Aurora Veil": 5, "Tailwind": 4, "Mist": 5, "Safeguard": 5]
+let fieldDurations = 5  // 天気・フィールド・トリックルームの基本継続ターン (岩・粘土等の延長は画面から知りえないため数えない)
+
+func turnsLeft(setTurn: Int, duration: Int) -> Int {
+    if setTurn <= 0 { return 0 }
+    return max(0, setTurn + duration - max(currentTurn, 1))
+}
+
+// プロトコル行から場・サイド状態の開始/終了を追跡する (emitLog のフック)
+func trackFieldEvent(_ line: String) {
+    let eff = max(currentTurn, 1)
+    if line.hasPrefix("|-weather|") {
+        fieldWeatherSetTurn = line.hasSuffix("|none") ? 0 : eff
+    } else if line.hasPrefix("|-fieldstart|move: ") {
+        let name = String(line.dropFirst("|-fieldstart|move: ".count))
+        if name == "Trick Room" { fieldTrickRoomSetTurn = eff }
+        else if name.hasSuffix(" Terrain") { fieldTerrainSetTurn = eff }
+    } else if line.hasPrefix("|-fieldend|move: ") {
+        let name = String(line.dropFirst("|-fieldend|move: ".count))
+        if name == "Trick Room" { fieldTrickRoomSetTurn = 0 }
+        else if name.hasSuffix(" Terrain") { fieldTerrainSetTurn = 0 }
+    } else if line.hasPrefix("|-sidestart|") || line.hasPrefix("|-sideend|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard f.count >= 4, f[3].hasPrefix("move: ") else { return }
+        let cond = String(f[3].dropFirst("move: ".count))
+        guard sideCondDurations[cond] != nil else { return }
+        if line.hasPrefix("|-sidestart|") {
+            sideCondSetTurns[f[2], default: [:]][cond] = eff
+        } else {
+            sideCondSetTurns[f[2]]?[cond] = nil
+        }
+    }
+}
 var logFieldTerrain = ""
 var logTrickRoom = false
 var logFieldWeather = ""   // UI 表記 (Sun/Rain/Sand/Snow)
@@ -716,6 +785,7 @@ func renderLogLine(_ line: String) -> [String] {
 
 func emitLog(_ line: String) {
     if line.hasPrefix("|move|") || line.hasPrefix("|turn|") { actionSeq += 1 }
+    trackFieldEvent(line)
     battleLog.append(line)
     // 推定エンジン用イベント (技の使用順)
     if line.hasPrefix("|move|") {
@@ -859,6 +929,10 @@ func resetLogState() {
     logFieldTerrain = ""
     logTrickRoom = false
     logFieldWeather = ""
+    fieldWeatherSetTurn = 0
+    fieldTerrainSetTurn = 0
+    fieldTrickRoomSetTurn = 0
+    sideCondSetTurns = [:]
     logStarted = false
     lastSlots = [:]
 }
@@ -3809,7 +3883,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1111"
+let readerBuild = "20261120_1124"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
