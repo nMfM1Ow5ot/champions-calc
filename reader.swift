@@ -1220,6 +1220,7 @@ func resetLogState() {
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
     battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
+    debugShotsThisBattle = 0; debugSeenKeys = []; debugFrameRing = []
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -1302,6 +1303,102 @@ func archiveCurrentBattle(final: Bool) {
         // 安全網の下書き (interrupted) が残っていれば取り除く (確定版が正)
         for suffix in ["_interrupted.log", "_interrupted_protocol.log"] {
             try? FileManager.default.removeItem(at: logsDirURL.appendingPathComponent("battle_\(id)\(suffix)"))
+        }
+    }
+}
+
+// MARK: - デバッグ用スクリーンショット (2026-11-20、ユーザーの指示)
+// 翻訳に落ちて |-message| になった平文の初出時と、リーダーが内部の矛盾を
+// 検出した箇所で、直近フレームのメッセージ表示欄 (下部 34%) の切り抜きを
+// JPEG で logs/ に保存し、イベントごとの JSON を添える。serve.py が試合
+// ログと同じ暗号化の便で logs_enc/ へ送り、ログ分析側がログ2点と突き合わ
+// せる。ファイル名は battle_<試合ID>_debugNN.jpg/.json で、ログファイルと
+// battle_<日時> の接頭辞を共有する。1 試合あたり上限 10 件、同一文・同一
+// 箇所の繰り返しは類似度で 1 件にまとめる。Mac ローカルの保持は 14 日。
+let debugMaxPerBattle = 10
+let debugRingSize = 12
+let debugRetentionDays = 14
+var debugShotsThisBattle = 0
+var debugSeenKeys: [String] = []
+var debugFrameRing: [(at: Date, img: CGImage)] = []
+
+// 撮影可否の判定 (純粋関数: ハーネスの T84 で検証する)。
+// 上限到達、または既出キーと類似 (OCR ゆれの再読) なら撮らない
+func debugShouldCapture(seen: [String], count: Int, key: String, cap: Int) -> Bool {
+    if count >= cap { return false }
+    return !seen.contains { textSimilarity($0, key) >= 0.6 }
+}
+
+func debugStateExcerpt() -> [String: Any] {
+    var slots: [String: Any] = [:]
+    for (k, s) in lastSlots { slots[k] = ["species": s.speciesEn, "hpPct": s.hpPercent] }
+    return ["turn": currentTurn, "weather": logFieldWeather, "terrain": logFieldTerrain, "slots": slots]
+}
+
+// メッセージ表示欄 (ocrBoxes の y0=0.66..1.0) の切り抜き。
+// makeFullBuffer と同じ反転 (行0 = 画像の上端) で描いて切り出す
+func cropMessageStrip(_ image: CGImage) -> CGImage? {
+    let w = image.width, h = image.height
+    guard w > 0, h > 0 else { return nil }
+    let cropY = Int(Double(h) * 0.66)
+    let cropH = h - cropY
+    guard cropH > 0 else { return nil }
+    guard let ctx = CGContext(data: nil, width: w, height: cropH, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    ctx.translateBy(x: 0, y: CGFloat(cropH))
+    ctx.scaleBy(x: 1, y: -1)
+    ctx.draw(image, in: CGRect(x: 0, y: -cropY, width: w, height: h))
+    return ctx.makeImage()
+}
+
+// 直近フレームのメッセージ欄をリングバッファに保持する (内部矛盾の検出は
+// メッセージ処理と別の経路で起きるため、その時点の画面を後から使えるように)
+func debugUpdateRing(_ image: CGImage) {
+    guard logStarted else { return }
+    guard let crop = cropMessageStrip(image) else { return }
+    debugFrameRing.append((at: Date(), img: crop))
+    if debugFrameRing.count > debugRingSize { debugFrameRing.removeFirst(debugFrameRing.count - debugRingSize) }
+}
+
+func debugCapture(kind: String, key: String, rawText: String, detail: [String: Any], image: CGImage? = nil) {
+    guard debugShouldCapture(seen: debugSeenKeys, count: debugShotsThisBattle, key: key, cap: debugMaxPerBattle) else { return }
+    debugSeenKeys.append(key)
+    debugShotsThisBattle += 1
+    let seq = debugShotsThisBattle
+    let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
+    let base = String(format: "battle_%@_debug%02d", id, seq)
+    try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+    var shot: CGImage? = nil
+    if let image { shot = cropMessageStrip(image) }
+    if shot == nil { shot = debugFrameRing.last?.img }
+    var imageFile: String? = nil
+    if let shot, let data = NSBitmapImageRep(cgImage: shot).representation(using: .jpeg, properties: [:]) {
+        let url = logsDirURL.appendingPathComponent(base + ".jpg")
+        if (try? data.write(to: url)) != nil { imageFile = base + ".jpg" }
+    }
+    let f = ISO8601DateFormatter()
+    f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    f.formatOptions = [.withInternetDateTime]
+    var ev: [String: Any] = ["battle": id, "seq": seq, "kind": kind, "at": f.string(from: Date()),
+                             "turn": currentTurn, "rawText": rawText,
+                             "state": debugStateExcerpt(), "detail": detail]
+    if let imageFile { ev["image"] = imageFile }
+    if let data = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
+        try? data.write(to: logsDirURL.appendingPathComponent(base + ".json"), options: .atomic)
+    }
+    print("[debug] デバッグ情報を保存しました: logs/\(base) (\(kind))")
+    fflush(stdout)
+}
+
+// 起動時: 保持期間 (14 日) を過ぎたローカルのデバッグ情報を掃除する
+func cleanupOldDebugShots() {
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: logsDirURL.path) else { return }
+    let cutoff = Date().addingTimeInterval(-Double(debugRetentionDays) * 86400)
+    for name in names where name.contains("_debug") {
+        let url = logsDirURL.appendingPathComponent(name)
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+           let mtime = attrs[.modificationDate] as? Date, mtime < cutoff {
+            try? FileManager.default.removeItem(at: url)
         }
     }
 }
@@ -1436,6 +1533,9 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             // みなし、保留行ごと捨てる (実例: 2026-11-20 vs チェイス戦、
             // ターン頭のサーナイトに被弾行と全回復行のペアが出た)
             if toPct == (lastEmittedPct[plateName] ?? fromPct) {
+                debugCapture(kind: "hp_reversal_drop", key: "hp_reversal_drop|\(plateName)", rawText: "",
+                             detail: ["slot": slot, "species": speciesEn, "heldToPct": h.toPct,
+                                      "reversedToPct": toPct, "lastEmittedPct": lastEmittedPct[plateName] ?? fromPct])
                 heldLine[plateName] = nil
                 return true
             }
@@ -1952,16 +2052,27 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
                 // (最大でも じこさいせい/ねがいの 50%)。隣の行の値を
                 // 拾った誤読とみて取り込まない (実例: 2026-11-20、
                 // 残り 4 のイエッサンが「全回復」として取り込まれた)
-                if np > cur && np - cur > 55 { break }
+                if np > cur && np - cur > 55 {
+                    debugCapture(kind: "hp_jump_rejected", key: "hp_jump|\(key)", rawText: text,
+                                 detail: ["slot": slot, "species": sp.en, "fromPct": cur, "toPct": np])
+                    break
+                }
                 // 状態への反映は emitLog -> applyEvent が行う (行の HP 表記から)
                 if np < cur { emitLog("|-damage|\(slot): \(sp.en)|\(hpText)") }
                 else { emitLog("|-heal|\(slot): \(sp.en)|\(hpText)") }
                 if np == 0 && !justSwitchedIn { emitLog("|faint|\(slot): \(sp.en)") }
+                else if np == 0 && justSwitchedIn {
+                    debugCapture(kind: "faint_guard", key: "faint_guard|\(key)", rawText: text,
+                                 detail: ["slot": slot, "species": sp.en, "source": "logscreen_hp"])
+                }
             }
         }
     case "ひんし":
         if !justSwitchedIn && (monStates[key]?.hpPercent ?? 0) > 0 {
             emitLog("|faint|\(slot): \(sp.en)")  // 状態への反映は applyEvent が行う
+        } else if justSwitchedIn {
+            debugCapture(kind: "faint_guard", key: "faint_guard|\(key)", rawText: text,
+                         detail: ["slot": slot, "species": sp.en, "source": "logscreen_faint_text"])
         }
     case "持ち物":
         if let itJa = findInDict(in: text, itemDict) {
@@ -3634,6 +3745,11 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
             lastMsgNorm = norm; lastMsgAt = now
         } else {
             emitLog("|-message|\(text)")
+            debugCapture(kind: "untranslated", key: norm, rawText: text,
+                         detail: ["boxes": msgBoxes.map { $0.text },
+                                  "moveLoose": moveNameLoose(text) ?? NSNull(),
+                                  "speciesLoose": findSpeciesJa(in: text)?.en ?? NSNull()],
+                         image: image)
             lastFallbackText = norm; lastFallbackAt = now
             lastMsgNorm = norm; lastMsgAt = now
         }
@@ -4408,6 +4524,7 @@ func runOnce(image: CGImage) {
     // 対戦終了カウンタ (emptyBattleFrames) や選出の試行回数も進めない
     if isBlankFrame(image) { noteBlankFrame(true); return }
     noteBlankFrame(false)
+    debugUpdateRing(image)
     // 選出画面はプレート判定より先に判定する。
     // (選出画面の自軍パネルや「0/4」表示をプレートと誤検出しないため)
     if detectPreview(image: image) {
@@ -4570,7 +4687,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1801"
+let readerBuild = "20261120_1942"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -5403,6 +5520,7 @@ if let tab = teamScreenTab {
 // 前回セッションが強制終了していた場合、残留した試合ログを先に救済する
 // (この後の処理で battle.log が上書きされる前に logs/ へ逃がす)
 salvageLeftoverLogs()
+cleanupOldDebugShots()
 
 startCaptureServer()
 if teamMode {
