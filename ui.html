@@ -445,6 +445,8 @@ let CHAMP_MOVES_JA = null;
 function champMoveList() { return CHAMP_MOVES_JA || Object.keys(NAMES._moveJa2en || {}); }
 let USAGE_SETS = null; // data/usage_sets.json の sets (pokedb 使用率トップ型)
 let POKEDB_PARSED = null; // data/pokedb_parsed.json (pokedb の使用率分布一式。ベイズ推定の候補生成用)
+let META_SETS = null;      // data/meta_sets.json (上位勢の実在型コーパス。ベイズ推定の候補へ統合する)
+let META_SETS_LOADED = false; // meta_sets の読み込み成否が確定したか (ファイルが無い場合も確定扱い)
 let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
 let USAGE_SEASON = '';
 // 使用率型の解決: フォルム名 (イルカマン(ヒーロー)等) には使用率データが
@@ -1063,7 +1065,7 @@ function statsGrid(side, statArr) {
     const est = side === 'opps' ? spec.estSp?.[k] : null;
     if (est) {
       const txt = est[0] === est[1] ? String(est[0]) : `${est[0]}-${est[1]}`;
-      return `<div class="evwrap"><input data-evest="${side}:${k}" class="estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1, 3.6)}" title="推定 ${txt}（数値を入力して上書きできます）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}" value="${txt}"></div>`;
+      return `<div class="evwrap"><input data-evest="${side}:${k}" class="estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1, 3.6)}" title="推定 ${txt}（数値を入力して上書きできます）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}${movePredTitle(spec)}" value="${txt}"></div>`;
     }
     return `<div class="evwrap"><span class="evfield"><input data-ev="${side}:${k}" type="number" min="0" max="32" value="${spec.sp[k] || 0}" class="${(spec.sp[k] || 0) > 0 ? 'has' : ''}"></span></div>`;
   }).join('');
@@ -1072,7 +1074,7 @@ function statsGrid(side, statArr) {
     const est = side === 'opps' ? spec.estStat?.[k] : null;
     if (est) {
       const txt = est[0] === est[1] ? String(est[0]) : `${est[1]}*`;
-      return `<input data-statest="${side}:${k}" class="finalstat estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}" value="${txt}">`;
+      return `<input data-statest="${side}:${k}" class="finalstat estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}${movePredTitle(spec)}" value="${txt}">`;
     }
     const [v, cn] = dispStat(spec, k, statArr, side === 'mine' ? 'mine' : 'opp');
     return `<div class="finalstat ${cn === 'green' ? 'pos' : cn === 'red' ? 'neg' : ''}">${v}</div>`;
@@ -1879,7 +1881,203 @@ function applyAbilityOrderEvidence(oppSpecies, mySpecies, firstIsOpp, turn) {
 const NATURE_JA2EN = { 'がんばりや': 'Hardy', 'さみしがり': 'Lonely', 'ゆうかん': 'Brave', 'いじっぱり': 'Adamant', 'やんちゃ': 'Naughty', 'ずぶとい': 'Bold', 'すなお': 'Docile', 'のんき': 'Relaxed', 'わんぱく': 'Impish', 'のんてんき': 'Lax', 'おくびょう': 'Timid', 'せっかち': 'Hasty', 'まじめ': 'Serious', 'ようき': 'Jolly', 'むじゃき': 'Naive', 'ひかえめ': 'Modest', 'おっとり': 'Mild', 'れいせい': 'Quiet', 'てれや': 'Bashful', 'うっかりや': 'Rash', 'おだやか': 'Calm', 'おとなしい': 'Gentle', 'なまいき': 'Sassy', 'しんちょう': 'Careful', 'きまぐれ': 'Quirky' };
 const BAYES_FLOOR = 0.02;    // 尤度の下限 (候補を完全に消さない)
 const BAYES_REV_KEEP = 0.05; // 判明情報と矛盾する候補の減衰率
-function bayesReset() { bayes = { bySpecies: {}, skipped: 0 }; }
+function bayesReset() { bayes = { bySpecies: {}, skipped: 0 }; try { moveStatsCache = {}; } catch (e) { /* モジュール初期化中の呼び出しでは宣言前になるため無視する */ } }
+/* ===== 技構成からの型予測 (型推定エンジンチャンネル 32274233 の構想に基づく実装) =====
+   判明した技を、技構成全体の証拠として扱うための拡張。
+   - pokedb 候補には、性格 (攻撃側の補正) と持ち物 (こだわり系・とつげきチョッキ等) から
+     予測した4技のプロファイルを持たせる (従来は全候補共通の使用率上位8技プールで、
+     技の証拠が候補間を区別できなかった)。技の証拠はプロファイルを通じて
+     性格・持ち物へも伝わる (アーキタイプの媒介)
+   - プロファイル側の所持尤度は、その種族における技の採用率で重み付ける
+     (珍しい技ほど強い証拠)。コーパスの確定技構成については、効果測定の結果を
+     踏まえて従来の強い絞り込みを維持する (bayesMoveFactorSingle の注記参照)
+   - コーパス型では、判明した2技の共起 (PMI) が実在の組み合わせらしい場合に係数を上乗せする
+   - 技の更新は差分適用 (追加は係数、取り消しは逆数) とし、同じ技を二重に数えない
+     (従来は判明技の集合が変わるたびに全技を再適用しており、二重計上があった)。
+     ダメージ尤度とは別チャンネルで、1イベントの分解 (所持×ダメージ) として両立させる
+   - 未判明技の予測 (bayesView.movePred) を同じ事後分布から算出し、推定セルの
+     ツールチップに表示する
+   BAYES_MOVE_V2=false で従来方式 (一律 0.2) に戻る (効果測定ハーネスの対照用) */
+let BAYES_MOVE_V2 = true;
+let moveStatsCache = {};
+// 性格の補正先 [上昇, 下降] (標準の25性格。無補正は null)
+const NATURE_MOD = { Lonely: ['atk', 'def'], Adamant: ['atk', 'spa'], Naughty: ['atk', 'spd'], Brave: ['atk', 'spe'],
+  Bold: ['def', 'atk'], Impish: ['def', 'spa'], Lax: ['def', 'spd'], Relaxed: ['def', 'spe'],
+  Modest: ['spa', 'atk'], Mild: ['spa', 'def'], Rash: ['spa', 'spd'], Quiet: ['spa', 'spe'],
+  Calm: ['spd', 'atk'], Gentle: ['spd', 'def'], Careful: ['spd', 'spa'], Sassy: ['spd', 'spe'],
+  Timid: ['spe', 'atk'], Hasty: ['spe', 'def'], Jolly: ['spe', 'spa'], Naive: ['spe', 'spd'],
+  Hardy: [null, null], Docile: [null, null], Bashful: [null, null], Quirky: [null, null], Serious: [null, null] };
+function pokedbForSpecies(species) {
+  if (!POKEDB_PARSED || !USAGE_SETS) return null;
+  let u = USAGE_SETS[idOf(species)];
+  if (!u) {
+    const base = gen.species.get(idOf(species))?.baseSpecies;
+    if (base && base !== species) u = USAGE_SETS[idOf(base)];
+  }
+  if (!u || !u.code) return null;
+  const pd = POKEDB_PARSED[u.code];
+  return pd ? { u, pd } : null;
+}
+// その種族のコーパス型 (技構成と weight)。候補生成のコーパス統合と同じ対象範囲
+function corpusSetsFor(species) {
+  if (!META_SETS || !Array.isArray(META_SETS.sets)) return [];
+  const sd = gen.species.get(idOf(species));
+  const base = (sd && sd.baseSpecies) || species;
+  const out = [];
+  for (const e of META_SETS.sets) {
+    if (!e || !e.species) continue;
+    const full = metaFormeFullName(e);
+    const isMega = full.includes('-Mega');
+    if (full !== species && !(species === base && e.species === base && isMega)) continue;
+    out.push({ moves: (e.moves || []).map(mv => metaNameEn('move', mv)).filter(Boolean), weight: Math.max(e.weight || 0, 0.01) });
+  }
+  return out;
+}
+// 種族ごとの技統計: 採用率 (pokedb 使用率とコーパス頻度の混合) と、コーパスでの2技共起 (PMI)
+function bayesMoveStats(species) {
+  if (moveStatsCache[species]) return moveStatsCache[species];
+  const marg = new Map(), cat = new Map(), pair = new Map();
+  const found = pokedbForSpecies(species);
+  if (found) for (const mv of found.pd.moves || []) {
+    const en = (NAMES._moveJa2en || {})[mv.ja];
+    if (!en) continue;
+    marg.set(en, Math.min(0.97, Math.max(0.02, (mv.rate || 0) / 100)));
+    if (mv.cat) cat.set(en, mv.cat);
+  }
+  const sets = corpusSetsFor(species);
+  if (sets.length) {
+    let W = 0; const wf = new Map();
+    for (const s of sets) { W += s.weight; for (const mv of s.moves) wf.set(mv, (wf.get(mv) || 0) + s.weight); }
+    if (W > 0) {
+      for (const [mv, w] of wf) {
+        const f = w / W;
+        if (marg.has(mv)) marg.set(mv, 0.65 * marg.get(mv) + 0.35 * f);
+        else marg.set(mv, Math.min(0.9, Math.max(0.03, 0.75 * f + 0.02)));
+      }
+      const pairW = new Map();
+      for (const s of sets) {
+        const ms = [...new Set(s.moves)];
+        for (let i = 0; i < ms.length; i++) for (let j = i + 1; j < ms.length; j++) {
+          const key = bayesPairKey(ms[i], ms[j]);
+          pairW.set(key, (pairW.get(key) || 0) + s.weight);
+        }
+      }
+      for (const [key, w] of pairW) {
+        const [a, b] = key.split('\u0000');
+        const pa = (wf.get(a) || 0) / W, pb = (wf.get(b) || 0) / W, pab = w / W;
+        if (pa > 0 && pb > 0 && pab > 0) pair.set(key, Math.max(-1.5, Math.min(2.5, Math.log(pab / (pa * pb)))));
+      }
+    }
+  }
+  const stats = { marg, cat, pair };
+  moveStatsCache[species] = stats;
+  return stats;
+}
+function bayesPairKey(a, b) { return a < b ? a + '\u0000' + b : b + '\u0000' + a; }
+// 判明技1つに対する候補の係数 (所持尤度)。従来方式は含まなければ一律 0.2。
+// コーパスの確定技構成については、効果測定 (tests/bayes_moves_eval.mjs の
+// leave-one-out) で「実在型レベルでの採用率の重み付け (置換モデル)」が
+// 最も近い候補の順位を悪化させたと確認されたため、従来の強い絞り込み
+// (含む=1 / 含まない=0.2) を維持する。採用率による重み付けは、候補の
+// アーキタイプを表す pokedb 候補の予測プロファイル側でのみ使う:
+// プロファイルに含まれる場合は (1-q)+q*p、プール内だがプロファイル外は
+// 中間、プール外は q*p (珍しい技ほど、その技を持つ型らしくない候補を強く下げる)
+function bayesMoveFactorSingle(c, mv, stats) {
+  if (!BAYES_MOVE_V2) return c.moves.includes(mv) ? 1 : 0.2;
+  if (c.moveExact) return c.moves.includes(mv) ? 1 : 0.2;
+  const p = stats && stats.marg.has(mv) ? stats.marg.get(mv) : 0.05;
+  if (c.moves.includes(mv)) return 0.45 + 0.55 * p;
+  if (c.movePool && c.movePool.includes(mv)) return 0.5;
+  return Math.max(0.55 * p, 0.005);
+}
+// コーパス型で判明ペアが実在の組み合わせらしい場合の上乗せ係数
+function bayesPairFactor(c, a, b, stats) {
+  if (!BAYES_MOVE_V2 || !c.moveExact || !stats) return 1;
+  if (!c.moves.includes(a) || !c.moves.includes(b)) return 1;
+  const pmi = stats.pair.get(bayesPairKey(a, b));
+  if (pmi == null) return 1;
+  return Math.max(0.8, Math.min(1.55, Math.exp(Math.max(-1, Math.min(2, pmi)) * 0.22)));
+}
+// 判明技の集合の変化を、差分だけ事後確率へ適用する (追加=係数、取消=逆数で厳密に戻る)
+function bayesMoveUpdate(ent, species, moves) {
+  if (!ent || !ent.cands) return;
+  const stats = bayesMoveStats(species);
+  const prev = ent.revMoves || [];
+  const added = moves.filter(mv => !prev.includes(mv));
+  const removed = prev.filter(mv => !moves.includes(mv));
+  if (!added.length && !removed.length) return;
+  const pairSet = list => { const s = new Set(); for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) s.add(bayesPairKey(list[i], list[j])); return s; };
+  const oldPairs = pairSet(prev), newPairs = pairSet(moves);
+  for (const c of ent.cands) {
+    let f = 1;
+    for (const mv of added) f *= bayesMoveFactorSingle(c, mv, stats);
+    for (const mv of removed) f /= bayesMoveFactorSingle(c, mv, stats);
+    for (const key of newPairs) if (!oldPairs.has(key)) { const [a, b] = key.split('\u0000'); f *= bayesPairFactor(c, a, b, stats); }
+    for (const key of oldPairs) if (!newPairs.has(key)) { const [a, b] = key.split('\u0000'); f /= bayesPairFactor(c, a, b, stats); }
+    if (f !== 1) c.post *= f;
+  }
+  ent.revMoves = [...moves];
+  let tot = 0;
+  for (const c of ent.cands) tot += c.post;
+  if (tot > 0) for (const c of ent.cands) c.post /= tot;
+  ent.used++;
+  infDirty = true;
+}
+// meta_sets の名前は英語表記が正本だが、和名で来ても解決できるよう両対応にする
+function metaNameEn(kind, name) {
+  if (!name) return '';
+  if (kind === 'nature') return NATURE_JA2EN[name] || name;
+  const map = kind === 'item' ? NAMES._itemJa2en : kind === 'ability' ? NAMES._abilityJa2en : NAMES._moveJa2en;
+  return (map || {})[name] || name;
+}
+// コーパスの forme 表記 ("-Mega" / "Mega-Z" / "Garchomp-Mega-Z" 等) を正式種族名へ寄せる
+function metaFormeFullName(entry) {
+  if (!entry.forme) return entry.species;
+  if (entry.forme.startsWith('-')) return entry.species + entry.forme;
+  if (entry.forme.includes(entry.species)) return entry.forme;
+  return entry.species + '-' + entry.forme;
+}
+// コーパス (meta_sets) から対象種族の実在型候補を作る。事前確率は weight 按分。
+// 対象は「その種族自身の型」と「ベース種族パネルに対する、そのメガ型」。
+// メガ型の特性はメガ側の特性なので megaAbility に入れ、ベース特性は使用率
+// 1位の特性 (fallback.topAbility) を仮置きする (pokedb 候補と同じ扱い)
+function bayesCorpusCandidates(species, table, fallback) {
+  if (!META_SETS || !Array.isArray(META_SETS.sets)) return [];
+  const sd = gen.species.get(idOf(species));
+  const base = (sd && sd.baseSpecies) || species;
+  const out = [];
+  for (const e of META_SETS.sets) {
+    if (!e || !e.species) continue;
+    const full = metaFormeFullName(e);
+    const isMega = full.includes('-Mega');
+    if (full !== species && !(species === base && e.species === base && isMega)) continue;
+    const nature = metaNameEn('nature', e.nature);
+    if (!nature) continue;
+    const sp = {};
+    for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) sp[k] = (e.sps && e.sps[k]) || 0;
+    const values = {};
+    for (const k of ['atk', 'def', 'spa', 'spd', 'spe']) {
+      const row = table[k].find(r => r.nature === nature && r.sp === sp[k]);
+      values[k] = row ? row.value : null;
+    }
+    const hpRow = table.hp.find(r => r.sp === sp.hp);
+    values.hp = hpRow ? hpRow.value : null;
+    const ability = metaNameEn('ability', e.ability);
+    out.push({
+      nature, sp,
+      item: metaNameEn('item', e.item),
+      ability: isMega ? (fallback.topAbility || ability) : ability,
+      megaAbility: isMega ? ability : fallback.megaAbility,
+      megaSpecies: isMega ? full : fallback.megaSpecies,
+      moves: (e.moves || []).map(mv => metaNameEn('move', mv)).filter(Boolean),
+      moveExact: true,
+      values, post: 0, corpus: true, _w: Math.max(e.weight || 0, 0.01),
+    });
+  }
+  const tot = out.reduce((s, c) => s + c._w, 0) || 1;
+  for (const c of out) { c.post = c._w / tot; delete c._w; }
+  return out;
+}
 // 候補生成: pokedb の使用率分布 (SP配分×性格×持ち物×特性) から実在の型を作る。
 // 事前確率は各要素の使用率の積 (独立近似) を正規化したもの
 function bayesBuildCandidates(species) {
@@ -1898,7 +2096,8 @@ function bayesBuildCandidates(species) {
   const natures = (pd.natures || []).map(n => ({ en: NATURE_JA2EN[n.name], rate: n.rate || 0 })).filter(n => n.en).slice(0, 5);
   const items = (pd.items || []).map(i => ({ en: (NAMES._itemJa2en || {})[i.name], rate: i.rate || 0 })).filter(i => i.en).slice(0, 4);
   const abilities = (pd.abilities || []).map(a => ({ en: (NAMES._abilityJa2en || {})[a.name], rate: a.rate || 0 })).filter(a => a.en).slice(0, 3);
-  const movePool = (pd.moves || []).map(mv => (NAMES._moveJa2en || {})[mv.ja]).filter(Boolean).slice(0, 8);
+  const poolInfo = (pd.moves || []).map(mv => ({ en: (NAMES._moveJa2en || {})[mv.ja], rate: mv.rate || 0, cat: mv.cat || '' })).filter(x => x.en).slice(0, 10);
+  const movePool = poolInfo.map(x => x.en).slice(0, 8);
   if (!patterns.length || !natures.length) return null;
   const topItem = items[0] || { en: '', rate: 0 };
   const topAbility = abilities[0] || { en: u.ability, rate: 0 };
@@ -1920,8 +2119,25 @@ function bayesBuildCandidates(species) {
     }
     const hpRow = table.hp.find(r => r.sp === sp.hp);
     values.hp = hpRow ? hpRow.value : null;
+    // 技プロファイル: この候補 (性格×持ち物) が持っていそうな4技を予測する。
+    // 性格の攻撃側補正と持ち物 (こだわり系は変化技をほぼ持たない等) で技カテゴリに
+    // 傾斜を付け、使用率順のプールから上位4技を選ぶ。判明技の証拠はこの
+    // プロファイルを通じて性格・持ち物へも伝わる (アーキタイプの媒介)
+    const mod = NATURE_MOD[combo.n.en] || [null, null];
+    let phys = 1, spec = 1, statAff = 1;
+    if (mod[0] === 'atk') phys *= 1.5; if (mod[1] === 'atk') phys *= 0.5;
+    if (mod[0] === 'spa') spec *= 1.5; if (mod[1] === 'spa') spec *= 0.5;
+    if (mod[1] === 'spa' && mod[0] !== 'spa') phys *= 1.15;
+    if (mod[1] === 'atk' && mod[0] !== 'atk') spec *= 1.15;
+    if (item.en === 'Choice Band') { phys *= 1.4; statAff = 0.25; }
+    else if (item.en === 'Choice Specs') { spec *= 1.4; statAff = 0.25; }
+    else if (item.en === 'Choice Scarf') statAff = 0.4;
+    else if (item.en === 'Assault Vest') statAff = 0.15;
+    else if (item.en === 'Life Orb') { phys *= 1.1; spec *= 1.1; }
+    const profMoves = poolInfo.map(x => ({ en: x.en, s: (x.rate + 2) * (x.cat === '物理' ? phys : x.cat === '特殊' ? spec : statAff) }))
+      .sort((a, b) => b.s - a.s).slice(0, 4).map(x => x.en);
     return { nature: combo.n.en, sp, item: item.en, ability: ability.en, megaAbility, megaSpecies: u.megaSpecies || undefined,
-      moves: movePool, values, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul };
+      moves: profMoves, movePool, moveExact: false, values, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul };
   };
   const raw = [];
   for (const c of combos.slice(0, 20)) raw.push(mk(c, topItem, topAbility, 1));
@@ -1936,13 +2152,31 @@ function bayesBuildCandidates(species) {
   }
   const tot = out.reduce((s, c) => s + c._w, 0) || 1;
   for (const c of out) { c.post = c._w / tot; delete c._w; }
-  return out.slice(0, 64);
+  // 上位勢コーパス (meta_sets) の実在型を候補へ統合する: 事前確率は
+  // コーパス側 6 割 (weight 按分) / pokedb 合成候補側 4 割 (従来の使用率積)。
+  // pokedb 候補と同一の型がコーパスにある場合は、その質量をコーパス候補へ
+  // 寄せて二重計上を避ける。コーパスが無い種族は従来動作のまま
+  const corpus = bayesCorpusCandidates(species, table, { topAbility: topAbility.en, megaAbility, megaSpecies: u.megaSpecies || undefined });
+  if (!corpus.length) return out.slice(0, 64);
+  const keyOf = c => c.nature + '|' + JSON.stringify(c.sp) + '|' + c.item + '|' + c.ability + '|' + (c.megaSpecies || '');
+  const byKey = new Map(corpus.map(c => [keyOf(c), c]));
+  const merged = [...corpus];
+  for (const c of corpus) c.post *= 0.6;
+  for (const c of out) {
+    const hit = byKey.get(keyOf(c));
+    if (hit) hit.post += 0.4 * c.post;
+    else { c.post *= 0.4; merged.push(c); }
+  }
+  const tot2 = merged.reduce((s, c) => s + c.post, 0) || 1;
+  for (const c of merged) c.post /= tot2;
+  merged.sort((a, b) => b.post - a.post);
+  return merged.slice(0, 96);
 }
 function bayesEntry(species) {
   if (!bayes) return null;
   if (!bayes.bySpecies[species]) {
     // 使用率データがまだ読み込めていない間は「候補なし」を確定させない
-    if (!POKEDB_PARSED || !USAGE_SETS) return null;
+    if (!POKEDB_PARSED || !USAGE_SETS || !META_SETS_LOADED) return null;
     const cands = bayesBuildCandidates(species);
     if (!cands || !cands.length) { bayes.bySpecies[species] = null; return null; }
     bayes.bySpecies[species] = { cands, used: 0, revKey: '' };
@@ -2019,18 +2253,22 @@ function bayesProcessMove(ev) {
   });
   bayesApply(ent, counts);
 }
-// 判明情報 (持ち物・特性・技) と矛盾する候補の減衰。同じ判明内容では再適用しない
+// 判明情報 (持ち物・特性) と矛盾する候補の減衰。同じ判明内容では再適用しない。
+// 判明技は bayesMoveUpdate が差分で適用する (技構成からの型予測)
 function syncBayesRevealed() {
   if (!bayes) return;
   for (let pi = 0; pi < state.oppTeam.length; pi++) {
     const spec = state.opps[pi];
-    const ent = bayes.bySpecies[state.oppTeam[pi]];
-    if (!spec || !ent) continue;
+    let ent = bayes.bySpecies[state.oppTeam[pi]];
+    if (!spec) continue;
+    // 技だけが判明している段階でも推定が始まるよう、候補を先に用意する
+    if (!ent && (spec.knownMoves || []).length) ent = bayesEntry(state.oppTeam[pi]);
+    if (!ent) continue;
+    bayesMoveUpdate(ent, state.oppTeam[pi], spec.knownMoves || []);
     const corr = spec.corrected || [];
     const item = spec.itemLost ? '' : (corr.includes('持ち物') ? (spec.item || '') : null);
     const ability = corr.includes('特性') ? spec.ability : null;
-    const moves = spec.knownMoves || [];
-    const key = (item ?? '?') + '|' + (ability ?? '?') + '|' + [...moves].sort().join(',');
+    const key = (item ?? '?') + '|' + (ability ?? '?');
     if (key === ent.revKey) continue;
     ent.revKey = key;
     let changed = false;
@@ -2038,7 +2276,6 @@ function syncBayesRevealed() {
       let f = 1;
       if (item !== null && c.item !== item) f *= BAYES_REV_KEEP;
       if (ability !== null && c.ability !== ability && !(spec.mega && c.megaAbility === ability)) f *= BAYES_REV_KEEP;
-      for (const mv of moves) if (!c.moves.includes(mv)) f *= 0.2;
       if (f !== 1) { c.post *= f; changed = true; }
     }
     if (changed) {
@@ -2068,6 +2305,19 @@ function bayesView(spec) {
   const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
   const map = sorted[0];
   const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, sp: { ...map.sp } } };
+  // 未判明技の予測: 事後確率で重み付けした候補の技構成から、まだ判明していない
+  // 技が含まれている確率を集計する (型予測と同じ事後分布の逆向きの出力)。
+  // pokedb 候補の技は予測プロファイルなので、確定技構成より少し割り引く
+  {
+    const known = spec.knownMoves || [];
+    const mp = new Map();
+    for (const c of ent.cands) {
+      const w = c.post * (c.moveExact ? 1 : 0.8);
+      for (const mv of c.moves) if (!known.includes(mv)) mp.set(mv, (mp.get(mv) || 0) + w);
+    }
+    view.movePred = [...mp.entries()].map(([move, prob]) => ({ move, prob }))
+      .filter(x => x.prob >= 0.08).sort((a, b) => b.prob - a.prob).slice(0, 6);
+  }
   // レンジは能力ごとの周辺分布の 90% 区間 (5%〜95% 分位点)。
   // 候補集合の min-max だと低確率の裾の候補に引っ張られるため
   for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) {
@@ -2126,6 +2376,13 @@ function estView(species) {
   }
   return view;
 }
+// 推定セルのツールチップに付ける未判明技の予測 (上位3件、日本語名)
+let _moveEn2ja = null;
+function movePredTitle(spec) {
+  if (!spec.estMovePred || !spec.estMovePred.length) return '';
+  if (!_moveEn2ja) { _moveEn2ja = {}; for (const [ja, en] of Object.entries(NAMES._moveJa2en || {})) _moveEn2ja[en] = ja; }
+  return '・未判明技の予測 ' + spec.estMovePred.slice(0, 3).map(x => `${_moveEn2ja[x.move] || x.move} ${Math.round(x.prob * 100)}%`).join(' / ');
+}
 // 推定を相手パネルの判明情報として反映する。
 // 計算用 SP は、推定レンジの中で実数値が最大になる候補の SP を使う
 // (相手を最も強い前提で計算する。性格が 1 つに定まっている場合はその
@@ -2147,6 +2404,7 @@ function attachEstimate(spec) {
   spec.estStat = view ? view.stat : null;
   spec.estNature = view ? view.nature : null;
   spec.estMapProb = view && view.bayes ? view.mapProb : null;
+  spec.estMovePred = view && view.bayes ? (view.movePred || null) : null;
   if (!view) return;
   if (view.bayes) {
     // MAP 型をそのまま採用する (性格は手動で直された場合はそちらを優先)
@@ -2451,6 +2709,10 @@ async function poll() {
     (async () => { try {
       POKEDB_PARSED = await (await fetch('./data/pokedb_parsed.json')).json();
     } catch (e) { /* pokedb distributions optional (bayes falls back) */ } })(),
+    (async () => { try {
+      const ms = await (await fetch('./data/meta_sets.json')).json();
+      if (ms && Array.isArray(ms.sets)) META_SETS = ms;
+    } catch (e) { /* meta sets optional (bayes uses pokedb candidates only) */ } finally { META_SETS_LOADED = true; } })(),
     (async () => { try {
       const cd = await (await fetch('./data/champions_dex.json')).json();
       CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
