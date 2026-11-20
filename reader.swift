@@ -3085,7 +3085,9 @@ func translateBattleMessage(_ text: String) -> Bool {
         return true
     }
     // 技の使用: 「(相手の) <種族>の <技>！」— <技> は種族名の直後から文末までと完全一致
-    if t.hasSuffix("！") || t.hasSuffix("!") {
+    // 「たおれた」を含む文は技の告知ではあり得ない (ひんし文を技と誤読する
+    // 事故の防止。検証 R5: カイリキーのひんし文から かいりき を誤検出)
+    if (t.hasSuffix("！") || t.hasSuffix("!")) && !t.contains("たおれた") {
         var cand: String? = nil
         if let r = nt.range(of: normalize(sp.ja + "の")) {
             cand = String(nt[r.upperBound...])
@@ -3112,8 +3114,22 @@ func translateBattleMessage(_ text: String) -> Bool {
             //  誤爆を避けるため、場にいる種族の文だけを対象にする)
             let onField = lastSlots.values.contains { $0.speciesEn == sp.en }
                 || formeGroup(sp).contains { g in lastSlots.values.contains { $0.speciesEn == g.en } }
-            if onField, let hit = moveNameOrig.keys.filter({ nt.contains($0) }).max(by: { $0.count < $1.count }) {
-                mvJaFound = moveNameOrig[hit]
+            if onField {
+                // 種族名そのものと重なる技名は拾わない (カイリキー vs かいりき
+                // のような種族名=技名の衝突。検証 R5 で検出)。技名は種族名の
+                // 出現位置より後ろにあるものだけを候補にする
+                var spEnd = 0
+                if let r = nt.range(of: normalize(sp.ja)) {
+                    spEnd = nt.distance(from: nt.startIndex, to: r.upperBound)
+                } else if let r = foldDakuten(nt).range(of: foldDakuten(normalize(sp.ja))) {
+                    let fnt = foldDakuten(nt)
+                    spEnd = fnt.distance(from: fnt.startIndex, to: r.upperBound)
+                }
+                let hit = moveNameOrig.keys.filter { key in
+                    guard let kr = nt.range(of: key) else { return false }
+                    return nt.distance(from: nt.startIndex, to: kr.lowerBound) >= spEnd
+                }.max(by: { $0.count < $1.count })
+                if let hit { mvJaFound = moveNameOrig[hit] }
             }
             if mvJaFound == nil && onField, let lr = nt.range(of: "ノ", options: .backwards) {
                 // 最後の「の」以降を技名候補として緩く照合する (濁点・半濁点の
@@ -4315,7 +4331,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1443"
+let readerBuild = "20261120_1450"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
