@@ -338,6 +338,10 @@ function speciesVariants(en) {
 // my_team.json の1体分 (reader の --team モードが書く) をプリセット形式に変換する。
 // stats があれば SP・性格を逆算し、item がメガストーンならメガ形態も導く。
 function myTeamPreset(e) {
+  // チーム名の番兵エントリ ({"teamName": ...}) など種族を持たない要素は
+  // ここで弾く。resolveSpecies(undefined) が例外を投げ、loadMyTeam 全体が
+  // 失敗して撮影取り込みが「読み直せませんでした」になる事故があった
+  if (!e || !e.species) return null;
   let species = resolveSpecies(e.species) || e.species;
   let sd = gen.species.get(idOf(species));
   if (!sd) return null;
