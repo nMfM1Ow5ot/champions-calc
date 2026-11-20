@@ -381,6 +381,7 @@ var fieldAbilityDone: [String: Date] = [:]        // "side:Species" -> 特性帰
 var intimidateDone: [String: Date] = [:]          // "side:Species" -> いかく帰属済みの繰り出し時刻
 var lastBoostApply: [String: (seq: Int, turn: Int, at: Date)] = [:]  // "slot|stat|delta" -> 最終適用 (再読での二重適用防止)
 var emittedSwitchKeys: Set<String> = []            // |switch| を出した "side:Species" (ランク変化行の保留判定)
+var pendingUnburden: Set<String> = []              // 交代行が出る前にシード消費を検知した種族 (かるわざ発動を交代行の後に出す)
 var heldBoostLines: [String: [(stat: String, delta: Int, at: Date)]] = [:]  // 交代行より先に届いたランク変化の保留 (枠は出す時点で付け直す)
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
@@ -834,6 +835,7 @@ func resetLogState() {
     pendingMegaStone = [:]
     pendingMegaSpecies = [:]
     emittedSwitchKeys = []
+    pendingUnburden = []
     heldBoostLines = [:]
     recentAtkDrops = [:]
     lastDamageLabel = ""
@@ -871,6 +873,16 @@ func slotId(_ plateName: String) -> String {
 func hpTextFor(_ s: SlotState) -> String {
     if let c = s.hpCur, let m = s.hpMax { return "\(c)/\(m)" }
     return "\(s.hpPercent)/100"
+}
+
+// 持ち物を消費・喪失したとき、特性が かるわざ なら発動として記録する。
+// かるわざはゲーム内に発動表示が無い (とくぼう上昇などの結果だけが出る)
+// ため、消費の事実から推定するしかない。自軍はチーム登録の特性で確定
+// でき、相手は特性が判明済みのときだけ記録する (推測では記録しない)
+func noteItemLost(slot: String, side: String, speciesEn: String) {
+    let abilityJa = side == "p1" ? (teamEntries[speciesEn]?["ability"] as? String) : revealedAbilities[speciesEn]
+    guard abilityJa == "かるわざ" else { return }
+    emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Unburden")
 }
 
 // 回復の発生源の推定 (プレート回復行に [from] を付けるため)。
@@ -967,6 +979,8 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             let srcSide = key.hasPrefix("p2") ? "p2" : "p1"
             emitItemOnce(slot: slot, side: srcSide, speciesEn: speciesEn, itemJa: itemJa)
             if srcSide == "p2" { revealedItems[speciesEn] = itemJa }
+            // オボンのみは回復と同時に消費される (たべのこしは消費されない)
+            if itemJa == "オボンのみ" { noteItemLost(slot: slot, side: srcSide, speciesEn: speciesEn) }
         }
         var line = "|-heal|\(slot): \(speciesEn)|\(hpText)"
         if let src { line += "|[from] \(src.label)" }
@@ -1521,6 +1535,8 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
     }
     // この種族宛てに保留していたランク変化行を、交代行の後に出す
     flushHeldBoosts(forKey: key, slot: slot)
+    // 交代前にシード消費を検知していた場合、かるわざ の発動をここで出す
+    if pendingUnburden.remove(key) != nil { noteItemLost(slot: slot, side: side, speciesEn: speciesEn) }
 }
 
 var fieldSeen: [String: Set<String>] = ["p1": [], "p2": []]   // その対戦で場に出たことのある種族 (ターン判定の交代可否に使う)
@@ -1645,6 +1661,18 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
         heldBoostLines[key, default: []].append((stat, delta, Date()))
     } else {
         emitLog(line)
+    }
+    // 地形シードの消費: 対応する地形が出ているとき、その地形のシードが
+    // 上げる能力が +1 されたらシードを消費したとみなす (持ち物がその
+    // シードだと分かっている場合のみ)。消費が確定すれば かるわざ の判定へ
+    let seedFor: [String: (item: String, stat: String)] = ["Psychic": ("サイコシード", "spd"), "Misty": ("ミストシード", "spd"), "Electric": ("エレキシード", "def"), "Grassy": ("グラスシード", "def")]
+    if delta == 1, let sd = seedFor[logFieldTerrain], sd.stat == stat {
+        let sdSide = String(key.prefix(2))
+        let knownItem = sdSide == "p1" ? (teamEntries[speciesEn]?["item"] as? String) : revealedItems[speciesEn]
+        if knownItem == sd.item {
+            if emittedSwitchKeys.contains(key) { noteItemLost(slot: slot, side: sdSide, speciesEn: speciesEn) }
+            else { pendingUnburden.insert(key) }
+        }
     }
 }
 
@@ -2520,6 +2548,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "きあいのタスキ")
         if side == "p2" { revealedItems[sp.en] = "きあいのタスキ" }
         emitLog("|-activate|\(slot): \(sp.en)|item: Focus Sash")
+        noteItemLost(slot: slot, side: side, speciesEn: sp.en)
         return true
     }
     // いのちのたまの反動 (実機文面は「いのちのたまの 効果で 命が少し削られた」。
@@ -2539,6 +2568,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("弱めた"), let itJa = findInDict(in: t, itemDict) {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
         if side == "p2" { revealedItems[sp.en] = itJa }
+        noteItemLost(slot: slot, side: side, speciesEn: sp.en)
         return true
     }
     // だっしゅつボタンで戻っていく (交代そのものはプレート側で記録する)
@@ -2573,6 +2603,11 @@ func translateBattleMessage(_ text: String) -> Bool {
        let itJa = findInDict(in: t, itemDict) {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)
         if side == "p2" { revealedItems[sp.en] = itJa }
+        // 消費・喪失が伴う文脈なら かるわざ の判定へ (きのみを食べた /
+        // 軽減きのみの発動 / 持ち物がなくなった)
+        if t.contains("なくなった") || ((itemJa2En[itJa] ?? "").hasSuffix("Berry") && (t.contains("食べ") || t.contains("発動"))) {
+            noteItemLost(slot: slot, side: side, speciesEn: sp.en)
+        }
     }
     // 回復の告知文: 回復そのものはプレート側で |-heal| を出すため消費のみ
     // (グラッシーフィールド等の回復文が OCR 崩れで漏れた実例: 2026-11-20
@@ -3527,7 +3562,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0948"
+let readerBuild = "20261120_0953"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
