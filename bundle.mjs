@@ -26075,7 +26075,7 @@ var require_dist = __commonJS({
   }
 });
 
-// .bundle_entry.mjs
+// .bundle_entry_tmp.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 
 // core.mjs
@@ -26641,8 +26641,15 @@ function createEstimator(deps) {
     if (ability === "Surge Surfer" && terrain === "Electric") v *= 2;
     if (unburden) v *= 2;
     if (tailwind) v *= 2;
-    if (status === "par") v = Math.floor(v / 2);
+    if (ability === "Quick Feet" && status) v = Math.floor(v * 1.5);
+    else if (status === "par") v = Math.floor(v / 2);
     return v;
+  }
+  function moveBracket(md, ability) {
+    let prio = md.priority, last = false;
+    if (ability === "Prankster" && md.category === "Status") prio += 1;
+    if (ability === "Stall") last = true;
+    return { prio, last };
   }
   function processMoveInf(ev, io) {
     const intents = [];
@@ -26650,8 +26657,10 @@ function createEstimator(deps) {
     if (ev.move === "Tailwind") {
       infCtx.tailwindTurn[side] = ev.turn;
       intents.push({ t: "side", side, key: "tailwind", turn: ev.turn });
-    } else if (ev.move === "Trick Room") infCtx.trickRoomTurn = ev.turn;
-    else if (ev.move === "Reflect") {
+    } else if (ev.move === "Trick Room") {
+      const trActive = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+      infCtx.trickRoomTurn = trActive ? -99 : ev.turn;
+    } else if (ev.move === "Reflect") {
       infCtx.screenTurn[side].reflect = ev.turn;
       intents.push({ t: "side", side, key: "reflect", turn: ev.turn });
     } else if (ev.move === "Light Screen") {
@@ -26684,6 +26693,18 @@ function createEstimator(deps) {
     const oppSpec = io.opp[oppSpecies] || null;
     const table = statTable(oppSpecies);
     if (!mySpec || !oppSpec || !table) return intents;
+    const myMd = firstIsOpp ? mdB : mdA, oppMd = firstIsOpp ? mdA : mdB;
+    const ORDER_ITEMS = ["Quick Claw", "Custap Berry", "Lagging Tail", "Full Incense"];
+    if (ORDER_ITEMS.includes(mySpec.itemLost ? "" : mySpec.item)) return intents;
+    if ((oppSpec.corrected || []).includes("\u6301\u3061\u7269") && ORDER_ITEMS.includes(oppSpec.itemLost ? "" : oppSpec.item)) return intents;
+    const myBr = moveBracket(myMd, mySpec.ability);
+    if (myBr.last) return intents;
+    if (mySpec.ability === "Gale Wings" && myMd.type === "Flying") return intents;
+    if ((oppSpec.corrected || []).includes("\u7279\u6027")) {
+      const oppBr = moveBracket(oppMd, oppSpec.ability);
+      if (oppBr.last || oppBr.prio !== myBr.prio) return intents;
+      if (oppSpec.ability === "Gale Wings" && oppMd.type === "Flying") return intents;
+    }
     const myTable = statTable(mySpecies);
     const myRow = myTable?.spe.find((r) => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
     if (!myRow) return intents;
@@ -26698,12 +26719,14 @@ function createEstimator(deps) {
       const ok = trick ? firstIsOpp ? eff <= myEff : eff >= myEff : firstIsOpp ? eff >= myEff : eff <= myEff;
       if (ok) feasible.add(row.nature + "|" + row.sp);
     }
-    lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw("p2") };
+    lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw("p2"), oppMd, myPrio: myBr.prio };
     infIntersect(oppSpecies, "spe", feasible, null);
     return intents;
   }
+  const AB_ORDER_EXEMPT = /* @__PURE__ */ new Set(["Unnerve", "As One (Glastrier)", "As One (Spectrier)", "Neutralizing Gas"]);
   function infProcessAbility(ev, io) {
     if (typeof ev.batch !== "number") return;
+    if (AB_ORDER_EXEMPT.has(ev.ability)) return;
     const list = infCtx.abBatches[ev.batch] || (infCtx.abBatches[ev.batch] = []);
     const me = { side: labelSide(ev.label), species: labelSpecies(ev.label) };
     for (const other of list) {
@@ -26726,23 +26749,21 @@ function createEstimator(deps) {
     const myTable = statTable(mySpecies);
     const myRow = myTable?.spe.find((r) => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
     if (!myRow) return;
-    const tw = (s) => turn - infCtx.tailwindTurn[s] >= 0 && turn - infCtx.tailwindTurn[s] < 4;
-    const myEff = infEffSpe(myRow.value, {}, mySpec.itemLost ? "" : mySpec.item, mySpec.status, tw("p1"), mySpec.ability, io.field.weather, io.field.terrain, false);
-    const itemKnown = (oppSpec.corrected || []).includes("\u6301\u3061\u7269");
-    const abKnown = (oppSpec.corrected || []).includes("\u7279\u6027");
+    const myRaw = myRow.value;
+    const trick = turn - infCtx.trickRoomTurn >= 0 && turn - infCtx.trickRoomTurn < 5;
     const feasible = /* @__PURE__ */ new Set();
     for (const row of table.spe) {
-      const eff = infEffSpe(row.value, {}, itemKnown ? oppSpec.itemLost ? "" : oppSpec.item : "", oppSpec.status, tw("p2"), abKnown ? oppSpec.ability : "", io.field.weather, io.field.terrain, false);
-      if (firstIsOpp ? eff >= myEff : eff <= myEff) feasible.add(row.nature + "|" + row.sp);
+      const ok = trick ? firstIsOpp ? row.value <= myRaw : row.value >= myRaw : firstIsOpp ? row.value >= myRaw : row.value <= myRaw;
+      if (ok) feasible.add(row.nature + "|" + row.sp);
     }
     infIntersect(oppSpecies, "spe", feasible, null);
     const ent = bayesEntry(oppSpecies);
     if (ent) {
       const counts = ent.cands.map((c) => {
         if (c.values.spe == null) return 0;
-        const eff = infEffSpe(c.values.spe, {}, oppSpec.itemLost ? "" : c.item, oppSpec.status, tw("p2"), c.ability, io.field.weather, io.field.terrain, false);
-        if (eff === myEff) return 8;
-        return (firstIsOpp ? eff > myEff : eff < myEff) ? 16 : 0;
+        if (c.values.spe === myRaw) return 8;
+        const ok = trick ? firstIsOpp ? c.values.spe < myRaw : c.values.spe > myRaw : firstIsOpp ? c.values.spe > myRaw : c.values.spe < myRaw;
+        return ok ? 16 : 0;
       });
       bayesApply(ent, counts);
     }
@@ -27160,6 +27181,13 @@ function createEstimator(deps) {
     const panel = io.opp[ctx.species] || null;
     const counts = ent.cands.map((c) => {
       if (c.values.spe == null) return 0;
+      if (ctx.oppMd) {
+        const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
+        if (cAb === "Gale Wings" && ctx.oppMd.type === "Flying") return 16;
+        const cBr = moveBracket(ctx.oppMd, cAb);
+        if (cBr.last) return ctx.firstIsOpp ? 0 : 16;
+        if (cBr.prio !== ctx.myPrio) return cBr.prio > ctx.myPrio === ctx.firstIsOpp ? 16 : 0;
+      }
       const eff = infEffSpe(
         c.values.spe,
         panel ? panel.boosts : {},
