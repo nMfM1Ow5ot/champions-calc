@@ -26,10 +26,7 @@ SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null' EXIT INT TERM
 
 sleep 1
-echo "UI をブラウザで開きます: http://localhost:8765/ui.html"
-if command -v open >/dev/null 2>&1; then
-  open "http://localhost:8765/ui.html" 2>/dev/null
-fi
+echo "UI はブラウザで http://localhost:8765/ui.html を開いてください (自動では開きません)"
 echo "リーダーを起動します (終了は Ctrl+C で両方止まります)"
 
 # リーダーは表で起動
