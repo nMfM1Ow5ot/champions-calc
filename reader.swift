@@ -1319,13 +1319,19 @@ func noteItemLost(slot: String, side: String, speciesEn: String) {
 func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int, toPct: Int) -> (label: String, itemJa: String?)? {
     let delta = toPct - fromPct
     guard delta > 0 else { return nil }
-    let knownItem = revealedItems[speciesEn] ?? (teamEntries[speciesEn]?["item"] as? String)
+    // 自軍データ (teamEntries) は種族キーなので、相手側の同種族に
+    // 引きずられないよう p1 の枠のときだけ参照する (実例: 2026-11-20
+    // vs チェイス戦、相手エルフーンのオボン回復が、自軍エルフーンの
+    // バビリのみ所持に引っ張られて [from] 無しになった)
+    let knownItem = key.hasPrefix("p2") ? revealedItems[speciesEn]
+        : ((teamEntries[speciesEn]?["item"] as? String) ?? revealedItems[speciesEn])
     if fromPct <= 50 && (20...30).contains(delta) {
         if knownItem == nil || knownItem == "オボンのみ" { return ("item: Sitrus Berry", "オボンのみ") }
         return nil
     }
     if (3...8).contains(delta) {
-        let abilityJa = revealedAbilities[speciesEn] ?? (teamEntries[speciesEn]?["ability"] as? String)
+        let abilityJa = key.hasPrefix("p2") ? revealedAbilities[speciesEn]
+            : ((teamEntries[speciesEn]?["ability"] as? String) ?? revealedAbilities[speciesEn])
         if abilityJa == "あめうけざら" || abilityJa == "アイスボディ" { return nil }
         if logFieldTerrain == "Grassy" && grassyHealTurn[plateName] != currentTurn {
             grassyHealTurn[plateName] = currentTurn
@@ -1357,8 +1363,16 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     var dirBase = fromPct
     if let h = heldLine[plateName], h.seq == actionSeq, h.turn == currentTurn { dirBase = h.toPct }
     let dir = toPct < dirBase ? -1 : 1
-    if !force && toPct != 0 && actionSeq > 0 {
+    if !force && toPct != 0 {
         if let h = heldLine[plateName], h.seq == actionSeq && h.turn == currentTurn, h.dir != dir {
+            // 反転先が「保留行を出す前の確定値」と完全一致する場合は、
+            // 実ダメージ+回復ではなく一時的な誤読が元に戻っただけと
+            // みなし、保留行ごと捨てる (実例: 2026-11-20 vs チェイス戦、
+            // ターン頭のサーナイトに被弾行と全回復行のペアが出た)
+            if toPct == (lastEmittedPct[plateName] ?? fromPct) {
+                heldLine[plateName] = nil
+                return true
+            }
             heldLine[plateName] = nil
             _ = emitDamageLine(plateName: plateName, slot: slot, key: key, speciesEn: speciesEn,
                                fromPct: lastEmittedPct[plateName] ?? fromPct, toPct: h.toPct,
@@ -1376,6 +1390,14 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
        lastDamageSeq[plateName] == actionSeq, lastDamageTurn[plateName] == currentTurn,
        lastDamageDir[plateName] == dir, toPct != lp, abs(toPct - lp) <= 3 {
         heldLine[plateName] = nil
+        lastEmittedPct[plateName] = toPct
+        return true
+    }
+    // 回復行なのに HP 表記の現在値が 0 のものは、ひんし直後のバー誤読
+    // (割合だけ僅かに読めた) による幻行なので出さない
+    // (実例: 2026-11-20 vs チェイス戦、倒れたバサギリに |-heal|0/100)
+    if toPct > effFrom, let first = hpText.split(separator: "/").first,
+       Int(first.trimmingCharacters(in: .whitespaces)) == 0 {
         lastEmittedPct[plateName] = toPct
         return true
     }
@@ -1418,6 +1440,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
 // 効果行より先に ひんしが並んでしまう (実例: 2026-11-20 vs Zycloud 戦)。
 // 文の翻訳が終わったタイミング (watchBattleMessage の末尾) でまとめて出す
 func deferFaint(slot: String, speciesEn: String) {
+    if faintedSlots[slot] == speciesEn { return }  // 既にひんし行を出した枠・種族は再登録しない
     if !pendingFaints.contains(where: { $0.slot == slot }) {
         pendingFaints.append((slot: slot, speciesEn: speciesEn, at: Date()))
     }
@@ -1438,6 +1461,7 @@ func emitPendingFaints() {
     let fs = pendingFaints
     pendingFaints = []
     for f in fs {
+        if faintedSlots[f.slot] == f.speciesEn { continue }
         if !faintStillValid(f) { continue }
         faintedSlots[f.slot] = f.speciesEn
         emitLog("|faint|\(f.slot): \(f.speciesEn)")
@@ -1532,6 +1556,7 @@ func processPlates(_ hits: [String: SlotState]) {
         if !ready.isEmpty {
             pendingFaints.removeAll { now.timeIntervalSince($0.at) > 1.5 }
             for f in ready {
+                if faintedSlots[f.slot] == f.speciesEn { continue }
                 if !faintStillValid(f) { continue }
                 faintedSlots[f.slot] = f.speciesEn
                 emitLog("|faint|\(f.slot): \(f.speciesEn)")
@@ -1791,6 +1816,11 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
     let slot = slotFor(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
+    // その枠に出てきたばかりの種族への ひんし 帰属は信用しない。
+    // ログ画面のエントリ取り違えで、交代直後の生存枠に幻のひんしが
+    // 出た実例があるため (2026-11-20 vs チェイス戦のグレンアルマ)。
+    // 本当に倒れていれば実況・プレート側の経路が別途ひんしを出す
+    let justSwitchedIn = lastSwitchIn[key].map { $0.slot == slot && Date().timeIntervalSince($0.at) < 30 } ?? false
     switch chip {
     case "技":
         if let mvJa = findInDict(in: text, moveNameOrig) {
@@ -1830,11 +1860,11 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
                 // 状態への反映は emitLog -> applyEvent が行う (行の HP 表記から)
                 if np < cur { emitLog("|-damage|\(slot): \(sp.en)|\(hpText)") }
                 else { emitLog("|-heal|\(slot): \(sp.en)|\(hpText)") }
-                if np == 0 { emitLog("|faint|\(slot): \(sp.en)") }
+                if np == 0 && !justSwitchedIn { emitLog("|faint|\(slot): \(sp.en)") }
             }
         }
     case "ひんし":
-        if (monStates[key]?.hpPercent ?? 0) > 0 {
+        if !justSwitchedIn && (monStates[key]?.hpPercent ?? 0) > 0 {
             emitLog("|faint|\(slot): \(sp.en)")  // 状態への反映は applyEvent が行う
         }
     case "持ち物":
@@ -3017,6 +3047,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         || t.contains("引つこめた") || t.contains("引つ込めた")
         || t.contains("引っごめた") || t.contains("引つごめた")
         || t.contains("イリュージョンが解けた") || t.contains("イリュージョンがとけた")
+        || (t.contains("ランク") && t.contains("級"))
         || t.contains("場所を入れ替えた") {
         // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
         // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
@@ -4386,7 +4417,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1628"
+let readerBuild = "20261120_1652"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
