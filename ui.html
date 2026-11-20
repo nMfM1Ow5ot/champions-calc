@@ -194,7 +194,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .estval{background:rgba(33,150,243,.15); box-shadow:0 0 2px rgba(33,150,243,.35); border-radius:.35rem; white-space:nowrap; display:block; text-align:center}
 .evwrap .estval{color:var(--blue-tint)}
 .finalstat.estval{display:block}
-input.estin{border:none; outline:none; width:100%; font:inherit; cursor:text; padding:0; box-sizing:border-box}
+input.estin{border:none; outline:none; width:100%; font:inherit; cursor:text; padding:0; box-sizing:border-box; appearance:none; -webkit-appearance:none; background:rgba(33,150,243,.15); color:var(--ink)}
 input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 .mvhead{font-family:'Work Sans',sans-serif; font-weight:500; font-size:.9rem; letter-spacing:.05em; text-transform:uppercase; color:var(--label); display:flex; align-items:center; gap:.6rem}
 .mvhead.mid{justify-content:center}
@@ -1302,7 +1302,8 @@ document.addEventListener('keydown', e => {
     setEv(side, k, (spec.sp[k] || 0) + step, true);
   }
   if (t.matches && t.matches('[data-hpnum]') && e.key === 'Enter') t.blur();
-  if (t.matches && (t.matches('[data-evest]') || t.matches('[data-statest]')) && e.key === 'Enter') t.blur();
+  if (t.matches && t.matches('[data-evest]') && e.key === 'Enter') { const [side, k] = t.dataset.evest.split(':'); commitEstEv(side, k, t.value); }
+  if (t.matches && t.matches('[data-statest]') && e.key === 'Enter') { const [side, k] = t.dataset.statest.split(':'); commitEstStat(side, k, t.value); }
 });
 document.addEventListener('focusin', e => {
   if (e.target.matches && (e.target.matches('[data-ev]') || e.target.matches('[data-evest]') || e.target.matches('[data-statest]'))) e.target.select();
@@ -1614,6 +1615,9 @@ function commitEstEv(side, k, raw) {
   spec.sp[k] = Math.min(32, Math.max(0, parseInt(t, 10) || 0));
   (spec.estManual ||= {})[k] = true;
   markCorrected(spec, 'EV');
+  // 推定表示はその場で外し、入力した値と計算後の実数値を通常表示で即時反映する
+  if (spec.estSp) delete spec.estSp[k];
+  if (spec.estStat) delete spec.estStat[k];
   calcAll();
 }
 // 推定セルの手動上書き: 実数値セルに数値を入れたら、その実数値になる (性格, SP) を逆算して固定する。
@@ -1644,6 +1648,8 @@ function commitEstStat(side, k, raw) {
   spec.sp[k] = chosen.sp;
   (spec.estManual ||= {})[k] = true;
   markCorrected(spec, 'EV');
+  if (spec.estSp) delete spec.estSp[k];
+  if (spec.estStat) delete spec.estStat[k];
   calcAll();
 }
 
