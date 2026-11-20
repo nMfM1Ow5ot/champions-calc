@@ -407,6 +407,7 @@ let CHAMP = null; // data/champions_dex.json (チャンピオンズ実装済み�
 let CHAMP_MOVES_JA = null;
 function champMoveList() { return CHAMP_MOVES_JA || Object.keys(NAMES._moveJa2en || {}); }
 let USAGE_SETS = null; // data/usage_sets.json の sets (pokedb 使用率トップ型)
+let POKEDB_PARSED = null; // data/pokedb_parsed.json (pokedb の使用率分布一式。ベイズ推定の候補生成用)
 let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
 let USAGE_SEASON = '';
 // 使用率型の解決: フォルム名 (イルカマン(ヒーロー)等) には使用率データが
@@ -867,7 +868,7 @@ function metaRow(side) {
   regDD(`nature:${side}`, {
     options: NATURES.map(n => ({ v: n, l: NAT_JA[n] || n })),
     value: spec.nature, highlight: corr('性格'),
-    onPick: v => { spec.nature = v; if (side === 'opps') markCorrected(spec, '性格'); calcAll(); },
+    onPick: v => { spec.nature = v; if (side === 'opps') { markCorrected(spec, '性格'); (spec.estManual ||= {}).nature = true; } calcAll(); },
   });
   regDD(`item:${side}`, {
     options: ITEM_OPTIONS, value: spec.itemLost ? '' : (spec.item || ''), clearable: true, placeholder: 'なし',
@@ -982,7 +983,7 @@ function statsGrid(side, statArr) {
     const est = side === 'opps' ? spec.estSp?.[k] : null;
     if (est) {
       const txt = est[0] === est[1] ? String(est[0]) : `${est[0]}-${est[1]}`;
-      return `<div class="evwrap"><input data-evest="${side}:${k}" class="estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1, 3.6)}" title="推定 ${txt}（数値を入力して上書きできます）" value="${txt}"></div>`;
+      return `<div class="evwrap"><input data-evest="${side}:${k}" class="estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1, 3.6)}" title="推定 ${txt}（数値を入力して上書きできます）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}" value="${txt}"></div>`;
     }
     return `<div class="evwrap"><span class="evfield"><input data-ev="${side}:${k}" type="number" min="0" max="32" value="${spec.sp[k] || 0}" class="${(spec.sp[k] || 0) > 0 ? 'has' : ''}"></span></div>`;
   }).join('');
@@ -991,7 +992,7 @@ function statsGrid(side, statArr) {
     const est = side === 'opps' ? spec.estStat?.[k] : null;
     if (est) {
       const txt = est[0] === est[1] ? String(est[0]) : `${est[1]}*`;
-      return `<input data-statest="${side}:${k}" class="finalstat estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）" value="${txt}">`;
+      return `<input data-statest="${side}:${k}" class="finalstat estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}" value="${txt}">`;
     }
     const [v, cn] = dispStat(spec, k, statArr, side === 'mine' ? 'mine' : 'opp');
     return `<div class="finalstat ${cn === 'green' ? 'pos' : cn === 'red' ? 'neg' : ''}">${v}</div>`;
@@ -1379,11 +1380,14 @@ function applyMegaFlag(spec, en) {
 const INF_BLACKLIST = new Set(['Foul Play', 'Gyro Ball', 'Electro Ball', 'Endeavor', 'Final Gambit', 'Seismic Toss', 'Night Shade', 'Dragon Rage', 'Sonic Boom', 'Super Fang', "Nature's Madness", 'Fissure', 'Horn Drill', 'Guillotine', 'Sheer Cold', 'Counter', 'Mirror Coat', 'Metal Burst', 'Comeuppance', 'Pain Split']);
 let inference, infCtx, infLastMove, infDirty;
 let autoSideTurn;
+let bayes = null, lastSpeCtx = null;
 function resetInference() {
   inference = { seen: 0, bySpecies: {} };
   infCtx = { tailwindTurn: { p1: -99, p2: -99 }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, hhTurn: { p1: -99, p2: -99 } };
   infLastMove = null;
   infDirty = false;
+  bayesReset();
+  lastSpeCtx = null;
   // 対戦イベントから自動反映したサイドコンディション (おいかぜ・壁・てだすけ) の
   // セットされたターン。新しい対戦では場の状態ごとリセットする
   autoSideTurn = { mine: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 }, opp: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 } };
@@ -1489,6 +1493,7 @@ function infProcessDamage(ev) {
   const gameType = targets >= 2 ? 'Doubles' : 'Singles';
   const conds = infSideConds(ev);
   const opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
+  ev._bayesOpts = opts; // ベイズ側も同じ場の条件で評価する (てだすけ消費などの副作用を共有するため)
   if (oppIsAtk) {
     // 相手の攻撃 -> 自分の正確な被ダメ量から相手の攻撃 (or Body Press は防御) を絞る
     if (typeof ev.amt !== 'number' || ev.amt <= 0) return;
@@ -1588,7 +1593,222 @@ function infProcessMove(ev) {
     const ok = trick ? (firstIsOpp ? eff <= myEff : eff >= myEff) : (firstIsOpp ? eff >= myEff : eff <= myEff);
     if (ok) feasible.add(row.nature + '|' + row.sp);
   }
+  lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw('p2') };
   infIntersect(oppSpecies, 'spe', feasible, null);
+}
+/* ---------- 候補型×ベイズ更新エンジン (主推定) ----------
+   使用率データに実在する型を候補とし、使用率を事前確率として、
+   ダメージ・行動順・判明情報の証拠で事後確率を更新する。
+   候補が無い種族や証拠が無い間は、従来の制約交差エンジン (estView) に
+   フォールバックする (attachEstimate 参照) */
+const NATURE_JA2EN = { 'がんばりや': 'Hardy', 'さみしがり': 'Lonely', 'ゆうかん': 'Brave', 'いじっぱり': 'Adamant', 'やんちゃ': 'Naughty', 'ずぶとい': 'Bold', 'すなお': 'Docile', 'のんき': 'Relaxed', 'わんぱく': 'Impish', 'のんてんき': 'Lax', 'おくびょう': 'Timid', 'せっかち': 'Hasty', 'まじめ': 'Serious', 'ようき': 'Jolly', 'むじゃき': 'Naive', 'ひかえめ': 'Modest', 'おっとり': 'Mild', 'れいせい': 'Quiet', 'てれや': 'Bashful', 'うっかりや': 'Rash', 'おだやか': 'Calm', 'おとなしい': 'Gentle', 'なまいき': 'Sassy', 'しんちょう': 'Careful', 'きまぐれ': 'Quirky' };
+const BAYES_FLOOR = 0.02;    // 尤度の下限 (候補を完全に消さない)
+const BAYES_REV_KEEP = 0.05; // 判明情報と矛盾する候補の減衰率
+function bayesReset() { bayes = { bySpecies: {}, skipped: 0 }; }
+// 候補生成: pokedb の使用率分布 (SP配分×性格×持ち物×特性) から実在の型を作る。
+// 事前確率は各要素の使用率の積 (独立近似) を正規化したもの
+function bayesBuildCandidates(species) {
+  if (!POKEDB_PARSED || !USAGE_SETS) return null;
+  let u = USAGE_SETS[idOf(species)];
+  if (!u) {
+    const base = gen.species.get(idOf(species))?.baseSpecies;
+    if (base && base !== species) u = USAGE_SETS[idOf(base)];
+  }
+  if (!u || !u.code) return null;
+  const pd = POKEDB_PARSED[u.code];
+  if (!pd) return null;
+  const table = statTable(species);
+  if (!table) return null;
+  const patterns = (pd.patterns || []).slice(0, 5).map(p => ({ sp: p.sp || {}, rate: p.rate || 0 }));
+  const natures = (pd.natures || []).map(n => ({ en: NATURE_JA2EN[n.name], rate: n.rate || 0 })).filter(n => n.en).slice(0, 5);
+  const items = (pd.items || []).map(i => ({ en: (NAMES._itemJa2en || {})[i.name], rate: i.rate || 0 })).filter(i => i.en).slice(0, 4);
+  const abilities = (pd.abilities || []).map(a => ({ en: (NAMES._abilityJa2en || {})[a.name], rate: a.rate || 0 })).filter(a => a.en).slice(0, 3);
+  const movePool = (pd.moves || []).map(mv => (NAMES._moveJa2en || {})[mv.ja]).filter(Boolean).slice(0, 8);
+  if (!patterns.length || !natures.length) return null;
+  const topItem = items[0] || { en: '', rate: 0 };
+  const topAbility = abilities[0] || { en: u.ability, rate: 0 };
+  let megaAbility;
+  if (u.megaSpecies) {
+    const ms = gen.species.get(idOf(u.megaSpecies));
+    if (ms) megaAbility = Array.isArray(ms.abilities) ? ms.abilities[0] : Object.values(ms.abilities || {})[0];
+  }
+  const combos = [];
+  for (const p of patterns) for (const n of natures) combos.push({ p, n, w: (p.rate + 0.5) * (n.rate + 0.5) });
+  combos.sort((a, b) => b.w - a.w);
+  const mk = (combo, item, ability, wMul) => {
+    const sp = {};
+    for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) sp[k] = combo.p.sp[k] || 0;
+    const values = {};
+    for (const k of ['atk', 'def', 'spa', 'spd', 'spe']) {
+      const row = table[k].find(r => r.nature === combo.n.en && r.sp === sp[k]);
+      values[k] = row ? row.value : null;
+    }
+    const hpRow = table.hp.find(r => r.sp === sp.hp);
+    values.hp = hpRow ? hpRow.value : null;
+    return { nature: combo.n.en, sp, item: item.en, ability: ability.en, megaAbility, megaSpecies: u.megaSpecies || undefined,
+      moves: movePool, values, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul };
+  };
+  const raw = [];
+  for (const c of combos.slice(0, 20)) raw.push(mk(c, topItem, topAbility, 1));
+  for (const c of combos.slice(0, 4)) for (const it of items.slice(1, 3)) raw.push(mk(c, it, topAbility, 1));
+  for (const c of combos.slice(0, 3)) for (const ab of abilities.slice(1, 2)) raw.push(mk(c, topItem, ab, 1));
+  for (const c of combos.slice(0, 2)) raw.push(mk(c, { en: '', rate: 0 }, topAbility, 0.15));
+  const seen = new Set(), out = [];
+  for (const c of raw) {
+    const key = c.nature + '|' + JSON.stringify(c.sp) + '|' + c.item + '|' + c.ability;
+    if (seen.has(key)) continue;
+    seen.add(key); out.push(c);
+  }
+  const tot = out.reduce((s, c) => s + c._w, 0) || 1;
+  for (const c of out) { c.post = c._w / tot; delete c._w; }
+  return out.slice(0, 64);
+}
+function bayesEntry(species) {
+  if (!bayes) return null;
+  if (!bayes.bySpecies[species]) {
+    // 使用率データがまだ読み込めていない間は「候補なし」を確定させない
+    if (!POKEDB_PARSED || !USAGE_SETS) return null;
+    const cands = bayesBuildCandidates(species);
+    if (!cands || !cands.length) { bayes.bySpecies[species] = null; return null; }
+    bayes.bySpecies[species] = { cands, used: 0, revKey: '' };
+  }
+  return bayes.bySpecies[species];
+}
+// 候補をイベント評価用の spec にする (場の状態はイベントのスナップショット base から)
+function bayesCandSpec(base, c) {
+  return { ...base, nature: c.nature, sp: { ...c.sp }, item: base.itemLost ? '' : c.item,
+    ability: base.mega && c.megaAbility ? c.megaAbility : c.ability,
+    megaSpecies: base.megaSpecies || c.megaSpecies, estSp: undefined, estStat: undefined, estNature: undefined };
+}
+// 尤度の適用。counts は「16 ロール中いくつ両立したか」相当 (0..16)。
+// 全候補が 0 のイベントは未モデル要素ありとみなして更新をスキップする
+function bayesApply(ent, counts) {
+  if (!counts.some(n => n > 0)) { bayes.skipped++; return; }
+  let tot = 0;
+  ent.cands.forEach((c, i) => { c.post *= Math.max(counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+  if (!(tot > 0)) return;
+  for (const c of ent.cands) c.post /= tot;
+  ent.used++;
+  infDirty = true;
+}
+function bayesProcessDamage(ev) {
+  const opts = ev._bayesOpts;
+  if (!opts) return; // 旧エンジンが対象外にした技 (変化・固定ダメ等) は同じく対象外
+  const md = moveData(ev.move);
+  if (!md) return;
+  const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
+  if (labelSide(ev.atk) === 'p2') {
+    // 相手の攻撃: 自分の正確な被ダメ量と両立するロールの割合が尤度
+    if (typeof ev.amt !== 'number' || ev.amt <= 0) return;
+    const ent = bayesEntry(atkSpecies);
+    const defSpec = infMySpec(defSpecies, ev, false);
+    const base = infOppBase(atkSpecies, ev, true);
+    if (!ent || !defSpec || !base) return;
+    const counts = ent.cands.map(c => {
+      const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts);
+      return rolls.filter(r => r === ev.amt).length;
+    });
+    bayesApply(ent, counts);
+  } else {
+    // 自分の攻撃: 相手の HP% 減少 (切り捨て/四捨五入の両対応) と両立するロールの割合
+    if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
+    const ent = bayesEntry(defSpecies);
+    const atkSpec = infMySpec(atkSpecies, ev, true);
+    const base = infOppBase(defSpecies, ev, false);
+    if (!ent || !atkSpec || !base) return;
+    const counts = ent.cands.map(c => {
+      const hpVal = c.values.hp;
+      if (!hpVal) return 0;
+      const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts);
+      let n = 0;
+      for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
+      return n;
+    });
+    bayesApply(ent, counts);
+  }
+}
+function bayesProcessMove(ev) {
+  const ctx = lastSpeCtx;
+  if (!ctx || ctx.turn !== ev.turn) return;
+  const ent = bayesEntry(ctx.species);
+  if (!ent) return;
+  const pi = state.oppTeam.indexOf(ctx.species);
+  const panel = pi >= 0 ? state.opps[pi] : null;
+  const counts = ent.cands.map(c => {
+    if (c.values.spe == null) return 0;
+    const eff = infEffSpe(c.values.spe, panel ? panel.boosts : {}, panel && panel.itemLost ? '' : c.item,
+      panel ? panel.status : '', ctx.twP2, c.ability, state.field.weather, state.field.terrain, !!(panel && panel.unburden));
+    if (eff === ctx.myEff) return 8; // 同速の可能性は中間
+    const ok = ctx.trick ? (ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff) : (ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff);
+    return ok ? 16 : 0;
+  });
+  bayesApply(ent, counts);
+}
+// 判明情報 (持ち物・特性・技) と矛盾する候補の減衰。同じ判明内容では再適用しない
+function syncBayesRevealed() {
+  if (!bayes) return;
+  for (let pi = 0; pi < state.oppTeam.length; pi++) {
+    const spec = state.opps[pi];
+    const ent = bayes.bySpecies[state.oppTeam[pi]];
+    if (!spec || !ent) continue;
+    const corr = spec.corrected || [];
+    const item = spec.itemLost ? '' : (corr.includes('持ち物') ? (spec.item || '') : null);
+    const ability = corr.includes('特性') ? spec.ability : null;
+    const moves = spec.knownMoves || [];
+    const key = (item ?? '?') + '|' + (ability ?? '?') + '|' + [...moves].sort().join(',');
+    if (key === ent.revKey) continue;
+    ent.revKey = key;
+    let changed = false;
+    for (const c of ent.cands) {
+      let f = 1;
+      if (item !== null && c.item !== item) f *= BAYES_REV_KEEP;
+      if (ability !== null && c.ability !== ability && !(spec.mega && c.megaAbility === ability)) f *= BAYES_REV_KEEP;
+      for (const mv of moves) if (!c.moves.includes(mv)) f *= 0.2;
+      if (f !== 1) { c.post *= f; changed = true; }
+    }
+    if (changed) {
+      let tot = 0;
+      for (const c of ent.cands) tot += c.post;
+      if (tot > 0) for (const c of ent.cands) c.post /= tot;
+      infDirty = true;
+    }
+  }
+}
+// 事後分布のビュー: MAP 型 (パネル採用用) + 事後確率 90% を覆う推定レンジ
+function bayesView(spec) {
+  if (!bayes) return null;
+  const ent = bayes.bySpecies[spec.species];
+  if (!ent || !ent.used) return null;
+  const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
+  const map = sorted[0];
+  const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, sp: { ...map.sp } } };
+  // レンジは能力ごとの周辺分布の 90% 区間 (5%〜95% 分位点)。
+  // 候補集合の min-max だと低確率の裾の候補に引っ張られるため
+  for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) {
+    const bySp = [...ent.cands].sort((a, b) => (a.sp[k] || 0) - (b.sp[k] || 0));
+    let acc = 0, lo = null, hi = null;
+    for (const c of bySp) {
+      if (lo === null && acc >= 0.05) lo = c.sp[k] || 0;
+      acc += c.post;
+      if (acc >= 0.95) { hi = c.sp[k] || 0; break; }
+    }
+    view.sp[k] = [lo ?? (bySp[0].sp[k] || 0), hi ?? (bySp[bySp.length - 1].sp[k] || 0)];
+    const byVal = ent.cands.filter(c => c.values[k] != null).sort((a, b) => a.values[k] - b.values[k]);
+    if (byVal.length) {
+      acc = 0; let vlo = null, vhi = null;
+      for (const c of byVal) {
+        if (vlo === null && acc >= 0.05) vlo = c.values[k];
+        acc += c.post;
+        if (acc >= 0.95) { vhi = c.values[k]; break; }
+      }
+      view.stat[k] = [vlo ?? byVal[0].values[k], vhi ?? byVal[byVal.length - 1].values[k]];
+    }
+  }
+  const nProb = {};
+  for (const c of ent.cands) nProb[c.nature] = (nProb[c.nature] || 0) + c.post;
+  const bestN = Object.entries(nProb).sort((a, b) => b[1] - a[1])[0];
+  if (bestN && bestN[1] >= 0.9) view.nature = bestN[0];
+  return view;
 }
 // 推定結果のビュー (性格の交差 + 各能力の SP/実数値レンジ)
 function estView(species) {
@@ -1627,7 +1847,10 @@ function estView(species) {
 //  中で最大になるものを選び、どちらの候補も無い能力は SP レンジの
 //  上限を使う)
 function attachEstimate(spec) {
-  const view = estView(spec.species);
+  // 主推定はベイズ (候補型×事後確率)。候補が無い種族・証拠が無い間は
+  // 従来の制約交差 (estView) にフォールバックする
+  let view = bayesView(spec);
+  if (!view) view = estView(spec.species);
   // ユーザーが入力で上書きした能力は、以降の推定で上書きしない
   if (view && spec.estManual) {
     for (const k of Object.keys(spec.estManual)) {
@@ -1637,7 +1860,15 @@ function attachEstimate(spec) {
   spec.estSp = view ? view.sp : null;
   spec.estStat = view ? view.stat : null;
   spec.estNature = view ? view.nature : null;
+  spec.estMapProb = view && view.bayes ? view.mapProb : null;
   if (!view) return;
+  if (view.bayes) {
+    // MAP 型をそのまま採用する (性格は手動で直された場合はそちらを優先)
+    if (!spec.estManual || !spec.estManual.nature) { spec.nature = view.map.nature; markCorrected(spec, '性格'); }
+    for (const k of Object.keys(view.sp)) spec.sp[k] = view.map.sp[k] || 0;
+    markCorrected(spec, 'EV');
+    return;
+  }
   if (view.nature) { spec.nature = view.nature; markCorrected(spec, '性格'); }
   for (const k of Object.keys(view.sp)) {
     const rows = view.rows[k] || [];
@@ -1818,14 +2049,15 @@ function applyState(j) {
     }
   }
   if (j.field && typeof j.field === 'object') { Object.assign(state.field, j.field); changed = true; }
+  syncBayesRevealed();
   if (Array.isArray(j.events)) {
     if (j.events.length < inference.seen) resetInference();
     for (let i = inference.seen; i < j.events.length; i++) {
       const ev = j.events[i];
       if (!ev || typeof ev !== 'object') continue;
       if (typeof ev.turn === 'number') expireAutoSide(ev.turn);
-      if (ev.k === 'mv') infProcessMove(ev);
-      else if (ev.k === 'dmg') infProcessDamage(ev);
+      if (ev.k === 'mv') { infProcessMove(ev); bayesProcessMove(ev); }
+      else if (ev.k === 'dmg') { infProcessDamage(ev); bayesProcessDamage(ev); }
     }
     inference.seen = j.events.length;
     if (infDirty) { infDirty = false; changed = true; }
@@ -1911,6 +2143,9 @@ async function poll() {
       const sa = await (await fetch('./data/species_abilities.json')).json();
       SPECIES_ABILITIES = sa || {};
     } catch (e) { /* species abilities optional */ } })(),
+    (async () => { try {
+      POKEDB_PARSED = await (await fetch('./data/pokedb_parsed.json')).json();
+    } catch (e) { /* pokedb distributions optional (bayes falls back) */ } })(),
     (async () => { try {
       const cd = await (await fetch('./data/champions_dex.json')).json();
       CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
