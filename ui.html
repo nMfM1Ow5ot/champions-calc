@@ -296,6 +296,20 @@ const state = {
 let lastCalc = null;
 // ひんし (HP0) になったポケモンは、対戦中に state.json の誤読で HP が戻らないようロックする (種族名)
 const faintLock = { mine: new Set(), opps: new Set() };
+// oppReset が来ても即座にロックやパネルを消さず、新しい対戦の開始が確認
+// できてから解除する (試合終了後の画面を選出画面と誤検出した oppReset で、
+// 前の対戦のひんしが HP100% で蘇るのを防ぐ)。確認の合図は「別チームの出現」
+// または「events 列のリスタート (長さが縮む)」のどちらか
+let battleResetPending = false;
+let lastEventCount = 0;
+function confirmNewBattle() {
+  battleResetPending = false;
+  faintLock.mine.clear();
+  faintLock.opps.clear();
+  revivalPending.mine = 0;
+  revivalPending.opps = 0;
+  for (const s of state.mine) if (s) s.itemLost = false;
+}
 // さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
 const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
@@ -2068,9 +2082,14 @@ function commitEstStat(side, k, raw) {
 function applyState(j) {
   if (!j || typeof j !== 'object') return;
   let changed = false;
+  // events 列が縮んだ = 新しい対戦のイベント列が始まった合図。保留中の
+  // リセットをここで確定し、ひんしロックを解除する (HP 反映より前に行う)。
+  // inference.seen は oppReset の resetInference で 0 に戻ってしまうため、
+  // 縮小判定には専用の lastEventCount を使う
+  if (Array.isArray(j.events) && j.events.length < lastEventCount) confirmNewBattle();
   // さいきのいのりの使用を先に拾う (同じ state.json で復活した HP が届いてもロック解除できるよう、HP 反映より前に数える)
   if (Array.isArray(j.events) && typeof inference !== 'undefined' && inference) {
-    const from = j.events.length < inference.seen ? 0 : inference.seen;
+    const from = j.events.length < lastEventCount ? 0 : lastEventCount;
     for (let i = from; i < j.events.length; i++) {
       const ev = j.events[i];
       if (ev && ev.k === 'mv' && ev.move === 'Revival Blessing' && typeof ev.label === 'string') {
@@ -2086,16 +2105,12 @@ function applyState(j) {
   if (j.oppReset) {
     resetInference();
     oppTrainerName = '';
-    state.oppTeam = [];
-    state.opps = [];
-    state.sel.opps = 0;
-    state.active.opps = [];
-    lastActiveKey.opps = '';
-    faintLock.mine.clear();
-    faintLock.opps.clear();
-    for (const s of state.mine) if (s) s.itemLost = false;
-    revivalPending.mine = 0;
-    revivalPending.opps = 0;
+    // ここではパネルもロックも消さない。リーダーは試合終了後の画面を
+    // 選出画面と誤検出して oppReset を送ることがあり、そのまま全消しすると
+    // 前の対戦のひんしが HP100% で蘇って見える。新しい対戦の開始が確認
+    // できたら (別チームの出現 / events のリスタート) confirmNewBattle()
+    // でロックを解除し、パネルは oppTeam 側の差し替えで作り直す
+    battleResetPending = true;
     changed = true;
   }
   if (Array.isArray(j.mine)) {
@@ -2131,15 +2146,30 @@ function applyState(j) {
   if (Array.isArray(j.oppTeam) && j.oppTeam.length) {
     const names = j.oppTeam.map(s => (s ? resolveSpecies(s) || s : null)).filter(Boolean).slice(0, 6);
     if (names.length && names.join() !== state.oppTeam.join()) {
-      const old = {};
-      state.oppTeam.forEach((sp, i) => { old[sp] = state.opps[i]; });
-      state.oppTeam = names;
-      state.opps = names.map(sp => old[sp] || oppSpec(sp, 'usage'));
-      for (const sp of [...faintLock.opps]) if (!names.includes(sp)) faintLock.opps.delete(sp);
-      if (state.sel.opps >= names.length) state.sel.opps = 0;
-      state.active.opps = [0, Math.min(1, names.length - 1)];
-      lastActiveKey.opps = '';
-      changed = true;
+      if (battleResetPending && state.oppTeam.length && names.every(n => state.oppTeam.includes(n))) {
+        // リセット保留中に届いた、今のチームの部分集合 (誤検出リセットに伴う
+        // 部分的な再同定など): パネルとひんしロックはそのまま保持する
+      } else if (battleResetPending) {
+        // 別チームが現れた = 新しい対戦の開始が確定。ロックを解除して
+        // 全パネルを作り直す (前戦のパネルは引き継がない)
+        confirmNewBattle();
+        state.oppTeam = names;
+        state.opps = names.map(sp => oppSpec(sp, 'usage'));
+        if (state.sel.opps >= names.length) state.sel.opps = 0;
+        state.active.opps = [0, Math.min(1, names.length - 1)];
+        lastActiveKey.opps = '';
+        changed = true;
+      } else {
+        const old = {};
+        state.oppTeam.forEach((sp, i) => { old[sp] = state.opps[i]; });
+        state.oppTeam = names;
+        state.opps = names.map(sp => old[sp] || oppSpec(sp, 'usage'));
+        for (const sp of [...faintLock.opps]) if (!names.includes(sp)) faintLock.opps.delete(sp);
+        if (state.sel.opps >= names.length) state.sel.opps = 0;
+        state.active.opps = [0, Math.min(1, names.length - 1)];
+        lastActiveKey.opps = '';
+        changed = true;
+      }
     }
   }
   if (Array.isArray(j.opps)) {
@@ -2200,6 +2230,7 @@ function applyState(j) {
       else if (ev.k === 'ab') { infProcessAbility(ev); }
     }
     inference.seen = j.events.length;
+    lastEventCount = j.events.length;
     if (infDirty) { infDirty = false; changed = true; }
   }
   for (const spec of state.opps) if (spec) attachEstimate(spec);
