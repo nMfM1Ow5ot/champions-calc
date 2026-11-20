@@ -20,35 +20,67 @@ for (const sp of gen.species) {
   if (abs.length) calcAbilities[sp.name] = [...new Set(abs)];
 }
 
-// PokeAPI のスラッグが一般規則と異なる種族
+// PokeAPI のスラッグが一般規則と異なる種族。
+// 性別差でデフォルト個体が -male になる種族 (Pyroar 等) や、デフォルト
+// フォルムに接尾辞が付く種族 (incarnate / altered 等) がここに要る。
+// 間違ったスラッグは 404 になり、無言で calc フォールバック (第1特性のみ)
+// に落ちるため、新規追加時は pokemon-species の varieties で実名を確認する
+// こと (2026-11-20 の Pyroar 欠落の教訓)。
 const SLUG_SPECIAL = {
   'Pyroar': 'pyroar-male',
+  'Frillish': 'frillish-male', 'Jellicent': 'jellicent-male',
   'Indeedee': 'indeedee-male', 'Indeedee-F': 'indeedee-female',
   'Meowstic': 'meowstic-male', 'Meowstic-F': 'meowstic-female',
   'Basculegion': 'basculegion-male', 'Basculegion-F': 'basculegion-female',
-  'Oinkologne-F': 'oinkologne-female',
+  'Oinkologne': 'oinkologne-male', 'Oinkologne-F': 'oinkologne-female',
   'Tauros-Paldea-Combat': 'tauros-paldea-combat-breed',
   'Tauros-Paldea-Blaze': 'tauros-paldea-blaze-breed',
   'Tauros-Paldea-Aqua': 'tauros-paldea-aqua-breed',
   'Urshifu': 'urshifu-single-strike',
-  'Calyrex-Ice': 'calyrex-ice-rider', 'Calyrex-Shadow': 'calyrex-shadow-rider',
+  'Calyrex-Ice': 'calyrex-ice', 'Calyrex-Shadow': 'calyrex-shadow',
   'Basculin': 'basculin-red-striped',
   'Wormadam': 'wormadam-plant',
-  'Sinistea': 'sinistea-phony', 'Polteageist': 'polteageist-phony',
   'Gourgeist': 'gourgeist-average', 'Pumpkaboo': 'pumpkaboo-average',
   'Maushold': 'maushold-family-of-three', 'Maushold-Four': 'maushold-family-of-four',
   'Tatsugiri': 'tatsugiri-curly',
   'Squawkabilly': 'squawkabilly-green-plumage',
-  'Zygarde-10%': 'zygarde-10',
+  'Squawkabilly-Blue': 'squawkabilly-blue-plumage',
+  'Squawkabilly-White': 'squawkabilly-white-plumage',
+  'Squawkabilly-Yellow': 'squawkabilly-yellow-plumage',
+  'Zygarde': 'zygarde-50', 'Zygarde-10%': 'zygarde-10',
   'Morpeko': 'morpeko-full-belly',
   "Oricorio-Pa'u": 'oricorio-pau',
   'Mimikyu': 'mimikyu-disguised',
-  'Eiscue': 'eiscue-ice-face',
+  'Eiscue': 'eiscue-ice',
   'Palafin': 'palafin-zero',
   'Gimmighoul': 'gimmighoul-chest',
   'Toxtricity': 'toxtricity-amped',
   'Minior': 'minior-red-meteor',
   'Wishiwashi': 'wishiwashi-solo',
+  'Lycanroc': 'lycanroc-midday',
+  'Giratina': 'giratina-altered',
+  'Shaymin': 'shaymin-land',
+  'Darmanitan': 'darmanitan-standard', 'Darmanitan-Galar': 'darmanitan-galar-standard',
+  'Keldeo': 'keldeo-ordinary',
+  'Landorus': 'landorus-incarnate', 'Thundurus': 'thundurus-incarnate',
+  'Tornadus': 'tornadus-incarnate',
+  'Meloetta': 'meloetta-aria',
+  'Enamorus': 'enamorus-incarnate',
+  'Dudunsparce': 'dudunsparce-two-segment',
+  'Necrozma-Dusk-Mane': 'necrozma-dusk', 'Necrozma-Dawn-Wings': 'necrozma-dawn',
+  'Pikachu-Original': 'pikachu-original-cap', 'Pikachu-Hoenn': 'pikachu-hoenn-cap',
+  'Pikachu-Sinnoh': 'pikachu-sinnoh-cap', 'Pikachu-Unova': 'pikachu-unova-cap',
+  'Pikachu-Kalos': 'pikachu-kalos-cap', 'Pikachu-Alola': 'pikachu-alola-cap',
+  'Pikachu-Partner': 'pikachu-partner-cap', 'Pikachu-World': 'pikachu-world-cap',
+};
+
+// PokeAPI に pokemon エントリが無い見た目フォルム (模様・真贋等)。
+// 特性は基本フォルムと同一なので、フォールバック前に基本フォルムの
+// PokeAPI 取得結果を引き継ぐ (calc フォールバックの第1特性のみ化を防ぐ)
+const INHERIT_ABILITIES = {
+  'Vivillon-Pokeball': 'Vivillon', 'Vivillon-Fancy': 'Vivillon',
+  'Polteageist-Antique': 'Polteageist', 'Sinistea-Antique': 'Sinistea',
+  'Sinistcha-Masterpiece': 'Sinistcha', 'Poltchageist-Artisan': 'Poltchageist',
 };
 
 function pokeSlug(en) {
@@ -66,6 +98,7 @@ console.log(`対象: ${names.length} 種族`);
 
 const out = {};
 let ok = 0, fallback = 0, missing = 0;
+const fallbackNames = [];
 const queue = [...names];
 async function worker() {
   while (queue.length) {
@@ -83,13 +116,23 @@ async function worker() {
       if (abs.length) { out[en] = abs; ok++; continue; }
       throw new Error('no abilities');
     } catch (e) {
-      if (calcAbilities[en]) { out[en] = calcAbilities[en]; fallback++; }
+      if (calcAbilities[en]) { out[en] = calcAbilities[en]; fallback++; fallbackNames.push(en); }
       else { missing++; console.log(`  取得失敗: ${en} (${slug})`); }
     }
   }
 }
 await Promise.all(Array.from({ length: 8 }, worker));
-console.log(`species abilities: ${ok} ok, ${fallback} calc fallback, ${missing} missing / ${names.length}`);
+// 見た目フォルムは基本フォルムの PokeAPI 取得結果を引き継ぐ
+let inherited = 0;
+for (const [forme, base] of Object.entries(INHERIT_ABILITIES)) {
+  if (out[base] && fallbackNames.includes(forme)) {
+    out[forme] = out[base];
+    fallback--; inherited++;
+    fallbackNames.splice(fallbackNames.indexOf(forme), 1);
+  }
+}
+console.log(`species abilities: ${ok} ok, ${inherited} inherited, ${fallback} calc fallback, ${missing} missing / ${names.length}`);
+if (fallbackNames.length) console.log(`calc fallback のままの種族: ${fallbackNames.join(', ')}`);
 writeFileSync(new URL('./data/species_abilities.json', import.meta.url), JSON.stringify(out, null, 1));
 for (const k of ['Ninetales-Alola', 'Indeedee-F', 'Marowak-Alola', 'Raichu-Alola', 'Rotom-Heat', 'Incineroar']) {
   console.log(`sample ${k}:`, out[k]);
