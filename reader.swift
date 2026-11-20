@@ -3480,15 +3480,49 @@ func diskReaderBuild() -> String? {
     return String(rest[..<end])
 }
 
-// 新しいリーダーが同期で届いていたら、選出画面のうち (同定が始まる前) に
-// 終了コード 42 で抜ける。起動スクリプト側がそのコードを見て再起動する。
+// reader が起動時に読み込むファイル一式 (本体 + data/*.json)。
+// これらは起動時にしか読まれないため、同期で差し替わった場合は
+// 再起動しないと反映されない
+func watchedFiles() -> [URL] {
+    let names = ["names_index.json", "log_names.json", "species_abilities.json",
+                 "species_moves.json", "regulation.json", "species_types.json",
+                 "preview_features.json", "type_icons.json", "names_ja.json",
+                 "items_ja.json", "base_stats.json"]
+    return [scriptDir.appendingPathComponent("reader.swift")]
+        + names.map { scriptDir.appendingPathComponent("data/\($0)") }
+}
+
+// ファイル群の内容指紋 (FNV-1a 64bit)。ファイル名と内容、読めない
+// (存在しない) ことも含める
+func fingerprintFiles(_ urls: [URL]) -> String {
+    var h: UInt64 = 0xcbf29ce484222325
+    func mix(_ byte: UInt8) { h = (h ^ UInt64(byte)) &* 0x100000001b3 }
+    for url in urls {
+        for byte in url.lastPathComponent.utf8 { mix(byte) }
+        mix(0xff)
+        if let data = try? Data(contentsOf: url) {
+            for byte in data { mix(byte) }
+        } else {
+            mix(0xee)
+        }
+        mix(0xfe)
+    }
+    return String(h, radix: 16)
+}
+
+let startupFingerprint = fingerprintFiles(watchedFiles())
+
+// 新しいリーダーやデータが同期で届いていたら、選出画面のうち
+// (同定が始まる前) に終了コード 42 で抜ける。起動スクリプト側が
+// そのコードを見て再起動する。
 // 対戦中は絶対に再起動しない (対戦状態が消えてしまうため)
 func maybeRestartForUpdate() {
     if previewHandled { return }
     if Date().timeIntervalSince(lastBuildCheckAt) < 5 { return }
     lastBuildCheckAt = Date()
-    guard let disk = diskReaderBuild(), disk != readerBuild else { return }
-    print("[sync] 新しいリーダー (\(disk)) が届いたため再起動します")
+    guard fingerprintFiles(watchedFiles()) != startupFingerprint else { return }
+    let disk = diskReaderBuild() ?? "?"
+    print("[sync] reader.swift または data ファイルの更新 (\(disk)) が届いたため再起動します")
     fflush(stdout)
     exit(42)
 }
@@ -3642,7 +3676,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1013"
+let readerBuild = "20261120_0116"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
