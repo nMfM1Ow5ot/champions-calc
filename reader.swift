@@ -2604,9 +2604,13 @@ func salvageItem(in t: String) -> Bool {
         || t.contains("失った") || t.contains("うしなった") else { return false }
     // きのみ・シード類の名前が本文にあるか (正規化して itemDict の値と照合)
     let nt = normalize(t)
-    // 濁点ゆれ (キーのみ→ギーのみ等) は両辺を畳んだ形でも照合する (検証 R2 #17)
+    // 濁点ゆれ (キーのみ→ギーのみ等) は両辺を畳んだ形でも照合する (検証 R2 #17)。
+    // 長音落ちまで重なった場合 (サイコシード→サイゴシド) は ッ→ツ+長音落ち
+    // まで畳む (検証 R8 #73)。この変換ではアイテム名は全件衝突しない
+    let itemFold: (String) -> String = { foldDakuten($0.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")).replacingOccurrences(of: "ー", with: "") }
     let itemJa = itemDict.values.first(where: { ($0.contains("のみ") || $0.contains("シード")) && nt.contains(normalize($0)) })
         ?? itemDict.values.first(where: { ($0.contains("のみ") || $0.contains("シード")) && foldDakuten(nt).contains(foldDakuten(normalize($0))) })
+        ?? itemDict.values.first(where: { ($0.contains("のみ") || $0.contains("シード")) && itemFold(nt).contains(itemFold(normalize($0))) })
     guard let itemJa else { return false }
     guard let subj = salvageSubject(in: t) else { return false }
     let key = "\(subj.side):\(subj.speciesEn)"
@@ -3077,9 +3081,10 @@ func translateBattleMessage(_ text: String) -> Bool {
         let tk = t.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
         // 「バツグン」が平仮名 (ばつぐん) で読まれた場合は正規化形でも判定する (検証 R1 #66)
         let ntk = nt.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
-        // バツグン自体の濁点ゆれ (パツグン/バツクン等) は畳んだ形でも判定する (検証 R3)
+        // バツグン自体の濁点ゆれ (パツグン/バツクン等) は畳んだ形でも判定する (検証 R3)。
+        // 平仮名読み (ばつくん) は正規化形を畳んだものとも照合する (検証 vhard R9)
         let ftk = foldDakuten(tk)
-        let kind = tk.contains("いまひとつ") ? "resisted" : (tk.contains("バツグン") || ntk.contains("バツグン") || ftk.contains("ハツクン")) ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
+        let kind = tk.contains("いまひとつ") ? "resisted" : (tk.contains("バツグン") || ntk.contains("バツグン") || ftk.contains("ハツクン") || foldDakuten(ntk).contains("ハツクン")) ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
         if !kind.isEmpty {
             let ekey = "\(slot)|\(kind)"
             if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
@@ -4355,7 +4360,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1524"
+let readerBuild = "20261120_1548"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
