@@ -17,14 +17,14 @@
   "data/pokedb_parsed.json": "bba36692be2b33ff42edeb7c62c8d0cd9b9c3cf2c123a7c95e49bec3b7c3fe63",
   "data/preview_features.json": "be0b19cddbfc7b25d504cc90c3c05a48b2152726e378721974e8109e1c66b19c",
   "data/regulation.json": "7efedfe7d41be04452c974d699af484e8cc7837c4ac33227e78198a0982149db",
-  "data/species_abilities.json": "48fc349d1f14a3db2b2f515b9093b372dd82b43d459eceeee06ca7df2f54be0f",
+  "data/species_abilities.json": "0f541543571d04385c8b54b7aca5e8f57bcebdc216177684c14b5aeb02a4c8cf",
   "data/species_moves.json": "e150e7645889ede9cf0ca9d83b660dce6263754511fe883b875052b026fb0948",
   "data/species_types.json": "c1aa4b42837de9767fb125ec9f9ccf41bdbeb0670d19e4670105ba7ee565ceba",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "1cf58a3d1ff20870453c4f8dd926e02f888c3896fe20110c0a142784523f3bd4",
   "fetch_champions_dex.mjs": "e879efed1dace75df4afc3894a40e86a84feeb531b1efe595b152d940201e6fa",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
-  "fetch_species_abilities.mjs": "0ff266109992574c9bf2d1986a0279a836680035cfd5d78fe0ba5502937108a1",
+  "fetch_species_abilities.mjs": "1f1221256a11ead833ec1a18a73e65bdb71c70f651b7bc800ed7d7db7afc1603",
   "fetch_species_moves.mjs": "0c9ee8b701167e5c03fbbe4e2b3693ac33e079cfd386b0cde83af39eee495817",
   "fetch_usage.mjs": "28c71b85cae10b8a8d45b84aee1ca9d3315c047b1cdf65a30ac4c90aae83b17d",
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
@@ -38,5 +38,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "af4212e9a6fa7774202cf2eca573248d55eac460beb8937d4940e3f66d071119"
  },
- "rev": "20261120_2005"
+ "rev": "20261120_2009"
 }
