@@ -293,7 +293,11 @@ for (const [code, d] of Object.entries(parsed)) {
 writeFileSync(new URL('./data/usage_sets.json', import.meta.url), JSON.stringify({ season: SEASON_LABEL, rule: RULE, source: 'champs.pokedb.tokyo', sets }, null, 1));
 writeFileSync(new URL('./data/regulation.json', import.meta.url), JSON.stringify({ regulation: REG_LABEL, rule: RULE, season: SEASON_LABEL, updated: new Date().toISOString().slice(0, 10) }, null, 1));
 console.log('regulation.json updated:', REG_LABEL, SEASON_LABEL);
-writeFileSync(new URL('./data/items_ja.json', import.meta.url), JSON.stringify({ ...ITEM_JA2EN, ...megaStoneByJa }, null, 1));
+// 既存の items_ja.json を優先してマージする (再取得のたびに、監査等で追加された
+// 項目が消えないように。新規項目だけが生成マップから足される)
+let existingItems = {};
+try { existingItems = JSON.parse(readFileSync(new URL('./data/items_ja.json', import.meta.url), 'utf8')); } catch (e) { /* 既定値 */ }
+writeFileSync(new URL('./data/items_ja.json', import.meta.url), JSON.stringify({ ...ITEM_JA2EN, ...megaStoneByJa, ...existingItems }, null, 1));
 console.log('sets built:', Object.keys(sets).length);
 console.log('unmapped items:', [...unmapped.items].slice(0, 30));
 console.log('unmapped moves:', [...unmapped.moves].slice(0, 20));
