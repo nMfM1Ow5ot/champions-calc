@@ -144,32 +144,97 @@ var debugMode = false    // --debug のときだけ診断メッセージを出�
 var teamDiag = false     // チーム画面取り込みの診断表示 (--team-screen 単発実行時のみ)
 func diagPrint(_ s: String) { if teamDiag { print(s); fflush(stdout) } }
 
+// 取得失敗・復帰の通知は通常時も遷移時に 1 回だけ出す。暗転・スリープ・
+// QuickTime 終了・iPad 切断のいずれでも、リーダーは終了せず待機して
+// 取得できるようになったら自動で再開するのが前提なので、「止まって
+// いる」のか「待っている」のかをターミナルで区別できるようにする
+func noteCaptureFailed(_ reason: String) {
+    if lastCaptureOK { print("[待機] \(reason) — 復帰を待っています"); fflush(stdout) }
+    lastCaptureOK = false
+}
+
+func noteCaptureOK() {
+    if !lastCaptureOK { print("[再開] 画面の取得を再開しました"); fflush(stdout) }
+    lastCaptureOK = true
+}
+
 func captureQuickTime() -> CGImage? {
-    guard let win = findQuickTimeWindow() else {
-        if debugMode && lastCaptureOK { print("QuickTime Player のウィンドウが見つかりません。iPadを表示した状態で再試行してください。") }
-        lastCaptureOK = false
+    // 最小化・サムネイル化した極小ウィンドウは取り込み対象にしない
+    guard let win = findQuickTimeWindow(), win.bounds.width >= 200, win.bounds.height >= 200 else {
+        noteCaptureFailed("QuickTime Player のウィンドウが見つかりません")
         return nil
     }
-    let tmp = NSTemporaryDirectory() + "champions_capture.png"
+    // 取り込み先は呼び出しごとに変える: メインループと撮影ボタン受付
+    // (localhost:8899) が同時に取り込むと同じファイルを取り合って
+    // 壊れた画像や前回の残り画像を読んでしまう。また起動に失敗した
+    // 場合に前回のファイルが「新しいフレーム」として読まれる事故も防ぐ
+    let tmp = NSTemporaryDirectory() + "champions_capture_\(UUID().uuidString).png"
+    defer { try? FileManager.default.removeItem(atPath: tmp) }
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
     p.arguments = ["-l", "\(win.id)", "-o", "-x", tmp]
-    try? p.run()
-    p.waitUntilExit()
-    guard p.terminationStatus == 0,
-          let img = NSImage(contentsOfFile: tmp),
-          let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-        if debugMode && lastCaptureOK { print("画面の取り込みに失敗しました (画面収録の権限を確認してください)。") }
-        lastCaptureOK = false
+    do { try p.run() } catch {
+        noteCaptureFailed("画面の取り込みを開始できませんでした")
         return nil
     }
-    lastCaptureOK = true
+    // スリープ復帰直後や QuickTime のハングでは screencapture が戻って
+    // こないことがある。無期限に待つとリーダー全体が固まってしまう
+    // ため、5 秒で打ち切って次の試行に回す
+    let done = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async { p.waitUntilExit(); done.signal() }
+    if done.wait(timeout: .now() + 5) == .timedOut {
+        p.terminate()
+        _ = done.wait(timeout: .now() + 1)
+        noteCaptureFailed("画面の取り込みがタイムアウトしました")
+        return nil
+    }
+    guard p.terminationStatus == 0,
+          let img = NSImage(contentsOfFile: tmp),
+          let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
+          cg.width >= 50, cg.height >= 50 else {
+        noteCaptureFailed("画面の取り込みに失敗しました")
+        return nil
+    }
+    noteCaptureOK()
     return cg
 }
 
 func loadImage(path: String) -> CGImage? {
     guard let img = NSImage(contentsOfFile: path) else { return nil }
     return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
+}
+
+// MARK: - 空フレーム (暗転・真っ黒・単色) の判定
+
+var blankFrameActive = false   // 空フレームが続いているか (遷移通知用)
+
+// フレームの平均輝度とばらつきを小さなバッファで測り、「絵が無い」
+// フレームかどうかを返す。暗転フェード・iPad の画面消灯・スリープ
+// 復帰直後の真っ黒な画面・QuickTime の切断画面などが該当する。
+// 空フレームは OCR や各種判定に流さず、その間は待機するだけにする
+// (真っ黒な時間が続いただけで対戦終了と誤判定したり、暗い画面の
+// ノイズをメッセージと誤読したりしないため)
+func isBlankFrame(_ image: CGImage) -> Bool {
+    if image.width < 50 || image.height < 50 { return true }
+    let buf = makePixelBuffer(image)
+    if buf.w <= 0 || buf.h <= 0 || buf.data.count < buf.w * buf.h * 4 { return true }
+    var sum = 0.0, sumSq = 0.0, n = 0.0
+    var i = 0
+    while i + 2 < buf.data.count {
+        let lum = (Double(buf.data[i]) + Double(buf.data[i + 1]) + Double(buf.data[i + 2])) / 3.0
+        sum += lum; sumSq += lum * lum; n += 1
+        i += 16   // 4 ピクセルに 1 個のサンプリング (小バッファなので十分)
+    }
+    if n == 0 { return true }
+    let mean = sum / n
+    let sd = sqrt(max(0, sumSq / n - mean * mean))
+    return mean < 12 || sd < 2.0
+}
+
+func noteBlankFrame(_ blank: Bool) {
+    if blank && !blankFrameActive { print("[待機] 画面が暗い/真っ黒なため待機します"); fflush(stdout) }
+    if !blank && blankFrameActive { print("[再開] 画面が戻りました"); fflush(stdout) }
+    blankFrameActive = blank
 }
 
 // MARK: - OCR
@@ -3145,11 +3210,15 @@ func loadPreviewData() {
 }
 
 // フル解像度のピクセルバッファ (行0 = 画像の上端、RGBA)
+// コンテキストが作れない画像 (0 サイズ・壊れた取り込み結果) では
+// 強制アンラップで落とさず、空バッファ (0, 0) を返して呼び出し側に
+// 「絵が無い」として扱わせる
 func makeFullBuffer(_ image: CGImage) -> (data: [UInt8], w: Int, h: Int) {
     let w = image.width, h = image.height
+    if w <= 0 || h <= 0 { return ([], 0, 0) }
     var data = [UInt8](repeating: 0, count: w * h * 4)
-    let ctx = CGContext(data: &data, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    guard let ctx = CGContext(data: &data, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return ([], 0, 0) }
     ctx.translateBy(x: 0, y: CGFloat(h))
     ctx.scaleBy(x: 1, y: -1)
     ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
@@ -3840,6 +3909,10 @@ func maybeRestartForUpdate() {
 }
 
 func runOnce(image: CGImage) {
+    // 空フレーム (暗転・消灯・切断) はどの判定にも流さず待機する。
+    // 対戦終了カウンタ (emptyBattleFrames) や選出の試行回数も進めない
+    if isBlankFrame(image) { noteBlankFrame(true); return }
+    noteBlankFrame(false)
     // 選出画面はプレート判定より先に判定する。
     // (選出画面の自軍パネルや「0/4」表示をプレートと誤検出しないため)
     if detectPreview(image: image) {
@@ -3988,7 +4061,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1139"
+let readerBuild = "20261120_1156"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -4113,8 +4186,8 @@ func ocrBoxes(_ image: CGImage, x0: Double, y0: Double, x1: Double, y1: Double, 
 func makePixelBuffer(_ image: CGImage) -> (data: [UInt8], w: Int, h: Int) {
     let w = 232, h = 152
     var data = [UInt8](repeating: 0, count: w * h * 4)
-    let ctx = CGContext(data: &data, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    guard let ctx = CGContext(data: &data, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return ([], 0, 0) }
     ctx.translateBy(x: 0, y: CGFloat(h))
     ctx.scaleBy(x: 1, y: -1)
     ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
@@ -4134,9 +4207,11 @@ func makePixelBuffer(_ image: CGImage) -> (data: [UInt8], w: Int, h: Int) {
 }
 
 func pixelAt(_ buf: (data: [UInt8], w: Int, h: Int), fx: Double, fy: Double) -> (r: Int, g: Int, b: Int) {
+    if buf.w <= 0 || buf.h <= 0 { return (0, 0, 0) }
     let x = min(buf.w - 1, max(0, Int(fx * Double(buf.w))))
     let y = min(buf.h - 1, max(0, Int(fy * Double(buf.h))))
     let i = (y * buf.w + x) * 4
+    if i < 0 || i + 2 >= buf.data.count { return (0, 0, 0) }
     return (Int(buf.data[i]), Int(buf.data[i + 1]), Int(buf.data[i + 2]))
 }
 
@@ -4188,6 +4263,8 @@ func writeTeamFile() {
 }
 
 func runTeamOnce(image: CGImage) {
+    if isBlankFrame(image) { noteBlankFrame(true); return }
+    noteBlankFrame(false)
     guard let sp = selectedSpecies(image) else {
         print("チーム登録: 選択中のポケモンが特定できません (様子を見る画面ですか？)")
         return
@@ -4433,6 +4510,8 @@ func expectedStats(base: [Int], sp: [String: Int], speciesEn: String, up: Int?, 
 }
 
 func captureTeamScreen(image: CGImage, tab: String) -> Int {
+    if isBlankFrame(image) { noteBlankFrame(true); return 0 }
+    noteBlankFrame(false)
     var updated = 0
     var screenSpecies: [String] = []
     let teamBuf = makeFullBuffer(image)
@@ -4665,6 +4744,12 @@ func startCaptureServer() {
             if let d = data, let s = String(data: d, encoding: .utf8), s.contains("tab=status") { tab = "status" }
             var body = "{\"ok\":false,\"error\":\"QuickTime の画面を取得できませんでした\"}"
             if let img = captureQuickTime() {
+                if isBlankFrame(img) {
+                    body = "{\"ok\":false,\"error\":\"画面が暗い/真っ黒です（iPad の画面が消えていないか確認してください）\"}"
+                    let resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
+                    conn.send(content: resp.data(using: .utf8), completion: .contentProcessed { _ in conn.cancel() })
+                    return
+                }
                 let n = captureTeamScreen(image: img, tab: tab)
                 if n > 0 {
                     body = "{\"ok\":true,\"registered\":\(teamOrder.count),\"message\":\"取り込みました（登録 \(teamOrder.count)/6）\"}"
@@ -4739,10 +4824,26 @@ startCaptureServer()
 if teamMode {
     print("チーム登録モード開始 (Ctrl+C で終了)。「様子を見る」で1体ずつ選び、能力タブとステータスタブをそれぞれ映してください。")
 }
+var lastLoopWorkEndAt: Date? = nil
+var discardNextFrame = false   // 復帰直後の 1 フレームは遷移中の可能性があるため読み捨てる
 while true {
+    // 前の周回から大きく時間が空いた = Mac のスリープや長時間の停止
+    // から復帰した可能性が高い。その場合はフレーム数ベースの判定
+    // (対戦終了カウンタ・ターン進行) をリセットし、復帰直後の
+    // 1 フレームは読み捨てて、遷移途中の画面で状態を壊さないようにする
+    if let last = lastLoopWorkEndAt, Date().timeIntervalSince(last) > 10 {
+        print("[再開] スリープ/停止から復帰したようです。読み取りを再開します")
+        fflush(stdout)
+        emptyBattleFrames = 0
+        turnRawFrames = 0
+        discardNextFrame = true
+    }
     if let img = captureQuickTime() {
-        if teamMode { runTeamOnce(image: img) } else { runOnce(image: img) }
+        if discardNextFrame {
+            discardNextFrame = false
+        } else if teamMode { runTeamOnce(image: img) } else { runOnce(image: img) }
     }
     if once { break }
+    lastLoopWorkEndAt = Date()
     Thread.sleep(forTimeInterval: intervalSec)
 }
