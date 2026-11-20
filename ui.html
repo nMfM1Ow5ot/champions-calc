@@ -727,11 +727,12 @@ function dispStat(spec, key, raw, sideKey) {
   else if (key === 'atk' && ab === 'Gorilla Tactics') pushMod(6144);
   if (key === 'def' && ab === 'Fur Coat') pushMod(8192);
   if (key === 'spd' && ab === 'Ice Scales') pushMod(8192);
-  if (key === 'atk' && spec.item === 'Choice Band') pushMod(6144);
-  if (key === 'spa' && spec.item === 'Choice Specs') pushMod(6144);
+  const itm = spec.itemLost ? '' : spec.item;
+  if (key === 'atk' && itm === 'Choice Band') pushMod(6144);
+  if (key === 'spa' && itm === 'Choice Specs') pushMod(6144);
   if (modChain !== 4096) { const x = v * modChain / 4096; v = (x % 1 > 0.5) ? Math.ceil(x) : Math.floor(x); }
   if (key === 'spe') {
-    if (spec.item === 'Choice Scarf') v = Math.floor(v * 1.5);
+    if (itm === 'Choice Scarf') v = Math.floor(v * 1.5);
     if (spec.unburden && ab === 'Unburden') v *= 2;
     if (state.side[sideKey].tailwind) v *= 2;
     if (spec.status === 'par') v = Math.floor(v / 2);
@@ -856,10 +857,10 @@ function metaRow(side) {
     onPick: v => { spec.nature = v; if (side === 'opps') markCorrected(spec, '性格'); calcAll(); },
   });
   regDD(`item:${side}`, {
-    options: ITEM_OPTIONS, value: spec.item || '', clearable: true, placeholder: 'なし',
-    valueLabel: spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : '',
+    options: ITEM_OPTIONS, value: spec.itemLost ? '' : (spec.item || ''), clearable: true, placeholder: 'なし',
+    valueLabel: !spec.itemLost && spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : '',
     highlight: corr('持ち物'),
-    onPick: v => { spec.item = v || ''; if (side === 'opps') markCorrected(spec, '持ち物'); calcAll(); },
+    onPick: v => { spec.item = v || ''; spec.itemLost = false; if (side === 'opps') markCorrected(spec, '持ち物'); calcAll(); },
   });
   return `<div class="metarow">
     <div class="col"><div class="ddlabel">特性</div>${ddHTML(`ability:${side}`)}</div>
@@ -901,7 +902,7 @@ function spreadCapable(side, moveName) {
     if (!sd) return false;
     if ((sd.types || []).includes('Flying')) return false;
     const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
-    if (ab === 'Levitate' || spec.item === 'Air Balloon') return false;
+    if (ab === 'Levitate' || (spec.itemLost ? '' : spec.item) === 'Air Balloon') return false;
     return true;
   }
   return md.target === 'allAdjacentFoes' || md.target === 'allAdjacent';
@@ -1342,6 +1343,8 @@ function applyRevealedPreserving(spec, rev) {
   fresh.knownMoves = [...new Set([...(fresh.knownMoves || []), ...(spec.knownMoves || [])])];
   fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
+  if (spec.itemLost) fresh.itemLost = true;
+  if (spec.unburden) fresh.unburden = true;
   return fresh;
 }
 // リーダーがメガシンカを検出したら、その枠をメガ種族として計算する
@@ -1561,13 +1564,13 @@ function infProcessMove(ev) {
   const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
   if (!myRow) return;
   const tw = s => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
-  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.item, mySpec.status, tw('p1'), mySpec.ability, state.field.weather, state.field.terrain, !!mySpec.unburden);
+  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.itemLost ? '' : mySpec.item, mySpec.status, tw('p1'), mySpec.ability, state.field.weather, state.field.terrain, !!mySpec.unburden);
   const trick = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
   const itemKnown = (oppSpec.corrected || []).includes('持ち物');
   const abKnown = (oppSpec.corrected || []).includes('特性');
   const feasible = new Set();
   for (const row of table.spe) {
-    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? oppSpec.item : '', oppSpec.status, tw('p2'), abKnown ? oppSpec.ability : '', state.field.weather, state.field.terrain, !!oppSpec.unburden);
+    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? (oppSpec.itemLost ? '' : oppSpec.item) : '', oppSpec.status, tw('p2'), abKnown ? oppSpec.ability : '', state.field.weather, state.field.terrain, !!oppSpec.unburden);
     // 通常: 先に動いた方が速い (同速の両勝ちはありうる)。トリックルーム下では逆
     const ok = trick ? (firstIsOpp ? eff <= myEff : eff >= myEff) : (firstIsOpp ? eff >= myEff : eff <= myEff);
     if (ok) feasible.add(row.nature + '|' + row.sp);
@@ -1707,6 +1710,7 @@ function applyState(j) {
     lastActiveKey.opps = '';
     faintLock.mine.clear();
     faintLock.opps.clear();
+    for (const s of state.mine) if (s) s.itemLost = false;
     revivalPending.mine = 0;
     revivalPending.opps = 0;
     changed = true;
@@ -1729,6 +1733,8 @@ function applyState(j) {
       // 再登場時に蘇ってしまうため、欠落は 0 として扱う
       state.mine[pi].boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
       state.mine[pi].unburden = !!en.unburden;
+      // 持ち物の消費・喪失は対戦中ずっと有効 (交代しても戻らない) ため、一度立ったら維持する
+      if (en.itemLost) state.mine[pi].itemLost = true;
       applyMegaFlag(state.mine[pi], en);
       idxs.push(pi); changed = true;
     }
@@ -1776,6 +1782,7 @@ function applyState(j) {
       // mine 側と同様、boosts 欠落は 0 として扱う (交代リセットの反映漏れ防止)
       spec.boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
       spec.unburden = !!en.unburden;
+      if (en.itemLost) spec.itemLost = true;
       applyMegaFlag(spec, en);
       idxs.push(pi); changed = true;
     }
