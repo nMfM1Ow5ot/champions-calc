@@ -293,8 +293,10 @@ const state = {
   active: { mine: [0, 1], opps: [0, 1] },
 };
 let lastCalc = null;
-// 場に出たことがある (選出されて登場した) ポケモンの記録。場を離れたらリングだけで示す
+// 場に出たことがある (選出されて登場した) ポケモンの記録。種族名で記録し、場を離れたらリングだけで示す
 const seenActive = { mine: new Set(), opps: new Set() };
+// ひんし (HP0) になったポケモンは、対戦中に state.json の誤読で HP が戻らないようロックする (種族名)
+const faintLock = { mine: new Set(), opps: new Set() };
 let lastStateJson = '';
 const ui = { importing: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
 
@@ -379,6 +381,7 @@ async function loadMyTeam() {
     state.sel.mine = 0;
     state.active.mine = [0, Math.min(1, list.length - 1)];
     seenActive.mine.clear();
+    faintLock.mine.clear();
     return true;
   } catch (e) { return false; }
 }
@@ -739,9 +742,8 @@ function dispStat(spec, key, raw, sideKey) {
 function playerBar(side) {
   const isOpp = side === 'opps';
   const specs = state[side];
-  for (const ai of state.active[side]) seenActive[side].add(ai);
   const rack = specs.map((spec, i) => {
-    const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', seenActive[side].has(i) ? 'seen' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
+    const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', seenActive[side].has(spec.species) ? 'seen' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
     const eff = effSpecies(spec);
     return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', eff))}">${spriteImg(eff, gen.species.get(idOf(eff))?.baseSpecies || eff, '')}</button>`;
   }).join('');
@@ -1270,6 +1272,7 @@ document.addEventListener('change', e => {
   if (t.matches('[data-hpnum]')) {
     const spec = DS(t.dataset.hpnum);
     spec.curHPPercent = Math.max(0, Math.min(100, Math.round(+t.value || 0)));
+    if (spec.curHPPercent > 0) faintLock[t.dataset.hpnum].delete(spec.species);
     calcAll();
     return;
   }
@@ -1604,6 +1607,8 @@ function applyState(j) {
     lastActiveKey.opps = '';
     seenActive.mine.clear();
     seenActive.opps.clear();
+    faintLock.mine.clear();
+    faintLock.opps.clear();
     changed = true;
   }
   if (Array.isArray(j.mine)) {
@@ -1613,7 +1618,11 @@ function applyState(j) {
       const spName = resolveSpecies(en.species) || en.species;
       const pi = state.mine.findIndex(s => s.species === spName);
       if (pi < 0) continue;
-      if (typeof en.curHPPercent === 'number') state.mine[pi].curHPPercent = en.curHPPercent;
+      seenActive.mine.add(spName);
+      if (typeof en.curHPPercent === 'number') {
+        if (en.curHPPercent <= 0) { state.mine[pi].curHPPercent = 0; faintLock.mine.add(spName); }
+        else if (!faintLock.mine.has(spName)) state.mine[pi].curHPPercent = en.curHPPercent;
+      }
       if (typeof en.status === 'string') state.mine[pi].status = en.status;
       // boosts キーが無い = 場に出ている以上ランクは 0 (reader は非0の時だけ送る)。
       // キーが無い時に旧値を残すと、交代でリセットされたはずのランクが
@@ -1634,6 +1643,8 @@ function applyState(j) {
       state.oppTeam.forEach((sp, i) => { old[sp] = state.opps[i]; });
       state.oppTeam = names;
       state.opps = names.map(sp => old[sp] || oppSpec(sp, 'usage'));
+      for (const sp of [...seenActive.opps]) if (!names.includes(sp)) seenActive.opps.delete(sp);
+      for (const sp of [...faintLock.opps]) if (!names.includes(sp)) faintLock.opps.delete(sp);
       if (state.sel.opps >= names.length) state.sel.opps = 0;
       state.active.opps = [0, Math.min(1, names.length - 1)];
       lastActiveKey.opps = '';
@@ -1654,7 +1665,11 @@ function applyState(j) {
       if (pi < 0) continue;
       let spec = state.opps[pi];
       if (en.revealed) { spec = applyRevealedPreserving(spec, en.revealed); state.opps[pi] = spec; }
-      if (typeof en.curHPPercent === 'number') spec.curHPPercent = en.curHPPercent;
+      seenActive.opps.add(spName);
+      if (typeof en.curHPPercent === 'number') {
+        if (en.curHPPercent <= 0) { spec.curHPPercent = 0; faintLock.opps.add(spName); }
+        else if (!faintLock.opps.has(spName)) spec.curHPPercent = en.curHPPercent;
+      }
       if (typeof en.status === 'string') spec.status = en.status;
       // mine 側と同様、boosts 欠落は 0 として扱う (交代リセットの反映漏れ防止)
       spec.boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
