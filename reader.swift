@@ -1187,6 +1187,7 @@ func resetLogState() {
 //     内容はディスクに残っている
 var battleArchiveId = ""        // 現在の試合のアーカイブ名 (開始時刻ベース)
 var battleArchived = false      // 現在の試合を logs/ へ保存済みか
+var lastArchiveSnapshotCount = -1  // 安全網の下書き保存をした時点の battleLog 行数
 let logsDirURL = scriptDir.appendingPathComponent("logs")
 
 func battleStamp(for date: Date = Date()) -> String {
@@ -1212,9 +1213,15 @@ func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [Stri
 // 現在進行中の試合を logs/ へ保存する (勝敗確定時は final: true)
 func archiveCurrentBattle(final: Bool) {
     guard logStarted, !battleArchived, !battleLog.isEmpty else { return }
-    archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog,
-                      id: battleArchiveId.isEmpty ? battleStamp() : battleArchiveId)
+    let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
+    archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog, id: id)
     battleArchived = true
+    if final {
+        // 安全網の下書き (interrupted) が残っていれば取り除く (確定版が正)
+        for suffix in ["_interrupted.log", "_interrupted_protocol.log"] {
+            try? FileManager.default.removeItem(at: logsDirURL.appendingPathComponent("battle_\(id)\(suffix)"))
+        }
+    }
 }
 
 // 起動時: 前回セッションの残留ログが未保存の試合なら救済する
@@ -1249,6 +1256,7 @@ func startBattleLog() {
     resetLogState()
     battleArchiveId = battleStamp()
     battleArchived = false
+    lastArchiveSnapshotCount = -1
     battleLog = []
     emitLog("|gametype|doubles")
     for sp in teamOrder { emitLog("|poke|p1|\(sp)") }
@@ -2715,6 +2723,30 @@ func translateBattleMessage(_ text: String) -> Bool {
         archiveCurrentBattle(final: true)
         return true
     }
+    // 無操作による対戦終了: 「相手の操作がありませんでした！対戦を終了します！」
+    // (実例: 2026-11-20 vs Foxy2905 戦。勝敗文が無いため従来は未保存のまま
+    // 終わり、保存も送信もされなかった)。操作しなかった側の負けとして扱う。
+    // OCR では文頭に「あいてそうさ」のような重なりゴミが付くことがあるため、
+    // 「操作がありません」に部分一致で判定し、どちらの無操作かは
+    // 相手/あいて・自分/じぶん の有無で分ける。判別できない場合も
+    // 対戦終了として確定保存だけは行う (勝敗行は出さない)
+    if t.contains("操作がありません") || (t.contains("対戦を終了します") && t.contains("操作")) {
+        if winLogged { return true }
+        let oppIdle = t.contains("相手") || t.contains("あいて")
+        let mineIdle = t.contains("自分") || t.contains("じぶん")
+        emitPendingFaints()
+        if oppIdle && !mineIdle {
+            forfeitName = trainerOpp.isEmpty ? "Opponent" : trainerOpp
+            emitLog("|win|\(trainerMine.isEmpty ? "p1" : trainerMine)")
+            winLogged = true
+        } else if mineIdle && !oppIdle {
+            forfeitName = trainerMine.isEmpty ? "You" : trainerMine
+            emitLog("|win|\(trainerOpp.isEmpty ? "p2" : trainerOpp)")
+            winLogged = true
+        }
+        archiveCurrentBattle(final: true)
+        return true
+    }
     // 急所: 「(相手の) Xの 急所に 当たった！」
     // 「急所」は OCR で「還所」「意所」等に崩れるため、「所に当たった」で
     // 判定する (実例: 2026-11-20 の対戦で 2 件とも日本語のまま漏れた)。
@@ -2870,6 +2902,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         || t.contains("戻れ") || t.contains("引っこめた") || t.contains("引っ込めた")
         || t.contains("引つこめた") || t.contains("引つ込めた")
         || t.contains("引っごめた") || t.contains("引つごめた")
+        || t.contains("イリュージョンが解けた") || t.contains("イリュージョンがとけた")
         || t.contains("場所を入れ替えた") {
         // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
         // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
@@ -2998,6 +3031,13 @@ func translateBattleMessage(_ text: String) -> Bool {
                 || formeGroup(sp).contains { g in lastSlots.values.contains { $0.speciesEn == g.en } }
             if onField, let hit = moveNameOrig.keys.filter({ nt.contains($0) }).max(by: { $0.count < $1.count }) {
                 mvJaFound = moveNameOrig[hit]
+            }
+            if mvJaFound == nil && onField, let lr = nt.range(of: "の", options: .backwards) {
+                // 最後の「の」以降を技名候補として緩く照合する (濁点・半濁点の
+                // OCR ゆれ対策。実例: 「あいて相手のゾロアークのハイパーポイス！」
+                // = ハイパーボイス が日本語のまま漏れた、2026-11-20 vs Foxy2905 戦)
+                let tail = String(nt[lr.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "！!"))
+                if tail.count >= 3 { mvJaFound = moveNameLoose(tail) }
             }
         }
         if let mvJa = mvJaFound {
@@ -4128,6 +4168,20 @@ func runOnce(image: CGImage) {
             watchBattleMessage(image: image, platesVisible: false)
             scanFieldFromScreen(image: image)
             writeState()
+            // 安全網: 勝敗文を取りこぼしたまま対戦が終わると (相手の無操作
+            // 終了・切断など)、次の対戦開始か reader 再起動まで保存されず
+            // 「保存も送信もされない」状態になる (実例: 2026-11-20 vs
+            // Foxy2905 戦)。プレートが消えて 45 秒イベントが無ければ
+            // 未確定の下書きとして保存する。確定保存ではないので
+            // battleArchived は立てず、勝敗が確定すれば final 版が正になる
+            if logStarted && !battleArchived && !battleLog.isEmpty && !winLogged
+                && emptyBattleFrames > 30
+                && Date().timeIntervalSince(lastLogEventAt) > 45
+                && battleLog.count != lastArchiveSnapshotCount {
+                archiveBattleLogs(final: false, protocolLines: battleLog, displayLines: displayLog,
+                                  id: battleArchiveId.isEmpty ? battleStamp() : battleArchiveId)
+                lastArchiveSnapshotCount = battleLog.count
+            }
             if emptyBattleFrames > 30 { inBattle = false; emptyBattleFrames = 0 }
         }
         return
@@ -4172,7 +4226,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1210"
+let readerBuild = "20261120_1247"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
