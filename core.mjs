@@ -118,7 +118,7 @@ function toPokemon(spec) {
   const name = spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species;
   const ability = spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability;
   const p = new Pokemon(gen, name, {
-    level: 50, nature: spec.nature, ability, item: spec.item,
+    level: 50, nature: spec.nature, ability, item: spec.itemLost ? '' : spec.item,
     ivs: IVS, evs: spToEvs(spec.sp),
     boosts: spec.boosts || undefined,
     status: spec.status || '',
