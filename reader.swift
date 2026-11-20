@@ -1680,8 +1680,21 @@ func processPlates(_ hits: [String: SlotState]) {
                     // 初登場だけは満タンとして採用する
                     let openingLead = prev == nil && actionSeq == 0
                         && !battleLog.contains { $0.hasPrefix("|move|") || $0.hasPrefix("|-damage|") }
-                    let effPct = openingLead ? 100 : s.hpPercent
-                    let effText = openingLead ? (s.hpMax.map { "\($0)/\($0)" } ?? "100/100") : hpTextFor(s)
+                    // ひんし交代での初登場も、設置物が無い限り満タンでしか
+                    // 出ない (バーは登場アニメーションで下から満ちていくため、
+                    // 途中値を採用すると幻の被ダメ→全回復の組が出る。実例:
+                    // 2026-11-20 vs leslie 戦、グレンアルマが 61/161 で登場し
+                    // 翌ターン 161/161 に回復した)。初登場を取り逃がして
+                    // 後から発見した場合は実ダメージを消しかねないため、
+                    // 前任のひんしが記録済みの枠に限る (交代待ち判定は場が
+                    // 1 体の間ずっと立つため条件に使えない)
+                    let firstEntry = !(fieldSeen[side]?.contains(s.speciesEn) ?? false)
+                        && (monStates[key]?.hpPercent ?? 100) >= 100
+                    let replacementEntry = firstEntry && (battleHazards[side] ?? [:]).isEmpty
+                        && faintedSlots[slot] != nil
+                    let adoptFull = openingLead || replacementEntry
+                    let effPct = adoptFull ? 100 : s.hpPercent
+                    let effText = adoptFull ? (s.hpMax.map { "\($0)/\($0)" } ?? "100/100") : hpTextFor(s)
                     lastEmittedPct[plate.name] = effPct
                     monStates[key]?.hpPercent = effPct
                     monStates[key]?.hpText = effText
@@ -1691,7 +1704,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
                     // 交代で入った直後の HP 減少は、設置物ダメージとして
                     // 帰属させる (Showdown の [from] 表記)
-                    if effPct < prevPct && !openingLead {
+                    if effPct < prevPct && !adoptFull {
                         if battleHazards[side]?["Stealth Rock"] != nil { pendingStatusFrom[key] = ("Stealth Rock", Date()) }
                         else if battleHazards[side]?["Spikes"] != nil { pendingStatusFrom[key] = ("Spikes", Date()) }
                     }
@@ -1703,7 +1716,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     // 0% で登場した (交代直後に技を受けて倒れた等) 場合は
                     // ひんし行を補う
                     if effPct == 0 { deferFaint(slot: slot, speciesEn: s.speciesEn) }
-                    lastSlots[plate.name] = openingLead
+                    lastSlots[plate.name] = adoptFull
                         ? SlotState(speciesEn: s.speciesEn, hpPercent: 100, hpCur: s.hpMax, hpMax: s.hpMax) : s
                 }
             }
@@ -3064,7 +3077,9 @@ func translateBattleMessage(_ text: String) -> Bool {
     // メガシンカの反応 (ストーンと相手トレーナー名がここで判明する)。
     // ストーンは「<種族>の<ストーン>と」の構造から切り出して完全一致で照合する
     // (部分一致の最長マッチだとキーアイテム名などと競合しうるため)
-    if t.contains("反応した") && t.contains("リングが") {
+    // 「反応した」は OCR で「受応した」と崩れることがある (実例:
+    // 2026-11-20 vs leslie 戦。崩れた文は |-message| に漏れていた)
+    if (t.contains("反応した") || t.contains("受応した")) && t.contains("リングが") {
         if let sp = findSpeciesJa(in: t) {
             let side = (t.contains("相手の") || t.contains("あいての")) ? "p2" : "p1"
             if monStates["\(side):\(sp.en)"] == nil { monStates["\(side):\(sp.en)"] = MonState() }
@@ -3180,12 +3195,15 @@ func translateBattleMessage(_ text: String) -> Bool {
         || t.contains("戻れ") || t.contains("引っこめた") || t.contains("引っ込めた")
         || t.contains("引つこめた") || t.contains("引つ込めた")
         || t.contains("引っごめた") || t.contains("引つごめた")
+        || (t.contains("引") && t.contains("こめた"))
         || t.contains("イリュージョンが解けた") || t.contains("イリュージョンがとけた")
         || (t.contains("ランク") && t.contains("級"))
         || ((t.contains("ゆけ") || t.contains("もどれ")) && findSpeciesJa(in: t) != nil)
         || t.contains("場所を入れ替えた") {
         // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
         // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
+        // ラテン文字が混入する崩れ (「引Iっこめた」) もあるため、
+        // 「引」と「こめた」の共起でも消費する (実例: 2026-11-20 vs leslie 戦)
         // 場所を入れ替えた はアリーバスイッチの結果文 (技そのものは |move| で記録済み)
         return true
     }
@@ -4552,7 +4570,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1741"
+let readerBuild = "20261120_1801"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
