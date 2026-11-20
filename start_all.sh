@@ -33,12 +33,33 @@ fi
 echo "リーダーを起動します (終了は Ctrl+C で両方止まります)"
 
 # リーダーは表で起動
-# 終了コード 42 (新しいリーダーが同期で届いた合図) のときだけ再起動する
+# 終了コード 42 (新しいリーダーが同期で届いた合図) のときは再起動する。
+# それ以外の異常終了 (クラッシュ等) でも自動で再起動し、復旧を待つ。
+# ただし起動直後に落ち続ける場合は無限ループを避けるため 5 回で諦める。
+# Ctrl+C (130) と正常終了 (0) はそのまま終わる
+CRASHES=0
 while true; do
+  START=$(date +%s)
   swift reader.swift "$@"
   code=$?
-  if [ $code -ne 42 ]; then
+  if [ $code -eq 42 ]; then
+    echo "リーダーを再起動します"
+    CRASHES=0
+    continue
+  fi
+  if [ $code -eq 0 ] || [ $code -eq 130 ]; then
     exit $code
   fi
-  echo "リーダーを再起動します"
+  NOW=$(date +%s)
+  if [ $((NOW - START)) -lt 5 ]; then
+    CRASHES=$((CRASHES + 1))
+  else
+    CRASHES=1
+  fi
+  if [ $CRASHES -ge 5 ]; then
+    echo "リーダーが起動直後に繰り返し終了するため、自動再起動を中止します (コード: $code)"
+    exit $code
+  fi
+  echo "リーダーが予期せず終了しました (コード: $code)。2 秒後に再起動します"
+  sleep 2
 done
