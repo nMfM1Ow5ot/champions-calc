@@ -26075,7 +26075,7 @@ var require_dist = __commonJS({
   }
 });
 
-// bundle_entry_tmp.mjs
+// .bundle_entry.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 
 // core.mjs
@@ -26179,62 +26179,62 @@ function spToEvs(sp = {}) {
 }
 var TEAM_PRESETS = [
   {
-    label: "\u30E9\u30A4\u30C1\u30E5\u30A6 (\u30E1\u30ACY)",
-    species: "Raichu",
-    megaSpecies: "Raichu-Mega-Y",
-    item: "Raichunite Y",
-    ability: "Lightning Rod",
-    megaAbility: "No Guard",
-    nature: "Timid",
-    sp: { hp: 32, def: 11, spe: 23 },
-    moves: ["Zap Cannon", "Focus Blast", "Fake Out", "Protect"]
-  },
-  {
-    label: "\u30AC\u30D6\u30EA\u30A2\u30B9 (\u30E1\u30ACZ)",
-    species: "Garchomp",
-    megaSpecies: "Garchomp-Mega-Z",
-    item: "Garchompite Z",
-    ability: "Rough Skin",
-    megaAbility: "Levitate",
+    label: "\u30AB\u30E1\u30C3\u30AF\u30B9 (\u30E1\u30AC)",
+    species: "Blastoise",
+    megaSpecies: "Blastoise-Mega",
+    item: "Blastoisinite",
+    ability: "Rain Dish",
+    megaAbility: "Mega Launcher",
     nature: "Modest",
-    sp: { def: 4, spa: 30, spe: 32 },
-    moves: ["Dragon Pulse", "Earth Power", "Power Gem", "Protect"]
+    sp: { hp: 2, spa: 32, spe: 32 },
+    moves: ["Water Spout", "Terrain Pulse", "Aura Sphere", "Dark Pulse"]
   },
   {
-    label: "\u30B5\u30FC\u30D5\u30B4\u30FC",
-    species: "Gholdengo",
-    item: "Life Orb",
-    ability: "Good as Gold",
-    nature: "Modest",
-    sp: { hp: 17, spa: 7, spd: 22, spe: 20 },
-    moves: ["Make It Rain", "Shadow Ball", "Nasty Plot", "Protect"]
-  },
-  {
-    label: "\u30A6\u30EB\u30AC\u30E2\u30B9",
-    species: "Volcarona",
-    item: "Rocky Helmet",
-    ability: "Flame Body",
+    label: "\u30B5\u30FC\u30CA\u30A4\u30C8 (\u30E1\u30AC)",
+    species: "Gardevoir",
+    megaSpecies: "Gardevoir-Mega",
+    item: "Gardevoirite",
+    ability: "Synchronize",
+    megaAbility: "Pixilate",
     nature: "Timid",
-    sp: { hp: 13, def: 30, spe: 23 },
-    moves: ["Overheat", "Struggle Bug", "Rage Powder", "Tailwind"]
+    sp: { hp: 2, spa: 32, spe: 32 },
+    moves: ["Hyper Voice", "Expanding Force", "Thunderbolt", "Protect"]
   },
   {
-    label: "\u30B4\u30EA\u30E9\u30F3\u30C0\u30FC",
-    species: "Rillaboom",
-    item: "Miracle Seed",
-    ability: "Grassy Surge",
+    label: "\u30AA\u30AA\u30CB\u30E5\u30FC\u30E9",
+    species: "Sneasler",
+    item: "Psychic Seed",
+    ability: "Unburden",
     nature: "Adamant",
-    sp: { hp: 26, atk: 30, def: 1, spd: 4, spe: 5 },
-    moves: ["Fake Out", "Grassy Glide", "Wood Hammer", "U-turn"]
+    sp: { hp: 2, atk: 32, spe: 32 },
+    moves: ["Close Combat", "Dire Claw", "Rock Tomb", "Protect"]
   },
   {
-    label: "\u30AC\u30AA\u30AC\u30A8\u30F3",
-    species: "Incineroar",
-    item: "Sitrus Berry",
-    ability: "Intimidate",
-    nature: "Impish",
-    sp: { hp: 30, def: 20, spd: 14, spe: 2 },
-    moves: ["Fake Out", "Parting Shot", "Flare Blitz", "Darkest Lariat"]
+    label: "\u30A4\u30A8\u30C3\u30B5\u30F3\u2640",
+    species: "Indeedee-F",
+    item: "Rocky Helmet",
+    ability: "Psychic Surge",
+    nature: "Relaxed",
+    sp: { hp: 32, def: 32, spd: 2 },
+    moves: ["Psychic", "Follow Me", "Helping Hand", "Protect"]
+  },
+  {
+    label: "\u30B0\u30EC\u30F3\u30A2\u30EB\u30DE",
+    species: "Armarouge",
+    item: "Focus Sash",
+    ability: "Weak Armor",
+    nature: "Modest",
+    sp: { hp: 1, def: 1, spa: 32, spe: 32 },
+    moves: ["Expanding Force", "Armor Cannon", "Wide Guard", "Protect"]
+  },
+  {
+    label: "\u30A8\u30EB\u30D5\u30FC\u30F3",
+    species: "Whimsicott",
+    item: "Babiri Berry",
+    ability: "Prankster",
+    nature: "Modest",
+    sp: { hp: 32, def: 2, spa: 25, spd: 7 },
+    moves: ["Grass Knot", "Tailwind", "Sunny Day", "Encore"]
   }
 ];
 function assumedSet(speciesName, kind = "attacker") {
