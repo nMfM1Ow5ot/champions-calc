@@ -266,6 +266,7 @@ func writeState() {
         let st = monStates["\(side):\(s.speciesEn)"]
         var e = "{\"species\": \"\(jsonEscape(s.speciesEn))\", \"curHPPercent\": \(st?.hpPercent ?? s.hpPercent)"
         if let st, !st.status.isEmpty { e += ", \"status\": \"\(st.status)\"" }
+        if unburdenActive.contains("\(side):\(s.speciesEn)") { e += ", \"unburden\": true" }
         if let st, !st.megaSpecies.isEmpty { e += ", \"mega\": true, \"megaSpecies\": \"\(jsonEscape(st.megaSpecies))\"" }
         if let st, !st.boosts.isEmpty {
             let bs = ["atk", "def", "spa", "spd", "spe"].compactMap { k -> String? in
@@ -382,6 +383,7 @@ var intimidateDone: [String: Date] = [:]          // "side:Species" -> いかく
 var lastBoostApply: [String: (seq: Int, turn: Int, at: Date)] = [:]  // "slot|stat|delta" -> 最終適用 (再読での二重適用防止)
 var emittedSwitchKeys: Set<String> = []            // |switch| を出した "side:Species" (ランク変化行の保留判定)
 var pendingUnburden: Set<String> = []              // 交代行が出る前にシード消費を検知した種族 (かるわざ発動を交代行の後に出す)
+var unburdenActive: Set<String> = []               // かるわざ発動中 (state.json の unburden フラグ用。交代で解除)
 var heldBoostLines: [String: [(stat: String, delta: Int, at: Date)]] = [:]  // 交代行より先に届いたランク変化の保留 (枠は出す時点で付け直す)
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
@@ -836,6 +838,7 @@ func resetLogState() {
     pendingMegaSpecies = [:]
     emittedSwitchKeys = []
     pendingUnburden = []
+    unburdenActive = []
     heldBoostLines = [:]
     recentAtkDrops = [:]
     lastDamageLabel = ""
@@ -882,6 +885,7 @@ func hpTextFor(_ s: SlotState) -> String {
 func noteItemLost(slot: String, side: String, speciesEn: String) {
     let abilityJa = side == "p1" ? (teamEntries[speciesEn]?["ability"] as? String) : revealedAbilities[speciesEn]
     guard abilityJa == "かるわざ" else { return }
+    unburdenActive.insert("\(side):\(speciesEn)")
     emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Unburden")
 }
 
@@ -1150,7 +1154,10 @@ func processPlates(_ hits: [String: SlotState]) {
                 let replacementBusy = faintedSlots[slot] == nil
                     && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
                 if !replacementBusy {
-                    if let p = prev { monStates["\(side):\(p.speciesEn)"]?.boosts = [:] }  // 交代でランク変化はリセット
+                    if let p = prev {
+                        monStates["\(side):\(p.speciesEn)"]?.boosts = [:]  // 交代でランク変化はリセット
+                        unburdenActive.remove("\(side):\(p.speciesEn)")  // かるわざも交代で解除
+                    }
                     // 入場時点の HP と前回出場時の HP の差は、交代で入った
                     // 直後に受けた技 (や さいせいさいぼう の回復) の分。
                     // 交代行の HP に吸収されて被ダメ行が出ないため、後で補う
@@ -3562,7 +3569,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0953"
+let readerBuild = "20261120_0959"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
