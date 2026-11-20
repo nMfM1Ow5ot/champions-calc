@@ -272,7 +272,6 @@ func ocr(_ image: CGImage, plate: Plate) -> [String] {
 
 struct SlotState { var speciesEn: String; var hpPercent: Int; var hpCur: Int? = nil; var hpMax: Int? = nil }
 var lastSlots: [String: SlotState] = [:]
-var activeFieldConds: Set<String> = []  // 開始行を出したサイド/フィールド条件 (終了行の照合用)
 var lastWritten = ""
 // 相手の6体コレクション: 対戦中にプレートで読み取れた相手種族を登場順に蓄積する (見せ合い画面には名前テキストが無いため)
 var oppTeamSeen: [String] = []
@@ -1003,28 +1002,10 @@ func emitLog(_ line: String) { emitLog(line, applyNow: true) }
 // applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
 // (交代行の後に出す保留ランク行など。適用は applyEvent で発生時に行う)
 func emitLog(_ line: String, applyNow: Bool) {
-    // 開始行を出していない条件の終了行は出さない (開始を取りこぼした
-    // 終了だけが残ると、存在しない条件の終了がログと状態に残る。
-    // 実例: 2026-11-20 vs チャンピオン戦、おいかぜが始まっていないのに
-    // |-sideend|Tailwind だけが出た)
-    if line.hasPrefix("|-sidestart|") || line.hasPrefix("|-sideend|") {
-        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-        if f.count >= 4 {
-            let key = "\(f[2]):\(f[3].replacingOccurrences(of: "move: ", with: ""))"
-            if line.hasPrefix("|-sidestart|") { activeFieldConds.insert(key) }
-            else if !activeFieldConds.contains(key) { return }
-            else { activeFieldConds.remove(key) }
-        }
-    }
-    if line.hasPrefix("|-fieldstart|") || line.hasPrefix("|-fieldend|") {
-        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-        if f.count >= 3 {
-            let key = "field:\(f[2].replacingOccurrences(of: "move: ", with: ""))"
-            if line.hasPrefix("|-fieldstart|") { activeFieldConds.insert(key) }
-            else if !activeFieldConds.contains(key) { return }
-            else { activeFieldConds.remove(key) }
-        }
-    }
+    // 終了行 (sideend/fieldend) が開始行なしで出た場合は、開始側を
+    // 取りこぼした可能性をまず疑う (2026-11-20 vs チャンピオン戦の
+    // 教訓: 序盤の取り込み失敗で開始行が欠け、実在した条件の終了行
+    // だけが残った)。終了行は証拠としてそのまま残す
     if applyNow {
         if line.hasPrefix("|move|") || line.hasPrefix("|turn|") { actionSeq += 1 }
         applyEvent(line)
@@ -1177,7 +1158,6 @@ func resetLogState() {
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
-    activeFieldConds = []
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -4452,7 +4432,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1700"
+let readerBuild = "20261120_1709"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
