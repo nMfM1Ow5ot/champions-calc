@@ -297,6 +297,8 @@ let lastCalc = null;
 const seenActive = { mine: new Set(), opps: new Set() };
 // ひんし (HP0) になったポケモンは、対戦中に state.json の誤読で HP が戻らないようロックする (種族名)
 const faintLock = { mine: new Set(), opps: new Set() };
+// さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
+const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
 const ui = { importing: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
 
@@ -1593,6 +1595,17 @@ function attachEstimate(spec) {
 function applyState(j) {
   if (!j || typeof j !== 'object') return;
   let changed = false;
+  // さいきのいのりの使用を先に拾う (同じ state.json で復活した HP が届いてもロック解除できるよう、HP 反映より前に数える)
+  if (Array.isArray(j.events) && typeof inference !== 'undefined' && inference) {
+    const from = j.events.length < inference.seen ? 0 : inference.seen;
+    for (let i = from; i < j.events.length; i++) {
+      const ev = j.events[i];
+      if (ev && ev.k === 'mv' && ev.move === 'Revival Blessing' && typeof ev.label === 'string') {
+        if (ev.label.startsWith('p1')) revivalPending.mine++;
+        else if (ev.label.startsWith('p2')) revivalPending.opps++;
+      }
+    }
+  }
   if (typeof j.oppTrainer === 'string' && j.oppTrainer && j.oppTrainer !== oppTrainerName) {
     oppTrainerName = j.oppTrainer;
     changed = true;
@@ -1609,6 +1622,8 @@ function applyState(j) {
     seenActive.opps.clear();
     faintLock.mine.clear();
     faintLock.opps.clear();
+    revivalPending.mine = 0;
+    revivalPending.opps = 0;
     changed = true;
   }
   if (Array.isArray(j.mine)) {
@@ -1622,6 +1637,7 @@ function applyState(j) {
       if (typeof en.curHPPercent === 'number') {
         if (en.curHPPercent <= 0) { state.mine[pi].curHPPercent = 0; faintLock.mine.add(spName); }
         else if (!faintLock.mine.has(spName)) state.mine[pi].curHPPercent = en.curHPPercent;
+        else if (revivalPending.mine > 0 && en.curHPPercent <= 55) { revivalPending.mine--; faintLock.mine.delete(spName); state.mine[pi].curHPPercent = en.curHPPercent; }
       }
       if (typeof en.status === 'string') state.mine[pi].status = en.status;
       // boosts キーが無い = 場に出ている以上ランクは 0 (reader は非0の時だけ送る)。
@@ -1669,6 +1685,7 @@ function applyState(j) {
       if (typeof en.curHPPercent === 'number') {
         if (en.curHPPercent <= 0) { spec.curHPPercent = 0; faintLock.opps.add(spName); }
         else if (!faintLock.opps.has(spName)) spec.curHPPercent = en.curHPPercent;
+        else if (revivalPending.opps > 0 && en.curHPPercent <= 55) { revivalPending.opps--; faintLock.opps.delete(spName); spec.curHPPercent = en.curHPPercent; }
       }
       if (typeof en.status === 'string') spec.status = en.status;
       // mine 側と同様、boosts 欠落は 0 として扱う (交代リセットの反映漏れ防止)
