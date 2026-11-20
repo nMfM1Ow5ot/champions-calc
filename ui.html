@@ -407,13 +407,31 @@ async function captureTeam(tab) {
   try {
     const r = await fetch('http://localhost:8899/capture?tab=' + tab);
     const j = await r.json();
-    if (j.ok) {
-      await loadMyTeam();
-      calcAll();
-      say('撮影成功： ' + (j.message || '取り込みました'), 'ok');
-    } else {
+    if (!j.ok) {
       say('撮影失敗： ' + (j.error || '画面を確認してください'), 'ng');
+      return;
     }
+    // 「取り込めた」と「画面に反映できた」は別々に確認する。
+    // 以前は読み直し (loadMyTeam) に失敗しても成功表示のままだったため、
+    // 成功と出ているのに内容が変わらない事故が起きていた
+    const loaded = await loadMyTeam();
+    calcAll();
+    if (!loaded) {
+      say('撮影失敗： 取り込んだチームを読み直せませんでした', 'ng');
+      return;
+    }
+    // リーダーが取り込んだ種族一覧を返してきた場合は、プリセット側に
+    // その種族が揃っていることまで確認して初めて成功とする
+    if (Array.isArray(j.species) && j.species.length) {
+      const have = new Set(PRESETS.map(p => p.species));
+      if (j.species.some(sp => !have.has(sp))) {
+        say('撮影失敗： 取り込んだ内容が画面に反映されませんでした', 'ng');
+        return;
+      }
+      say('撮影成功： ' + j.species.map(sp => ja('species', sp)).join('・') + ' を取り込みました', 'ok');
+      return;
+    }
+    say('撮影成功： ' + (j.message || '取り込みました'), 'ok');
   } catch (e) {
     say('撮影失敗： リーダーに接続できません（run_reader.sh を起動してください）', 'ng');
   }
