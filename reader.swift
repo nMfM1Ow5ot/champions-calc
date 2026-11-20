@@ -667,6 +667,10 @@ func renderLogLine(_ line: String) -> [String] {
         let (_, side, species) = renderLabelParts(f[2])
         if f[3].contains("Focus Sash") { return ["(\(renderPrefix(side))\(species) held on thanks to its Focus Sash!)"] }
         if f[3].contains("Protect") { return ["\(renderPrefix(side))\(species) protected itself!"] }
+        if f[3].contains("Terrain") {
+            let tn = f[3].replacingOccurrences(of: "move: ", with: "")
+            return ["\(renderPrefix(side))\(species) was protected by the \(tn)!"]
+        }
         return []
     case "-sidestart", "-sideend":
         guard f.count >= 4 else { return [] }
@@ -1104,7 +1108,7 @@ func flushPendingDamage(force: Bool = false) {
 // プレートの差分をログ行に変換する
 func processPlates(_ hits: [String: SlotState]) {
     if !logStarted { startBattleLog() }
-    // 保留中のランク変化行: 交代行が来なくても 4 秒経ったら出す
+    // 保留中のランク変化行: 交代行が来なくても 30 秒経ったら出す
     flushHeldBoostsTimeout()
     // 遅延中のひんし行: 文が来なくても 1.5 秒経ったら出す
     if !pendingFaints.isEmpty {
@@ -1197,11 +1201,27 @@ func processPlates(_ hits: [String: SlotState]) {
                 pendingDamagePct[plate.name] = nil
                 pendingDamageCount[plate.name] = nil
             } else if s.hpPercent == 0 {
-                // 0% (ひんし) は即時
-                pendingDamagePct[plate.name] = nil
-                pendingDamageCount[plate.name] = nil
-                emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
-                               fromPct: emitted, toPct: s.hpPercent, hpText: monStates[key]!.hpText)
+                // 0% (ひんし) は原則即時だが、隣の枠の 0% が一瞬だけ混入
+                // する誤読で「幻の ひんし」になった実例があるため、
+                // 2 フレーム連続で 0% のときだけ確定する
+                // (実例: 2026-11-20、場に残っていたアブソルが 0% と
+                //  誤読されて ひんし行まで出た)
+                if pendingDamagePct[plate.name] == 0 {
+                    let n = (pendingDamageCount[plate.name] ?? 1) + 1
+                    if n >= 2 {
+                        pendingDamagePct[plate.name] = nil
+                        pendingDamageCount[plate.name] = nil
+                        pendingDamageSince[plate.name] = nil
+                        emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
+                                       fromPct: emitted, toPct: 0, hpText: monStates[key]!.hpText)
+                    } else {
+                        pendingDamageCount[plate.name] = n
+                    }
+                } else {
+                    pendingDamagePct[plate.name] = 0
+                    pendingDamageCount[plate.name] = 1
+                    pendingDamageSince[plate.name] = Date()
+                }
             } else if pendingDamagePct[plate.name] == s.hpPercent {
                 // 同じ値が 3 回続き、かつ現れてから 1.2 秒経った = アニメーションが
                 // 落ち着いた (段階アニメーションは途中で 1 秒近く止まることが
@@ -1598,8 +1618,10 @@ func applyMoveField(_ mvJa: String) {
 // 能力名はフリガナ+漢字の二重表記 (こうげき攻撃 等) で読めることがある。
 func checkBoostText(text: String, side: String, speciesEn: String, slot: String) {
     if text.contains("あがらない") || text.contains("さがらない") || text.contains("上がらない") || text.contains("下がらない") { return }
-    let up = text.contains("あがった") || text.contains("上がった")
-    let down = text.contains("さがった") || text.contains("下がった")
+    // 小さい「っ」が通常の「つ」に崩れる OCR ゆれも拾う
+    // (実例: 2026-11-20「とくぼう特防が上がつた！」が日本語のまま漏れた)
+    let up = text.contains("あがった") || text.contains("上がった") || text.contains("あがつた") || text.contains("上がつた")
+    let down = text.contains("さがった") || text.contains("下がった") || text.contains("さがつた") || text.contains("下がつた")
     guard up || down else { return }
     let key = "\(side):\(speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
@@ -2062,7 +2084,7 @@ func findSpeciesJaLoose(in text: String) -> (entry: SpeciesEntry, moveStart: Int
 // ランク変化らしい文か (能力名 + 上がった/下がった を含む)
 func isBoostShapedText(_ text: String) -> Bool {
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
-    guard t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") else { return false }
+    guard t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった") || t.contains("あがつた") || t.contains("さがつた") || t.contains("上がつた") || t.contains("下がつた") else { return false }
     if t.contains("あがらない") || t.contains("さがらない") || t.contains("上がらない") || t.contains("下がらない") { return false }
     return ["攻撃", "こうげき", "防御", "ぼうぎょ", "攻が", "防が", "特攻", "とくこう", "特防", "とくぼう", "素早さ", "すばやさ", "命中率", "回避率", "すべての"].contains { t.contains($0) }
 }
@@ -2625,6 +2647,18 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 消費しないと |-message| に化けて同じ文が残り続ける)
     if t.contains("たおれた") {
         if (monStates[key]?.hpPercent ?? 0) > 0 {
+            // プレートで 0% を読む前に倒れた場合 (ひんしアニメーションで
+            // プレートがすぐ消える等)、被ダメ行もここで補う
+            // (実例: 2026-11-20、イエッサンとオオニューラの ひんし に
+            //  被ダメ行が付かなかった)
+            let pn = ["p1a": "mineA", "p1b": "mineB", "p2a": "oppA", "p2b": "oppB"][slot] ?? ""
+            if !pn.isEmpty && (lastEmittedPct[pn] ?? 1) > 0 {
+                heldLine[pn] = nil
+                let fhp = monStates[key]?.hpMax.map { "0/\($0)" } ?? "0/100"
+                _ = emitDamageLine(plateName: pn, slot: slot, key: key, speciesEn: sp.en,
+                                   fromPct: lastEmittedPct[pn] ?? (monStates[key]?.hpPercent ?? 100),
+                                   toPct: 0, hpText: fhp, force: true)
+            }
             monStates[key]?.hpPercent = 0
             deferFaint(slot: slot, speciesEn: sp.en)
         }
@@ -3569,7 +3603,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0959"
+let readerBuild = "20261120_1007"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
