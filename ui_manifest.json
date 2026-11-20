@@ -3,7 +3,7 @@
   "README.md": "937b9c9926cc986d8aa9d3d32ec2a8e0e4da101149871b24b6bcd2fca76f4c8b",
   "audit_items_ja.mjs": "b536fff2ca001daed9e79d2c8859484339f41e32c702bade0d5c62dd39136b4a",
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
-  "bundle.mjs": "bc4d0deb11c643f0edc35a103b11ef02446b2d9d659ea710ec3475ba3fbb216f",
+  "bundle.mjs": "ad648466ef63b746b38fa55e7343028fb844e52fb73cfe2b8c48bec0cb5eb620",
   "check/apple_stubs.swift": "71635ad1349461b2c8c5eccb49aaa9cc85789f4f3d2a131050259accdac4be75",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
   "core.mjs": "b30b4eb06829f2443d3383b66cfc6fabb16461c75b306f49c398a9f8361a34f0",
@@ -22,6 +22,7 @@
   "data/species_types.json": "c1aa4b42837de9767fb125ec9f9ccf41bdbeb0670d19e4670105ba7ee565ceba",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "1cf58a3d1ff20870453c4f8dd926e02f888c3896fe20110c0a142784523f3bd4",
+  "estimate_engine.mjs": "5c86a641cb342df38ca2259f2614670a3c2bcb1c7196679a8df702c6f3e1aae2",
   "fetch_champions_dex.mjs": "e879efed1dace75df4afc3894a40e86a84feeb531b1efe595b152d940201e6fa",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
   "fetch_species_abilities.mjs": "1f1221256a11ead833ec1a18a73e65bdb71c70f651b7bc800ed7d7db7afc1603",
@@ -34,9 +35,9 @@
   "serve.py": "817a17072af69f2124419d0cd6c63b9dc207240bca5e4b7d60a377cba2f1cb2f",
   "start_all.sh": "de5fbc9b78209265a010a39d2a0c73c42a762aba313ae1723116f9e672b02d52",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
-  "ui.html": "7378376233692abebd40eea69b9a0aca1f8c87e288c3c078b989f9d2a4c49fcb",
+  "ui.html": "c8f7962fd2af7fa957d9e13e9d52f5c1e40b54e852fbe09e3ff373403674b573",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "af4212e9a6fa7774202cf2eca573248d55eac460beb8937d4940e3f66d071119"
  },
- "rev": "20261120_2009"
+ "rev": "20261120_2114"
 }
