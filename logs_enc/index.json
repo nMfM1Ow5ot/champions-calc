@@ -49,6 +49,16 @@
    "name": "battle_20261120_171545_interrupted_protocol.log",
    "sha256": "fd4e1e8c99109de0f8fcb899bf41295002b51aa11ff9db349ceb6ea216eca22d",
    "uploaded_at": "2026-11-20T17:17:38.374794+09:00"
+  },
+  {
+   "name": "battle_20261120_173400_final.log",
+   "sha256": "59ecded1603d62a9b3484a00d694bacf84cb645e0f15728f9ef82af216288f6a",
+   "uploaded_at": "2026-11-20T17:37:17.975898+09:00"
+  },
+  {
+   "name": "battle_20261120_173400_final_protocol.log",
+   "sha256": "41d92da7882f8222cf6829b733834d3d278dae97c74d6d66ae38f55013e8f381",
+   "uploaded_at": "2026-11-20T17:37:20.021426+09:00"
   }
  ]
 }
