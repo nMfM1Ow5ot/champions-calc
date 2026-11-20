@@ -3449,7 +3449,9 @@ func pvExtractTrainers(_ boxes: [OcrBox]) {
     }
 }
 func detectPreview(image: CGImage) -> Bool {
-    let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1, fast: true)
+    // .fast は実機で Vision 内部がクラッシュしたため使わない (build 1013 で
+    // 導入、1023 の縮小対策でも直らず、.accurate に戻した)。経緯は ocrBoxes 参照
+    let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
     let isP = boxes.contains { $0.text.contains("選出") }
     // 新しい選出画面に入ったら前試合のトレーナー名を消し、今試合分を取り直す
     // (自分の名前は左上、相手は右上。勝敗ログの |win| に使う)
@@ -3677,7 +3679,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1023"
+let readerBuild = "20261120_1028"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -3774,32 +3776,21 @@ func loadMoveDict() {
 struct OcrBox { let text: String; let cx, cy, x0, y0, x1, y1: Double } // 座標は左上原点の割合
 
 func ocrBoxes(_ image: CGImage, x0: Double, y0: Double, x1: Double, y1: Double, fast: Bool = false) -> [OcrBox] {
-    // Vision のテキスト検出は、極端に小さい画像や、.fast では大きな画像で
-    // フレームワーク内部がクラッシュすることがある (実機 2026-11-20、
-    // build 1013 で選出検出を .fast 化した直後の起動時クラッシュ。
-    // CRDetectorOutputMaps の Array index out of range で、try? では
-    // 防げない)。入口で画像サイズを安全な範囲に寄せてから渡す。
-    // 結果の座標は正規化で返るため、縮小しても呼び出し側に影響しない。
+    // Vision のテキスト検出 (.fast) は実機でフレームワーク内部が
+    // クラッシュした (2026-11-20、build 1013 で選出検出を .fast 化した
+    // 直後から起動時に再現。CRDetectorOutputMaps の Array index out of
+    // range で、try? では防げない)。build 1023 で「.fast 時は長辺
+    // 1600px に縮小してから渡す」対策を入れたが直らなかったため、
+    // .fast 自体をやめて全て .accurate に戻した (build 1028)。
+    // fast 引数は将来の再検証用に残すが、現在の呼び出し元は使わない。
+    // 極端に小さい画像を渡さないガードだけは保険として残す。
     if image.width < 50 || image.height < 50 { return [] }
-    var img = image
-    if fast && max(image.width, image.height) > 1600 {
-        let scale = 1600.0 / Double(max(image.width, image.height))
-        let nw = Int((Double(image.width) * scale).rounded())
-        let nh = Int((Double(image.height) * scale).rounded())
-        var buf = [UInt8](repeating: 0, count: nw * nh * 4)
-        if let ctx = CGContext(data: &buf, width: nw, height: nh, bitsPerComponent: 8,
-                               bytesPerRow: nw * 4, space: CGColorSpaceCreateDeviceRGB(),
-                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
-            ctx.draw(image, in: CGRect(x: 0, y: 0, width: nw, height: nh))
-            if let scaled = ctx.makeImage() { img = scaled }
-        }
-    }
     let req = VNRecognizeTextRequest()
     req.recognitionLevel = fast ? .fast : .accurate
     req.recognitionLanguages = ["ja-JP", "en-US"]
     req.usesLanguageCorrection = false
     req.regionOfInterest = CGRect(x: x0, y: 1.0 - y1, width: x1 - x0, height: y1 - y0)
-    let handler = VNImageRequestHandler(cgImage: img, options: [:])
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try? handler.perform([req])
     return (req.results ?? []).compactMap { obs -> OcrBox? in
         guard let t = obs.topCandidates(1).first?.string else { return nil }
