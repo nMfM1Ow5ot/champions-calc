@@ -322,6 +322,7 @@ var battleLog: [String] = []
 var logStarted = false
 var currentTurn = 0
 var logFieldTerrain = ""
+var logTrickRoom = false
 var logFieldWeather = ""   // UI 表記 (Sun/Rain/Sand/Snow)
 
 struct MonState {
@@ -380,7 +381,7 @@ var fieldAbilityDone: [String: Date] = [:]        // "side:Species" -> 特性帰
 var intimidateDone: [String: Date] = [:]          // "side:Species" -> いかく帰属済みの繰り出し時刻
 var lastBoostApply: [String: (seq: Int, turn: Int, at: Date)] = [:]  // "slot|stat|delta" -> 最終適用 (再読での二重適用防止)
 var emittedSwitchKeys: Set<String> = []            // |switch| を出した "side:Species" (ランク変化行の保留判定)
-var heldBoostLines: [String: [(line: String, at: Date)]] = [:]  // 交代行より先に届いたランク変化行の保留
+var heldBoostLines: [String: [(stat: String, delta: Int, at: Date)]] = [:]  // 交代行より先に届いたランク変化の保留 (枠は出す時点で付け直す)
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
 var lastFallbackAt = Date.distantPast
@@ -624,6 +625,7 @@ func renderLogLine(_ line: String) -> [String] {
         let terrain = f[2].replacingOccurrences(of: "move: ", with: "").replacingOccurrences(of: " Terrain", with: "")
         if f[1] == "-fieldstart" {
             switch terrain {
+            case "Trick Room": return []
             case "Psychic": return ["The battlefield got weird!"]
             case "Electric": return ["An electric current ran across the battlefield!"]
             case "Grassy": return ["Grass grew to cover the battlefield!"]
@@ -632,6 +634,7 @@ func renderLogLine(_ line: String) -> [String] {
             }
         } else {
             switch terrain {
+            case "Trick Room": return ["The dimensions returned to normal!"]
             case "Psychic": return ["The battlefield returned to normal."]
             case "Electric": return ["The electricity disappeared from the battlefield."]
             case "Grassy": return ["The grass disappeared from the battlefield."]
@@ -839,6 +842,7 @@ func resetLogState() {
     commandPhaseSeen = false
     currentTurn = 0
     logFieldTerrain = ""
+    logTrickRoom = false
     logFieldWeather = ""
     logStarted = false
     lastSlots = [:]
@@ -1133,6 +1137,10 @@ func processPlates(_ hits: [String: SlotState]) {
                     && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
                 if !replacementBusy {
                     if let p = prev { monStates["\(side):\(p.speciesEn)"]?.boosts = [:] }  // 交代でランク変化はリセット
+                    // 入場時点の HP と前回出場時の HP の差は、交代で入った
+                    // 直後に受けた技 (や さいせいさいぼう の回復) の分。
+                    // 交代行の HP に吸収されて被ダメ行が出ないため、後で補う
+                    let prevPct = monStates[key]?.hpPercent ?? 100
                     pendingDamagePct[plate.name] = nil
                     heldLine[plate.name] = nil
                     lastEmittedPct[plate.name] = s.hpPercent
@@ -1142,6 +1150,10 @@ func processPlates(_ hits: [String: SlotState]) {
                     if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
                     emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
                     recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
+                    if s.hpPercent != prevPct {
+                        _ = emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
+                                           fromPct: prevPct, toPct: s.hpPercent, hpText: hpTextFor(s), force: true)
+                    }
                     faintedSlots.removeValue(forKey: slot)
                     // 0% で登場した (交代直後に技を受けて倒れた等) 場合は
                     // ひんし行を補う
@@ -1482,7 +1494,7 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
         }
     }
     // この種族宛てに保留していたランク変化行を、交代行の後に出す
-    flushHeldBoosts(forKey: key)
+    flushHeldBoosts(forKey: key, slot: slot)
 }
 
 var fieldSeen: [String: Set<String>] = ["p1": [], "p2": []]   // その対戦で場に出たことのある種族 (ターン判定の交代可否に使う)
@@ -1555,7 +1567,13 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
     // 1 文で 2 つ上がる技があるため、最初の 1 つで打ち切らない)。
     // フリガナ+漢字の二重表記は同一コードとして 1 回だけ数える
     var applied = Set<String>()
-    for (ja, code) in stats where text.contains(ja) && !applied.contains(code) {
+    for (ja, code) in stats where !applied.contains(code) {
+        // 「攻が」「防が」の 1 字落ちフォールバックは「特攻が」「特防が」の
+        // 部分文字列でもあるため、特攻/特防の文では使わない
+        // (実例: 2026-11-20、サイコキネシスの特防低下に防御低下まで付いた)
+        if ja == "攻が" && text.contains("特攻が") { continue }
+        if ja == "防が" && text.contains("特防が") { continue }
+        guard text.contains(ja) else { continue }
         applied.insert(code)
         applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag)
     }
@@ -1594,16 +1612,26 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
     // (実例: 2026-11-20 vs Vanille 戦、場に出る前の サイコシード 発動行が
     //  繰り出し行より先に出た)。状態への適用は即時に行い、行だけ保留する
     if !emittedSwitchKeys.contains(key) && (monStates[key]?.hpPercent ?? 100) > 0 {
-        heldBoostLines[key, default: []].append((line, Date()))
+        // 行は出さず変化だけ保留する。枠は交代確定の時点で付け直す
+        // (読んだ時点では場にいないため slotFor が既定の a 枠を返し、
+        //  実際の枠と食い違う。実例: 2026-11-20、オオニューラの
+        //  サイコシード発動行が p1a で出た (実際は p1b))
+        heldBoostLines[key, default: []].append((stat, delta, Date()))
     } else {
         emitLog(line)
     }
 }
 
-// 保留中のランク変化行を出す (その種族の交代行が出たとき / 時間切れのとき)
-func flushHeldBoosts(forKey key: String) {
+// 保留中のランク変化行を出す (その種族の交代行が出たとき / 時間切れのとき)。
+// 枠は出す時点で付け直す (保留した時点の枠は当てにならないため)
+func boostLine(slot: String, speciesEn: String, stat: String, delta: Int) -> String {
+    delta > 0 ? "|-boost|\(slot): \(speciesEn)|\(stat)|\(delta)" : "|-unboost|\(slot): \(speciesEn)|\(stat)|\(-delta)"
+}
+
+func flushHeldBoosts(forKey key: String, slot: String) {
     guard let arr = heldBoostLines.removeValue(forKey: key) else { return }
-    for h in arr { emitLog(h.line) }
+    let speciesEn = String(key.dropFirst(3))
+    for h in arr { emitLog(boostLine(slot: slot, speciesEn: speciesEn, stat: h.stat, delta: h.delta)) }
 }
 
 func flushHeldBoostsTimeout() {
@@ -1611,11 +1639,16 @@ func flushHeldBoostsTimeout() {
     let now = Date()
     for k in Array(heldBoostLines.keys) {
         guard let arr = heldBoostLines[k] else { continue }
-        let ready = arr.filter { now.timeIntervalSince($0.at) > 4 }
+        // 交代確定はアニメーションの都合で 1 ターン分遅れることがある
+        // (実例: 2026-11-20、4 秒で時間切れになり交代行より先に出た)。
+        // フィールド特性の帰属窓と同じ 30 秒まで待つ
+        let ready = arr.filter { now.timeIntervalSince($0.at) > 30 }
         if ready.isEmpty { continue }
-        let keep = arr.filter { now.timeIntervalSince($0.at) <= 4 }
+        let keep = arr.filter { now.timeIntervalSince($0.at) <= 30 }
         if keep.isEmpty { heldBoostLines[k] = nil } else { heldBoostLines[k] = keep }
-        for h in ready { emitLog(h.line) }
+        let speciesEn = String(k.dropFirst(3))
+        let slot = slotFor(side: String(k.prefix(2)), speciesEn: speciesEn)
+        for h in ready { emitLog(boostLine(slot: slot, speciesEn: speciesEn, stat: h.stat, delta: h.delta)) }
     }
 }
 
@@ -1627,6 +1660,16 @@ func checkFieldText(text: String) -> Bool {
     if text.contains("霧が") && text.contains("はれた") { clearTerrain(); return true }
     if text.contains("電気が") && text.contains("消えた") { clearTerrain(); return true }
     if text.contains("草が") && (text.contains("なくなった") || text.contains("消え") || text.contains("きえ")) { clearTerrain(); return true }
+    // トリックルーム (地形・天候とは別枠のフィールド効果)
+    if text.contains("時空") && (text.contains("ゆがめ") || text.contains("歪め")) {
+        if !logTrickRoom { logTrickRoom = true; emitLog("|-fieldstart|move: Trick Room") }
+        return true
+    }
+    if logTrickRoom && (text.contains("ゆがみ") || text.contains("時空")) && (text.contains("戻った") || text.contains("もどった")) {
+        logTrickRoom = false
+        emitLog("|-fieldend|move: Trick Room")
+        return true
+    }
     // フィールドの開始文 (特性サージ系は種族名・特性名が出ず、この文だけが出る。
     // 「足下が不思議な感じになった」はサイコフィールド専用の文。
     // 「感じになった」はこの文にしか出ないため、足下・不思議が OCR 崩れ
@@ -2049,8 +2092,9 @@ func translateBattleMessage(_ text: String) -> Bool {
     // その文のときだけ先行フラッシュを止めて帰属を pending 側に残す
     // (「急所」が OCR 崩れした文も同様に止める)
     let strippedText = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
-    if !strippedText.contains("急所") && !(strippedText.contains("所に") && strippedText.contains("当たった"))
-        && !strippedText.hasSuffix("に当たった！") && !strippedText.hasSuffix("に当たった!") { flushPendingDamage() }
+    if !strippedText.contains("急所") && !(strippedText.contains("所に") && (strippedText.contains("当たった") || strippedText.contains("たった")))
+        && !strippedText.hasSuffix("に当たった！") && !strippedText.hasSuffix("に当たった!")
+        && !strippedText.hasSuffix("にたった！") && !strippedText.hasSuffix("にたった!") { flushPendingDamage() }
     // 照合は空白を除いた形で行う (OCR のボックス分割で空白位置が揺れるため)
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
     let nt = normalize(t)
@@ -2100,7 +2144,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 対象は文中の種族名を優先する (範囲技では最後に被弾した枠と急所の
     // 対象が食い違うことがあるため)。種族が取れない場合だけ従来通り
     // 直近にダメージを受けた (受けつつある) 枠に付ける
-    if (t.contains("急所に") || t.contains("所に") || t.hasSuffix("に当たった！") || t.hasSuffix("に当たった!")) && t.contains("当たった") {
+    if (t.contains("急所に") || t.contains("所に") || t.hasSuffix("に当たった！") || t.hasSuffix("に当たった!") || t.hasSuffix("にたった！") || t.hasSuffix("にたった!")) && (t.contains("当たった") || t.contains("たった")) {
         var target = ""
         if let csp = findSpeciesJa(in: t) {
             let anch = fieldAnchoredSpecies(csp)
@@ -2216,6 +2260,9 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 状態が変化した文はフィールドの告知として消費する
     // 天候・フィールドの告知文は、状態が変わらなかった (再読だった) 場合も消費する
     if checkFieldText(text: t) { return true }
+    // あくびで眠気を誘った文 (対象は次のターン終了時に眠る。眠気そのものは
+    // 状態として持たないため、漏らさず消費だけする)
+    if (t.contains("眠気") || t.contains("ねむけ")) && (t.contains("誘った") || t.contains("誘つた") || t.contains("さそった") || t.contains("さそつた")) { return true }
     // サイドコンディション (おいかぜ) の告知文: 種族名を含まないため、
     // 種族照合より前にここで処理する (実例: 2026-11-20 vs Zycloud 戦、
     // 「あいて相手にかぜおはし追い風が吹き始めた！」が日本語のまま漏れた)
@@ -3451,7 +3498,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0922"
+let readerBuild = "20261120_0928"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
