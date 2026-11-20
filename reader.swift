@@ -3676,7 +3676,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_0116"
+let readerBuild = "20261120_1016"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
