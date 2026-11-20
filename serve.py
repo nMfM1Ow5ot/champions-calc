@@ -86,6 +86,12 @@ def sync_loop():
 # reader が試合ごとに logs/ へ保存した battle_*.log (人間可読ログ) と
 # battle_*_protocol.log (プロトコルログ) を、team_key.txt で暗号化して
 # GitHub リポジトリ (nMfM1Ow5ot/champions-calc) の logs_enc/ へ送る。
+# あわせて、reader が問題発生時に保存したデバッグ同梱ファイル
+# (battle_<試合ID>_debugNN.jpg/.json、メッセージ欄の切り抜きとイベント
+# 情報) も同じ便で送る。目録 (logs_enc/index.json) にはログと同じ形式で
+# フラットに載るため、同梱の無い試合では従来と完全に同じになる。
+# デバッグ同梱は保持ルールで掃除する: 送信から 30 日超、または総数 300 件
+# 超の古いものから目録と実体を削除する (ログ本体は削除対象にしない)。
 # リポジトリは公開のため、平文は置かず my_team.enc と同じ
 # AES-256-CBC + PBKDF2 100k 回の暗号化を必須とする。
 # 送信には Mac 側の github_log_token.txt (このリポジトリへの Contents
@@ -102,6 +108,7 @@ GH_CONTENTS = "https://api.github.com/repos/nMfM1Ow5ot/champions-calc/contents/"
 JST = timezone(timedelta(hours=9))
 _log_notice_shown = False
 _log_last_error = ""
+_log_prune_done_date = None
 
 
 def _log_token():
@@ -155,12 +162,58 @@ def _gh_put_file(path, content, token, message, sha=None):
     return _gh_request("PUT", path, token, payload)
 
 
+def _gh_delete_file(path, token, message, sha):
+    return _gh_request("DELETE", path, token, {"message": message, "sha": sha})
+
+
+def _is_upload_target(name):
+    if not name.startswith("battle_"):
+        return False
+    if name.endswith(".log"):
+        return True
+    return "_debug" in name and (name.endswith(".jpg") or name.endswith(".json"))
+
+
+def _prune_debug_entries(index, token, limit=10):
+    # デバッグ同梱の保持ルール (30 日超 / 総数 300 件超の古い順) に従い、
+    # 目録と実体 (logs_enc/*.enc) を削除する。1 回の掃除は limit 件まで。
+    now = datetime.now(JST)
+    entries = index.get("files", [])
+    debug_entries = [e for e in entries if "_debug" in (e.get("name") or "")]
+
+    def age_days(e):
+        try:
+            return (now - datetime.fromisoformat(e["uploaded_at"])).days
+        except Exception:
+            return -1
+
+    victims = [e for e in debug_entries if age_days(e) > 30]
+    excess = len(debug_entries) - len(victims) - 300
+    if excess > 0:
+        rest = sorted((e for e in debug_entries if e not in victims),
+                      key=lambda e: e.get("uploaded_at", ""))
+        victims += rest[:excess]
+    removed = 0
+    for e in victims[:limit]:
+        name = e["name"]
+        try:
+            _, sha = _gh_get_file("logs_enc/" + name + ".enc", token)
+            if sha:
+                _gh_delete_file("logs_enc/" + name + ".enc", token,
+                                f"prune debug bundle {name}", sha)
+            entries.remove(e)
+            removed += 1
+            print(f"[log] 古いデバッグ情報を削除しました: {name}", flush=True)
+        except Exception:
+            continue
+    return removed
+
+
 def upload_logs_once():
-    global _log_notice_shown, _log_last_error
+    global _log_notice_shown, _log_last_error, _log_prune_done_date
     if not os.path.isdir(LOG_DIR):
         return
-    names = sorted(n for n in os.listdir(LOG_DIR)
-                   if n.startswith("battle_") and n.endswith(".log"))
+    names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
     if not names:
         return
     state = {}
@@ -178,7 +231,9 @@ def upload_logs_once():
         h = hashlib.sha256(data).hexdigest()
         if state.get(n) != h:
             pending.append((n, data, h))
-    if not pending:
+    # デバッグ同梱の掃除は 1 日 1 回まで (送信が無い日でもその回だけ目録を見る)
+    prune_due = _log_prune_done_date != datetime.now(JST).date()
+    if not pending and not prune_due:
         return
     token = _log_token()
     if not token:
@@ -216,6 +271,10 @@ def upload_logs_once():
             state[n] = h
             changed_index = True
             print(f"[log] 試合ログを送信しました: {n}", flush=True)
+        if prune_due or changed_index:
+            if _prune_debug_entries(index, token):
+                changed_index = True
+            _log_prune_done_date = datetime.now(JST).date()
         if changed_index:
             index["files"].sort(key=lambda e: e["name"])
             _gh_put_file("logs_enc/index.json",
