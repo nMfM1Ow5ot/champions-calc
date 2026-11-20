@@ -538,18 +538,21 @@ state.opps = state.oppTeam.map(sp => oppSpec(sp, 'usage'));
 const effSpecies = spec => (spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
 function speciesData(spec) { return gen.species.get(idOf(effSpecies(spec))); }
 let SPECIES_ABILITIES = {};
-function abilitiesOf(spec) {
+function speciesAbilities(spec) {
+  // そのフォルム本来の特性一覧 (現在の特性は混ぜない。フォルム変更時の補正判定用)
   const sd = speciesData(spec);
-  let vals;
   if (spec.mega && spec.megaSpecies) {
     const msd = gen.species.get(idOf(spec.megaSpecies));
-    vals = msd ? Object.values(msd.abilities || {}) : [];
-  } else {
-    const base = (sd && sd.baseSpecies) || spec.species;
-    const full = SPECIES_ABILITIES[base];
-    if (full && full.length) vals = [...full];
-    else vals = Array.isArray(sd.abilities) ? sd.abilities : Object.values(sd.abilities || {});
+    return msd ? Object.values(msd.abilities || {}) : [];
   }
+  const base = (sd && sd.baseSpecies) || spec.species;
+  const full = SPECIES_ABILITIES[base];
+  if (full && full.length) return [...full];
+  if (!sd) return [];
+  return Array.isArray(sd.abilities) ? sd.abilities : Object.values(sd.abilities || {});
+}
+function abilitiesOf(spec) {
+  const vals = speciesAbilities(spec);
   if (spec.ability && !vals.includes(spec.ability)) vals.push(spec.ability);
   return [...new Set(vals)];
 }
@@ -1213,40 +1216,67 @@ function calcAll() {
 }
 
 /* ---------- import (adapted to displayed spec) ---------- */
+// paste がメガ形態そのもの (例: Gardevoir-Mega) で書かれていた場合の正規化。
+// 種族はベースに戻し、メガ形態は megaSpecies 側へ寄せて「メガ済み」として取り込む。
+// 種族欄にメガ形態が入ったままだと、メガボタンの表示条件 (ベース種族からメガ先を
+// 探す) が外れてボタンが消え、特性もメガ側に固定されてしまう。
+function normalizeMegaPaste(parsed) {
+  const sd = gen.species.get(idOf(parsed.species));
+  if (!sd || !sd.baseSpecies || sd.baseSpecies === parsed.species || !parsed.species.includes('-Mega')) return null;
+  const base = sd.baseSpecies;
+  const full = SPECIES_ABILITIES[base];
+  const bsd = gen.species.get(idOf(base));
+  const baseList = (full && full.length) ? [...full] : (bsd ? Object.values(bsd.abilities || {}) : []);
+  const out = {
+    species: base, megaSpecies: parsed.species, mega: true,
+    megaAbility: Object.values(sd.abilities || {})[0] || null,
+    ability: parsed.ability || baseList[0] || '', item: parsed.item || '',
+  };
+  if (parsed.ability && baseList.length && !baseList.includes(parsed.ability)) {
+    // paste の特性はメガ側の特性 (ベースではあり得ない) → メガ特性として保持し、
+    // ベース特性は候補の先頭を仮置きする
+    out.megaAbility = parsed.ability;
+    out.ability = baseList[0];
+  }
+  if (!out.item) out.item = stoneForForme(parsed.species) || '';
+  return out;
+}
 function applyImport(side, parsed) {
   if (!parsed.species) return;
   const idx = state.sel[side];
   const keep = state[side][idx];
-  const megaSpecies = megaFromItem(parsed.item) || parsed.megaSpecies || null;
-  const megaAbility = megaSpecies ? (gen.species.get(megaSpecies)?.abilities?.[0] || null) : null;
+  const mp = normalizeMegaPaste(parsed);
+  const megaSpecies = mp ? mp.megaSpecies : (megaFromItem(parsed.item) || parsed.megaSpecies || null);
+  const megaAbility = mp ? mp.megaAbility : (megaSpecies ? (Object.values(gen.species.get(idOf(megaSpecies))?.abilities || {})[0] || null) : null);
   state[side][idx] = {
-    species: parsed.species, kind: 'custom',
+    species: mp ? mp.species : parsed.species, kind: 'custom',
     sp: { ...parsed.sp }, nature: parsed.nature || keep.nature,
-    ability: parsed.ability || keep.ability, item: parsed.item || '',
+    ability: mp ? mp.ability : (parsed.ability || keep.ability), item: mp ? mp.item : (parsed.item || ''),
     moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
     curHPPercent: keep.curHPPercent, boosts: keep.boosts, status: keep.status,
-    megaSpecies, megaAbility, mega: !!megaSpecies && keep.mega,
+    megaSpecies, megaAbility, mega: mp ? true : (!!megaSpecies && keep.mega),
     knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
     note: 'Imported set', corrected: ['読み込み'],
   };
-  if (side === 'opps') state.oppTeam[idx] = parsed.species;
+  if (side === 'opps') state.oppTeam[idx] = mp ? mp.species : parsed.species;
 }
 function applyImportAll(side, list) {
   if (!list.length) return;
   list.forEach((parsed, idx) => {
-    const megaSpecies = megaFromItem(parsed.item) || parsed.megaSpecies || null;
-    const megaAbility = megaSpecies ? (gen.species.get(megaSpecies)?.abilities?.[0] || null) : null;
+    const mp = normalizeMegaPaste(parsed);
+    const megaSpecies = mp ? mp.megaSpecies : (megaFromItem(parsed.item) || parsed.megaSpecies || null);
+    const megaAbility = mp ? mp.megaAbility : (megaSpecies ? (Object.values(gen.species.get(idOf(megaSpecies))?.abilities || {})[0] || null) : null);
     state[side][idx] = {
-      species: parsed.species, kind: 'custom',
+      species: mp ? mp.species : parsed.species, kind: 'custom',
       sp: { ...parsed.sp }, nature: parsed.nature || 'Serious',
-      ability: parsed.ability || abilitiesOf({ species: parsed.species })[0] || '', item: parsed.item || '',
+      ability: mp ? mp.ability : (parsed.ability || abilitiesOf({ species: parsed.species })[0] || ''), item: mp ? mp.item : (parsed.item || ''),
       moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
       curHPPercent: 100, boosts: blankBoosts(), status: '',
-      megaSpecies, megaAbility, mega: false,
+      megaSpecies, megaAbility, mega: mp ? true : false,
       knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
       note: 'Imported set', corrected: ['読み込み'],
     };
-    if (side === 'opps') state.oppTeam[idx] = parsed.species;
+    if (side === 'opps') state.oppTeam[idx] = mp ? mp.species : parsed.species;
   });
   state.sel[side] = 0;
   state.active[side] = [0, Math.min(1, state[side].length - 1)];
@@ -1256,7 +1286,8 @@ function applyImportAll(side, list) {
 }
 function megaFromItem(itemEn) {
   if (!itemEn) return null;
-  const it = gen.items.get(itemEn);
+  // gen.items.get は ID 形式 (小文字) で引く必要がある (表示名では引けない)
+  const it = gen.items.get(idOf(itemEn));
   if (it && it.megaStone) return Object.values(it.megaStone)[0];
   return null;
 }
@@ -1346,7 +1377,7 @@ document.addEventListener('click', e => {
         // フォルム違い (イルカマン等) は種族自体をベースに戻す
         spec.species = base;
         spec.megaSpecies = undefined;
-        const list = abilitiesOf(spec);
+        const list = speciesAbilities(spec);
         if (list.length && !list.includes(spec.ability)) spec.ability = list[0];
       }
     }
@@ -1361,7 +1392,7 @@ document.addEventListener('click', e => {
       spec.species = forme;
       spec.mega = false;
       spec.megaSpecies = undefined;
-      const list = abilitiesOf(spec);
+      const list = speciesAbilities(spec);
       if (list.length && !list.includes(spec.ability)) spec.ability = list[0];
     }
     ui.formePop = null;
