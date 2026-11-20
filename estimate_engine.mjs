@@ -139,14 +139,28 @@ function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, te
   if (ability === 'Surge Surfer' && terrain === 'Electric') v *= 2;
   if (unburden) v *= 2;
   if (tailwind) v *= 2;
-  if (status === 'par') v = Math.floor(v / 2);
+  // はやあし: 状態異常のとき 1.5 倍になり、まひによる半減も受けない
+  if (ability === 'Quick Feet' && status) v = Math.floor(v * 1.5);
+  else if (status === 'par') v = Math.floor(v / 2);
   return v;
+}
+// 技の優先度枠: 特性による優先度の増減と、枠内で最後尾になる特性を見る。
+// はやてのつばさ (HP 満タン時のひこう技 +1) は時点の HP が要るため呼び出し側で扱う
+function moveBracket(md, ability) {
+  let prio = md.priority, last = false;
+  if (ability === 'Prankster' && md.category === 'Status') prio += 1;
+  if (ability === 'Stall') last = true;
+  return { prio, last };
 }
 function processMoveInf(ev, io) {
   const intents = [];
   const side = labelSide(ev.label);
   if (ev.move === 'Tailwind') { infCtx.tailwindTurn[side] = ev.turn; intents.push({ t: 'side', side, key: 'tailwind', turn: ev.turn }); }
-  else if (ev.move === 'Trick Room') infCtx.trickRoomTurn = ev.turn;
+  else if (ev.move === 'Trick Room') {
+    // トリックルーム中に再度使うと解除される (張り直しにはならない)
+    const trActive = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+    infCtx.trickRoomTurn = trActive ? -99 : ev.turn;
+  }
   else if (ev.move === 'Reflect') { infCtx.screenTurn[side].reflect = ev.turn; intents.push({ t: 'side', side, key: 'reflect', turn: ev.turn }); }
   else if (ev.move === 'Light Screen') { infCtx.screenTurn[side].light = ev.turn; intents.push({ t: 'side', side, key: 'light', turn: ev.turn }); }
   else if (ev.move === 'Aurora Veil') { infCtx.screenTurn[side].veil = ev.turn; intents.push({ t: 'side', side, key: 'veil', turn: ev.turn }); }
@@ -170,6 +184,24 @@ function processMoveInf(ev, io) {
   const oppSpec = io.opp[oppSpecies] || null;
   const table = statTable(oppSpecies);
   if (!mySpec || !oppSpec || !table) return intents;
+  // 行動順が素早さで決まらないケースを除外する。特性で優先度が変わる技
+  // (いたずらごころ)、枠内で最後尾になる特性 (あとだし)、順序を乱す持ち物
+  // (せんせいのツメ/イバンのみ/こうこうのしっぽ/まんぷくおこう) があると
+  // 順序から素早さは読み取れない。自分の側は正確に判定でき、相手は判明
+  // している場合のみ判定する (未判明分はベイズ側で候補ごとに割り引く)
+  const myMd = firstIsOpp ? mdB : mdA, oppMd = firstIsOpp ? mdA : mdB;
+  const ORDER_ITEMS = ['Quick Claw', 'Custap Berry', 'Lagging Tail', 'Full Incense'];
+  if (ORDER_ITEMS.includes(mySpec.itemLost ? '' : mySpec.item)) return intents;
+  if ((oppSpec.corrected || []).includes('持ち物') && ORDER_ITEMS.includes(oppSpec.itemLost ? '' : oppSpec.item)) return intents;
+  const myBr = moveBracket(myMd, mySpec.ability);
+  if (myBr.last) return intents;
+  // はやてのつばさは HP 満タン時のみ発動し、このスナップショットでは時点の HP が確定しないため除外する
+  if (mySpec.ability === 'Gale Wings' && myMd.type === 'Flying') return intents;
+  if ((oppSpec.corrected || []).includes('特性')) {
+    const oppBr = moveBracket(oppMd, oppSpec.ability);
+    if (oppBr.last || oppBr.prio !== myBr.prio) return intents;
+    if (oppSpec.ability === 'Gale Wings' && oppMd.type === 'Flying') return intents;
+  }
   const myTable = statTable(mySpecies);
   const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
   if (!myRow) return intents;
@@ -185,19 +217,23 @@ function processMoveInf(ev, io) {
     const ok = trick ? (firstIsOpp ? eff <= myEff : eff >= myEff) : (firstIsOpp ? eff >= myEff : eff <= myEff);
     if (ok) feasible.add(row.nature + '|' + row.sp);
   }
-  lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw('p2') };
+  lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw('p2'), oppMd, myPrio: myBr.prio };
   infIntersect(oppSpecies, 'spe', feasible, null);
   return intents;
 }
 /* 特性の発動順からの素早さ推定: 同時入場 (対戦開始・両者同時交代・2 体同時
-   補充など) では、入場時発動の特性は素早さ順に発動する (天候の奪い合いで
+   補充など) では、入場時発動の特性はすばやさ順に発動する (天候の奪い合いで
    遅い方の天候が残るのはこのため)。reader が同じ入場バッチで記録した
-   'ab' イベント同士を比べ、先に発動した側を速い側として、技の行動順と
-   同じ形で両エンジンに証拠を与える。トリックルームは特性の発動順には
-   影響しないため反転しない。入場直後はランク変化 0・かるわざ未発動
-   として実効素早さを計算する */
+   'ab' イベント同士を比べ、技の行動順と同じ形で両エンジンに証拠を与える。
+   仕様 (ポケモンWiki「ターン」、第八世代以降): 発動順の比較はランク補正・
+   持ち物・状態異常などの補正を一切含まない「すばやさ実数値のみ」で行われ、
+   トリックルーム中は遅い順に反転する。きんちょうかん / じんばいったい /
+   かがくへんかガスは前段のブロックで発動し、すばやさ比較の対象にならない
+   ためペアリングから除外する */
+const AB_ORDER_EXEMPT = new Set(['Unnerve', 'As One (Glastrier)', 'As One (Spectrier)', 'Neutralizing Gas']);
 function infProcessAbility(ev, io) {
   if (typeof ev.batch !== 'number') return;
+  if (AB_ORDER_EXEMPT.has(ev.ability)) return;
   const list = infCtx.abBatches[ev.batch] || (infCtx.abBatches[ev.batch] = []);
   const me = { side: labelSide(ev.label), species: labelSpecies(ev.label) };
   for (const other of list) {
@@ -220,15 +256,15 @@ function applyAbilityOrderEvidence(oppSpecies, mySpecies, firstIsOpp, turn, io) 
   const myTable = statTable(mySpecies);
   const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
   if (!myRow) return;
-  const tw = s => turn - infCtx.tailwindTurn[s] >= 0 && turn - infCtx.tailwindTurn[s] < 4;
-  const myEff = infEffSpe(myRow.value, {}, mySpec.itemLost ? '' : mySpec.item, mySpec.status, tw('p1'), mySpec.ability, io.field.weather, io.field.terrain, false);
-  // 制約交差エンジン: 入場時の実効素早さで実現可能な (性格, SP) 行を残す
-  const itemKnown = (oppSpec.corrected || []).includes('持ち物');
-  const abKnown = (oppSpec.corrected || []).includes('特性');
+  // 発動順の比較は補正なしの実数値のみ (持ち物・まひ・おいかぜ・天候特性
+  // などは一切含まない)。トリックルーム中は遅い順に反転する
+  const myRaw = myRow.value;
+  const trick = turn - infCtx.trickRoomTurn >= 0 && turn - infCtx.trickRoomTurn < 5;
+  // 制約交差エンジン: 実数値で実現可能な (性格, SP) 行を残す
   const feasible = new Set();
   for (const row of table.spe) {
-    const eff = infEffSpe(row.value, {}, itemKnown ? (oppSpec.itemLost ? '' : oppSpec.item) : '', oppSpec.status, tw('p2'), abKnown ? oppSpec.ability : '', io.field.weather, io.field.terrain, false);
-    if (firstIsOpp ? eff >= myEff : eff <= myEff) feasible.add(row.nature + '|' + row.sp);
+    const ok = trick ? (firstIsOpp ? row.value <= myRaw : row.value >= myRaw) : (firstIsOpp ? row.value >= myRaw : row.value <= myRaw);
+    if (ok) feasible.add(row.nature + '|' + row.sp);
   }
   infIntersect(oppSpecies, 'spe', feasible, null);
   // ベイズエンジン: 技の行動順と同じ尤度 (一致 16 / 同速 8 / 矛盾 0→下限)
@@ -236,9 +272,9 @@ function applyAbilityOrderEvidence(oppSpecies, mySpecies, firstIsOpp, turn, io) 
   if (ent) {
     const counts = ent.cands.map(c => {
       if (c.values.spe == null) return 0;
-      const eff = infEffSpe(c.values.spe, {}, oppSpec.itemLost ? '' : c.item, oppSpec.status, tw('p2'), c.ability, io.field.weather, io.field.terrain, false);
-      if (eff === myEff) return 8;
-      return (firstIsOpp ? eff > myEff : eff < myEff) ? 16 : 0;
+      if (c.values.spe === myRaw) return 8;
+      const ok = trick ? (firstIsOpp ? c.values.spe < myRaw : c.values.spe > myRaw) : (firstIsOpp ? c.values.spe > myRaw : c.values.spe < myRaw);
+      return ok ? 16 : 0;
     });
     bayesApply(ent, counts);
   }
@@ -613,6 +649,15 @@ function processMoveBayes(ev, io) {
   const panel = io.opp[ctx.species] || null;
   const counts = ent.cands.map(c => {
     if (c.values.spe == null) return 0;
+    // 候補の特性で優先度枠がずれる場合、その候補については順序は素早さ
+    // ではなく枠で決まる (枠が上の候補は先行が確定、下なら先行はあり得ない)
+    if (ctx.oppMd) {
+      const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
+      if (cAb === 'Gale Wings' && ctx.oppMd.type === 'Flying') return 16; // HP 条件で確定しないため中立
+      const cBr = moveBracket(ctx.oppMd, cAb);
+      if (cBr.last) return ctx.firstIsOpp ? 0 : 16;
+      if (cBr.prio !== ctx.myPrio) return (cBr.prio > ctx.myPrio) === ctx.firstIsOpp ? 16 : 0;
+    }
     const eff = infEffSpe(c.values.spe, panel ? panel.boosts : {}, panel && panel.itemLost ? '' : c.item,
       panel ? panel.status : '', ctx.twP2, c.ability, io.field.weather, io.field.terrain, !!(panel && panel.unburden));
     if (eff === ctx.myEff) return 8; // 同速の可能性は中間
