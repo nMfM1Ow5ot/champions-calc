@@ -1070,7 +1070,7 @@ function calcAll() {
   }
   lastCalc = calcMatchup({
     mine: [DS('mine')], opps: [DS('opps')],
-    field: { weather: state.field.weather, terrain: state.field.terrain, attackerSide: atkSide, defenderSide: defSide, oppAttackerSide: oppAtkSide, oppDefenderSide: oppDefSide },
+    field: { weather: state.field.weather, terrain: state.field.terrain, attackerSide: atkSide, defenderSide: defSide, oppAttackerSide: oppAtkSide, oppDefenderSide: oppDefSide, tailwindMine: !!state.side.mine.tailwind, tailwindOpp: !!state.side.opp.tailwind },
     crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
     singleMoves,
   });
@@ -1361,11 +1361,34 @@ function applyMegaFlag(spec, en) {
 // 空になった時点で矛盾として捨てるため、推定が壊れることはない。
 const INF_BLACKLIST = new Set(['Foul Play', 'Gyro Ball', 'Electro Ball', 'Endeavor', 'Final Gambit', 'Seismic Toss', 'Night Shade', 'Dragon Rage', 'Sonic Boom', 'Super Fang', "Nature's Madness", 'Fissure', 'Horn Drill', 'Guillotine', 'Sheer Cold', 'Counter', 'Mirror Coat', 'Metal Burst', 'Comeuppance', 'Pain Split']);
 let inference, infCtx, infLastMove, infDirty;
+let autoSideTurn;
 function resetInference() {
   inference = { seen: 0, bySpecies: {} };
   infCtx = { tailwindTurn: { p1: -99, p2: -99 }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, hhTurn: { p1: -99, p2: -99 } };
   infLastMove = null;
   infDirty = false;
+  // 対戦イベントから自動反映したサイドコンディション (おいかぜ・壁・てだすけ) の
+  // セットされたターン。新しい対戦では場の状態ごとリセットする
+  autoSideTurn = { mine: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 }, opp: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 } };
+  state.side = { mine: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false }, opp: { light: false, reflect: false, aurora: false, hand: false, guard: false, tailwind: false } };
+}
+// 技の使用イベントからサイドコンディションをチップ状態へ反映する
+function setAutoSide(sideP, key, turn) {
+  const sk = sideP === 'p1' ? 'mine' : 'opp';
+  if (!state.side[sk][key]) { state.side[sk][key] = true; infDirty = true; }
+  autoSideTurn[sk][key] = turn;
+}
+// 効果ターンが切れた自動コンディションを落とす (おいかぜ4ターン / 壁5ターン / てだすけ当ターンのみ)。
+// 手動で付けたチップは autoSideTurn が -99 のままなので、ここでは落ちない
+function expireAutoSide(turn) {
+  const dur = { tailwind: 4, light: 5, reflect: 5, veil: 5, hand: 1 };
+  for (const sk of ['mine', 'opp']) for (const k of Object.keys(dur)) {
+    const s = autoSideTurn[sk][k];
+    if (s >= 0 && turn - s >= dur[k]) {
+      autoSideTurn[sk][k] = -99;
+      if (state.side[sk][k]) { state.side[sk][k] = false; infDirty = true; }
+    }
+  }
 }
 resetInference();
 function infEntry(species) {
@@ -1514,12 +1537,12 @@ function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, te
 }
 function infProcessMove(ev) {
   const side = labelSide(ev.label);
-  if (ev.move === 'Tailwind') infCtx.tailwindTurn[side] = ev.turn;
+  if (ev.move === 'Tailwind') { infCtx.tailwindTurn[side] = ev.turn; setAutoSide(side, 'tailwind', ev.turn); }
   else if (ev.move === 'Trick Room') infCtx.trickRoomTurn = ev.turn;
-  else if (ev.move === 'Reflect') infCtx.screenTurn[side].reflect = ev.turn;
-  else if (ev.move === 'Light Screen') infCtx.screenTurn[side].light = ev.turn;
-  else if (ev.move === 'Aurora Veil') infCtx.screenTurn[side].veil = ev.turn;
-  else if (ev.move === 'Helping Hand') infCtx.hhTurn[side] = ev.turn;
+  else if (ev.move === 'Reflect') { infCtx.screenTurn[side].reflect = ev.turn; setAutoSide(side, 'reflect', ev.turn); }
+  else if (ev.move === 'Light Screen') { infCtx.screenTurn[side].light = ev.turn; setAutoSide(side, 'light', ev.turn); }
+  else if (ev.move === 'Aurora Veil') { infCtx.screenTurn[side].veil = ev.turn; setAutoSide(side, 'veil', ev.turn); }
+  else if (ev.move === 'Helping Hand') { infCtx.hhTurn[side] = ev.turn; setAutoSide(side, 'hand', ev.turn); }
   const prev = infLastMove;
   infLastMove = { turn: ev.turn, side, species: labelSpecies(ev.label), move: ev.move };
   if (!prev || prev.turn !== ev.turn || prev.side === side) return;
@@ -1779,6 +1802,7 @@ function applyState(j) {
     for (let i = inference.seen; i < j.events.length; i++) {
       const ev = j.events[i];
       if (!ev || typeof ev !== 'object') continue;
+      if (typeof ev.turn === 'number') expireAutoSide(ev.turn);
       if (ev.k === 'mv') infProcessMove(ev);
       else if (ev.k === 'dmg') infProcessDamage(ev);
     }
