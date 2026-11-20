@@ -2796,6 +2796,7 @@ func salvageField(in t: String) -> Bool {
     guard let cond = conds.first(where: { t.contains($0.0) }) else { return false }
     let start = t.contains("現れた") || t.contains("現れ") || t.contains("張った") || t.contains("張られた")
         || t.contains("包まれた") || t.contains("つつまれた") || t.contains("覆われた") || t.contains("吹き始") || t.contains("ふきはじ")
+        || t.contains("強くなった")  // 壁の告知は「ひかりのかべで特殊に強くなった！」の形 (実例: 2026-11-20 vs Destrock 戦)
     let end = t.contains("消えた") || t.contains("なくなった") || t.contains("消え去った") || t.contains("はれた")
         || t.contains("止ん") || t.contains("やん") || t.contains("終わ")
     guard start != end else { return false }  // 開始か終了か確定しないものは入れない
@@ -3181,6 +3182,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         || t.contains("引っごめた") || t.contains("引つごめた")
         || t.contains("イリュージョンが解けた") || t.contains("イリュージョンがとけた")
         || (t.contains("ランク") && t.contains("級"))
+        || ((t.contains("ゆけ") || t.contains("もどれ")) && findSpeciesJa(in: t) != nil)
         || t.contains("場所を入れ替えた") {
         // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
         // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
@@ -4550,7 +4552,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1733"
+let readerBuild = "20261120_1741"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
