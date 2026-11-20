@@ -56,12 +56,20 @@ def maybe_restart_self():
 def sync_loop():
     # 起動時の同期はサーバ開始をブロックしないよう、このスレッド側で行う。
     # 先にサーバを立ち上げてから同期するので、ブラウザがすぐ開ける。
+    # スリープ復帰直後などで一時的に失敗しても、スレッドごと死なずに
+    # 次の周期で再試行する (サーバ本体は動き続ける)。
     run_sync(True, force=True)
-    maybe_restart_self()
+    try:
+        maybe_restart_self()
+    except Exception:
+        print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
     while True:
         time.sleep(5)
         run_sync(False)
-        maybe_restart_self()
+        try:
+            maybe_restart_self()
+        except Exception:
+            print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
