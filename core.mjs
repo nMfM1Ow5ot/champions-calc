@@ -57,37 +57,39 @@ export function spToEvs(sp = {}) {
   return evs;
 }
 
-// ユーザーの Regulation M-C 構築 (2026-11-12 作成分) をそのままプリセット化
+// デフォルトチーム: 「やなぎ_グロチャレ２」(Regulation M-C)。
+// my_team.json が読めない場合のフォールバックとして、登録チームと同内容を
+// 保持する (2026-11-20 ユーザー指示で旧 M-C 構築から差し替え)
 export const TEAM_PRESETS = [
   {
-    label: 'ライチュウ (メガY)', species: 'Raichu', megaSpecies: 'Raichu-Mega-Y',
-    item: 'Raichunite Y', ability: 'Lightning Rod', megaAbility: 'No Guard', nature: 'Timid',
-    sp: { hp: 32, def: 11, spe: 23 }, moves: ['Zap Cannon', 'Focus Blast', 'Fake Out', 'Protect'],
+    label: 'カメックス (メガ)', species: 'Blastoise', megaSpecies: 'Blastoise-Mega',
+    item: 'Blastoisinite', ability: 'Rain Dish', megaAbility: 'Mega Launcher', nature: 'Modest',
+    sp: { hp: 2, spa: 32, spe: 32 }, moves: ['Water Spout', 'Terrain Pulse', 'Aura Sphere', 'Dark Pulse'],
   },
   {
-    label: 'ガブリアス (メガZ)', species: 'Garchomp', megaSpecies: 'Garchomp-Mega-Z',
-    item: 'Garchompite Z', ability: 'Rough Skin', megaAbility: 'Levitate', nature: 'Modest',
-    sp: { def: 4, spa: 30, spe: 32 }, moves: ['Dragon Pulse', 'Earth Power', 'Power Gem', 'Protect'],
+    label: 'サーナイト (メガ)', species: 'Gardevoir', megaSpecies: 'Gardevoir-Mega',
+    item: 'Gardevoirite', ability: 'Synchronize', megaAbility: 'Pixilate', nature: 'Timid',
+    sp: { hp: 2, spa: 32, spe: 32 }, moves: ['Hyper Voice', 'Expanding Force', 'Thunderbolt', 'Protect'],
   },
   {
-    label: 'サーフゴー', species: 'Gholdengo',
-    item: 'Life Orb', ability: 'Good as Gold', nature: 'Modest',
-    sp: { hp: 17, spa: 7, spd: 22, spe: 20 }, moves: ['Make It Rain', 'Shadow Ball', 'Nasty Plot', 'Protect'],
+    label: 'オオニューラ', species: 'Sneasler',
+    item: 'Psychic Seed', ability: 'Unburden', nature: 'Adamant',
+    sp: { hp: 2, atk: 32, spe: 32 }, moves: ['Close Combat', 'Dire Claw', 'Rock Tomb', 'Protect'],
   },
   {
-    label: 'ウルガモス', species: 'Volcarona',
-    item: 'Rocky Helmet', ability: 'Flame Body', nature: 'Timid',
-    sp: { hp: 13, def: 30, spe: 23 }, moves: ['Overheat', 'Struggle Bug', 'Rage Powder', 'Tailwind'],
+    label: 'イエッサン♀', species: 'Indeedee-F',
+    item: 'Rocky Helmet', ability: 'Psychic Surge', nature: 'Relaxed',
+    sp: { hp: 32, def: 32, spd: 2 }, moves: ['Psychic', 'Follow Me', 'Helping Hand', 'Protect'],
   },
   {
-    label: 'ゴリランダー', species: 'Rillaboom',
-    item: 'Miracle Seed', ability: 'Grassy Surge', nature: 'Adamant',
-    sp: { hp: 26, atk: 30, def: 1, spd: 4, spe: 5 }, moves: ['Fake Out', 'Grassy Glide', 'Wood Hammer', 'U-turn'],
+    label: 'グレンアルマ', species: 'Armarouge',
+    item: 'Focus Sash', ability: 'Weak Armor', nature: 'Modest',
+    sp: { hp: 1, def: 1, spa: 32, spe: 32 }, moves: ['Expanding Force', 'Armor Cannon', 'Wide Guard', 'Protect'],
   },
   {
-    label: 'ガオガエン', species: 'Incineroar',
-    item: 'Sitrus Berry', ability: 'Intimidate', nature: 'Impish',
-    sp: { hp: 30, def: 20, spd: 14, spe: 2 }, moves: ['Fake Out', 'Parting Shot', 'Flare Blitz', 'Darkest Lariat'],
+    label: 'エルフーン', species: 'Whimsicott',
+    item: 'Babiri Berry', ability: 'Prankster', nature: 'Modest',
+    sp: { hp: 32, def: 2, spa: 25, spd: 7 }, moves: ['Grass Knot', 'Tailwind', 'Sunny Day', 'Encore'],
   },
 ];
 
