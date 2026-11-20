@@ -2787,6 +2787,9 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
 
 var previewHandled = false
 var previewFrames = 0
+var previewAttempts = 0                    // この選出セッションでの同定試行回数
+var previewBestTeam: [String?] = []        // 試行をまたいでマージした最良の同定結果
+var previewTeamWritten = false             // このセッションで oppReset 付きの初回書き込みをしたか
 var pvSpeciesTypes: [String: [String]] = [:]
 var pvFeatures: [String: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)] = [:]
 var pvTypeIcons: [String: (rgb: [Double], glyph: [Double])] = [:]
@@ -3427,24 +3430,40 @@ var inBattle = false
 var emptyBattleFrames = 0   // プレートが見えないフレームの連続数 (対戦終了の判定用)
 
 // 選出画面の検出 (「選出してください」「選出完了」などの文言を探す)
+// 毎フレームの検出は高速 OCR (.fast) で行う: 全画面の .accurate OCR は
+// 1 回で数秒かかることがあり、同定開始がその分遅れていた。トレーナー名
+// だけは精度が要るため、2 フレーム目以降に 1 回だけ .accurate で取り直す
 var previewLastFrame = false
 var lastPreviewSeenAt = Date.distantPast   // 選出画面を最後に見た時刻 (同定のやり直し判定)
+var previewDetectCount = 0                 // この選出セッションで検出したフレーム数
+var previewNamesAccurateDone = false       // トレーナー名の .accurate 取り直し済みか
+func pvExtractTrainers(_ boxes: [OcrBox]) {
+    let bad = ["バトル", "選出", "ダブル", "カジュアル", "ランク", "マスター", "ください"]
+    for b in boxes where b.cy > 0.11 && b.cy < 0.20 {
+        let t = b.text.trimmingCharacters(in: .whitespaces)
+        if t.isEmpty || t.count > 14 || bad.contains(where: { t.contains($0) }) { continue }
+        if t.allSatisfy({ $0.isNumber || ":： ".contains($0) }) { continue }
+        if b.cx < 0.32 { trainerMine = t }
+        if b.cx > 0.70 { trainerOpp = t }
+    }
+}
 func detectPreview(image: CGImage) -> Bool {
-    let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
+    let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1, fast: true)
     let isP = boxes.contains { $0.text.contains("選出") }
     // 新しい選出画面に入ったら前試合のトレーナー名を消し、今試合分を取り直す
     // (自分の名前は左上、相手は右上。勝敗ログの |win| に使う)
     if isP && !previewLastFrame { trainerMine = ""; trainerOpp = "" }
     previewLastFrame = isP
     if isP {
-        let bad = ["バトル", "選出", "ダブル", "カジュアル", "ランク", "マスター", "ください"]
-        for b in boxes where b.cy > 0.11 && b.cy < 0.20 {
-            let t = b.text.trimmingCharacters(in: .whitespaces)
-            if t.isEmpty || t.count > 14 || bad.contains(where: { t.contains($0) }) { continue }
-            if t.allSatisfy({ $0.isNumber || ":： ".contains($0) }) { continue }
-            if b.cx < 0.32 { trainerMine = t }
-            if b.cx > 0.70 { trainerOpp = t }
+        previewDetectCount += 1
+        pvExtractTrainers(boxes)
+        if previewDetectCount >= 2 && !previewNamesAccurateDone {
+            previewNamesAccurateDone = true
+            pvExtractTrainers(ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1))
         }
+    } else {
+        previewDetectCount = 0
+        previewNamesAccurateDone = false
     }
     return isP
 }
@@ -3481,41 +3500,58 @@ func runOnce(image: CGImage) {
         previewFrames += 1
         lastPreviewSeenAt = Date()
         maybeRestartForUpdate()
-        // 出現アニメーションが落ち着く 2 フレーム目で同定する (1 回だけ)
-        if previewFrames >= 2 && !previewHandled {
-            previewHandled = true
+        // 同定は 1 フレーム目から試みる (従来は出現アニメーション待ちで
+        // 2 フレーム目まで始めず、全画面 OCR 2 回分 = 数秒遅れていた)。
+        // 分かった枠から state.json に反映し、未確定の枠が残れば次の
+        // フレームで試行し直す (最大 4 回)。6 枠そろった場合はアニメー
+        // ション明けのフレームでもう 1 回確認してから確定とする
+        if !previewHandled {
+            previewAttempts += 1
             let hadState = !oppTeamSeen.isEmpty || lastSlots["oppA"] != nil || lastSlots["oppB"] != nil
             lastSlots["oppA"] = nil
             lastSlots["oppB"] = nil
             if pvDataLoaded, let r = identifyPreview(image: image) {
-                // 選出段階で推定した相手チームを state.json に反映する
-                oppTeamSeen = r.team.compactMap { $0 }
-                oppUnconfirmed = Set(oppTeamSeen)  // 全枠が推定 = 未確認 (実物で差し替え可)
-                startBattleLog()
+                // 試行をまたいでマージする: 一度埋まった枠は空に戻さない
+                if previewBestTeam.count != r.team.count {
+                    previewBestTeam = Array(repeating: nil, count: r.team.count)
+                }
+                for i in r.team.indices where r.team[i] != nil { previewBestTeam[i] = r.team[i] }
+                let filled = previewBestTeam.compactMap { $0 }
+                oppTeamSeen = filled
+                oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
+                if !logStarted { startBattleLog() }
                 var obj: [String: Any] = [:]
                 obj["mine"] = [Any]()
                 obj["opps"] = [Any]()
                 obj["field"] = [String: Any]()
-                obj["oppReset"] = true
+                if !previewTeamWritten { obj["oppReset"] = true }
                 obj["oppPreview"] = true
-                obj["oppTeam"] = r.team.map { $0 as Any? ?? NSNull() }
+                obj["oppTeam"] = previewBestTeam.map { $0 as Any? ?? NSNull() }
                 if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
                    let json = String(data: data, encoding: .utf8), json != lastWritten {
                     lastWritten = json
                     try? json.write(to: outURL, atomically: true, encoding: .utf8)
                 }
+                previewTeamWritten = true
+                if (filled.count >= 6 && previewAttempts >= 2) || previewAttempts >= 4 {
+                    previewHandled = true
+                }
+            } else if previewAttempts >= 4 {
+                // 4 回試みても何も同定できなかった: 従来通りリセットする。
+                // 部分的にでも同定できていれば、その結果は保持する
+                previewHandled = true
+                if previewBestTeam.isEmpty {
+                    oppTeamSeen = []
+                    oppUnconfirmed = []
+                    resetLogState()
+                    if hadState {
+                        let json = "{\"mine\": [], \"opps\": [], \"oppTeam\": [], \"oppReset\": true, \"field\": {}}"
+                        if json != lastWritten {
+                            lastWritten = json
+                            try? json.write(to: outURL, atomically: true, encoding: .utf8)
+                        }
 
-            } else {
-                oppTeamSeen = []
-                oppUnconfirmed = []
-                resetLogState()
-                if hadState {
-                    let json = "{\"mine\": [], \"opps\": [], \"oppTeam\": [], \"oppReset\": true, \"field\": {}}"
-                    if json != lastWritten {
-                        lastWritten = json
-                        try? json.write(to: outURL, atomically: true, encoding: .utf8)
                     }
-
                 }
             }
         }
@@ -3529,6 +3565,9 @@ func runOnce(image: CGImage) {
     if winLogged || inBattle || Date().timeIntervalSince(lastPreviewSeenAt) > 10 {
         previewHandled = false
         previewFrames = 0
+        previewAttempts = 0
+        previewBestTeam = []
+        previewTeamWritten = false
     }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
     if parseLogScreen(image: image) {
@@ -3603,7 +3642,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1006"
+let readerBuild = "20261120_1013"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -3699,9 +3738,9 @@ func loadMoveDict() {
 
 struct OcrBox { let text: String; let cx, cy, x0, y0, x1, y1: Double } // 座標は左上原点の割合
 
-func ocrBoxes(_ image: CGImage, x0: Double, y0: Double, x1: Double, y1: Double) -> [OcrBox] {
+func ocrBoxes(_ image: CGImage, x0: Double, y0: Double, x1: Double, y1: Double, fast: Bool = false) -> [OcrBox] {
     let req = VNRecognizeTextRequest()
-    req.recognitionLevel = .accurate
+    req.recognitionLevel = fast ? .fast : .accurate
     req.recognitionLanguages = ["ja-JP", "en-US"]
     req.usesLanguageCorrection = false
     req.regionOfInterest = CGRect(x: x0, y: 1.0 - y1, width: x1 - x0, height: y1 - y0)
