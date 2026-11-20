@@ -26075,6 +26075,9 @@ var require_dist = __commonJS({
   }
 });
 
+// bundle_entry_tmp.mjs
+var import_calc2 = __toESM(require_dist(), 1);
+
 // core.mjs
 var import_calc = __toESM(require_dist(), 1);
 var gen = import_calc.Generations.get(9);
@@ -26266,7 +26269,7 @@ function toPokemon(spec) {
     level: 50,
     nature: spec.nature,
     ability,
-    item: spec.item,
+    item: spec.itemLost ? "" : spec.item,
     ivs: IVS,
     evs: spToEvs(spec.sp),
     boosts: spec.boosts || void 0,
@@ -26493,9 +26496,6 @@ function moveData(name) {
     basePower: m.basePower
   };
 }
-
-// bundle_entry.mjs
-var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
   export_Generations as Generations,
