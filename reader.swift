@@ -509,6 +509,10 @@ var lastMoveLabel = ""                            // 直近の |move| の使用�
 var lastMoveName = ""                             // 直近の |move| の技名 (EN, 推定イベント用)
 var lastMoveSeq = -1                              // 直近の |move| が出た actionSeq
 var battleEvents: [String] = []                   // 推定エンジン用イベント (JSON 断片の配列)
+var entryBatchId = 0                              // 同時入場バッチの通し番号 ('ab' イベント用)
+var entryBatchOpen = false                        // 入場ウィンドウ (|switch| の連続区間) が開いているか
+var entryBatchMembers: Set<String> = []           // 現バッチで入場したラベル ("p2a: 種族")
+var entryBatchAbBuffer: [(label: String, ability: String)] = []  // ウィンドウ内の |-ability| 行 (発動順)
 var lastExactHp: [String: [Int]] = [:]            // key -> [現在HP, 最大HP] (自軍の正確な数値の追跡)
 var lastMoveMsgAt = Date.distantPast
 var lastFallbackText = ""                         // 直近の |-message| の正規化文 (OCR ゆれの重複防止)
@@ -994,6 +998,34 @@ func emitLog(_ line: String, applyNow: Bool) {
             battleEvents.append("{\"k\":\"mv\",\"turn\":\(currentTurn),\"label\":\"\(jsonEscape(f[2]))\",\"move\":\"\(jsonEscape(f[3]))\"}")
         }
     }
+    // 推定エンジン用イベント (特性の発動順): |switch| の連続区間を 1 回の同時入場
+    // とみなし、その間に入場した個体が発動した特性を発動順のまま 'ab' イベント
+    // として記録する。ゲーム内では同時入場時の特性は素早さ順に発動する
+    // (天候の奪い合いで遅い方が勝つのもこのため) ので、素早さ推定の証拠になる。
+    // ウィンドウは |turn| / |move| で閉じ、その時点で入場個体分だけを吐き出す
+    // (かるわざ等の非入場発動は入場集合に無いため自動的に除外される)
+    if line.hasPrefix("|switch|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 3 {
+            if !entryBatchOpen { entryBatchId += 1; entryBatchMembers = []; entryBatchAbBuffer = []; entryBatchOpen = true }
+            entryBatchMembers.insert(f[2])
+        }
+    } else if line.hasPrefix("|-ability|") {
+        if entryBatchOpen {
+            let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            if f.count >= 4 { entryBatchAbBuffer.append((label: f[2], ability: f[3])) }
+        }
+    }
+    if (line.hasPrefix("|turn|") || line.hasPrefix("|move|")) && entryBatchOpen {
+        for ab in entryBatchAbBuffer where entryBatchMembers.contains(ab.label) {
+            if battleEvents.count < 600 {
+                battleEvents.append("{\"k\":\"ab\",\"turn\":\(currentTurn),\"label\":\"\(jsonEscape(ab.label))\",\"ability\":\"\(jsonEscape(ab.ability))\",\"batch\":\(entryBatchId)}")
+            }
+        }
+        entryBatchOpen = false
+        entryBatchMembers = []
+        entryBatchAbBuffer = []
+    }
     if line.hasPrefix("|switch|") {
         let sf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         if sf.count >= 4 {
@@ -1083,6 +1115,10 @@ func resetLogState() {
     lastMoveSigAt = [:]
     lastSingleActAt = [:]
     battleEvents = []
+    entryBatchId = 0
+    entryBatchOpen = false
+    entryBatchMembers = []
+    entryBatchAbBuffer = []
     lastExactHp = [:]
     lastMoveName = ""
     lastMoveSeq = -1
@@ -4136,7 +4172,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1202"
+let readerBuild = "20261120_1210"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
