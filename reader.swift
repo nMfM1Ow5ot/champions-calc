@@ -345,7 +345,7 @@ func jsonEscape(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: 
 // 追加・変更するときは必ずここを更新すること (ハーネスが、実際に生成
 // した state.json のキーと突き合わせて検証する。aurora/veil のような
 // キー名の食い違いを機械で検出するため)
-let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "oppReset", "oppPreview"]
+let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "hazards", "oppReset", "oppPreview"]
 let stateMonKeys: Set<String> = ["species", "curHPPercent", "status", "unburden", "itemLost", "mega", "megaSpecies", "boosts", "revealed"]
 let stateBoostKeys: [String] = ["atk", "def", "spa", "spd", "spe", "acc", "eva"]  // boosts は常時この7能力をそろえて出す
 let stateRevealedKeys: Set<String> = ["moves", "item", "ability"]
@@ -416,9 +416,18 @@ func writeState() {
         if !active.isEmpty { scParts.append("\"\(sd)\": {\(active.joined(separator: ", "))}") }
     }
     let scJson = scParts.isEmpty ? "" : ", \"sideConditions\": {\(scParts.joined(separator: ", "))}"
+    // 設置物 (ステルスロック等) はターンで切れないため、残りターン式の
+    // sideConditions とは別に、層数つきでそのまま送る
+    var hzParts: [String] = []
+    for sd in ["p1", "p2"] {
+        guard let hz = battleHazards[sd], !hz.isEmpty else { continue }
+        let items = hz.keys.sorted().map { "\"\($0)\": \(hz[$0]!)" }
+        hzParts.append("\"\(sd)\": {\(items.joined(separator: ", "))}")
+    }
+    let hzJson = hzParts.isEmpty ? "" : ", \"hazards\": {\(hzParts.joined(separator: ", "))}"
     let trainer = trainerOpp.isEmpty ? "" : ", \"oppTrainer\": \"\(jsonEscape(trainerOpp))\""
     let eventsJson = ", \"events\": [\(battleEvents.joined(separator: ", "))]"
-    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(eventsJson), \"field\": \(field)\(scJson)}"
+    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
     if json == lastWritten { return }
     lastWritten = json
     try? json.write(to: outURL, atomically: true, encoding: .utf8)
@@ -497,6 +506,10 @@ var logSeenEntries = Set<String>()               // ゲーム内ログ画面エ�
 var pendingDamagePct: [String: Int] = [:]        // プレート名 -> 確定待ちの HP%
 var lastEmittedPct: [String: Int] = [:]          // プレート名 -> ログ出力済みの HP%
 var pendingStatusFrom: [String: (code: String, at: Date)] = [:]  // "p1:Species" -> 状態異常ダメージの帰属
+var pendingHazard: (side: String, hazard: String, seq: Int)? = nil   // がんせきアックスの設置保留 (当たって初めて確定する)
+var pendingRemoval: (side: String, seq: Int)? = nil                  // スピン系の設置物解除保留 (同上)
+var battleHazards: [String: [String: Int]] = [:]                     // side -> 設置物EN -> 層数 (applyEvent が正本として保持)
+let hazardCaps: [String: Int] = ["Stealth Rock": 1, "Spikes": 3, "Toxic Spikes": 2, "Sticky Web": 1]
 var lastDamageLabel = ""                          // 直近にダメージを受けた枠 (急所の帰属先)
 var lastDamageAt = Date.distantPast
 var lastPendingLabel = ""                         // 確定待ちダメージの枠 (急所はダメージ行より先に表示される)
@@ -687,6 +700,8 @@ func renderLogLine(_ line: String) -> [String] {
         if f.count >= 5 {
             if f[4].contains("psn") || f[4].contains("tox") { out.append("\(renderPrefix(side))\(species) was hurt by its poison!") }
             else if f[4].contains("brn") { out.append("\(renderPrefix(side))\(species) was hurt by its burn!") }
+            else if f[4].contains("Stealth Rock") { out.append("(The pointed stones dug into \(renderPrefix(side))\(species)!)") }
+            else if f[4].contains("Spikes") { out.append("(\(renderPrefix(side))\(species) was hurt by the spikes!)") }
         }
         if let pct = renderPct(of: f[3]) {
             let lost = (renderLastPct[f[2]] ?? 100) - pct
@@ -833,6 +848,18 @@ func renderLogLine(_ line: String) -> [String] {
         return []
     case "-sidestart", "-sideend":
         guard f.count >= 4 else { return [] }
+        if f[3].contains("Stealth Rock") {
+            if f[1] == "-sidestart" {
+                return [f[2] == "p2" ? "(Pointed stones float around the opposing team!)" : "(Pointed stones float around your team!)"]
+            }
+            return [f[2] == "p2" ? "(The pointed stones disappeared from around the opposing team!)" : "(The pointed stones disappeared from around your team!)"]
+        }
+        if f[3].contains("Spikes") {
+            if f[1] == "-sidestart" {
+                return [f[2] == "p2" ? "(Spikes were scattered on the ground around the opposing team!)" : "(Spikes were scattered on the ground around your team!)"]
+            }
+            return [f[2] == "p2" ? "(The spikes disappeared from the ground around the opposing team!)" : "(The spikes disappeared from the ground around your team!)"]
+        }
         if f[3].contains("Tailwind") {
             if f[1] == "-sidestart" {
                 return [f[2] == "p2" ? "(The Tailwind started blowing on the opposing team's side!)" : "(The Tailwind started blowing!)"]
@@ -877,6 +904,22 @@ let weatherUiByLogName: [String: String] = ["Rain Dance": "Rain", "Sunny Day": "
 
 func applyEvent(_ line: String) {
     trackFieldEvent(line)  // 残りターン管理 (開始ターンの記録)
+    // 設置物はここを正本として保持する (state.json の hazards 用)。
+    // sidestart/sideend 行が唯一の入力で、保存したプロトコルログを
+    // 再生すれば設置状態も再構築できる
+    if line.hasPrefix("|-sidestart|") || line.hasPrefix("|-sideend|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, f[3].hasPrefix("move: ") {
+            let name = String(f[3].dropFirst("move: ".count))
+            if let cap = hazardCaps[name] {
+                if line.hasPrefix("|-sidestart|") {
+                    battleHazards[f[2], default: [:]][name] = min(cap, (battleHazards[f[2]]?[name] ?? 0) + 1)
+                } else {
+                    battleHazards[f[2]]?[name] = nil
+                }
+            }
+        }
+    }
     if line.hasPrefix("|turn|") {
         if let n = Int(line.dropFirst(6)) { currentTurn = n }
     } else if line.hasPrefix("|-weather|") {
@@ -1116,6 +1159,24 @@ func emitLog(_ line: String, applyNow: Bool) {
     if line.hasPrefix("|move|") || line.hasPrefix("|switch|") || line.hasPrefix("|faint|") {
         commandPhaseSeen = false
     }
+    // 設置・解除の保留確定: がんせきアックスとスピン系は当たって初めて
+    // 効果が出るため、相手側へのダメージ行を確定の合図にする
+    // (まもる・無効・外しではダメージ行が出ず、保留は次の技で失効する)
+    if line.hasPrefix("|turn|") { pendingHazard = nil; pendingRemoval = nil }
+    if line.hasPrefix("|-damage|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 3 {
+            let dmgSide = f[2].hasPrefix("p1") ? "p1" : "p2"
+            if let ph = pendingHazard, dmgSide == ph.side {
+                pendingHazard = nil
+                emitHazard(ph.side, ph.hazard, start: true)
+            }
+            if let pr = pendingRemoval, dmgSide != pr.side {
+                pendingRemoval = nil
+                clearSideHazards(pr.side)
+            }
+        }
+    }
     lastLogEventAt = Date()
 }
 
@@ -1158,6 +1219,7 @@ func resetLogState() {
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
+    battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -1627,6 +1689,12 @@ func processPlates(_ hits: [String: SlotState]) {
                     if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
                     emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
                     recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
+                    // 交代で入った直後の HP 減少は、設置物ダメージとして
+                    // 帰属させる (Showdown の [from] 表記)
+                    if effPct < prevPct && !openingLead {
+                        if battleHazards[side]?["Stealth Rock"] != nil { pendingStatusFrom[key] = ("Stealth Rock", Date()) }
+                        else if battleHazards[side]?["Spikes"] != nil { pendingStatusFrom[key] = ("Spikes", Date()) }
+                    }
                     if effPct != prevPct {
                         _ = emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
                                            fromPct: prevPct, toPct: effPct, hpText: effText, force: true)
@@ -1846,7 +1914,7 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
             if lastMoveSigAt[sig] != nil { break }
             lastMoveSigAt[sig] = Date()
             emitLog("|move|\(slot): \(sp.en)|\(moveEn)")  // 判明登録は applyEvent が行う
-            applyMoveField(mvJa)
+            applyMoveField(mvJa, side: side)
         } else if debugMode {
             print("    -> 技名が辞書に見つかりませんでした")
         }
@@ -2077,7 +2145,23 @@ func clearTerrain() {
 }
 
 // 技そのものが天候・フィールドを張る場合
-func applyMoveField(_ mvJa: String) {
+// 設置物の開始/終了行はこの入口に一本化する。本文側の救済
+// (salvageField) とクールダウンキーを共有し、二重に出さない
+func emitHazard(_ side: String, _ hazard: String, start: Bool) {
+    lastSideCondAt["\(side):\(hazard):\(start ? "start" : "end")"] = Date()
+    emitLog("|-\(start ? "sidestart" : "sideend")|\(side)|move: \(hazard)")
+}
+
+func clearSideHazards(_ side: String) {
+    guard let hz = battleHazards[side] else { return }
+    for name in hz.keys.sorted() { emitHazard(side, name, start: false) }
+}
+
+func applyMoveField(_ mvJa: String, side: String) {
+    // 前の技で確定しなかった設置・解除の保留は、次の技の時点で失効させる
+    if let ph = pendingHazard, ph.seq < actionSeq { pendingHazard = nil }
+    if let pr = pendingRemoval, pr.seq < actionSeq { pendingRemoval = nil }
+    let foe = side == "p1" ? "p2" : "p1"
     switch mvJa {
     case "あめごい": setWeather("Rain", "Rain Dance")
     case "にほんばれ": setWeather("Sun", "Sunny Day")
@@ -2087,6 +2171,25 @@ func applyMoveField(_ mvJa: String) {
     case "グラスフィールド": setTerrain("Grassy")
     case "ミストフィールド": setTerrain("Misty")
     case "サイコフィールド": setTerrain("Psychic")
+    // 設置物 (Showdown のサイドコンディションとして扱う)
+    case "ステルスロック": emitHazard(foe, "Stealth Rock", start: true)
+    case "まきびし": emitHazard(foe, "Spikes", start: true)
+    case "がんせきアックス":
+        // 追加効果の設置は当たった場合のみ。確定は emitLog 側の
+        // ダメージ行フックと設置文の救済に任せ、ここでは保留だけ置く
+        pendingHazard = (foe, "Stealth Rock", actionSeq)
+    case "こうそくスピン", "キラースピン":
+        pendingRemoval = (side, actionSeq)
+    case "おかたづけ": clearSideHazards(side)
+    case "きりばらい":
+        // きりばらいは両側の設置物とフィールドを消す (第9世代仕様)
+        clearSideHazards("p1"); clearSideHazards("p2")
+        if !logFieldTerrain.isEmpty { emitLog("|-fieldend|move: \(logFieldTerrain) Terrain") }
+    case "コートチェンジ":
+        let mineHz = battleHazards["p1"] ?? [:], oppHz = battleHazards["p2"] ?? [:]
+        clearSideHazards("p1"); clearSideHazards("p2")
+        for (name, layers) in oppHz { for _ in 0..<layers { emitHazard("p1", name, start: true) } }
+        for (name, layers) in mineHz { for _ in 0..<layers { emitHazard("p2", name, start: true) } }
     default: break
     }
 }
@@ -2671,6 +2774,21 @@ func salvageField(in t: String) -> Bool {
     // サイドコンディションの告知 (種族に依存しない)。開始/終了の語が
     // 明確な場合だけ反映し、重複は lastSideCondAt で抑える (正規経路と共有)
     let scSide = (t.contains("相手") || t.contains("あいて")) ? "p2" : "p1"
+    // 設置物の告知。技の検出を取りこぼした場合の受け皿で、開始/終了が
+    // 曖昧な文は出さずに消費だけする (本文を |-message| に残さない)
+    if t.contains("とがった岩") || t.contains("まきびし") {
+        let hz = t.contains("とがった岩") ? "Stealth Rock" : "Spikes"
+        let start = t.contains("漂") || t.contains("浮か") || t.contains("散らば")
+        let end = t.contains("消え") || t.contains("なくな")
+        if start != end {
+            let k = "\(scSide):\(hz):\(start ? "start" : "end")"
+            if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+                lastSideCondAt[k] = Date()
+                emitLog("|-\(start ? "sidestart" : "sideend")|\(scSide)|move: \(hz)")
+            }
+        }
+        return true
+    }
     let conds: [(String, String)] = [("リフレクター", "Reflect"), ("ひかりのかべ", "Light Screen"), ("光の壁", "Light Screen"),
                                      ("オーロラベール", "Aurora Veil"), ("しろいきり", "Mist"), ("白い霧", "Mist"),
                                      ("しんぴのまもり", "Safeguard"), ("神秘の守り", "Safeguard"),
@@ -3256,7 +3374,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                 synthesizeMegaIfPending(side: side, speciesEn: sp.en)
                 emitLog("|move|\(slot): \(sp.en)|\(moveEn)")
                 lastMoveSeq = actionSeq
-                applyMoveField(mvJa)  // 判明登録は |move| 行の applyEvent が行う
+                applyMoveField(mvJa, side: side)  // 判明登録は |move| 行の applyEvent が行う
                 return true
         }
     }
@@ -4432,7 +4550,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1709"
+let readerBuild = "20261120_1716"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
