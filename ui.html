@@ -1547,21 +1547,28 @@ function estView(species) {
     natures = natures ? new Set([...natures].filter(n => ns.has(n))) : ns;
   }
   if (natures && !natures.size) natures = null;
-  const view = { nature: natures && natures.size === 1 ? [...natures][0] : null, sp: {}, stat: {} };
+  const view = { nature: natures && natures.size === 1 ? [...natures][0] : null, sp: {}, stat: {}, rows: {} };
   for (const k of keys) {
     const rows = table[k].filter(r => e.pairs[k].has(r.nature + '|' + r.sp) && (!natures || natures.has(r.nature)));
     if (!rows.length) continue;
     view.sp[k] = [Math.min(...rows.map(r => r.sp)), Math.max(...rows.map(r => r.sp))];
     view.stat[k] = [Math.min(...rows.map(r => r.value)), Math.max(...rows.map(r => r.value))];
+    view.rows[k] = rows;
   }
   if (e.hpSps) {
     const rows = table.hp.filter(r => e.hpSps.has(r.sp));
     view.sp.hp = [Math.min(...e.hpSps), Math.max(...e.hpSps)];
     view.stat.hp = [Math.min(...rows.map(r => r.value)), Math.max(...rows.map(r => r.value))];
+    view.rows.hp = rows;
   }
   return view;
 }
-// 推定を相手パネルの判明情報として反映する (計算用 SP は範囲内に寄せる)
+// 推定を相手パネルの判明情報として反映する。
+// 計算用 SP は、推定レンジの中で実数値が最大になる候補の SP を使う
+// (相手を最も強い前提で計算する。性格が 1 つに定まっている場合はその
+//  性格の候補の中で、定まっていない場合はパネルの現在の性格の候補の
+//  中で最大になるものを選び、どちらの候補も無い能力は SP レンジの
+//  上限を使う)
 function attachEstimate(spec) {
   const view = estView(spec.species);
   spec.estSp = view ? view.sp : null;
@@ -1570,8 +1577,12 @@ function attachEstimate(spec) {
   if (!view) return;
   if (view.nature) { spec.nature = view.nature; markCorrected(spec, '性格'); }
   for (const k of Object.keys(view.sp)) {
-    const [lo, hi] = view.sp[k];
-    spec.sp[k] = Math.max(lo, Math.min(hi, spec.sp[k] || 0));
+    const rows = view.rows[k] || [];
+    const byNature = rows.filter(r => r.nature === undefined || r.nature === spec.nature);
+    const pool = byNature.length ? byNature : rows;
+    let best = null;
+    for (const r of pool) if (!best || r.value > best.value) best = r;
+    spec.sp[k] = best ? best.sp : view.sp[k][1];
     markCorrected(spec, 'EV');
   }
 }
