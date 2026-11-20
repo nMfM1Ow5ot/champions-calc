@@ -419,7 +419,8 @@ function oppSpec(speciesEn, kind) {
   const u = usageSpec(speciesEn, USAGE_SETS);
   const moves = u ? [...u.moves] : [];
   return { species: speciesEn, kind, sp: { ...a.sp }, nature: a.nature, ability: a.ability, item: '',
-    moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [] };
+    moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [],
+    noUsage: kind === 'usage' && !USAGE_SETS ? true : undefined };
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
 function applyRevealed(spec, rev) {
@@ -855,7 +856,7 @@ function metaRow(side) {
   });
   regDD(`item:${side}`, {
     options: ITEM_OPTIONS, value: spec.item || '', clearable: true, placeholder: 'なし',
-    valueLabel: spec.item ? (NAMES._itemEn2ja[idOf(spec.item)] || spec.item) : '',
+    valueLabel: spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : '',
     highlight: corr('持ち物'),
     onPick: v => { spec.item = v || ''; if (side === 'opps') markCorrected(spec, '持ち物'); calcAll(); },
   });
@@ -873,8 +874,8 @@ function oppInfoLine() {
   const parts = [];
   if (rates.ability && !corr.includes('特性')) parts.push(`特性 ${ja('abilities', spec.ability)} ${rates.ability}%`);
   else if (rates.ability) parts.push(`特性 ${ja('abilities', spec.ability)}`);
-  if (rates.item && !corr.includes('持ち物')) parts.push(`持ち物 ${spec.item ? (NAMES._itemEn2ja[idOf(spec.item)] || spec.item) : 'なし'} ${rates.item}%`);
-  else if (rates.item) parts.push(`持ち物 ${spec.item ? (NAMES._itemEn2ja[idOf(spec.item)] || spec.item) : 'なし'}`);
+  if (rates.item && !corr.includes('持ち物')) parts.push(`持ち物 ${spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : 'なし'} ${rates.item}%`);
+  else if (rates.item) parts.push(`持ち物 ${spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : 'なし'}`);
   if (rates.patternLabel && !corr.includes('EV')) parts.push(`EV型 ${rates.patternLabel} ${rates.pattern || ''}%`);
   const head = `pokedb 使用率トップ型${USAGE_SEASON ? `（${USAGE_SEASON}）` : ''}: `;
   const corrLine = corr.length ? `<br><span class="corrected">判明情報で訂正済み: ${corr.join('・')}</span>` : '';
@@ -1809,44 +1810,71 @@ async function poll() {
 
 /* ---------- init ---------- */
 (async function init() {
-  try {
-    const r = await fetch('./data/names_ja.json');
-    if (r.ok) {
-      NAMES = await r.json();
-      NAMES._ja2en = {};
-      NAMES._indexSpecies = (await (await fetch('./data/names_index.json')).json()).species;
-      // 同じJA名に複数のフォルムがある場合は先勝ち (索引は基本フォルムが先頭)
-      for (const e of NAMES._indexSpecies) { const k = z2h(e.ja); if (!(k in NAMES._ja2en)) NAMES._ja2en[k] = e.en; }
-      NAMES._moveJa2en = {};
-      for (const [id, jaName] of Object.entries(NAMES.moves)) { const mv = [...gen.moves].find(m => idOf(m.name) === id); if (mv) NAMES._moveJa2en[z2h(jaName)] = mv.name; }
-      NAMES._abilityJa2en = {};
-      for (const [id, jaName] of Object.entries(NAMES.abilities)) { const ab = [...gen.abilities].find(a => idOf(a.name) === id); if (ab) NAMES._abilityJa2en[z2h(jaName)] = ab.name; }
-      NAMES._itemEn2ja = {};
-      try {
-        const ij = await (await fetch('./data/items_ja.json')).json();
-        NAMES._itemJa2en = ij;
-        for (const [jaName, en] of Object.entries(ij)) NAMES._itemEn2ja[idOf(en)] = jaName;
-      } catch (e) { /* items_ja optional */ }
-    }
-  } catch (e) { /* names are optional */ }
-  try {
-    const u = await (await fetch('./data/usage_sets.json')).json();
-    USAGE_SETS = u.sets || {};
-    USAGE_SEASON = u.season || '';
-    state.opps = state.oppTeam.map(sp => oppSpec(sp, 'usage'));
-  } catch (e) { /* usage sets optional */ }
-  try {
-    const sa = await (await fetch('./data/species_abilities.json')).json();
-    SPECIES_ABILITIES = sa || {};
-  } catch (e) { /* species abilities optional */ }
-  try {
-    const cd = await (await fetch('./data/champions_dex.json')).json();
-    CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
-  } catch (e) { /* champions dex optional */ }
-  try {
-    const rg = await (await fetch('./data/regulation.json')).json();
-    if (rg && rg.regulation) { const el = document.getElementById('regname'); if (el) el.textContent = 'レギュレーション' + rg.regulation; }
-  } catch (e) { /* regulation optional */ }
+  // state.json の取り込みはデータ読み込みの完了を待たずに即開始する
+  // (選出画面・試合開始直後の反映を速くするため)
+  poll();
+  setInterval(poll, 200);
+  // データファイル群は並列に読み込む (逐次読みだと全て揃うまで時間がかかるため)
+  await Promise.all([
+    (async () => { try {
+      const r = await fetch('./data/names_ja.json');
+      if (r.ok) {
+        NAMES = await r.json();
+        NAMES._ja2en = {};
+        NAMES._indexSpecies = (await (await fetch('./data/names_index.json')).json()).species;
+        // 同じJA名に複数のフォルムがある場合は先勝ち (索引は基本フォルムが先頭)
+        for (const e of NAMES._indexSpecies) { const k = z2h(e.ja); if (!(k in NAMES._ja2en)) NAMES._ja2en[k] = e.en; }
+        NAMES._moveJa2en = {};
+        for (const [id, jaName] of Object.entries(NAMES.moves)) { const mv = [...gen.moves].find(m => idOf(m.name) === id); if (mv) NAMES._moveJa2en[z2h(jaName)] = mv.name; }
+        NAMES._abilityJa2en = {};
+        for (const [id, jaName] of Object.entries(NAMES.abilities)) { const ab = [...gen.abilities].find(a => idOf(a.name) === id); if (ab) NAMES._abilityJa2en[z2h(jaName)] = ab.name; }
+        NAMES._itemEn2ja = {};
+        try {
+          const ij = await (await fetch('./data/items_ja.json')).json();
+          NAMES._itemJa2en = ij;
+          for (const [jaName, en] of Object.entries(ij)) (NAMES._itemEn2ja || {})[idOf(en)] = jaName;
+        } catch (e) { /* items_ja optional */ }
+      }
+    } catch (e) { /* names are optional */ } })(),
+    (async () => { try {
+      const u = await (await fetch('./data/usage_sets.json')).json();
+      USAGE_SETS = u.sets || {};
+      USAGE_SEASON = u.season || '';
+      // 読み込み前に仮の型で作られていた相手パネルは、使用率型で作り直す。
+      // その際、既に反映済みの HP・状態・判明情報などは引き継ぐ
+      state.opps = state.oppTeam.map((sp, i) => {
+        const old = state.opps[i];
+        if (!old || old.species !== sp) return oppSpec(sp, 'usage');
+        if (!old.noUsage) return old;
+        const fresh = oppSpec(sp, 'usage');
+        fresh.curHPPercent = old.curHPPercent; fresh.boosts = old.boosts; fresh.status = old.status;
+        fresh.knownMoves = old.knownMoves || [];
+        if (old.estManual) fresh.estManual = old.estManual;
+        for (const f of old.corrected || []) {
+          if (f === '特性') fresh.ability = old.ability;
+          if (f === '性格') fresh.nature = old.nature;
+          if (f === '持ち物') { fresh.item = old.item; fresh.megaSpecies = old.megaSpecies; fresh.megaAbility = old.megaAbility; fresh.mega = old.mega; }
+          if (f === '技') fresh.moves = [...old.moves];
+          if (f === 'EV') fresh.sp = { ...old.sp };
+          if (!fresh.corrected.includes(f)) fresh.corrected.push(f);
+        }
+        if (old.mega && !fresh.mega) { fresh.mega = true; fresh.megaSpecies = old.megaSpecies; fresh.megaAbility = old.megaAbility; }
+        return fresh;
+      });
+    } catch (e) { /* usage sets optional */ } })(),
+    (async () => { try {
+      const sa = await (await fetch('./data/species_abilities.json')).json();
+      SPECIES_ABILITIES = sa || {};
+    } catch (e) { /* species abilities optional */ } })(),
+    (async () => { try {
+      const cd = await (await fetch('./data/champions_dex.json')).json();
+      CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
+    } catch (e) { /* champions dex optional */ } })(),
+    (async () => { try {
+      const rg = await (await fetch('./data/regulation.json')).json();
+      if (rg && rg.regulation) { const el = document.getElementById('regname'); if (el) el.textContent = 'レギュレーション' + rg.regulation; }
+    } catch (e) { /* regulation optional */ } })(),
+  ]);
   // dropdown option lists
   const seen = new Set();
   SPECIES_OPTIONS = Object.entries(NAMES._ja2en || {})
@@ -1866,7 +1894,9 @@ async function poll() {
       .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
   await loadMyTeam();
   calcAll();
-  setInterval(poll, 500);
+  // データが揃った状態で最新の state.json を反映し直す
+  lastStateText = '';
+  poll();
 })();
 </script>
 </body>
