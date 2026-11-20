@@ -4550,7 +4550,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1716"
+let readerBuild = "20261120_1733"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -4741,6 +4741,9 @@ var lastTeamSignature = ""
 // 形式追加)。配列形式のままなので、番兵を読み飛ばす既存の読み手 (UI の
 // loadMyTeam は species の無いエントリを除外する) は無変更で動き続ける
 var teamName = ""
+// 対応レギュレーション名も番兵エントリの "regulation" キーで保持する
+// (2026-11-20 追加。「やなぎ_グロチャレ２」は "M-C")
+var teamRegulation = ""
 // 直近の captureTeamScreen で画面から特定できた種族 (EN) の一覧。
 // 撮影ボタンの応答で UI 側に返し、反映確認に使わせる
 var lastCaptureSpecies: [String] = []
@@ -4749,14 +4752,19 @@ func loadTeamFile() {
     guard let data = try? Data(contentsOf: teamURL),
           let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
     for e in arr {
-        if let tn = e["teamName"] as? String { teamName = tn; continue }
+        if let tn = e["teamName"] as? String { teamName = tn }
+        if let rg = e["regulation"] as? String { teamRegulation = rg }
         if let sp = e["species"] as? String { teamEntries[sp] = e; teamOrder.append(sp) }
     }
 }
 
 func writeTeamFile() {
-    // --team で再登録してもチーム名が消えないよう、番兵を引き継いで先頭に書く
-    var arr: [[String: Any]] = teamName.isEmpty ? [] : [["teamName": teamName]]
+    // --team で再登録してもチーム名・レギュレーションが消えないよう、
+    // 番兵を引き継いで先頭に書く
+    var sentinel: [String: Any] = [:]
+    if !teamName.isEmpty { sentinel["teamName"] = teamName }
+    if !teamRegulation.isEmpty { sentinel["regulation"] = teamRegulation }
+    var arr: [[String: Any]] = sentinel.isEmpty ? [] : [sentinel]
     arr += teamOrder.map { teamEntries[$0]! }
     guard let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted, .sortedKeys]) else { return }
     try? data.write(to: teamURL, options: .atomic)
