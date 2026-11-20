@@ -272,6 +272,7 @@ func ocr(_ image: CGImage, plate: Plate) -> [String] {
 
 struct SlotState { var speciesEn: String; var hpPercent: Int; var hpCur: Int? = nil; var hpMax: Int? = nil }
 var lastSlots: [String: SlotState] = [:]
+var activeFieldConds: Set<String> = []  // 開始行を出したサイド/フィールド条件 (終了行の照合用)
 var lastWritten = ""
 // 相手の6体コレクション: 対戦中にプレートで読み取れた相手種族を登場順に蓄積する (見せ合い画面には名前テキストが無いため)
 var oppTeamSeen: [String] = []
@@ -1002,6 +1003,28 @@ func emitLog(_ line: String) { emitLog(line, applyNow: true) }
 // applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
 // (交代行の後に出す保留ランク行など。適用は applyEvent で発生時に行う)
 func emitLog(_ line: String, applyNow: Bool) {
+    // 開始行を出していない条件の終了行は出さない (開始を取りこぼした
+    // 終了だけが残ると、存在しない条件の終了がログと状態に残る。
+    // 実例: 2026-11-20 vs チャンピオン戦、おいかぜが始まっていないのに
+    // |-sideend|Tailwind だけが出た)
+    if line.hasPrefix("|-sidestart|") || line.hasPrefix("|-sideend|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4 {
+            let key = "\(f[2]):\(f[3].replacingOccurrences(of: "move: ", with: ""))"
+            if line.hasPrefix("|-sidestart|") { activeFieldConds.insert(key) }
+            else if !activeFieldConds.contains(key) { return }
+            else { activeFieldConds.remove(key) }
+        }
+    }
+    if line.hasPrefix("|-fieldstart|") || line.hasPrefix("|-fieldend|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 3 {
+            let key = "field:\(f[2].replacingOccurrences(of: "move: ", with: ""))"
+            if line.hasPrefix("|-fieldstart|") { activeFieldConds.insert(key) }
+            else if !activeFieldConds.contains(key) { return }
+            else { activeFieldConds.remove(key) }
+        }
+    }
     if applyNow {
         if line.hasPrefix("|move|") || line.hasPrefix("|turn|") { actionSeq += 1 }
         applyEvent(line)
@@ -1154,6 +1177,7 @@ func resetLogState() {
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
+    activeFieldConds = []
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -1606,22 +1630,33 @@ func processPlates(_ hits: [String: SlotState]) {
                     let prevPct = monStates[key]?.hpPercent ?? 100
                     pendingDamagePct[plate.name] = nil
                     heldLine[plate.name] = nil
-                    lastEmittedPct[plate.name] = s.hpPercent
-                    monStates[key]?.hpPercent = s.hpPercent
-                    monStates[key]?.hpText = hpTextFor(s)
+                    // 試合開始時の先発は必ず満タンで出る。登場アニメーション
+                    // 途中のバー読み (満タン未満) をそのまま採用すると、
+                    // 以後の全ての割合計算がずれる (実例: 2026-11-20 vs
+                    // チャンピオン戦、サーナイト 58/145・イエッサン 74/177
+                    // で登場したことになった)。技も被ダメもまだ無い間の
+                    // 初登場だけは満タンとして採用する
+                    let openingLead = prev == nil && actionSeq == 0
+                        && !battleLog.contains { $0.hasPrefix("|move|") || $0.hasPrefix("|-damage|") }
+                    let effPct = openingLead ? 100 : s.hpPercent
+                    let effText = openingLead ? (s.hpMax.map { "\($0)/\($0)" } ?? "100/100") : hpTextFor(s)
+                    lastEmittedPct[plate.name] = effPct
+                    monStates[key]?.hpPercent = effPct
+                    monStates[key]?.hpText = effText
                     var hp = monStates[key]!.hpText
                     if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
                     emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
                     recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
-                    if s.hpPercent != prevPct {
+                    if effPct != prevPct {
                         _ = emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
-                                           fromPct: prevPct, toPct: s.hpPercent, hpText: hpTextFor(s), force: true)
+                                           fromPct: prevPct, toPct: effPct, hpText: effText, force: true)
                     }
                     faintedSlots.removeValue(forKey: slot)
                     // 0% で登場した (交代直後に技を受けて倒れた等) 場合は
                     // ひんし行を補う
-                    if s.hpPercent == 0 { deferFaint(slot: slot, speciesEn: s.speciesEn) }
-                    lastSlots[plate.name] = s
+                    if effPct == 0 { deferFaint(slot: slot, speciesEn: s.speciesEn) }
+                    lastSlots[plate.name] = openingLead
+                        ? SlotState(speciesEn: s.speciesEn, hpPercent: 100, hpCur: s.hpMax, hpMax: s.hpMax) : s
                 }
             }
         } else {
@@ -4417,7 +4452,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1652"
+let readerBuild = "20261120_1700"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -4608,6 +4643,9 @@ var lastTeamSignature = ""
 // 形式追加)。配列形式のままなので、番兵を読み飛ばす既存の読み手 (UI の
 // loadMyTeam は species の無いエントリを除外する) は無変更で動き続ける
 var teamName = ""
+// 直近の captureTeamScreen で画面から特定できた種族 (EN) の一覧。
+// 撮影ボタンの応答で UI 側に返し、反映確認に使わせる
+var lastCaptureSpecies: [String] = []
 
 func loadTeamFile() {
     guard let data = try? Data(contentsOf: teamURL),
@@ -5107,7 +5145,28 @@ func captureTeamScreen(image: CGImage, tab: String) -> Int {
         }
     }
     if updated > 0 || pruned { writeTeamFile() }
+    lastCaptureSpecies = screenSpecies
     return updated
+}
+
+// 画面が「チーム確認画面 (6体一覧)」かどうかを、カード位置に種族名が
+// 読めるカードの数で判定する。対戦画面など別画面のまま撮影ボタンが押された
+// 場合に、場のポケモンを誤って登録してしまう事故を防ぐための事前ガード
+// (captureTeamScreen は読めた内容をその場でマージしてしまうため、
+//  書き込み前にここで弾く)
+func teamScreenCardCount(image: CGImage) -> Int {
+    let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
+    var found = 0
+    for row in 0..<3 {
+        for col in 0..<2 {
+            let x0 = cardXs[col], y0 = cardYs[row]
+            let inCard = boxes.filter { b in
+                b.cx >= x0 && b.cx < x0 + cardW && b.cy >= y0 && b.cy < y0 + cardH
+            }
+            if inCard.contains(where: { matchSpecies(texts: [$0.text]) != nil }) { found += 1 }
+        }
+    }
+    return found
 }
 
 // MARK: - 撮影ボタンの HTTP 受付 (UI から localhost:8899/capture?tab=ability|status)
@@ -5130,11 +5189,26 @@ func startCaptureServer() {
                     conn.send(content: resp.data(using: .utf8), completion: .contentProcessed { _ in conn.cancel() })
                     return
                 }
-                let n = captureTeamScreen(image: img, tab: tab)
-                if n > 0 {
-                    body = "{\"ok\":true,\"registered\":\(teamOrder.count),\"message\":\"取り込みました（登録 \(teamOrder.count)/6）\"}"
+                let cards = teamScreenCardCount(image: img)
+                if cards < 4 {
+                    // チーム確認画面ではない画面 (対戦画面など) のまま押された。
+                    // 部分的に読めても登録には使わず、画面違いとして返す
+                    print("[撮影] チーム確認画面と判定できませんでした (カード検出 \(cards)/6) — 登録は行っていません")
+                    fflush(stdout)
+                    body = "{\"ok\":false,\"error\":\"チーム確認画面（6体一覧の能力/ステータス表示）を表示してから撮影してください（カード検出 \(cards)/6）\"}"
                 } else {
-                    body = "{\"ok\":false,\"error\":\"チーム画面を読み取れませんでした\"}"
+                    let n = captureTeamScreen(image: img, tab: tab)
+                    if n > 0 {
+                        let spJson = lastCaptureSpecies.map { "\"\($0)\"" }.joined(separator: ",")
+                        let spJa = lastCaptureSpecies.map { pvJa($0) }.joined(separator: "・")
+                        print("[撮影] \(tab == "status" ? "ステータス" : "能力")画面を取り込みました (更新 \(n) 件): \(spJa)")
+                        fflush(stdout)
+                        body = "{\"ok\":true,\"registered\":\(teamOrder.count),\"species\":[\(spJson)],\"message\":\"取り込みました（登録 \(teamOrder.count)/6）\"}"
+                    } else {
+                        print("[撮影] チーム画面を読み取れませんでした (カード検出 \(cards)/6)")
+                        fflush(stdout)
+                        body = "{\"ok\":false,\"error\":\"チーム画面を読み取れませんでした\"}"
+                    }
                 }
             }
             let resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
