@@ -78,7 +78,7 @@ def sync_loop():
         except Exception:
             print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
         cycles += 1
-        if cycles % 12 == 0:   # 試合ログの送信チェックは約 60 秒ごと
+        if cycles % 6 == 0:   # 試合ログの送信チェックは約 30 秒ごと
             upload_logs_once()
 
 
