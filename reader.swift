@@ -268,6 +268,7 @@ func writeState() {
         var e = "{\"species\": \"\(jsonEscape(s.speciesEn))\", \"curHPPercent\": \(st?.hpPercent ?? s.hpPercent)"
         if let st, !st.status.isEmpty { e += ", \"status\": \"\(st.status)\"" }
         if unburdenActive.contains("\(side):\(s.speciesEn)") { e += ", \"unburden\": true" }
+        if itemLostActive.contains("\(side):\(s.speciesEn)") { e += ", \"itemLost\": true" }
         if let st, !st.megaSpecies.isEmpty { e += ", \"mega\": true, \"megaSpecies\": \"\(jsonEscape(st.megaSpecies))\"" }
         if let st, !st.boosts.isEmpty {
             let bs = ["atk", "def", "spa", "spd", "spe"].compactMap { k -> String? in
@@ -385,6 +386,7 @@ var lastBoostApply: [String: (seq: Int, turn: Int, at: Date)] = [:]  // "slot|st
 var emittedSwitchKeys: Set<String> = []            // |switch| を出した "side:Species" (ランク変化行の保留判定)
 var pendingUnburden: Set<String> = []              // 交代行が出る前にシード消費を検知した種族 (かるわざ発動を交代行の後に出す)
 var unburdenActive: Set<String> = []               // かるわざ発動中 (state.json の unburden フラグ用。交代で解除)
+var itemLostActive: Set<String> = []               // 持ち物を消費・喪失した種族 (state.json の itemLost フラグ用。対戦中は交代しても解除されない)
 var heldBoostLines: [String: [(stat: String, delta: Int, at: Date)]] = [:]  // 交代行より先に届いたランク変化の保留 (枠は出す時点で付け直す)
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
@@ -844,6 +846,7 @@ func resetLogState() {
     emittedSwitchKeys = []
     pendingUnburden = []
     unburdenActive = []
+    itemLostActive = []
     heldBoostLines = [:]
     recentAtkDrops = [:]
     lastDamageLabel = ""
@@ -888,6 +891,8 @@ func hpTextFor(_ s: SlotState) -> String {
 // ため、消費の事実から推定するしかない。自軍はチーム登録の特性で確定
 // でき、相手は特性が判明済みのときだけ記録する (推測では記録しない)
 func noteItemLost(slot: String, side: String, speciesEn: String) {
+    // 消費・喪失の事実自体は特性によらず記録する (UI が持ち物なしとして扱うため)
+    itemLostActive.insert("\(side):\(speciesEn)")
     let abilityJa = side == "p1" ? (teamEntries[speciesEn]?["ability"] as? String) : revealedAbilities[speciesEn]
     guard abilityJa == "かるわざ" else { return }
     unburdenActive.insert("\(side):\(speciesEn)")
@@ -3679,7 +3684,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1028"
+let readerBuild = "20261120_1043"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
