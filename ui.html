@@ -201,6 +201,7 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 .dmgbtn{justify-self:center; font:inherit; font-size:1.05rem; background:none; border:none; color:var(--ink); cursor:pointer; text-align:left; padding:.2rem .3rem; border-radius:.4rem; white-space:nowrap}
 .dmgbtn:hover{background:rgba(255,255,255,.06)}
 .dmgbtn.copied{color:var(--green)}
+.dmgbtn .candsub{display:block; font-size:.72rem; color:var(--blue); white-space:nowrap}
 .dmgbtn.immune{color:var(--ink)}
 .ko{font-size:1.05rem; white-space:nowrap; justify-self:center}
 .statswrap{flex:1; min-width:0; padding:0 1.2rem}
@@ -964,8 +965,14 @@ function movesBox(side, res) {
     const foe = DS(side === 'mine' ? 'opps' : 'mine');
     const mvName = spec.moves[mi];
     const copyText = (r && !r.status && !r.immune && mvName) ? `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: ${dmg} ${ko}` : '';
+    // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す
+    let sub = '';
+    const cr = lastCalc && lastCalc.candRanges ? lastCalc.candRanges[side][mi] : null;
+    if (r && cr && !r.status && !r.immune && !r.error && (cr.lo < r.minPct - 0.05 || cr.hi > r.maxPct + 0.05)) {
+      sub = `<span class="candsub" title="相手の型候補（事後確率 ${Math.round((lastCalc.candRanges.acc || 0) * 100)}% 分）を通じたダメージ範囲">候補 ${fmtPct(cr.lo)}–${fmtPct(cr.hi)}%</span>`;
+    }
     return `${ddHTML(`move:${side}:${mi}`)}
-      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}"` : ''}>${dmg}</button>
+      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}"` : ''}>${dmg}${sub}</button>
       <span class="ko"${koStyle}>${ko}</span>`;
   }).join('');
   return `<div class="movesbox"><div class="movesgrid">${head}${rows}</div></div>`;
@@ -1071,6 +1078,45 @@ function renderAll() {
   document.getElementById('fieldbar').innerHTML = renderField();
   document.getElementById('playerOpp').innerHTML = renderPanel('opps');
 }
+// 第2段: 選択中マッチアップについて、相手の事後上位候補 (累積90%) を通じた
+// ダメージの最小〜最大を出す。MAP 型だけの通常表示に対する「型が違った場合の幅」
+function computeCandRanges() {
+  const out = { mine: [null, null, null, null], opps: [null, null, null, null], acc: 0 };
+  const opp = DS('opps'), mine = DS('mine');
+  if (!opp || !mine) return out;
+  const cov = bayesCover(opp.species);
+  if (!cov) return out;
+  out.acc = cov.acc;
+  const F = { weather: state.field.weather, terrain: state.field.terrain };
+  const sideFor = (atkKey, defKey) => ({
+    atkSide: { isHelpingHand: !!state.side[atkKey === 'mine' ? 'mine' : 'opp'].hand },
+    defSide: { isLightScreen: !!state.side[defKey === 'mine' ? 'mine' : 'opp'].light, isReflect: !!state.side[defKey === 'mine' ? 'mine' : 'opp'].reflect, isAuroraVeil: !!state.side[defKey === 'mine' ? 'mine' : 'opp'].veil, isFriendGuard: !!state.side[defKey === 'mine' ? 'mine' : 'opp'].guard },
+  });
+  const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst) => {
+    const sc = sideFor(atkKey, defKey);
+    (moves || []).forEach((mv, mi) => {
+      if (!mv || !defHp) return;
+      const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), mv,
+        { ...F, gameType: singleFn(mv) ? 'Singles' : 'Doubles', crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide });
+      if (!rolls || !rolls.length) return;
+      const lo = Math.min(...rolls) / defHp * 100, hi = Math.max(...rolls) / defHp * 100;
+      const cur = dst[mi];
+      dst[mi] = cur ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi) } : { lo, hi };
+    });
+  };
+  for (const c of cov.cover) {
+    const candSpec = bayesCandSpec(opp, c);
+    // 自分の技 → 相手候補 (防御側が変動)
+    run(mine, candSpec, c.values.hp, mine.moves, ui.crit.mine, 'mine', 'opps',
+      mv => spreadCapable('mine', mv) && spreadMode('mine', mv) === 'single', out.mine);
+    // 相手候補の技 → 自分 (攻撃側が変動)
+    const myTable = statTable(effSpecies(mine));
+    const myHp = myTable ? (myTable.hp.find(r => r.sp === (mine.sp.hp || 0)) || {}).value : null;
+    run(candSpec, mine, myHp, opp.moves, ui.crit.opps, 'opps', 'mine',
+      mv => spreadCapable('opps', mv) && spreadMode('opps', mv) === 'single', out.opps);
+  }
+  return out;
+}
 function calcAll() {
   ui.formePop = null;
   if (!DS('mine') || !DS('opps')) { lastCalc = null; renderAll(); return; }
@@ -1090,6 +1136,7 @@ function calcAll() {
     crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
     singleMoves,
   });
+  lastCalc.candRanges = computeCandRanges();
   renderAll();
 }
 
@@ -1773,6 +1820,17 @@ function syncBayesRevealed() {
       infDirty = true;
     }
   }
+}
+// 事後確率の上位候補 (累積 90% に達するまで。最大 16 件)
+function bayesCover(species) {
+  if (!bayes) return null;
+  const ent = bayes.bySpecies[species];
+  if (!ent || !ent.used) return null;
+  const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
+  const cover = [];
+  let acc = 0;
+  for (const c of sorted) { cover.push(c); acc += c.post; if (acc >= 0.9 || cover.length >= 16) break; }
+  return { cover, acc, map: sorted[0] };
 }
 // 事後分布のビュー: MAP 型 (パネル採用用) + 事後確率 90% を覆う推定レンジ
 function bayesView(spec) {
