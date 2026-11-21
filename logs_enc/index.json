@@ -69,6 +69,16 @@
    "name": "battle_20261120_174219_final_protocol.log",
    "sha256": "a36eb4cef1e23bfb4ba27e546c742020be26ea34481acfb03eb2d3a7c0a083eb",
    "uploaded_at": "2026-11-20T17:48:51.640153+09:00"
+  },
+  {
+   "name": "battle_20261121_125324_final.log",
+   "sha256": "1c7ef9cd699fce08ba48452ae9a0cb8a9d638d3eb1a499c1b0fe711e32adeeae",
+   "uploaded_at": "2026-11-21T13:04:30.558298+09:00"
+  },
+  {
+   "name": "battle_20261121_125324_final_protocol.log",
+   "sha256": "d8eb594bdfd9591b921fd769afbef32e6887f7955dbb818534b203ac72688f10",
+   "uploaded_at": "2026-11-21T13:04:32.238718+09:00"
   }
  ]
 }
