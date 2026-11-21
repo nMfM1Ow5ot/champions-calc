@@ -5352,10 +5352,13 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         }
         used.insert(pickCand.0)
         team[i] = pickCand.0
-        slots[i] = PvSlotInfo(pick: pickCand.0, score: pickCand.1,
-                               decisive: slotDecisive[i], expanded: slotExpanded[i],
-                               types: slotTypes[i], candidates: Array(slotRanked[i].prefix(3)),
-                               gender: slotGender[i])
+        // 証跡フィールド (panel / iconDiag / genderCounts) を保持するため、
+        // PvSlotInfo を作り直さず既存の枠へ項目だけを書き込む
+        // (作り直すと証跡が空になる。2026-11-21 preview_test_20261121_204955 で確認)
+        slots[i].pick = pickCand.0
+        slots[i].score = pickCand.1
+        slots[i].decisive = slotDecisive[i]
+        slots[i].expanded = slotExpanded[i]
         let rank = ranked.firstIndex(where: { $0.0 == pickCand.0 }) ?? 0
         if slotDecisive[i] {
             noteByIdx[i] = "選出\(i + 1): \(pvJa(pickCand.0)) (タイプで確定)"
@@ -6161,7 +6164,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1846"
+let readerBuild = "20261121_2101"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
