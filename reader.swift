@@ -447,6 +447,11 @@ let battleLogURL = scriptDir.appendingPathComponent("battle.log")
 var battleLog: [String] = []
 var logStarted = false
 var currentTurn = 0
+// ターン行の構造ガード用: 最後のターン行以降に技を使った枠のラベルと、
+// ラウンド内の出来事を記録したか、ガード発火直後の判定側発火の抑止
+var movesSinceTurnLine: Set<String> = []
+var roundEventSeen = false
+var suppressNextDetectorTurn = false
 // 場・サイド状態の残りターン管理: 開始した実効ターン (対戦開始前の
 // 繰り出しで張られた場合は 1 として数える) を記録し、writeState が
 // 現在ターンとの差から残りターンを出す。追跡は emitLog のフックで行う
@@ -1057,6 +1062,18 @@ func parseSlotSpecies(_ s: String) -> (slot: String, side: String, speciesEn: St
     return (slot, String(slot.prefix(2)), sp)
 }
 
+// ラウンドの中でしか起きない出来事の行か (ターン行の構造ガード用)。
+// 対戦開始時にも出る行 (繰り出し・入場特性・フィールドや天候の開始) は
+// 含めない
+func isRoundEventLine(_ line: String) -> Bool {
+    for p in ["|move|", "|-damage|", "|-heal|", "|faint|", "|-status|", "|-boost|", "|-unboost|",
+              "|-activate|", "|-start|", "|-end|", "|-item|", "|-enditem|", "|-sidestart|", "|-sideend|",
+              "|detailschange|", "|-mega|", "|-crit|", "|-fail|"] {
+        if line.hasPrefix(p) { return true }
+    }
+    return false
+}
+
 func emitLog(_ line: String) { emitLog(line, applyNow: true) }
 
 // applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
@@ -1072,6 +1089,40 @@ func emitLog(_ line: String, applyNow: Bool) {
     // startBattleLog 内のヘッダー行は resetLogState で winLogged が
     // 落ちた後に emitLog されるため、ここで再帰はしない
     if winLogged { startBattleLog() }
+    // ターン行の構造ガード: ターン判定 (コマンドフェーズ検出) が遅れて、
+    // ラウンドの出来事がそのラウンドの |turn| 行より先に記録されることが
+    // ある (実例: 2026-11-21 battle_20261121_140658、初回ラウンド全体が
+    // |turn|1 より前に出た)。並びの保証はここで構造的に担保する。
+    // (a) ターン行がまだ無いのにラウンド内の出来事が来たら、それは
+    //     第 1 ラウンドの出来事なので、先に |turn|1 を出す
+    // (b) 同じポケモンは 1 ラウンドに 2 回技を使えず、ダブルでは
+    //     1 ラウンドの技は最大 4 件のため、最後のターン行以降に既に
+    //     技を使った枠の技 (または 5 件目の技) が来たら、それは次の
+    //     ラウンドの最初の出来事なので、先に次のターン行を出す
+    // 発火した場合は、判定側の次の発火を 1 回抑止して二重に出さない
+    if logStarted && !winLogged {
+        if line.hasPrefix("|turn|") {
+            movesSinceTurnLine = []
+            roundEventSeen = false
+        } else if isRoundEventLine(line) {
+            let mover: String? = line.hasPrefix("|move|")
+                ? line.split(separator: "|", omittingEmptySubsequences: false).map(String.init).dropFirst(2).first?.trimmingCharacters(in: .whitespaces)
+                : nil
+            var guardN: Int? = nil
+            if currentTurn == 0 && !roundEventSeen { guardN = 1 }
+            else if let mover, movesSinceTurnLine.contains(mover) || movesSinceTurnLine.count >= 4 { guardN = currentTurn + 1 }
+            if let n = guardN {
+                print("[reader] ターン行ガードが発火しました: |turn|\(n) を先に出します (きっかけ: \(line))")
+                fflush(stdout)
+                debugCapture(kind: "turn_guard", key: "turn_guard|\(n)", rawText: "",
+                             detail: ["turn": n, "trigger": line])
+                suppressNextDetectorTurn = true
+                emitLog("|turn|\(n)")   // この呼び出しで追跡状態はリセットされる
+            }
+            roundEventSeen = true
+            if let mover { movesSinceTurnLine.insert(mover) }
+        }
+    }
     // 終了行 (sideend/fieldend) が開始行なしで出た場合は、開始側を
     // 取りこぼした可能性をまず疑う (2026-11-20 vs チャンピオン戦の
     // 教訓: 序盤の取り込み失敗で開始行が欠け、実在した条件の終了行
@@ -1234,6 +1285,9 @@ func resetLogState() {
     pendingDamageSince = [:]
     lastEmittedPct = [:]
     winLogged = false
+    movesSinceTurnLine = []
+    roundEventSeen = false
+    suppressNextDetectorTurn = false
     lastMoveSigAt = [:]
     lastSingleActAt = [:]
     battleEvents = []
@@ -5248,8 +5302,17 @@ func runOnce(image: CGImage) {
         flushPendingDamage(force: true)
         emitPendingFaints()
         for sd in ["p1", "p2"] { if let spEn = pendingMegaSpecies[sd] { synthesizeMegaIfPending(side: sd, speciesEn: spEn) } }
-        currentTurn += 1
-        emitLog("|turn|\(currentTurn)")
+        if suppressNextDetectorTurn {
+            // 構造ガードがこのラウンドのターン行を既に出しているため、
+            // 判定側の出力は抑止する (同じラウンドのターン行を二重に
+            // 出さない)。証拠記録は判定の発火自体の記録なので従来どおり行う
+            suppressNextDetectorTurn = false
+            print("[reader] ターン判定の出力を抑止しました (構造ガードが |turn|\(currentTurn) を出力済み)")
+            fflush(stdout)
+        } else {
+            currentTurn += 1
+            emitLog("|turn|\(currentTurn)")
+        }
         recordTurnEvidence(turn: currentTurn,
                            path: (expectedPlates >= 4 && allSettled) ? "plates_settled" : "raw_frames",
                            image: image,
@@ -5267,7 +5330,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1438"
+let readerBuild = "20261121_1444"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
