@@ -27548,7 +27548,7 @@ function createEstimator(deps) {
         },
         hpSps: ie.hpSps ? ie.hpSps.size : null
       } : null;
-      infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, speFlag: ent && ent.speFlag || null, map, marg, cover90, cands, inf });
+      infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, speFlag: ent && ent.speFlag || null, dmgFlag: ent && ent.dmgFlag || null, map, marg, cover90, cands, inf });
       if (infLog.length > 2e3) infLog.splice(0, infLog.length - 2e3);
     } catch (e) {
     }
@@ -28423,6 +28423,15 @@ function createEstimator(deps) {
     dirty = true;
     return { applied: true, excluded };
   }
+  function isMegaStoneItem(item) {
+    if (!item) return false;
+    try {
+      const it = gen.items.get(idOf(item));
+      return !!(it && it.megaStone);
+    } catch (e) {
+      return false;
+    }
+  }
   function processDamageBayes(ev, ctx) {
     if (ev.atk && ev.atk === ev.def) {
       if (labelSide(ev.atk) === "p2") processRecoilBayes(ev);
@@ -28439,11 +28448,32 @@ function createEstimator(deps) {
       const defSpec = ctx.myDef;
       const base = ctx.baseAtk;
       if (!ent || !defSpec || !base) return;
-      const counts = ent.cands.map((c) => {
-        const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts);
-        return rolls.filter((r) => r === ev.amt).length;
-      });
-      logTrigger = { turn: ev.turn, trig: { kind: "damage", move: md.name, by: "opp", amt: ev.amt, crit: !!ev.crit } };
+      const rollsList = ent.cands.map((c) => damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts).rolls);
+      let counts = rollsList.map((rolls) => rolls.filter((r) => r === ev.amt).length);
+      const trig = { kind: "damage", move: md.name, by: "opp", amt: ev.amt, crit: !!ev.crit };
+      if (!counts.some((n) => n > 0)) {
+        const over = rollsList.every((rolls) => rolls.length && ev.amt > Math.max(...rolls));
+        if (over) {
+          trig.dir = "over";
+          const want = md.category === "Physical" ? "Choice Band" : md.category === "Special" ? "Choice Specs" : null;
+          if (want && !ent.dmgFlag) {
+            ent.dmgFlag = want;
+            trig.dmgFlagSet = want;
+          }
+        }
+      }
+      const flag = ent.dmgFlag;
+      if (flag === "Choice Band" || flag === "Choice Specs") {
+        if (flag === "Choice Band" && md.category === "Physical" || flag === "Choice Specs" && md.category === "Special") {
+          counts = ent.cands.map((c) => {
+            const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
+            const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
+            return rolls.filter((r) => r === ev.amt).length;
+          });
+          trig.dmgFlag = flag;
+        }
+      }
+      logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     } else {
       if (typeof ev.pct !== "number" || ev.pct <= 0) return;
@@ -28451,15 +28481,40 @@ function createEstimator(deps) {
       const atkSpec = ctx.myAtk;
       const base = ctx.baseDef;
       if (!ent || !atkSpec || !base) return;
-      const counts = ent.cands.map((c) => {
+      const pctCounts = (c, rolls) => {
         const hpVal = c.values.hp;
-        if (!hpVal) return 0;
-        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts);
+        if (!hpVal || !rolls) return 0;
         let n = 0;
         for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
         return n;
-      });
-      logTrigger = { turn: ev.turn, trig: { kind: "damage", move: md.name, by: "mine", pct: ev.pct, crit: !!ev.crit } };
+      };
+      const rollsList = ent.cands.map((c) => c.values.hp ? damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts).rolls : null);
+      let counts = ent.cands.map((c, i) => pctCounts(c, rollsList[i]));
+      const trig = { kind: "damage", move: md.name, by: "mine", pct: ev.pct, crit: !!ev.crit };
+      if (!counts.some((n) => n > 0)) {
+        const under = ent.cands.every((c, i) => {
+          const rolls = rollsList[i];
+          if (!rolls || !c.values.hp) return false;
+          return ev.pct < Math.min(...rolls.map((r) => Math.floor(r / c.values.hp * 100)));
+        });
+        if (under) {
+          trig.dir = "under";
+          if (md.category === "Special" && !ent.dmgFlag) {
+            ent.dmgFlag = "Assault Vest";
+            trig.dmgFlagSet = "Assault Vest";
+          }
+        }
+      }
+      if (ent.dmgFlag === "Assault Vest" && md.category === "Special") {
+        counts = ent.cands.map((c) => {
+          if (!c.values.hp) return 0;
+          const cc = isMegaStoneItem(c.item) ? c : { ...c, item: "Assault Vest" };
+          const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
+          return pctCounts(c, rolls);
+        });
+        trig.dmgFlag = "Assault Vest";
+      }
+      logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     }
   }
@@ -28536,7 +28591,10 @@ function createEstimator(deps) {
       }
       const hardMode = (itemHard || ability !== null) && survivorMass > 0;
       let applied = false;
-      if (hardMode && itemHard) ent.speFlag = null;
+      if (itemHard && item) {
+        ent.speFlag = null;
+        ent.dmgFlag = null;
+      }
       if (hardMode) {
         if (excluded > 0) {
           for (const c of ent.cands) if (!(matchItem(c) && matchAbility(c))) c.post = 0;
@@ -28586,7 +28644,7 @@ function createEstimator(deps) {
     if (!ent || !ent.used) return null;
     const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
     const map = sorted[0];
-    const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, speFlag: ent.speFlag || null, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
+    const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, speFlag: ent.speFlag || null, dmgFlag: ent.dmgFlag || null, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
     {
       const mN = /* @__PURE__ */ new Map(), mI = /* @__PURE__ */ new Map();
       for (const c of ent.cands) {
@@ -28686,7 +28744,7 @@ function createEstimator(deps) {
       atkSide: { isHelpingHand: !!args.side[atkKey === "mine" ? "mine" : "opp"].hand },
       defSide: { isLightScreen: !!args.side[defKey === "mine" ? "mine" : "opp"].light, isReflect: !!args.side[defKey === "mine" ? "mine" : "opp"].reflect, isAuroraVeil: !!args.side[defKey === "mine" ? "mine" : "opp"].veil, isFriendGuard: !!args.side[defKey === "mine" ? "mine" : "opp"].guard, isSR: !!args.side[defKey === "mine" ? "mine" : "opp"].rock, spikes: args.side[defKey === "mine" ? "mine" : "opp"].spikes || 0 }
     });
-    const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst) => {
+    const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst, w) => {
       const sc = sideFor(atkKey, defKey);
       (moves || []).forEach((mv, mi) => {
         if (!mv || !defHp) return;
@@ -28700,16 +28758,21 @@ function createEstimator(deps) {
         );
         if (!rolls || !rolls.length) return;
         const lo = Math.min(...rolls) / defHp * 100, hi = Math.max(...rolls) / defHp * 100;
+        const meanPct = rolls.reduce((s, r) => s + r, 0) / rolls.length / defHp * 100;
+        const pctNow = defSpec && defSpec.curHPPercent != null ? defSpec.curHPPercent : 100;
+        const curHp = pctNow >= 100 ? defHp : Math.max(1, Math.floor(defHp * pctNow / 100));
+        const koPct = rolls.filter((r) => r >= curHp).length / rolls.length * 100;
         const cur = dst[mi];
-        dst[mi] = cur ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi) } : { lo, hi };
+        dst[mi] = cur ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi), exp: cur.exp + w * meanPct, ko: cur.ko + w * koPct } : { lo, hi, exp: w * meanPct, ko: w * koPct };
       });
     };
     for (const c of cov.cover) {
       const candSpec = bayesCandSpec(opp, c);
-      run(mine, candSpec, c.values.hp, mine.moves, args.critMine, "mine", "opps", args.isSingleMine, out.mine);
+      const w = cov.acc > 0 ? c.post / cov.acc : 0;
+      run(mine, candSpec, c.values.hp, mine.moves, args.critMine, "mine", "opps", args.isSingleMine, out.mine, w);
       const myTable = statTable(effSpecies(mine));
       const myHp = myTable ? (myTable.hp.find((r) => r.sp === (mine.sp.hp || 0)) || {}).value : null;
-      run(candSpec, mine, myHp, opp.moves, args.critOpps, "opps", "mine", args.isSingleOpps, out.opps);
+      run(candSpec, mine, myHp, opp.moves, args.critOpps, "opps", "mine", args.isSingleOpps, out.opps, w);
     }
     return out;
   }
