@@ -109,6 +109,21 @@
    "name": "battle_20261121_132153_debug02.json",
    "sha256": "eff6732626768d692afa621d4e0a29a4b175d06ff14445048ced91b0f14f1d72",
    "uploaded_at": "2026-11-21T13:24:05.433964+09:00"
+  },
+  {
+   "name": "battle_20261121_140542_salvage_interrupted.log",
+   "sha256": "fd2b1e1157d8604c5b18943eb348e635ac5ac458e8dcf15c3bf3c7e6e59d768b",
+   "uploaded_at": "2026-11-21T14:12:13.713722+09:00"
+  },
+  {
+   "name": "battle_20261121_140542_salvage_interrupted_protocol.log",
+   "sha256": "6cacb0439ff5390920a8a80992d8bcddd6f0c5b6ee2d719e34b185d64688dfb6",
+   "uploaded_at": "2026-11-21T14:12:15.558795+09:00"
+  },
+  {
+   "name": "battle_20261121_140542_salvage_note.txt",
+   "sha256": "2b5f779b8e0e879044f6391c2752cc3a2b54a75964c4cb9c0338ceec9da8a41e",
+   "uploaded_at": "2026-11-21T14:12:17.506174+09:00"
   }
  ]
 }
