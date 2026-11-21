@@ -636,11 +636,14 @@ function koColor(n, guaranteed) { if (n === 1) return guaranteed ? 'g' : 'o'; if
 function koFmt(t) {
   if (!t) return null;
   let m;
-  if (t === 'guaranteed OHKO') return ['1HKO', 'g'];
-  if ((m = t.match(/^([\d.]+)% chance to OHKO/))) return [`${fmtPct(+m[1])}% 1HKO`, 'g'];
-  if ((m = t.match(/^guaranteed (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], true)];
-  if ((m = t.match(/^([\d.]+)% chance to (\d+)HKO/))) return [`${fmtPct(+m[1])}% ${m[2]}HKO`, koColor(+m[2], false)];
-  if ((m = t.match(/^possible (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], false)];
+  // 'approx. ' 始まりや 'guaranteed OHKO after ...' のような後置句付きの形状もラベル化する
+  const s = t.replace(/^approx\. /, '');
+  if (/^guaranteed OHKO/.test(s)) return ['1HKO', 'g'];
+  if (/^possible OHKO/.test(s)) return ['1HKO', 'o'];
+  if ((m = s.match(/^([\d.]+)% chance to OHKO/))) return [`${fmtPct(+m[1])}% 1HKO`, 'g'];
+  if ((m = s.match(/^guaranteed (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], true)];
+  if ((m = s.match(/^([\d.]+)% chance to (\d+)HKO/))) return [`${fmtPct(+m[1])}% ${m[2]}HKO`, koColor(+m[2], false)];
+  if ((m = s.match(/^possible (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], false)];
   return [t, 'n'];
 }
 
