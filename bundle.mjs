@@ -26075,9 +26075,6 @@ var require_dist = __commonJS({
   }
 });
 
-// .bundle_entry_tmp.mjs
-var import_calc2 = __toESM(require_dist(), 1);
-
 // core.mjs
 var import_calc = __toESM(require_dist(), 1);
 var gen = import_calc.Generations.get(9);
@@ -26563,6 +26560,7 @@ function createEstimator(deps) {
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
   let pendingOpts = null;
+  let teamContextSpecies = null;
   const INF_BLACKLIST = /* @__PURE__ */ new Set(["Foul Play", "Gyro Ball", "Electro Ball", "Endeavor", "Final Gambit", "Seismic Toss", "Night Shade", "Dragon Rage", "Sonic Boom", "Super Fang", "Nature's Madness", "Fissure", "Horn Drill", "Guillotine", "Sheer Cold", "Counter", "Mirror Coat", "Metal Burst", "Comeuppance", "Pain Split"]);
   function infEntry(species) {
     if (!inference.bySpecies[species]) inference.bySpecies[species] = { pairs: { atk: null, spa: null, def: null, spd: null, spe: null }, hpSps: null, used: 0, dropped: 0 };
@@ -27145,6 +27143,20 @@ function createEstimator(deps) {
       raw.push(synth(defNat, { hp: 32, atk: 0, def: 32, spa: 0, spd: 0, spe: 0 }));
       raw.push(synth(spdNat, { hp: 32, atk: 0, def: 0, spa: 0, spd: 32, spe: 0 }));
     }
+    {
+      const baseW = patterns[0].rate + 0.5;
+      const atkNat = natures.find((n) => (NATURE_MOD[n.en] || [])[0] === "atk") || natures[0];
+      const spaNat = natures.find((n) => (NATURE_MOD[n.en] || [])[0] === "spa") || natures[0];
+      const mixNat = natures.find((n) => (NATURE_MOD[n.en] || [])[0] === "def") || natures.find((n) => (NATURE_MOD[n.en] || [])[0] === "spd") || natures[0];
+      const synth = (nat, sp) => {
+        const c = mk({ p: { sp, rate: patterns[0].rate }, n: nat, w: baseW * (nat.rate + 0.5) }, topItem, topAbility, 0.5);
+        c.shapeSynth = true;
+        return c;
+      };
+      raw.push(synth(atkNat, { hp: 32, atk: 32, def: 0, spa: 0, spd: 0, spe: 2 }));
+      raw.push(synth(spaNat, { hp: 32, atk: 0, def: 0, spa: 32, spd: 0, spe: 2 }));
+      raw.push(synth(mixNat, { hp: 32, atk: 0, def: 16, spa: 0, spd: 16, spe: 2 }));
+    }
     const seen = /* @__PURE__ */ new Set(), out = [];
     for (const c of raw) {
       const key = c.nature + "|" + JSON.stringify(c.sp) + "|" + c.item + "|" + c.ability;
@@ -27176,6 +27188,39 @@ function createEstimator(deps) {
     merged.sort((a, b) => b.post - a.post);
     return merged.slice(0, 96);
   }
+  const TEAM_SEED_BOOST = 3;
+  const TERRAIN_SEED_BY_ABILITY = { "Psychic Surge": "Psychic Seed", "Grassy Surge": "Grassy Seed", "Electric Surge": "Electric Seed", "Misty Surge": "Misty Seed" };
+  function applyTeamItemBoost(cands, selfSpecies) {
+    if (!teamContextSpecies || !teamContextSpecies.length || !POKEDB_PARSED || !USAGE_SETS) return;
+    const seeds = /* @__PURE__ */ new Set();
+    for (const sp2 of teamContextSpecies) {
+      if (sp2 === selfSpecies) continue;
+      let u2 = USAGE_SETS[idOf(sp2)];
+      if (!u2) {
+        const base = gen.species.get(idOf(sp2))?.baseSpecies;
+        if (base && base !== sp2) u2 = USAGE_SETS[idOf(base)];
+      }
+      const pd2 = u2 && u2.code ? POKEDB_PARSED[u2.code] : null;
+      if (!pd2) continue;
+      for (const a of pd2.abilities || []) {
+        const seed = TERRAIN_SEED_BY_ABILITY[(NAMES._abilityJa2en || {})[a.name]];
+        if (seed) seeds.add(seed);
+      }
+    }
+    if (!seeds.size) return;
+    let hit = false, tot = 0;
+    for (const c of cands) {
+      if (seeds.has(c.item)) {
+        c.post *= TEAM_SEED_BOOST;
+        hit = true;
+      }
+      tot += c.post;
+    }
+    if (hit && tot > 0) for (const c of cands) c.post /= tot;
+  }
+  function setTeamContext(list) {
+    teamContextSpecies = Array.isArray(list) && list.length ? [...list] : null;
+  }
   function bayesEntry(species) {
     syncData();
     if (!bayes) return null;
@@ -27186,6 +27231,7 @@ function createEstimator(deps) {
         bayes.bySpecies[species] = null;
         return null;
       }
+      applyTeamItemBoost(cands, species);
       bayes.bySpecies[species] = { cands, used: 0, revKey: "" };
     }
     return bayes.bySpecies[species];
@@ -27492,6 +27538,7 @@ function createEstimator(deps) {
     processAbility: infProcessAbility,
     applyRevealed,
     candRanges,
+    setTeamContext,
     setMoveV2(v) {
       BAYES_MOVE_V2 = v;
     },
@@ -27511,6 +27558,9 @@ function createEstimator(deps) {
     }
   };
 }
+
+// .bundle_entry_tmp.mjs
+var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
   export_Generations as Generations,
