@@ -3414,6 +3414,13 @@ function applyState(j) {
       if (pendingReload) { location.reload(); return; }
       confirmNewBattle();
       resetInference();
+      // 推定のリセットだけでは、パネル側に蓄積した判明情報 (判明技・
+      // 訂正済み・持ち物喪失) は消えない。次の相手にも同じ種族がいると、
+      // チーム差し替え時のパネル再利用でそれが残り、前の対戦の判明技が
+      // 新しい対戦の証拠として再投入されてしまうため、パネルも作り直す
+      // (battle_20261122_075240: 前戦で判明した Incineroar の
+      // Flare Blitz が、本戦では未登場のまま証拠化した)
+      state.opps = state.oppTeam.map(sp => oppSpec(sp, 'usage'));
       lastEventCount = 0;
       changed = true;
     }
