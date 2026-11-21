@@ -1258,7 +1258,7 @@ function statusPopHTML(side, spec) {
 }
 function statusDDHTML(side, spec) {
   const n = statusActiveCount(spec);
-  return `<span class="statuswrap"><button class="tgl${n ? ' on' : ''}" data-statusbtn="${side}">状態${n ? ` (${n})` : ''}</button>${n ? `<button class="tgl statusx" data-statusclear="${side}" title="状態をすべて解除">✕</button>` : ''}${ui.statusPop === side ? statusPopHTML(side, spec) : ''}</span>`;
+  return `<span class="statuswrap"><button class="tgl${n ? ' on' : ''}" data-statusbtn="${side}">状態 (${n})</button>${n ? `<button class="tgl statusx" data-statusclear="${side}" title="状態をすべて解除">✕</button>` : ''}${ui.statusPop === side ? statusPopHTML(side, spec) : ''}</span>`;
 }
 
 /* ---------- panel parts (1 vs 1, Showdex PlayerCalc structure) ---------- */
