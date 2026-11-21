@@ -272,6 +272,7 @@ func ocr(_ image: CGImage, plate: Plate) -> [String] {
 
 struct SlotState { var speciesEn: String; var hpPercent: Int; var hpCur: Int? = nil; var hpMax: Int? = nil }
 var lastSlots: [String: SlotState] = [:]
+var firstSlotConfirmedAt: Date? = nil   // この試合で最初にプレート枠が確定した時刻 (未確定枠の検出用)
 var lastWritten = ""
 // 相手の6体コレクション: 対戦中にプレートで読み取れた相手種族を登場順に蓄積する (見せ合い画面には名前テキストが無いため)
 var oppTeamSeen: [String] = []
@@ -708,6 +709,7 @@ func renderLogLine(_ line: String) -> [String] {
             else if f[4].contains("brn") { out.append("\(renderPrefix(side))\(species) was hurt by its burn!") }
             else if f[4].contains("Stealth Rock") { out.append("(The pointed stones dug into \(renderPrefix(side))\(species)!)") }
             else if f[4].contains("Spikes") { out.append("(\(renderPrefix(side))\(species) was hurt by the spikes!)") }
+            else if f[4].contains("Rocky Helmet") { out.append("(\(renderPrefix(side))\(species) was hurt by Rocky Helmet!)") }
         }
         if let pct = renderPct(of: f[3]) {
             let lost = (renderLastPct[f[2]] ?? 100) - pct
@@ -1270,6 +1272,8 @@ func resetLogState() {
     eventSlotSpecies = [:]
     logStarted = false
     lastSlots = [:]
+    firstSlotConfirmedAt = nil
+    headerWeatherPending = (ui: "", logName: "", count: 0, lastAt: Date.distantPast)
 }
 
 // MARK: - 試合ごとのログアーカイブ (自動送信の下準備)
@@ -1360,20 +1364,21 @@ func debugStateExcerpt() -> [String: Any] {
     return ["turn": currentTurn, "weather": logFieldWeather, "terrain": logFieldTerrain, "slots": slots]
 }
 
-// メッセージ表示欄 (ocrBoxes の y0=0.66..1.0) の切り抜き。
-// makeFullBuffer と同じ反転 (行0 = 画像の上端) で描いて切り出す
+// メッセージ表示欄 (画面下部 0.66..1.0) の切り抜き。
+// 以前は CGContext へ反転描画して切り出していたが、実機で保存された
+// 切り抜きは画面上部の帯が上下反転したものになっており、メッセージ欄が
+// 一切写っていなかった (実例: 2026-11-21 battle_20261121_132153 の
+// debug01/02。ブリジュラスのプレートが上下逆さまに写っていただけで、
+// 分析の証拠にならなかった。反転描画の癖は makePixelBuffer でも
+// 2026-11-20 に判明している)。CGImage の cropping は画像座標
+// (左上原点) で切り出すため、こちらに置き換える
 func cropMessageStrip(_ image: CGImage) -> CGImage? {
     let w = image.width, h = image.height
     guard w > 0, h > 0 else { return nil }
     let cropY = Int(Double(h) * 0.66)
     let cropH = h - cropY
     guard cropH > 0 else { return nil }
-    guard let ctx = CGContext(data: nil, width: w, height: cropH, bitsPerComponent: 8, bytesPerRow: 0,
-                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-    ctx.translateBy(x: 0, y: CGFloat(cropH))
-    ctx.scaleBy(x: 1, y: -1)
-    ctx.draw(image, in: CGRect(x: 0, y: -cropY, width: w, height: h))
-    return ctx.makeImage()
+    return image.cropping(to: CGRect(x: 0, y: cropY, width: w, height: cropH))
 }
 
 // 直近フレームのメッセージ欄をリングバッファに保持する (内部矛盾の検出は
@@ -1385,7 +1390,7 @@ func debugUpdateRing(_ image: CGImage) {
     if debugFrameRing.count > debugRingSize { debugFrameRing.removeFirst(debugFrameRing.count - debugRingSize) }
 }
 
-func debugCapture(kind: String, key: String, rawText: String, detail: [String: Any], image: CGImage? = nil) {
+func debugCapture(kind: String, key: String, rawText: String, detail: [String: Any], image: CGImage? = nil, fullFrame: Bool = false) {
     guard debugShouldCapture(seen: debugSeenEntries, count: debugShotsThisBattle, key: key, cap: debugMaxPerBattle, now: Date()) else { return }
     debugSeenEntries.append((key: key, at: Date()))
     debugShotsThisBattle += 1
@@ -1394,7 +1399,7 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     let base = String(format: "battle_%@_debug%02d", id, seq)
     try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
     var shot: CGImage? = nil
-    if let image { shot = cropMessageStrip(image) }
+    if let image { shot = fullFrame ? image : cropMessageStrip(image) }
     if shot == nil { shot = debugFrameRing.last?.img }
     var imageFile: String? = nil
     if let shot, let data = NSBitmapImageRep(cgImage: shot).representation(using: .jpeg, properties: [:]) {
@@ -2590,16 +2595,53 @@ func checkFieldText(text: String) -> Bool {
 
 // 画面上部のフィールド状態バー (ログ画面ヘッダ・様子を見る等) から現在値を取得する。
 // OCR で複数ボックスに割れても拾えるよう、帯のテキストを連結してから照合する。
+// 上部バーの天候読みの保留状態 (誤読対策の連続確認用。scanFieldHeader 参照)
+var headerWeatherPending: (ui: String, logName: String, count: Int, lastAt: Date) = (ui: "", logName: "", count: 0, lastAt: Date.distantPast)
+
 func scanFieldHeader(_ boxes: [OcrBox]) {
     let joined = boxes.filter { $0.cy < 0.09 }.map { $0.text }.joined(separator: " ")
     if joined.isEmpty { return }
     for (ja, en) in [("グラスフィールド", "Grassy"), ("エレキフィールド", "Electric"), ("サイコフィールド", "Psychic"), ("ミストフィールド", "Misty")] where joined.contains(ja) {
-        setTerrain(en)
+        if logFieldTerrain != en {
+            setTerrain(en)
+            // バー読みが根拠の採用は、次回の切り分け用に根拠テキストごと残す
+            debugCapture(kind: "header_terrain", key: "header_terrain:\(en)", rawText: joined,
+                         detail: ["source": "scanFieldHeader", "text": joined])
+        }
     }
-    if joined.contains("にほんばれ") { setWeather("Sun", "Sunny Day") }
-    else if joined.contains("すなあらし") { setWeather("Sand", "Sandstorm") }
-    else if joined.contains("あめ") && joined.contains("状態") { setWeather("Rain", "Rain Dance") }
-    else if joined.contains("ゆき") && joined.contains("状態") { setWeather("Snow", "Snow") }
+    // 天候は、上部バーの一過性の誤読だけで幻の天候になった実例が続いた
+    // ため (2026-11-20 の幻の晴れ、2026-11-21 battle_20261121_132153 の
+    // 幻の雨。どちらも発生源のポケモンは場に出ていない)、バー読み単独
+    // では即採用せず、10 秒以内に 2 回続けて同じ天候が読めたときだけ
+    // 採用する。本物の天候表示は継続して画面に出るため 1 フレーム分
+    // 遅れるだけで済み、告知文や特性・技からの採用は従来どおり即時。
+    // 採用したときは根拠テキストをデバッグ情報に残し、次回は経路を
+    // 特定できるようにする
+    let hit: (ui: String, logName: String)?
+    if joined.contains("にほんばれ") { hit = ("Sun", "Sunny Day") }
+    else if joined.contains("すなあらし") { hit = ("Sand", "Sandstorm") }
+    else if joined.contains("あめ") && joined.contains("状態") { hit = ("Rain", "Rain Dance") }
+    else if joined.contains("ゆき") && joined.contains("状態") { hit = ("Snow", "Snow") }
+    else { hit = nil }
+    guard let hit else { return }
+    if logFieldWeather == hit.ui {
+        headerWeatherPending = (ui: "", logName: "", count: 0, lastAt: Date.distantPast)
+        return
+    }
+    let now = Date()
+    if headerWeatherPending.ui == hit.ui && now.timeIntervalSince(headerWeatherPending.lastAt) <= 10 {
+        headerWeatherPending.count += 1
+        headerWeatherPending.lastAt = now
+    } else {
+        headerWeatherPending = (ui: hit.ui, logName: hit.logName, count: 1, lastAt: now)
+        return
+    }
+    if headerWeatherPending.count >= 2 {
+        headerWeatherPending = (ui: "", logName: "", count: 0, lastAt: Date.distantPast)
+        setWeather(hit.ui, hit.logName)
+        debugCapture(kind: "header_weather", key: "header_weather:\(hit.ui)", rawText: joined,
+                     detail: ["source": "scanFieldHeader", "text": joined])
+    }
 }
 
 func scanFieldFromScreen(image: CGImage) {
@@ -3467,6 +3509,13 @@ func translateBattleMessage(_ text: String) -> Bool {
     let slot = slotFor(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
+    // ゴツゴツメット: 接触技で攻撃した側が受ける反動ダメージの予告。
+    // ダメージ行に [from] item: Rocky Helmet を付けるため記録だけする
+    // (人間可読ログ側の -damage 描画でも発生源として表示する)
+    if t.contains("ゴツゴツメット") && t.contains("ダメージを受けた") {
+        pendingStatusFrom[key] = ("item: Rocky Helmet", Date())
+        return true
+    }
     // 状態異常などのダメージ予告: ダメージ行に [from] を付けるため記録だけする
     if t.contains("ダメージを受けた") {
         for (ja, code) in [("毒", "psn"), ("やけど", "brn"), ("砂嵐", "sandstorm"), ("あられ", "hail")] where t.contains(ja) {
@@ -4911,6 +4960,29 @@ func runOnce(image: CGImage) {
     emptyBattleFrames = 0
     inBattle = true
     processPlates(hits)
+    // プレート未確定の記録: 相方の枠は確定しているのに片方の枠だけが、
+    // 最初の枠確定から 25 秒以上たっても一度も確定しない場合はプレート
+    // 検出側の異常として、その時点の全画面を試合中 1 回だけデバッグ情報
+    // に残す (実例: 2026-11-21 battle_20261121_132153、イエッサン♀の
+    // プレートが試合を通じて未確定で、てだすけ等の文の帰属が既定枠に
+    // 流れ続けた。従来のデバッグ情報にはプレート側の証拠が残らず、
+    // 原因の切り分けができなかった)
+    if firstSlotConfirmedAt == nil && !lastSlots.isEmpty { firstSlotConfirmedAt = Date() }
+    if logStarted && !winLogged, let t0 = firstSlotConfirmedAt,
+       Date().timeIntervalSince(t0) >= 25 {
+        let missing = ["mineA", "mineB", "oppA", "oppB"].filter { name in
+            guard lastSlots[name] == nil else { return false }
+            let partner = String(name.dropLast()) + (name.hasSuffix("A") ? "B" : "A")
+            return lastSlots[partner] != nil
+        }
+        if !missing.isEmpty {
+            debugCapture(kind: "plate_missing", key: "plate_missing", rawText: "",
+                         detail: ["missingSlots": missing,
+                                  "confirmedSlots": lastSlots.keys.sorted(),
+                                  "note": "slot never confirmed 25s after first slot confirmation"],
+                         image: image, fullFrame: true)
+        }
+    }
     // 全プレートが見える = コマンド選択フェーズ。その開始をターンの区切りにする
     // (行動のログ行が出るたびに commandPhaseSeen は emitLog 側で解除される)
     // ターンの区切りは「場に出ている全員のプレートが揃った」ことを条件にする。
@@ -4948,7 +5020,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1401"
+let readerBuild = "20261121_1417"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
