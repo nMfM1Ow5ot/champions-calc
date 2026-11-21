@@ -2019,9 +2019,9 @@ function statsGrid(side, statArr) {
       // 推定の最大値を素の値として dispStat に渡し、補正後の実数値を表示する
       const estRaw = {};
       for (const [kk] of STATJ) estRaw[kk] = spec.estStat?.[kk] ? spec.estStat[kk][1] : (statArr ? statArr[kk] : 0);
-      const [bv] = dispStat(spec, k, estRaw, side === 'mine' ? 'mine' : 'opp');
+      const [bv, cn] = dispStat(spec, k, estRaw, side === 'mine' ? 'mine' : 'opp');
       const txt = est[0] === est[1] ? String(bv) : `${bv}*`;
-      return `<input data-statest="${side}:${k}" class="finalstat estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}${movePredTitle(spec)}" value="${txt}">`;
+      return `<input data-statest="${side}:${k}" class="finalstat estval estin${cn === 'green' ? ' pos' : cn === 'red' ? ' neg' : ''}" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}${movePredTitle(spec)}" value="${txt}">`;
     }
     const [v, cn] = dispStat(spec, k, statArr, side === 'mine' ? 'mine' : 'opp');
     return `<div class="finalstat ${cn === 'green' ? 'pos' : cn === 'red' ? 'neg' : ''}">${v}</div>`;
