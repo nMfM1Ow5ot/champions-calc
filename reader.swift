@@ -1758,9 +1758,10 @@ func itemLineImplausible(_ line: String) -> Bool {
 // battle_20261122_050512、Salamence / Rillaboom の宣言が無かった)。
 // 交代行に実際に現れた種族は対戦にいたことが確定しているため、
 // 保存時に限り、現れた順で宣言へ補う (ライブの状態には触れない)
-func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (protocolLines: [String], displayLines: [String], added: [String]) {
+func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (protocolLines: [String], displayLines: [String], added: [String], removed: [String]) {
     var proto = protocolLines
     var added: [String] = []
+    var removed: [String] = []
     for side in ["p1", "p2"] {
         var declared: [String] = []
         var lastPokeIdx: Int? = nil
@@ -1780,6 +1781,29 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (
         }
         let missing = appeared.filter { a in !declared.contains { sameSpeciesFamily($0, a) } }
         if missing.isEmpty { continue }
+        // 補完で 6 体を超える場合は、実際には登場しなかった宣言側の
+        // 種族 (見せ合い同定の誤り) と入れ替える。チームが 7 体に
+        // なるヘッダーはあり得ない (実例: 2026-11-22
+        // battle_20261122_071457、誤同定の枠が残ったまま実登場した
+        // サーフゴーが 7 体目に追記された)
+        if declared.count + missing.count > 6 {
+            let unused = declared.filter { d in !appeared.contains { sameSpeciesFamily($0, d) } }
+            let removeCount = min(unused.count, declared.count + missing.count - 6)
+            if removeCount > 0 {
+                let removing = Array(unused.suffix(removeCount))
+                let removeSet = Set(removing)
+                proto = proto.filter { line in
+                    guard line.hasPrefix("|poke|\(side)|") else { return true }
+                    return !removeSet.contains(String(line.dropFirst("|poke|\(side)|".count)))
+                }
+                removed += removing.map { "\(side):\($0)" }
+                lastPokeIdx = nil
+                for (i, l) in proto.enumerated() {
+                    if l.hasPrefix("|poke|\(side)|") { lastPokeIdx = i }
+                    if l == "|start" { break }
+                }
+            }
+        }
         let insertAt = lastPokeIdx.map { $0 + 1 } ?? (proto.firstIndex(of: "|start") ?? proto.count)
         proto.insert(contentsOf: missing.map { "|poke|\(side)|\($0)" }, at: insertAt)
         added += missing.map { "\(side):\($0)" }
@@ -1796,11 +1820,13 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (
             let namesIdx = teamLineIdxs[n] + 1
             guard namesIdx < disp.count else { continue }
             let existing = disp[namesIdx].isEmpty ? [] : disp[namesIdx].components(separatedBy: " / ")
-            let extra = sideAdded.filter { a in !existing.contains { sameSpeciesFamily($0, a) } }
-            if !extra.isEmpty { disp[namesIdx] = (existing + extra).joined(separator: " / ") }
+            let sideRemoved = removed.filter { $0.hasPrefix("\(side):") }.map { String($0.dropFirst(3)) }
+            let kept = existing.filter { e in !sideRemoved.contains { sameSpeciesFamily($0, e) } }
+            let extra = sideAdded.filter { a in !kept.contains { sameSpeciesFamily($0, a) } }
+            if !extra.isEmpty || kept.count != existing.count { disp[namesIdx] = (kept + extra).joined(separator: " / ") }
         }
     }
-    return (proto, disp, added)
+    return (proto, disp, added, removed)
 }
 
 func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String) {
@@ -3664,6 +3690,18 @@ func completeMega(side: String, baseEn: String, megaEn: String) {
     }
     // megaSpecies への反映は |detailschange| 行の applyEvent が行う
     let slot = slotFor(side: side, speciesEn: baseEn)
+    // 場に居ることが確認できていない種族のメガを、別種族が占有して
+    // いる枠へ付けることはしない。slotFor は場に無い種族に対して
+    // 既定枠 (a 枠) を返すため、そのまま出すと無関係な枠の種族として
+    // detailschange が出て、その枠の状態まで巻き込む (実例:
+    // 2026-11-22 battle_20261122_071457、交代が未確定だった
+    // ムクホークのメガがオオニューラの枠 p1a に付いた)。保留は
+    // 維持し、交代の確定後の再試行 (synthesizeMegaIfPending) で
+    // 正しい枠に出す
+    let megaPlate = ["p1a": "mineA", "p1b": "mineB", "p2a": "oppA", "p2b": "oppB"][slot] ?? ""
+    if let occ = lastSlots[megaPlate], !sameSpeciesFamily(occ.speciesEn, baseEn) {
+        return
+    }
     emitLog("|detailschange|\(slot): \(baseEn)|\(megaEn)")
     var megaLine = "|-mega|\(slot): \(baseEn)|\(baseEn)"
     if let stoneJa = pendingMegaStone[side] { megaLine += "|\(itemJa2En[stoneJa] ?? stoneJa)" }
@@ -3725,7 +3763,11 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
        let pool = speciesAbilityMap[speciesEn], pool.contains("Intimidate") {
         let other = side == "p1" ? "p2" : "p1"
         let now = Date()
-        let hasDrop = recentAtkDrops.contains { $0.key.hasPrefix("\(other):") && $0.value.seq == actionSeq && now.timeIntervalSince($0.value.at) < 12 }
+        // seq 一致まで要求すると、確定の遅れの間に他の文が処理された
+        // 時点で恒常的に外れ、特性行が丸ごと落ちる (実例: 2026-11-22
+        // battle_20261122_071457、特性行が 1 行も出なかった)。攻撃
+        // 低下の記録が直近 20 秒以内にあれば帰属の根拠として十分
+        let hasDrop = recentAtkDrops.contains { $0.key.hasPrefix("\(other):") && now.timeIntervalSince($0.value.at) < 20 }
         if hasDrop {
             intimidateDone[key] = sw.at
             emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Intimidate")  // 判明登録は applyEvent が行う
@@ -4119,8 +4161,10 @@ func checkFieldText(text: String, fromLogScreen: Bool = false) -> Bool {
     if text.contains("霧が") && text.contains("はれた") { clearTerrain(stale: fromLogScreen); return true }
     if text.contains("電気が") && (text.contains("消えた") || text.contains("消え去った")) { clearTerrain(stale: fromLogScreen); return true }
     if text.contains("草が") && (text.contains("なくな") || text.contains("消え") || text.contains("きえ")) { clearTerrain(stale: fromLogScreen); return true }
-    // トリックルーム (地形・天候とは別枠のフィールド効果)
-    if text.contains("時空") && (text.contains("ゆがめ") || text.contains("歪め")) {
+    // トリックルーム (地形・天候とは別枠のフィールド効果)。開始文の
+    // 濁点崩れ (ゆがめた -> ゆかめた) も拾う (実例: 2026-11-22
+    // battle_20261122_071457、開始行が出ず告知文が未翻訳で残った)
+    if text.contains("時空") && (foldDakuten(text).contains("ゆかめ") || text.contains("歪め")) {
         if !logTrickRoom { emitLog("|-fieldstart|move: Trick Room") }
         return true
     }
@@ -5481,7 +5525,22 @@ func translateBattleMessage(_ text: String) -> Bool {
     // ミス: 「<対象>には 当たらなかった！」(使用者は直近の |move| の枠)
     if t.contains("当たらなかった") {
         if !lastMoveLabel.isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 8 {
-            emitLog("|-miss|\(lastMoveLabel)|\(slot): \(sp.en)")
+            // 外れの対象 (枠と種族) が場の記録と矛盾する場合は行を
+            // 出さない (実例: 2026-11-22 battle_20261122_071457、
+            // 場に出ていないガオガエンが p2a の外れ対象になった)。
+            // 交代直後でプレート未確定の間は、交代記録の枠と一致
+            // すれば通す
+            let missPn = ["p1a": "mineA", "p1b": "mineB", "p2a": "oppA", "p2b": "oppB"][slot] ?? ""
+            let missTracked = lastSlots[missPn]?.speciesEn
+            let missConsistent = (missTracked.map { sameSpeciesFamily($0, sp.en) } ?? false)
+                || pendingSwitchSpecies[missPn] == sp.en
+                || lastSwitchIn["\(side):\(sp.en)"]?.slot == slot
+            if missConsistent {
+                emitLog("|-miss|\(lastMoveLabel)|\(slot): \(sp.en)")
+            } else {
+                debugCapture(kind: "move_guard", key: "miss_target:\(slot):\(sp.en):\(currentTurn)", rawText: t,
+                             detail: ["reason": "miss_target_inconsistent", "slot": slot, "species": sp.en, "tracked": missTracked ?? "", "turn": currentTurn])
+            }
         }
         return true
     }
@@ -5763,6 +5822,23 @@ func translateBattleMessage(_ text: String) -> Bool {
     // battle_20261122_070237、ひんし文が faint 行と併記で残った)
     if t.contains("たおれた") || foldDakuten(t).contains("たおれた") {
         if (monStates[key]?.hpPercent ?? 0) > 0 {
+            // 場の占有として記録されていない種族の ひんし文では、
+            // 被ダメ行の合成も ひんし行も出さない。未登録のまま倒れた
+            // 個体の文や枠解決の誤りで、無関係な枠の HP 基準
+            // (lastEmittedPct) を 0 に潰し、後続の正しいプレート読み
+            // まで棄却する事故になるため (実例: 2026-11-22
+            // battle_20261122_071457、コータスの ひんし文が p1a に
+            // 解決され、リキキリンの正しい 65% 読みが棄却された)。
+            // 文自体は消費する
+            let faintPn = ["p1a": "mineA", "p1b": "mineB", "p2a": "oppA", "p2b": "oppB"][slot] ?? ""
+            let faintOccupant = lastSlots[faintPn]?.speciesEn
+            let faintIsOccupant = (faintOccupant.map { sameSpeciesFamily($0, sp.en) } ?? false)
+                || pendingSwitchSpecies[faintPn] == sp.en
+            if !faintIsOccupant {
+                debugCapture(kind: "faint_guard", key: "faint_guard:untracked:\(slot):\(sp.en)", rawText: t,
+                             detail: ["reason": "faint_text_untracked", "slot": slot, "species": sp.en, "occupant": faintOccupant ?? "", "turn": currentTurn])
+                return true
+            }
             // プレートで 0% を読む前に倒れた場合 (ひんしアニメーションで
             // プレートがすぐ消える等)、被ダメ行もここで補う
             // (実例: 2026-11-20、イエッサンとオオニューラの ひんし に
@@ -7764,7 +7840,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0744"
+let readerBuild = "20261122_0801"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
