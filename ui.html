@@ -658,6 +658,28 @@ async function runDataLoader(d) {
   return st.ok;
 }
 function missingCriticalLoaders() { return DATA_LOADERS.filter(d => d.critical && !(loadStatus[d.id] && loadStatus[d.id].ok)); }
+// 重要データの取得: まず配信元 (相対パス) から取り、失敗したら公開ページ
+// (GitHub Pages) の同一ファイルへ切り替える。ローカル配信へファイルが
+// まだ届いていない・壊れている場合でも、オンラインなら読み込める。
+// 失敗時は HTTP ステータスを含むエラーを投げ、警告表示と loadStatus に
+// 理由が残るようにする (従来は 404 でも本文のパースエラーしか残らず、
+// 原因が分からなかった)
+const PAGES_BASE = 'https://nmfm1ow5ot.github.io/champions-calc/';
+async function fetchCriticalJson(path) {
+  let firstErr = null;
+  try {
+    const r = await fetch('./' + path, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return { json: await r.json(), source: 'local' };
+  } catch (e) { firstErr = e; }
+  try {
+    const r2 = await fetch(PAGES_BASE + path, { cache: 'no-store' });
+    if (!r2.ok) throw new Error('HTTP ' + r2.status);
+    return { json: await r2.json(), source: 'pages' };
+  } catch (e2) {
+    throw new Error(((firstErr && firstErr.message) || 'fetch failed') + ' / pages: ' + ((e2 && e2.message) || e2));
+  }
+}
 // データ回復で推定を作り直す際、最後に受けた state を再適用してイベントを
 // 再生する (poll は state の変化時にしか適用しないため、リセットだけでは
 // 変化が来るまで再生されない)
@@ -680,7 +702,7 @@ function renderLoadWarn() {
   const missing = missingCriticalLoaders();
   if (!missing.length) { el.hidden = true; el.textContent = ''; return; }
   el.hidden = false;
-  el.textContent = 'データ読込: ' + missing.map(d => d.label).join('・') + ' が未読込です（再試行中・クリックで再試行）';
+  el.textContent = 'データ読込: ' + missing.map(d => { const st = loadStatus[d.id]; const err = st && st.lastError ? String(st.lastError).slice(0, 80) : ''; return d.label + (err ? '（' + err + '）' : ''); }).join('・') + ' が未読込です（再試行中・クリックで再試行）';
 }
 if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
   const t = e.target && e.target.closest ? e.target.closest('[data-loadretry]') : null;
@@ -3561,24 +3583,28 @@ document.getElementById('specSel')?.addEventListener('change', e => {
   } catch (e) {}
 })();
 const LOADER_ITEMS_JA = regDataLoader('items_ja', '持ち物名', true, async () => {
-  const ij = await (await fetch('./data/items_ja.json', { cache: 'no-store' })).json();
+  const { json: ij, source } = await fetchCriticalJson('data/items_ja.json');
   if (!ij || typeof ij !== 'object' || !Object.keys(ij).length) throw new Error('items_ja: bad shape');
+  if (loadStatus.items_ja) loadStatus.items_ja.source = source;
   ITEM_MAPS = ij; applyItemMaps();
 });
 const LOADER_VGC_CORPUS = regDataLoader('vgc_pastes', 'VGCPastesコーパス', true, async () => {
-  const vc = await (await fetch('./data/vgc_pastes.json', { cache: 'no-store' })).json();
+  const { json: vc, source } = await fetchCriticalJson('data/vgc_pastes.json');
   if (!vc || !Array.isArray(vc.sets)) throw new Error('vgc_pastes: bad shape');
+  if (loadStatus.vgc_pastes) loadStatus.vgc_pastes.source = source;
   VGC_CORPUS = vc;
 });
 const LOADER_META_SETS = regDataLoader('meta_sets', '対戦データ', true, async () => {
   try {
-    const ms = await (await fetch('./data/meta_sets.json', { cache: 'no-store' })).json();
+    const { json: ms, source } = await fetchCriticalJson('data/meta_sets.json');
     if (ms && Array.isArray(ms.sets)) META_SETS = ms; else throw new Error('meta_sets: bad shape');
+    if (loadStatus.meta_sets) loadStatus.meta_sets.source = source;
   } finally { META_SETS_LOADED = true; }
 });
 const LOADER_POKEDB = regDataLoader('pokedb_parsed', '使用率分布', true, async () => {
-  const pd = await (await fetch('./data/pokedb_parsed.json', { cache: 'no-store' })).json();
+  const { json: pd, source } = await fetchCriticalJson('data/pokedb_parsed.json');
   if (!pd || typeof pd !== 'object') throw new Error('pokedb_parsed: bad shape');
+  if (loadStatus.pokedb_parsed) loadStatus.pokedb_parsed.source = source;
   POKEDB_PARSED = pd;
 });
 (async function init() {
