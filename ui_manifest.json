@@ -4,7 +4,7 @@
   "audit_items_ja.mjs": "b536fff2ca001daed9e79d2c8859484339f41e32c702bade0d5c62dd39136b4a",
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
   "build_species_gender.py": "36e4d0d6f2cf2125b3e7d575660c25afc9ffaaf7fac45a51738cca99106adaa3",
-  "bundle.mjs": "c4c5438db902cd663f8c5d55ac72483c2ef2a671b30da13cd7792adaed00de90",
+  "bundle.mjs": "d811e364e0df864a5e6913b8a80a4dc4d0fe61fdae1b49950f36adba2632d0c1",
   "check/apple_stubs.swift": "b54bf022428e2a6a30a35b206a14e01f276a20866d04376928109e4bcd6da175",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
   "core.mjs": "45bfa4424bfa0996c7b75fd7329eb0f0dc9c0174ff75b51e489176e6e44e6f2a",
@@ -23,7 +23,7 @@
   "data/species_types.json": "2e09c69afc9191ffd7a4977318e79738aa95dd9f3f02b7450f11094bf50a34dc",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "1cf58a3d1ff20870453c4f8dd926e02f888c3896fe20110c0a142784523f3bd4",
-  "estimate_engine.mjs": "eee91bd07df61237f83e274bc1edee3ef68698abd738ba8be27fcb0802a82d1a",
+  "estimate_engine.mjs": "8a7eeef9e533713a95600720683c42c6c9595d33297153264454b79827359831",
   "fetch_champions_dex.mjs": "da99127c5b06a757aab42596b2ac7b8ba3e7d13ff205aa479f4acb6123677b38",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
   "fetch_species_abilities.mjs": "1f1221256a11ead833ec1a18a73e65bdb71c70f651b7bc800ed7d7db7afc1603",
@@ -43,5 +43,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_1939"
+ "rev": "20261121_1940"
 }
