@@ -27041,25 +27041,83 @@ function createEstimator(deps) {
     }
     return out;
   }
+  function bayesGenericCandidates(species, table) {
+    const sd = gen.species.get(idOf(species));
+    if (!sd || !table) return null;
+    const abilities = [...new Set(Object.values(sd.abilities || {}).filter(Boolean))];
+    if (!abilities.length) return null;
+    const bs = sd.baseStats || {};
+    const phys = (bs.atk || 0) >= (bs.spa || 0);
+    const off = phys ? "atk" : "spa";
+    const fastNat = (bs.spe || 0) >= 90 ? phys ? "Jolly" : "Timid" : phys ? "Adamant" : "Modest";
+    const shapes = [
+      { sp: { hp: 2, [off]: 32, spe: 32 }, nature: fastNat, items: [phys ? "Choice Band" : "Choice Specs", "Life Orb", ""], w: 1 },
+      { sp: { hp: 32, [off]: 32, spe: 2 }, nature: phys ? "Brave" : "Quiet", items: ["Life Orb", ""], w: 0.6 },
+      { sp: { hp: 32, [off]: 32, spe: 2 }, nature: phys ? "Adamant" : "Modest", items: ["Life Orb", ""], w: 0.5 },
+      { sp: { hp: 32, def: 32, spe: 2 }, nature: "Impish", items: ["Leftovers", ""], w: 0.5 },
+      { sp: { hp: 32, spd: 32, spe: 2 }, nature: "Careful", items: ["Leftovers", ""], w: 0.5 },
+      { sp: { hp: 32, def: 16, spd: 16, spe: 2 }, nature: "Bold", items: ["Leftovers", ""], w: 0.4 },
+      { sp: {}, nature: "Serious", items: [""], w: 0.3 }
+    ];
+    const out = [];
+    shapes.forEach((sh, si) => {
+      const sp = {};
+      for (const k of ["hp", "atk", "def", "spa", "spd", "spe"]) sp[k] = sh.sp[k] || 0;
+      const values = {};
+      for (const k of ["atk", "def", "spa", "spd", "spe"]) {
+        const row = table[k].find((r) => r.nature === sh.nature && r.sp === sp[k]);
+        values[k] = row ? row.value : null;
+      }
+      const hpRow = table.hp.find((r) => r.sp === sp.hp);
+      values.hp = hpRow ? hpRow.value : null;
+      if (values.hp == null) return;
+      const abils = si === 0 && abilities[1] ? [abilities[0], abilities[1]] : [abilities[0]];
+      for (const item of sh.items) for (const ability of abils) {
+        out.push({
+          nature: sh.nature,
+          sp: { ...sp },
+          item,
+          ability,
+          megaAbility: void 0,
+          megaSpecies: void 0,
+          moves: [],
+          movePool: [],
+          moveExact: false,
+          values,
+          valuesMega: void 0,
+          post: 0,
+          _w: sh.w * (ability === abilities[0] ? 1 : 0.5),
+          generic: true
+        });
+      }
+    });
+    if (!out.length) return null;
+    const tot = out.reduce((s, c) => s + c._w, 0) || 1;
+    for (const c of out) {
+      c.post = c._w / tot;
+      delete c._w;
+    }
+    return out;
+  }
   function bayesBuildCandidates(species) {
     if (!POKEDB_PARSED || !USAGE_SETS) return null;
+    const table = statTable(species);
+    if (!table) return null;
     let u = USAGE_SETS[idOf(species)];
     if (!u) {
       const base = gen.species.get(idOf(species))?.baseSpecies;
       if (base && base !== species) u = USAGE_SETS[idOf(base)];
     }
-    if (!u || !u.code) return null;
+    if (!u || !u.code) return bayesGenericCandidates(species, table);
     const pd = POKEDB_PARSED[u.code];
-    if (!pd) return null;
-    const table = statTable(species);
-    if (!table) return null;
+    if (!pd) return bayesGenericCandidates(species, table);
     const patterns = (pd.patterns || []).slice(0, 5).map((p) => ({ sp: p.sp || {}, rate: p.rate || 0 }));
     const natures = (pd.natures || []).map((n) => ({ en: NATURE_JA2EN[n.name], rate: n.rate || 0 })).filter((n) => n.en).slice(0, 5);
     const items = (pd.items || []).map((i) => ({ en: (NAMES._itemJa2en || {})[i.name], rate: i.rate || 0 })).filter((i) => i.en).slice(0, 4);
     const abilities = (pd.abilities || []).map((a) => ({ en: (NAMES._abilityJa2en || {})[a.name], rate: a.rate || 0 })).filter((a) => a.en).slice(0, 3);
     const poolInfo = (pd.moves || []).map((mv) => ({ en: (NAMES._moveJa2en || {})[mv.ja], rate: mv.rate || 0, cat: mv.cat || "" })).filter((x) => x.en).slice(0, 10);
     const movePool = poolInfo.map((x) => x.en).slice(0, 8);
-    if (!patterns.length || !natures.length) return null;
+    if (!patterns.length || !natures.length) return bayesGenericCandidates(species, table);
     const topItem = items[0] || { en: "", rate: 0 };
     const topAbility = abilities[0] || { en: u.ability, rate: 0 };
     let megaAbility;
