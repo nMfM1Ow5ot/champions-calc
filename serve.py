@@ -592,6 +592,12 @@ def _is_upload_target(name):
         # 蓄積)。推論過程ログと同じく、その試合のファイル一式の
         # 一部として、備考ゲート付きで試合ログと一緒に送る
         return True
+    if name.endswith("_obs.jsonl"):
+        # 生観測アーカイブ (reader が処理したフレームの OCR 結果を
+        # 解釈せずに残したもの。改善計画フェーズ0)。その試合の
+        # ファイル一式の一部として、備考ゲート付きで試合ログと
+        # 一緒に送る
+        return True
     return "_debug" in name and (name.endswith(".jpg") or name.endswith(".json"))
 
 
@@ -751,6 +757,8 @@ def _battle_key(name):
         rest = rest[: -len("_calclog.json")]
     elif rest.endswith("_states.json"):
         rest = rest[: -len("_states.json")]
+    elif rest.endswith("_obs.jsonl"):
+        rest = rest[: -len("_obs.jsonl")]
     elif rest.endswith(".log"):
         rest = rest[: -len(".log")]
         if rest.endswith("_protocol"):
