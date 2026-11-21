@@ -1104,7 +1104,16 @@ function parseSet(text) {
     else if ((m = line.match(/^Tera Type:\s*(.+)$/i))) { const tt = TERA_TYPES.find(t => t.toLowerCase() === m[1].trim().toLowerCase()); if (tt) out.teraType = tt; }
     else if ((m = line.match(/^(\w+)\s+Nature$/i))) out.nature = m[1];
     else if ((m = line.match(/^SPs:\s*(.+)$/i))) for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) out.sp[statMap[p[2]]] = Math.min(32, +p[1]); }
-    else if ((m = line.match(/^EVs:\s*(.+)$/i))) for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) out.sp[statMap[p[2]]] = Math.min(32, Math.round(+p[1] / 8)); }
+    else if ((m = line.match(/^EVs:\s*(.+)$/i))) {
+      const parts = [];
+      for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) parts.push([statMap[p[2]], +p[1]]); }
+      // Champions 形式の書き出しでは EVs 欄に SP (各 0-32、合計 66) が
+      // そのまま入っていることがある。全て 32 以下で合計 66 以下なら
+      // SP として読み、通常の EV (合計 510 前後) は従来どおり 8 で割る
+      const total = parts.reduce((a, [, v]) => a + v, 0);
+      const asSp = parts.length > 0 && parts.every(([, v]) => v <= 32) && total <= 66;
+      for (const [k, v] of parts) out.sp[k] = asSp ? Math.min(32, v) : Math.min(32, Math.round(v / 8));
+    }
     else if (line.startsWith('-')) { const mv = resolveMove(line.slice(1)); if (mv) out.moves.push(mv); }
   }
   return out;
