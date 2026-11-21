@@ -1001,6 +1001,22 @@ def check_log_token():
               "(対戦・計算には影響しません)。使う場合はこのフォルダに置いてください", flush=True)
 
 
+class QuietHTTPServer(http.server.ThreadingHTTPServer):
+    # クライアント側の切断 (ブラウザが大きなファイルの取得を中断
+    # して再試行した、タブを閉じた等) で copyfile が送る
+    # BrokenPipeError 等は無害なので、トレースバックを出さずに
+    # 静かに処理する。それ以外のハンドラ例外は従来どおり表示し、
+    # クラッシュジャーナルにも残す (2026-11-22、ユーザーの報告:
+    # data/vgc_pastes.json の取得中断でトレースバックが表示された)
+    def handle_error(self, request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError,
+                            ConnectionAbortedError)):
+            return
+        _record_crash("http_handler", exc)
+        super().handle_error(request, client_address)
+
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -1551,7 +1567,7 @@ if __name__ == "__main__":
                 pass
     handler = functools.partial(QuietHandler, directory=".")
     try:
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", 8765), handler)
+        server = QuietHTTPServer(("127.0.0.1", 8765), handler)
     except OSError:
         print("ポート 8765 は使用中です。別のターミナルで旧サーバが動いています。")
         print("そのターミナルで Ctrl+C を押して止めてから、もう一度実行してください。")
