@@ -378,8 +378,11 @@ def save_log_note(key, note):
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(note)
     os.replace(tmp, path)
+    # 受け付けた本文も表示する (意図しない入力がそのまま送信される
+    # 事故に、その場で気づけるようにするため)
+    shown = note if len(note) <= 200 else note[:200] + "…"
     print(f"[log] 備考を受け付けました: battle_{key} "
-          f"({len(note)}文字)", flush=True)
+          f"({len(note)}文字) {shown!r}", flush=True)
     return True
 
 
@@ -569,7 +572,9 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 # の場合は例外で呼び出し側に知らせる。
 def prompt_for_pending_notes(input_fn=None, do_upload=True):
     if input_fn is None:
-        input_fn = input
+        # 既定も _prompt_input を使う (タイプアヘッド破棄などの保護を
+        # --note の手動経路でも効かせるため)
+        input_fn = lambda prompt: _prompt_input(sys.stdin, sys.stdout, prompt)  # noqa: E731
     count = 0
     for p in list_pending_log_notes():
         vs = f" vs {p['opponent']}" if p.get("opponent") else ""
@@ -606,14 +611,54 @@ def _open_prompt_io():
         return None, None, ""
 
 
+def _flush_typeahead(stream):
+    """プロンプト表示前に、端末の未読入力 (タイプアヘッド) を破棄する。
+
+    対戦中は誰も入力を読まないため、対戦中やそれ以前にそのターミナルへ
+    打たれた文字がカーネルの入力バッファに残り続け、試合終了直後の
+    プロンプトがそれを備考として取り込んでしまう (実例: 2026-11-21
+    battle_20261121_145658、備考が「a」1 文字で勝手に送信された)。
+    端末でないストリームでは何もしない。
+    """
+    try:
+        fd = stream.fileno()
+    except Exception:
+        return
+    try:
+        import termios
+        if os.isatty(fd):
+            termios.tcflush(fd, termios.TCIFLUSH)
+    except Exception:
+        pass
+
+
 def _prompt_input(in_stream, out_stream, prompt):
-    """プロンプトを確実に表示 (flush) してから 1 行読む。"""
-    out_stream.write(prompt)
-    out_stream.flush()
-    line = in_stream.readline()
-    if line == "":
-        raise EOFError("note prompt input closed")
-    return line.rstrip("\n").rstrip("\r")
+    """プロンプトを確実に表示 (flush) してから 1 行読む。
+
+    表示前のタイプアヘッドは破棄し、表示後に入力された行だけを
+    受け付ける。防御の重ねとして、表示から不自然に早く (0.5 秒未満で)
+    返った行はバッファ残りの疑いとして 1 回だけ破棄して聞き直す
+    (2 回目は速くても受け付ける)。入力が確定したら、表示からの
+    経過時間をターミナルに残す。
+    """
+    for attempt in (1, 2):
+        _flush_typeahead(in_stream)
+        started = time.monotonic()
+        out_stream.write(prompt)
+        out_stream.flush()
+        line = in_stream.readline()
+        if line == "":
+            raise EOFError("note prompt input closed")
+        elapsed = time.monotonic() - started
+        line = line.rstrip("\n").rstrip("\r")
+        if elapsed < 0.5 and attempt == 1:
+            print(f"[log] プロンプト表示から {elapsed:.2f} 秒で入力が返ったため、"
+                  f"バッファ残りの疑いとして破棄しました: {line!r}。"
+                  "もう一度入力してください", flush=True)
+            continue
+        print(f"[log] 備考の入力が確定しました "
+              f"(プロンプト表示から {elapsed:.1f} 秒)", flush=True)
+        return line
 
 
 def _note_prompt_loop(in_stream=None, out_stream=None):
