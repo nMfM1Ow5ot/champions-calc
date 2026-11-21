@@ -976,6 +976,11 @@ function candRanges(args) {
     const sc = sideFor(atkKey, defKey);
     (moves || []).forEach((mv, mi) => {
       if (!mv || !defHp) return;
+      // Zワザ/ダイマックス技は変換トグル経由でのみ正しい威力になる機構技で、
+      // 候補横断の計算には変換を入れない (計算側の方針)。ダミー威力の幅を
+      // 出さないよう対象外にする (moveData の isZ / isMax で判定)
+      const md = moveData(mv);
+      if (md && (md.isZ || md.isMax)) return;
       const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), mv,
         { ...F, gameType: singleFn(mv) ? 'Singles' : 'Doubles', crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide });
       if (!rolls || !rolls.length) return;
