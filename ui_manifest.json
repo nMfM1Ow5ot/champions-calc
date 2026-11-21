@@ -39,9 +39,9 @@
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
   "tests/bayes_equiv_golden.json": "cea9d9dcf7b828e6795ee412b09f239379436528ac81151c332c7e25a6a8ab1b",
   "tests/bayes_sim.mjs": "0a1221f18ccc0ad0b974ff2719cc3e6b2d30e1e1d0f8e5f89b8cf80943420658",
-  "ui.html": "714f520ecef0fa96ec024543d2f9603fd1407e1ec3b89d44bdcb25e2c46e1bea",
+  "ui.html": "44d8e12de7792e27b5e6bab870d959689b063ea94c0a94a29f651accb3c296cc",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_0004"
+ "rev": "20261122_0008"
 }
