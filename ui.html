@@ -364,6 +364,7 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
   <div class="topbar">
     <div class="titlebox"><h1>チャンピオンズ ダメージ計算</h1><div class="revline" id="revLine"></div></div>
     <div class="loadwarn" id="loadWarn" data-loadretry hidden></div>
+    <div class="loadwarn" id="reloadNote" data-reloadnow hidden></div>
     <div class="cam" id="camBox">チーム画面を取り込む
       <button data-capture="ability">能力画面を撮影</button>
       <button data-capture="status">ステータス画面を撮影</button><span id="capStatusText"></span>
@@ -653,6 +654,10 @@ async function runDataLoader(d) {
   return st.ok;
 }
 function missingCriticalLoaders() { return DATA_LOADERS.filter(d => d.critical && !(loadStatus[d.id] && loadStatus[d.id].ok)); }
+// データ回復で推定を作り直す際、最後に受けた state を再適用してイベントを
+// 再生する (poll は state の変化時にしか適用しないため、リセットだけでは
+// 変化が来るまで再生されない)
+function reapplyLastState() { if (lastStateText) { try { applyState(JSON.parse(lastStateText)); } catch (e) {} } }
 function scheduleDataRetry() {
   if (dataRetryTimer) return;
   if (!missingCriticalLoaders().some(d => (loadStatus[d.id] ? loadStatus[d.id].attempts : 0) < 40)) { renderLoadWarn(); return; }
@@ -661,7 +666,7 @@ function scheduleDataRetry() {
     let recovered = false;
     for (const d of missingCriticalLoaders()) { if (await runDataLoader(d)) recovered = true; }
     // 対戦中に遅れて揃った場合は、完全なデータで推定を作り直す
-    if (recovered && lastBattleKey) resetInference();
+    if (recovered && lastBattleKey) { resetInference(); reapplyLastState(); }
     if (missingCriticalLoaders().length) scheduleDataRetry();
   }, 30000);
 }
@@ -679,7 +684,7 @@ if (typeof document !== 'undefined' && document.addEventListener) document.addEv
   (async () => {
     let recovered = false;
     for (const d of missingCriticalLoaders()) { if (await runDataLoader(d)) recovered = true; }
-    if (recovered && lastBattleKey) resetInference();
+    if (recovered && lastBattleKey) { resetInference(); reapplyLastState(); }
     if (missingCriticalLoaders().length) scheduleDataRetry();
   })();
 });
@@ -3197,6 +3202,9 @@ function applyState(j) {
   const bkey = (typeof j.battle === 'string' && j.battle) ? j.battle : null;
   if (bkey) {
     if (lastBattleKey && bkey !== lastBattleKey) {
+      // 前の対戦は終わっている。保留中の版数リロードがあればここで反映し、
+      // 新しい対戦は新しい版で最初から読み直す
+      if (pendingReload) { location.reload(); return; }
       confirmNewBattle();
       resetInference();
       lastEventCount = 0;
@@ -3382,24 +3390,47 @@ function applyState(j) {
 }
 let lastStateText = '';
 let uiVersionSeen = null;
+// 対戦中の版数変化では即リロードしない (battle_20261122_054802: 対戦中の
+// push による自動リロードで推定セッションが再開せず、記録が途絶えた)。
+// 対戦中は保留し、次の対戦の開始時 (試合キーの変化) か、state.json が
+// 10分間変化しなかった時点で反映する。通知をクリックすれば即反映する
+let pendingReload = false;
+let lastStateChangeAt = Date.now();
+function renderReloadNote() {
+  const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById('reloadNote') : null;
+  if (!el) return;
+  el.hidden = !pendingReload;
+  if (pendingReload) el.textContent = '新しい版があります。対戦終了後に自動で反映します（クリックで今すぐ反映）';
+}
+function noteVersionChange(v) {
+  if (uiVersionSeen === null) { uiVersionSeen = v; return 'none'; }
+  if (!v || v === uiVersionSeen) return 'none';
+  if (lastBattleKey) { pendingReload = true; renderReloadNote(); return 'deferred'; }
+  return 'reload';
+}
+function resetVersionState() { uiVersionSeen = null; pendingReload = false; renderReloadNote(); }
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
+  const t = e.target && e.target.closest ? e.target.closest('[data-reloadnow]') : null;
+  if (t) location.reload();
+});
 async function poll() {
   try {
     const rv = await fetch('./ui_version.txt', { cache: 'no-store' });
     if (rv.ok) {
       const v = (await rv.text()).trim();
-      if (uiVersionSeen === null) uiVersionSeen = v;
-      else if (v && v !== uiVersionSeen) { location.reload(); return; }
+      if (noteVersionChange(v) === 'reload') { location.reload(); return; }
       const rl = document.getElementById('revLine');
-      if (rl && v) rl.textContent = 'rev ' + v;
+      if (rl && uiVersionSeen) rl.textContent = 'rev ' + uiVersionSeen;
     }
   } catch (e) { /* ローカルコピーのみで動作 */ }
   try {
     const r = await fetch('./state.json', { cache: 'no-store' });
     if (r.ok) {
       const txt = await r.text();
-      if (txt !== lastStateText) { lastStateText = txt; applyState(JSON.parse(txt)); }
+      if (txt !== lastStateText) { lastStateText = txt; lastStateChangeAt = Date.now(); applyState(JSON.parse(txt)); }
     }
   } catch (e) { /* not running under a server */ }
+  if (pendingReload && Date.now() - lastStateChangeAt > 10 * 60 * 1000) { location.reload(); return; }
 }
 
 /* ---------- デバッグ送信: 押下時点のキャッシュと UI の出力状況をチャットへ送る ---------- */
