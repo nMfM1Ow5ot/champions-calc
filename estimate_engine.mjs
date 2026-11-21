@@ -370,14 +370,15 @@ function applyAbilityOrderEvidence(oppSpecies, mySpecies, firstIsOpp, turn, io) 
 const NATURE_JA2EN = { 'がんばりや': 'Hardy', 'さみしがり': 'Lonely', 'ゆうかん': 'Brave', 'いじっぱり': 'Adamant', 'やんちゃ': 'Naughty', 'ずぶとい': 'Bold', 'すなお': 'Docile', 'のんき': 'Relaxed', 'わんぱく': 'Impish', 'のんてんき': 'Lax', 'おくびょう': 'Timid', 'せっかち': 'Hasty', 'まじめ': 'Serious', 'ようき': 'Jolly', 'むじゃき': 'Naive', 'ひかえめ': 'Modest', 'おっとり': 'Mild', 'れいせい': 'Quiet', 'てれや': 'Bashful', 'うっかりや': 'Rash', 'おだやか': 'Calm', 'おとなしい': 'Gentle', 'なまいき': 'Sassy', 'しんちょう': 'Careful', 'きまぐれ': 'Quirky' };
 const BAYES_FLOOR = 0.02;    // 尤度の下限 (候補を完全に消さない)
 const BAYES_REV_KEEP = 0.05; // 判明情報と矛盾する候補の減衰率
-// 耐久配分の仮定 (ユーザーの指示): まず HP 振りのみを仮定し、HP に振り切って
-// いないのに防御・特防へ振っている型は事前確率を強く割り引く。HP 全振りでも
-// ダメージ結果と整合しない場合にだけ、尤度を通じてそちらが持ち上がる。
-// 完全な排除はしない (HP を振らない耐久型も実在し、強い証拠では覆るため)。
-// さらに、ダメージ証拠が HP優先候補の全てと矛盾し割り引き対象候補でのみ
-// 説明できる場合は、仮定を撤廃して割り引きを解除する (bayesApply 内)。
+// 耐久配分の事前分布: かつては「HP 振り優先」の仮定として、HP に振り切って
+// いないのに防御・特防へ振っている合成候補の事前確率を割り引いていたが、
+// 2026-11-22 にユーザーが仮定の撤回を許可し、公正条件 (leave-one-team-out)
+// の A/B 検証で割り引きの撤廃が弱点クラス (HP 振りでない耐久型) の収束率を
+// 改善し (3 シード合計 11.9% → 16.9%)、他クラスに悪化が無いことを確認した
+// ため撤廃した。HP_FIRST_FACTOR は互換のため 1 (無割引) で残置し、
+// bayesApply 内の解除処理 (hpLifted) は割り引きが無いため実質無効。
 // 使用率型に耐久寄りの型が無い種族向けに、最大耐久の合成候補も追加する
-const HP_FIRST_FACTOR = 0.1;
+const HP_FIRST_FACTOR = 1;
 const hpFirstCand = c => (c.sp.hp || 0) >= 32 || (!(c.sp.def > 0) && !(c.sp.spd > 0));
 function bayesReset() { bayes = { bySpecies: {}, skipped: 0 }; try { moveStatsCache = {}; } catch (e) { /* モジュール初期化中の呼び出しでは宣言前になるため無視する */ } }
 /* ===== 技構成からの型予測 (型推定エンジンチャンネル 32274233 の構想に基づく実装) =====
