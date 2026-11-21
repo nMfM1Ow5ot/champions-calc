@@ -14,6 +14,7 @@ import http.server
 import json
 import os
 import re
+import select
 import signal
 import subprocess
 import sys
@@ -903,6 +904,54 @@ def _flush_typeahead(stream):
         pass
 
 
+# 備考プロンプトの入力待ち上限 (秒)。表示からこの時間入力がなければ
+# 備考は空欄として送信に進む (入力待ちで止まり続けないため)
+_NOTE_PROMPT_TIMEOUT_SEC = 30.0
+
+
+def _read_line_with_timeout(in_stream, deadline):
+    """deadline (time.monotonic) までに 1 行読む。
+
+    タイムアウト時は None を返し、EOF では EOFError を送出する。
+    select が使えないストリーム (疑似ストリーム等) では通常の
+    readline にフォールバックする (タイムアウトなし)。
+    端末はカノニカルモードのため、行が確定するまで読み取り可能に
+    ならない。fd を直接読むのは、バッファ済みリーダだと select で
+    検知できないため (プロンプト表示前に _flush_typeahead で入力は
+    破棄されており、このストリームの読み手はプロンプトだけ)。
+    """
+    try:
+        fd = in_stream.fileno()
+    except Exception:
+        fd = None
+    if fd is None or fd < 0:
+        line = in_stream.readline()
+        if line == "":
+            raise EOFError("note prompt input closed")
+        return line
+    buf = b""
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        try:
+            ready, _, _ = select.select([fd], [], [], remaining)
+        except (OSError, ValueError):
+            line = in_stream.readline()
+            if line == "":
+                raise EOFError("note prompt input closed")
+            return line
+        if not ready:
+            return None
+        chunk = os.read(fd, 1)
+        if chunk == b"":
+            raise EOFError("note prompt input closed")
+        buf += chunk
+        if chunk == b"\n":
+            break
+    return buf.decode("utf-8", errors="replace")
+
+
 def _prompt_input(in_stream, out_stream, prompt):
     """プロンプトを確実に表示 (flush) してから 1 行読む。
 
@@ -911,15 +960,23 @@ def _prompt_input(in_stream, out_stream, prompt):
     返った行はバッファ残りの疑いとして 1 回だけ破棄して聞き直す
     (2 回目は速くても受け付ける)。入力が確定したら、表示からの
     経過時間をターミナルに残す。
+
+    表示から _NOTE_PROMPT_TIMEOUT_SEC 秒入力がなければ、空欄の
+    備考として扱って空文字列を返す (聞き直しにまたがって同じ
+    締め切りを使う)。手動の `serve.py --note` も同じ経路を使う
+    ため、そちらにも同じタイムアウトが効く。
     """
+    deadline = time.monotonic() + _NOTE_PROMPT_TIMEOUT_SEC
     for attempt in (1, 2):
         _flush_typeahead(in_stream)
         started = time.monotonic()
         out_stream.write(prompt)
         out_stream.flush()
-        line = in_stream.readline()
-        if line == "":
-            raise EOFError("note prompt input closed")
+        line = _read_line_with_timeout(in_stream, deadline)
+        if line is None:
+            print(f"[log] プロンプト表示から {_NOTE_PROMPT_TIMEOUT_SEC:.0f} 秒間"
+                  "入力がなかったため、備考なしで送信します", flush=True)
+            return ""
         elapsed = time.monotonic() - started
         line = line.rstrip("\n").rstrip("\r")
         if elapsed < 0.5 and attempt == 1:
