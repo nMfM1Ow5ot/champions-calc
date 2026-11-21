@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ダメ計</title>
 <script>(function(){var t='dark';try{t=localStorage.getItem('champions-calc-theme')||'dark';}catch(e){}if(t!=='light'&&t!=='dark')t='dark';document.documentElement.setAttribute('data-theme',t);})();</script>
-<script>(function(){var l='';try{var q=new URLSearchParams(location.search).get('layout');if(q==='sp'||q==='tablet'||q==='pc')l=q;}catch(e){}
-if(!l){var w=Math.min(window.innerWidth||9999, (window.screen&&screen.width)||9999);l=w<=640?'sp':(w<=1150?'tablet':'pc');}
+<script>(function(){var l='';
+// 優先順位: URL の ?layout= (その場で保存もする) > 保存済みの選択 > 画面幅による自動判定
+try{var q=new URLSearchParams(location.search).get('layout');if(q==='sp'||q==='tablet'||q==='pc'){l=q;localStorage.setItem('champions-calc-layout',l);}}catch(e){}
+if(!l){try{l=localStorage.getItem('champions-calc-layout')||'';}catch(e){}}
+if(l!=='sp'&&l!=='tablet'&&l!=='pc'){var w=Math.min(window.innerWidth||9999, (window.screen&&screen.width)||9999);l=w<=640?'sp':(w<=1150?'tablet':'pc');}
 document.documentElement.setAttribute('data-layout',l);})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Work+Sans:wght@400;500;700&display=swap" rel="stylesheet">
@@ -84,7 +87,12 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .topbar .cam{display:flex; align-items:center; gap:.6rem; font-size:1rem; color:var(--dim)}
 .topbar button{font:inherit; font-size:1rem; background:var(--panel); color:var(--ink); border:none; border-radius:.5rem; padding:.4rem .8rem; cursor:pointer; box-shadow:var(--dd-shadow)}
 .topbar button:hover{background:rgba(33,150,243,.15); color:#fff}
-.topbar .theme-toggle{margin-left:auto; flex:none; white-space:nowrap}
+.topbar .theme-toggle{flex:none; white-space:nowrap}
+.topbar .layoutsw{margin-left:auto; display:flex; flex:none; border:1px solid rgba(255,255,255,.18); border-radius:999px; overflow:hidden}
+.topbar .layoutsw button{font:inherit; font-size:.85rem; line-height:1; padding:.45rem .7rem; background:none; border:none; border-radius:0; box-shadow:none; color:var(--label); cursor:pointer; white-space:nowrap}
+.topbar .layoutsw button:hover{background:rgba(33,150,243,.15); color:var(--ink)}
+.topbar .layoutsw button.on{background:rgba(33,150,243,.85); color:#fff; font-weight:700}
+:root[data-theme="light"] .topbar .layoutsw{border-color:rgba(0,0,0,.18)}
 #camstat{color:var(--green); font-size:1rem}
 
 /* ---------- PlayerCalc ---------- */
@@ -299,6 +307,12 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
       <span id="camstat"></span>
     </div>
     <script>(function(){var h=location.hostname;if(h&&h!=='localhost'&&h!=='127.0.0.1'){var c=document.getElementById('camBox');if(c)c.style.display='none';}})();</script>
+    <div class="layoutsw" role="group" aria-label="ページレイアウト切り替え">
+      <button type="button" data-layoutpick="sp">スマホ用</button>
+      <button type="button" data-layoutpick="tablet">iPad用</button>
+      <button type="button" data-layoutpick="pc">PC用</button>
+    </div>
+    <script>(function(){var sw=document.querySelector('.layoutsw');if(!sw)return;function render(){var cur=document.documentElement.getAttribute('data-layout');sw.querySelectorAll('[data-layoutpick]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-layoutpick')===cur);});}sw.addEventListener('click',function(e){var b=e.target.closest('[data-layoutpick]');if(!b)return;var l=b.getAttribute('data-layoutpick');document.documentElement.setAttribute('data-layout',l);try{localStorage.setItem('champions-calc-layout',l);}catch(err){}render();});render();})();</script>
     <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="false" title="ライトモードに切り替え">☀️ ライト</button>
   </div>
   <script>(function(){var btn=document.getElementById('themeToggle');if(!btn)return;function render(){var light=document.documentElement.getAttribute('data-theme')==='light';btn.textContent=light?'🌙 ダーク':'☀️ ライト';btn.setAttribute('aria-pressed',light?'true':'false');btn.title=light?'ダークモードに切り替え':'ライトモードに切り替え';}btn.addEventListener('click',function(){var next=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem('champions-calc-theme',next);}catch(e){}render();});render();})();</script>
