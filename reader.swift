@@ -527,6 +527,7 @@ var logSeenEntries = Set<String>()               // ゲーム内ログ画面エ�
 var pendingDamagePct: [String: Int] = [:]        // プレート名 -> 確定待ちの HP%
 var lastEmittedPct: [String: Int] = [:]          // プレート名 -> ログ出力済みの HP%
 var pendingStatusFrom: [String: (code: String, at: Date)] = [:]  // "p1:Species" -> 状態異常ダメージの帰属
+var wishSetTurn: [String: Int] = [:]               // side -> ねがいごとを使ったターン (回復の説明用)
 var pendingHazard: (side: String, hazard: String, seq: Int)? = nil   // がんせきアックスの設置保留 (当たって初めて確定する)
 var pendingRemoval: (side: String, seq: Int)? = nil                  // スピン系の設置物解除保留 (同上)
 var battleHazards: [String: [String: Int]] = [:]                     // side -> 設置物EN -> 層数 (applyEvent が正本として保持)
@@ -542,6 +543,7 @@ var actionSeq = 0                                  // |move| / |turn| の通し�
 var lastDamageSeq: [String: Int] = [:]             // プレート名 -> ダメージ行を出した行動番号
 var lastDamageTurn: [String: Int] = [:]            // プレート名 -> ダメージ行を出したターン番号
 var lastDamageDir: [String: Int] = [:]             // プレート名 -> 最後に出した行の向き (-1: ダメージ / +1: 回復)
+var lastDamageTime: [String: Date] = [:]           // プレート名 -> 最後にダメージ/回復行を出した時刻
 var lastCritAt: [String: Date] = [:]               // 枠 -> 最後に |-crit| を出した時刻
 var heldLine: [String: (toPct: Int, dir: Int, seq: Int, turn: Int, hpText: String)] = [:]  // プレート名 -> 行動内に保留したダメージ/回復行
 var pendingFaints: [(slot: String, speciesEn: String, at: Date)] = []  // 遅延出力するひんし行 (効果行より後に並べるため)
@@ -1376,7 +1378,8 @@ func resetLogState() {
     boostPathAt = [:]
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
-    lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
+    lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastDamageTime = [:]; lastCritAt = [:]; actionSeq = 0
+    wishSetTurn = [:]
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
     battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
     debugShotsThisBattle = 0; debugRoutineShots = 0; debugEventShots = 0; debugSeenEntries = []; debugFrameRing = []
@@ -1761,6 +1764,18 @@ func healExplained(key: String, slot: String, speciesEn: String, fromPct: Int, t
         let st = monStates[key]?.status ?? ""
         if st == "psn" || st == "tox" { return true }
     }
+    // ねがいごと: 使った次のターンの終わりに、使用側の場のポケモンが
+    // 50% 回復する。受け手は使用者とは限らない (交代先の枠が受ける)
+    // ため、直前の技ではなく使用ターンと側で判定する
+    if (40...55).contains(delta), let wt = wishSetTurn[key.hasPrefix("p2") ? "p2" : "p1"],
+       wt == currentTurn - 1 { return true }
+    // 吸収特性: 相手の技を受けて回復する (みずをすいこむ等は 25%)。
+    // 直前の技が相手側のもので、増分が吸収量と一致する場合のみ
+    let absorb: Set<String> = ["みずをすいこむ", "ちくでん", "どしょく", "かんそうはだ"]
+    if let abilityJa, absorb.contains(abilityJa), (20...30).contains(delta),
+       !lastMoveLabel.isEmpty, !lastMoveLabel.hasPrefix(key.hasPrefix("p2") ? "p2" : "p1") { return true }
+    // かんそうはだは雨のターン終了時にも 1/8 回復する
+    if abilityJa == "かんそうはだ" && logFieldWeather == "Rain" && (9...16).contains(delta) { return true }
     return false
 }
 
@@ -1826,12 +1841,28 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         return true
     }
     heldLine[plateName] = nil
+    let prevDamageAt = lastDamageTime[plateName]
+    let prevDamageSeq = lastDamageSeq[plateName]
     lastDamageSeq[plateName] = actionSeq
     lastDamageTurn[plateName] = currentTurn
     lastDamageDir[plateName] = dir
+    lastDamageTime[plateName] = Date()
     lastEmittedPct[plateName] = toPct
     if lastPendingLabel == "\(slot): \(speciesEn)" { lastPendingLabel = "" }
     if toPct < effFrom {
+        // 訂正の吸収: その枠の直前の行から 10 秒以上経ち、別の行動で、
+        // 差が 3% 以下の減少は、落ち着いた実値への訂正とみなして
+        // 行を出さず値だけ取り込む (実例: 2026-11-21
+        // battle_20261121_224409、ゴツゴツメット反動の 55% が交代
+        // 要員選択中に 53% へ訂正され、独立したダメージ行として
+        // 追記された)。行動中の小さな実ダメージは、直前の行と行動が
+        // 近いため、この条件には入らない
+        if effFrom - toPct <= 3, let lt = prevDamageAt, Date().timeIntervalSince(lt) >= 10,
+           prevDamageSeq != actionSeq, Date().timeIntervalSince(lastMoveMsgAt) >= 5 {
+            debugCapture(kind: "hp_correction", key: "hp_correction|\(plateName)", rawText: "",
+                         detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct])
+            return true
+        }
         lastDamageLabel = "\(slot): \(speciesEn)"
         lastDamageAt = Date()
         var line = "|-damage|\(slot): \(speciesEn)|\(hpText)"
@@ -1862,6 +1893,32 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 回復の発生源 (オボンのみ/たべのこし/グラッシーフィールド) が
         // 推定できれば [from] を付け、持ち物なら判明としても記録する
         let src = healSource(plateName: plateName, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
+        // 発生源を特定できず、回復技・ねがいごとの遅延回復・吸収特性
+        // でも説明できない回復は、行を出さず証拠記録だけを残す。
+        // 以前は行も出していたが、演出中の一時的な満タン誤読が
+        // |-heal| として残り、続く被弾行の喪失率表示まで狂わせた
+        // (実例: 2026-11-21 battle_20261121_224409、はたき落としの
+        // 演出中にイエッサン♀が 82% から全回復したことになり、
+        // ひんし表示が「100% 失った」になった)。記録は枠ごとに
+        // 最初の 1 件のみ (デバッグ上限の圧迫を避ける)
+        if src == nil {
+            let knownItem = key.hasPrefix("p2") ? revealedItems[speciesEn]
+                : ((teamEntries[speciesEn]?["item"] as? String) ?? revealedItems[speciesEn])
+            let knownAbility = key.hasPrefix("p2") ? revealedAbilities[speciesEn]
+                : ((teamEntries[speciesEn]?["ability"] as? String) ?? revealedAbilities[speciesEn])
+            if !healExplained(key: key, slot: slot, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct,
+                              knownItem: knownItem, abilityJa: knownAbility) {
+                lastEmittedPct[plateName] = effFrom
+                print("[reader] 発生源を特定できない回復を記録し、行は出しませんでした: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+                fflush(stdout)
+                debugCapture(kind: "heal_no_source", key: "heal_no_source:\(slot)", rawText: "",
+                             detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct,
+                                      "turn": currentTurn, "knownItem": knownItem ?? "", "knownAbility": knownAbility ?? "",
+                                      "terrain": logFieldTerrain, "weather": logFieldWeather,
+                                      "lastMove": lastMoveName, "lastMoveLabel": lastMoveLabel])
+                return true
+            }
+        }
         if let itemJa = src?.itemJa {
             let srcSide = key.hasPrefix("p2") ? "p2" : "p1"
             emitItemOnce(slot: slot, side: srcSide, speciesEn: speciesEn, itemJa: itemJa)  // 判明登録は applyEvent が行う
@@ -1871,28 +1928,6 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         var line = "|-heal|\(slot): \(speciesEn)|\(hpText)"
         if let src { line += "|[from] \(src.label)" }
         emitLog(line)
-        // 発生源を特定できない回復は、大きさによらず証拠として残す
-        // (行自体は却下しない)。実例: 2026-11-21
-        // battle_20261121_144858、タスキ判明済みのフシギバナに
-        // 発生源のない +33% の幻回復が出たが、55 ポイント以下のため
-        // 従来のガードでは記録が残らなかった。記録は枠ごとに最初の
-        // 1 件のみ (デバッグ上限の圧迫を避ける)
-        if src == nil {
-            let knownItem = key.hasPrefix("p2") ? revealedItems[speciesEn]
-                : ((teamEntries[speciesEn]?["item"] as? String) ?? revealedItems[speciesEn])
-            let knownAbility = key.hasPrefix("p2") ? revealedAbilities[speciesEn]
-                : ((teamEntries[speciesEn]?["ability"] as? String) ?? revealedAbilities[speciesEn])
-            if !healExplained(key: key, slot: slot, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct,
-                              knownItem: knownItem, abilityJa: knownAbility) {
-                print("[reader] 発生源を特定できない回復を記録しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
-                fflush(stdout)
-                debugCapture(kind: "heal_no_source", key: "heal_no_source:\(slot)", rawText: "",
-                             detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct,
-                                      "turn": currentTurn, "knownItem": knownItem ?? "", "knownAbility": knownAbility ?? "",
-                                      "terrain": logFieldTerrain, "weather": logFieldWeather,
-                                      "lastMove": lastMoveName, "lastMoveLabel": lastMoveLabel])
-            }
-        }
     }
     if toPct == 0 { deferFaint(slot: slot, speciesEn: speciesEn) }
     return true
@@ -2813,6 +2848,10 @@ func applyMoveField(_ mvJa: String, side: String) {
         // 追加効果の設置は当たった場合のみ。確定は emitLog 側の
         // ダメージ行フックと設置文の救済に任せ、ここでは保留だけ置く
         pendingHazard = (foe, "Stealth Rock", actionSeq)
+    case "ねがいごと":
+        // 回復は次のターンの終わりに使用側の枠へ届く。発生源の説明
+        // (healExplained) が参照するため、使用ターンだけを記録する
+        wishSetTurn[side] = currentTurn
     case "こうそくスピン", "キラースピン":
         pendingRemoval = (side, actionSeq)
     case "おかたづけ": clearSideHazards(side)
@@ -3921,13 +3960,25 @@ func translateBattleMessage(_ text: String) -> Bool {
             return true
         }
     }
+    // ワイドガードの持続告知: 「味方の周りを ワイドガードが
+    // 守っている！」(種族名を含まない文)。設置は |-sidestart| で
+    // 記録済みで、守られた対象は文から特定できないため消費だけする
+    // (実例: 2026-11-21 battle_20261121_224409、崩れた再読が
+    // 2 回 |-message| に残った)
+    if t.contains("ワイドガード") && t.contains("守っている") { return true }
     // 効果の確認文・交代の指示文 (出来事そのものは別の行で記録済みのため、
     // 本文だけを |-message| に残さないよう消費する)
     // ワイドガードの文はここで消費しない (使用告知は後段の技使用として
     // |move| に、防御の確認文は種族固定後の |-activate| 分岐で処理する)。
     // 以前は確認文として一律に消費していたため使用告知まで巻き込まれ、
     // ワイドガードがログに一切出なかった
-    if !t.contains("ワイドガード") && (t.contains("手助けする") || t.contains("守られた") || t.contains("身を守った") || t.contains("体勢に入った")
+    // 「身を守った」もここで消費しない: まもるで防いだ際の確認文
+    // (「<対象>は 攻撃から 身を守った！」) は、種族固定後の
+    // |-activate| 分岐が記録するのが唯一の経路で、ここで消費すると
+    // 防がれた技の解決行が残らなかった (実例: 2026-11-21
+    // battle_20261121_224409、クチートのまもるに阻まれた
+    // サイコキネシス)
+    if !t.contains("ワイドガード") && (t.contains("手助けする") || t.contains("守られた") || t.contains("体勢に入った")
         || t.contains("戻れ") || t.contains("引っこめた") || t.contains("引っ込めた")
         || t.contains("引つこめた") || t.contains("引つ込めた")
         || t.contains("引っごめた") || t.contains("引つごめた")
@@ -3952,8 +4003,29 @@ func translateBattleMessage(_ text: String) -> Bool {
     // おみとおしでサーナイトナイトの判明が、どちらもルールが無く
     // |-message| に落ちていた)
     if t.contains("はたき落とした") || t.contains("見通し") {
-        if let itJa = findInDict(in: t, itemDict),
-           let owner = speciesDict.first(where: { !$0.ja.isEmpty && t.contains("\($0.ja)の\(itJa)") }) {
+        var itemOwner: (item: String, owner: SpeciesEntry)? = nil
+        if let it = findInDict(in: t, itemDict),
+           let ow = speciesDict.first(where: { !$0.ja.isEmpty && t.contains("\($0.ja)の\(it)") }) {
+            itemOwner = (it, ow)
+        } else {
+            // OCR 崩れ救済: 濁点・小書き仮名を畳んだ looseText 空間で
+            // 持ち物名と「持ち主の持ち物」の並びを探す (実例:
+            // 2026-11-21 battle_20261121_224409、ゴツゴツメットが
+            // ゴッゴツメットに崩れて辞書照合できなかった)
+            let lt = looseText(t)
+            var bestIt: String? = nil
+            for orig in itemDict.values {
+                let lo = looseText(orig)
+                if !lo.isEmpty && lt.contains(lo) && (bestIt == nil || orig.count > bestIt!.count) {
+                    bestIt = orig
+                }
+            }
+            if let it = bestIt,
+               let ow = speciesDict.first(where: { !$0.ja.isEmpty && lt.contains(looseText("\($0.ja)の\(it)")) }) {
+                itemOwner = (it, ow)
+            }
+        }
+        if let (itJa, owner) = itemOwner {
             var anch = anchoredSpeciesForText(owner, text: t)
             // 名前表記は雌雄・フォルムで同一のため、場にいるフォルムへ寄せる
             if !lastSlots.values.contains(where: { $0.speciesEn == anch.en }),
@@ -3991,6 +4063,40 @@ func translateBattleMessage(_ text: String) -> Bool {
                     else { subjSide = oside == "p1" ? "p2" : "p1" }   // おみとおしは相手の道具を見るため、主語は持ち主の反対側
                     emitAbilityOnce(slot: slotFor(side: subjSide, speciesEn: sAnch.en), side: subjSide, speciesEn: sAnch.en, abilityEn: "Frisk")
                 }
+                return true
+            }
+        }
+    }
+    // はたきおとすの持ち物名が OCR 崩れで辞書照合できなかった場合の
+    // 受け皿 (上の分岐は持ち物名が読めることが前提)。「<持ち主>の」
+    // の隣接から持ち主を特定し、判明済みの持ち物で喪失を記録する。
+    // 判明が無ければ喪失の事実だけを記録する (実例: 2026-11-21
+    // battle_20261121_224409、ゴツゴツメットがゴッゴツメットに
+    // 崩れて文が |-message| に残った)
+    if t.contains("はたき落とした") {
+        // 持ち主は「<種族>の」に続き、主語 (攻撃側) は「<種族>は」に続く
+        if let owner = speciesDict.first(where: { !$0.ja.isEmpty && t.contains("\($0.ja)の") && !t.contains("\($0.ja)は") }) {
+            var anch = anchoredSpeciesForText(owner, text: t)
+            if !lastSlots.values.contains(where: { $0.speciesEn == anch.en }),
+               let onField = formeGroup(anch).first(where: { e in lastSlots.values.contains { $0.speciesEn == e.en } }) {
+                anch = onField
+            }
+            let inMine = lastSlots["mineA"]?.speciesEn == anch.en || lastSlots["mineB"]?.speciesEn == anch.en
+            let inOpp = lastSlots["oppA"]?.speciesEn == anch.en || lastSlots["oppB"]?.speciesEn == anch.en
+            var ownerSide: String? = nil
+            if inMine != inOpp { ownerSide = inOpp ? "p2" : "p1" }
+            else if let subj = speciesDict.first(where: { !$0.ja.isEmpty && t.contains("\($0.ja)は") }), subj.en != anch.en {
+                let sInMine = lastSlots["mineA"]?.speciesEn == subj.en || lastSlots["mineB"]?.speciesEn == subj.en
+                let sInOpp = lastSlots["oppA"]?.speciesEn == subj.en || lastSlots["oppB"]?.speciesEn == subj.en
+                if sInMine != sInOpp { ownerSide = sInOpp ? "p1" : "p2" }
+                else if t.contains("相手の") || t.contains("あいての") { ownerSide = "p1" }
+            }
+            if let oside = ownerSide {
+                let oslot = slotFor(side: oside, speciesEn: anch.en)
+                if monStates["\(oside):\(anch.en)"] == nil { monStates["\(oside):\(anch.en)"] = MonState() }
+                let knownItem = oside == "p1" ? (teamEntries[anch.en]?["item"] as? String) : revealedItems[anch.en]
+                if let knownItem { emitItemOnce(slot: oslot, side: oside, speciesEn: anch.en, itemJa: knownItem) }
+                noteItemLost(slot: oslot, side: oside, speciesEn: anch.en)
                 return true
             }
         }
@@ -4513,6 +4619,29 @@ func translateBattleMessage(_ text: String) -> Bool {
     return battleLog.count > before
 }
 
+// ルビ (ふりがな) のボックスを落とす。ゲーム内メッセージでは漢字の
+// 上に小さなルビが表示され (例: 味方→みかた、周り→まわ、守→まも)、
+// 位置順に結合するとルビが本文へ混入して文が崩れる (実例:
+// 2026-11-21 battle_20261121_224409 のワイドガード持続告知)。
+// ルビは本文より明らかに小さく、本文の字の直上に重なるため、
+// その 2 条件がそろう小さいボックスだけを除く
+func dropRubyBoxes(_ boxes: [OcrBox]) -> [OcrBox] {
+    let heights = boxes.map { $0.y1 - $0.y0 }.sorted()
+    guard !heights.isEmpty else { return boxes }
+    let med = heights[heights.count / 2]
+    if med <= 0 { return boxes }
+    return boxes.filter { b in
+        let h = b.y1 - b.y0
+        if h >= 0.62 * med { return true }
+        let isRuby = boxes.contains { o in
+            let oh = o.y1 - o.y0
+            return oh >= 0.8 * med && o.x0 < b.x1 && b.x0 < o.x1
+                && abs(o.y0 - b.y1) <= 0.02
+        }
+        return !isRuby
+    }
+}
+
 func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     let boxes = ocrBoxes(image, x0: 0, y0: 0.66, x1: 1, y1: 1)
     // プレートが見えているとき、その文字だけをメッセージから除く。
@@ -4522,7 +4651,7 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     // 実測: メッセージ行は cy≈0.79/0.86。コマンド時のプレートは名前 ≈0.90 /
     // HP ≈0.95、単体表示時は名前 ≈0.84 / HP ≈0.88 に上がる。
     let activeJa = Set(lastSlots.values.compactMap { s in speciesDict.first { $0.en == s.speciesEn }?.ja })
-    let msgBoxes = boxes.filter { b in
+    let filteredBoxes = boxes.filter { b in
         guard platesVisible else { return true }
         if b.cy > 0.90 && b.cx < 0.30 { return false }   // コマンド時のプレート文字
         if b.cy > 0.82 && b.cx < 0.30 {                   // 単体プレートの残り文字
@@ -4531,7 +4660,8 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
             if activeJa.contains(b.text) { return false }
         }
         return true
-    }.sorted { ($0.cy, $0.x0) < ($1.cy, $1.x0) }
+    }
+    let msgBoxes = dropRubyBoxes(filteredBoxes).sorted { ($0.cy, $0.x0) < ($1.cy, $1.x0) }
     let text = msgBoxes.map { $0.text }.joined(separator: "")
     let norm = normalize(text)
     if norm.count < 4 { return }
@@ -6224,7 +6354,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_2246"
+let readerBuild = "20261121_2309"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
