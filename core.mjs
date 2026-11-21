@@ -199,15 +199,14 @@ function isImmune(atkP, defP, moveObj) {
   return false;
 }
 
-function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves) {
+function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs) {
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
     for (const mv of spec.moves || []) {
       const row = { move: mv, vs: [] };
       if (!mv || !gen.moves.get(String(mv).toLowerCase().replace(/[^a-z0-9]/g, ''))) { for (let j = 0; j < defenders.length; j++) row.vs.push({ status: true }); entry.moveResults.push(row); continue; }
-      const moveObj = new Move(gen, mv);
-      if (critFlags && critFlags[i]) moveObj.isCrit = true;
+      const moveObj = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : undefined, !!(critFlags && critFlags[i]));
       const useField = fieldSingle && singleMoves && singleMoves.includes(mv) ? fieldSingle : field;
       for (let j = 0; j < defenders.length; j++) {
         if (moveObj.category === 'Status') { row.vs.push({ status: true }); continue; }
@@ -235,6 +234,7 @@ function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSi
 }
 
 // state: { mine: [spec, spec], opps: [spec, spec], field: {weather, terrain, attackerSide, defenderSide, oppAttackerSide, oppDefenderSide, tailwindMine, tailwindOpp} }
+//   moveSpecs (任意): { mine: [{技名: 指定値}, ...], opps: [...] } 攻撃側スロットごとの技指定値 (moveSpecInfo 参照)
 //   attackerSide/defenderSide = 自分が攻撃する時 (自分の手助け / 相手の壁)
 //   oppAttackerSide/oppDefenderSide = 相手が攻撃する時 (相手の手助け / 自分の壁)
 // spec: {species, megaSpecies?, mega?, sp, nature, ability, megaAbility?, item, moves[], curHPPercent, boosts, status}
@@ -271,8 +271,8 @@ export function calcMatchup(state, names) {
     defenderSide: state.field.oppDefenderSide || {},
   });
   const out = { results: [], oppResults: [], speeds: { mine: [], opps: [] } };
-  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine);
-  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps);
+  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine);
+  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps);
   out.speeds.mine = mine.map(p => boostedSpe(p, state.field.tailwindMine));
   out.speeds.opps = opps.map(p => boostedSpe(p, state.field.tailwindOpp));
   out.stats = {
@@ -289,15 +289,65 @@ export function withCurHP(spec) {
   return { ...spec, curHP: Math.max(1, Math.floor(p.stats.hp * spec.curHPPercent / 100)) };
 }
 
+/* ---------- 技ごとの指定値 (ヒット数・積み技カウンタ) ---------- */
+
+// 技に「指定できる値」があるかを返す (UI が moveData().spec で引く)。
+//   hits:        連続技のヒット数。2〜5 回の可変ヒット技 (multihit が配列) と、
+//                命中判定がヒットごとの技 (multiaccuracy: トリプルアクセル等)
+//   rageFist:    ふんどのこぶしの被弾回数 0〜6 (威力 50+50×回数、上限 350)
+//   lastRespects: おはかまいりの倒れた味方の数 0〜5 (威力 50+50×数)
+// 固定ヒット数の技 (ダブルキック等) は指定なし (spec: null) で現行どおり。
+// def は指定がない場合の現行デフォルト (calc の Move 既定値と同じ)。
+const _moveSpecCache = {};
+export function moveSpecInfo(name) {
+  if (name in _moveSpecCache) return _moveSpecCache[name];
+  const m = gen.moves.get(String(name).toLowerCase().replace(/[^a-z0-9]/g, ''));
+  let spec = null;
+  if (m) {
+    if (Array.isArray(m.multihit)) {
+      spec = { kind: 'hits', min: m.multihit[0], max: m.multihit[1], def: m.multihit[0] + 1 };
+    } else if (m.multiaccuracy && typeof m.multihit === 'number') {
+      spec = { kind: 'hits', min: 1, max: m.multihit, def: m.multihit };
+    } else if (m.name === 'Rage Fist') {
+      spec = { kind: 'rageFist', min: 0, max: 6, def: 0 };
+    } else if (m.name === 'Last Respects') {
+      spec = { kind: 'lastRespects', min: 0, max: 5, def: 0 };
+    }
+  }
+  _moveSpecCache[name] = spec;
+  return spec;
+}
+
+// 指定値を反映した Move を作る。指定が無い・不正な場合は従来どおり
+// (new Move(gen, name)) と完全に同じものになる。
+function buildMove(moveName, specValue, crit) {
+  const info = moveSpecInfo(moveName);
+  let moveObj = null;
+  if (info && specValue != null && Number.isFinite(+specValue)) {
+    const v = Math.min(info.max, Math.max(info.min, Math.floor(+specValue)));
+    if (info.kind === 'hits') {
+      moveObj = new Move(gen, moveName, { hits: v });
+    } else {
+      // ふんどのこぶし / おはかまいり: 威力 = 50 + 50 × 指定値
+      moveObj = new Move(gen, moveName, { overrides: { basePower: 50 + 50 * v } });
+    }
+  }
+  if (!moveObj) moveObj = new Move(gen, moveName);
+  if (crit) moveObj.isCrit = true;
+  return moveObj;
+}
+
 /* ---------- 推定エンジン用ヘルパー ---------- */
 
 // 1 回の攻撃のダメージロール (16 本) を返す
-// atkSpec/defSpec は toPokemon が受ける spec 形式。opts: {weather, terrain, gameType, crit, atkSide, defSide}
+// atkSpec/defSpec は toPokemon が受ける spec 形式。opts: {weather, terrain, gameType, crit, atkSide, defSide, moveSpec}
+// moveSpec は技ごとの指定値 (moveSpecInfo の kind に対応する数値)。
+// ヒット数を指定した連続技では、ヒットごとのロールを合計した 16 本を返す。
+// 指定がない場合の戻り値は従来と完全に同じ。
 export function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   const atk = toPokemon(atkSpec);
   const def = toPokemon(defSpec);
-  const moveObj = new Move(gen, moveName);
-  if (opts.crit) moveObj.isCrit = true;
+  const moveObj = buildMove(moveName, opts.moveSpec, opts.crit);
   const field = new Field({
     gameType: opts.gameType || 'Doubles',
     weather: opts.weather || undefined,
@@ -310,6 +360,18 @@ export function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   try {
     const r = calculate(gen, atk, def, moveObj, field);
     const d = r.damage;
+    const info = moveSpecInfo(moveName);
+    if (opts.moveSpec != null && info && info.kind === 'hits' &&
+        Array.isArray(d) && Array.isArray(d[0])) {
+      // ヒットごとのロール (ヒット数 × 16) を要素ごとに合計し、
+      // 合計ダメージの 16 本として返す
+      const totals = new Array(16).fill(0);
+      for (const hitRolls of d) {
+        if (!Array.isArray(hitRolls)) continue;
+        for (let i = 0; i < 16; i++) totals[i] += hitRolls[i] || 0;
+      }
+      return { rolls: totals };
+    }
     return { rolls: Array.isArray(d) ? d : [d] };
   } catch (e) {
     return { rolls: [], error: e.message };
@@ -339,6 +401,8 @@ export function statTable(speciesName) {
 }
 
 // 技の基本データ (推定エンジンと範囲技判定用)
+// spec は技ごとの指定値のメタ情報 (moveSpecInfo と同じ形)。
+// 指定できる技では {kind, min, max, def}、それ以外は null。
 export function moveData(name) {
   const m = gen.moves.get(String(name).toLowerCase().replace(/[^a-z0-9]/g, ''));
   if (!m) return null;
@@ -346,5 +410,6 @@ export function moveData(name) {
     name: m.name, category: m.category, type: m.type, target: m.target,
     priority: m.priority || 0, multihit: m.multihit || null,
     fixedDamage: m.fixedDamage || null, basePower: m.basePower,
+    spec: moveSpecInfo(name),
   };
 }
