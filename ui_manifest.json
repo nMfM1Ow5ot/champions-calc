@@ -4,7 +4,7 @@
   "audit_items_ja.mjs": "b536fff2ca001daed9e79d2c8859484339f41e32c702bade0d5c62dd39136b4a",
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
   "build_species_gender.py": "36e4d0d6f2cf2125b3e7d575660c25afc9ffaaf7fac45a51738cca99106adaa3",
-  "bundle.mjs": "68209ac1b933869bef3ed8369cc5ade6a3c9bb94f0bcb90167c346374171834f",
+  "bundle.mjs": "2a62c08c4234c388796916e4ced4106b2b5fc2193fc2d10085b74d4c16a415b2",
   "check/apple_stubs.swift": "b54bf022428e2a6a30a35b206a14e01f276a20866d04376928109e4bcd6da175",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
   "core.mjs": "4ed2ac09601becc7c0f1ff235ebe4bbb73b887fe8a84294cd6a118cf5336832a",
@@ -23,7 +23,7 @@
   "data/species_types.json": "ce11f9ae2d01f8a6061b473ed9260b61c95c1c3d58c40e5231cfde9df05623ec",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "1cf58a3d1ff20870453c4f8dd926e02f888c3896fe20110c0a142784523f3bd4",
-  "estimate_engine.mjs": "58cd9db8824e52dae931fad2fc2eb317892ffee8171443bd23575549f00213ef",
+  "estimate_engine.mjs": "f6abc4c793fc166dfc07a6c3166710e46af2fa7a1cf69f87526d6f29987896d6",
   "fetch_champions_dex.mjs": "da99127c5b06a757aab42596b2ac7b8ba3e7d13ff205aa479f4acb6123677b38",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
   "fetch_species_abilities.mjs": "1f1221256a11ead833ec1a18a73e65bdb71c70f651b7bc800ed7d7db7afc1603",
@@ -37,11 +37,11 @@
   "serve.py": "eb78b70119cda457a1b2b149b425085aae5c68a695eb2f638d9232129ec61f82",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
-  "tests/bayes_equiv_golden.json": "a08ade191ff31a576728d32f419e3383ce3828cf128efac6fbcf9d15efabcd7d",
+  "tests/bayes_equiv_golden.json": "35e63c0e1c2e1e78615805872faebc67ca997df35a6500ba8487e66924b99d30",
   "tests/bayes_sim.mjs": "0a1221f18ccc0ad0b974ff2719cc3e6b2d30e1e1d0f8e5f89b8cf80943420658",
   "ui.html": "d3664984ba5695d709faede1f48cf9a044b1c88dd3d6a6c6e948f9bc4bb0add3",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_0010"
+ "rev": "20261122_0014"
 }
