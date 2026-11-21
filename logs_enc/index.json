@@ -1491,9 +1491,49 @@
    "uploaded_at": "2026-11-22T05:12:16.706155+09:00"
   },
   {
+   "name": "battle_20261122_050512_debug11.jpg",
+   "sha256": "d2f60827fa5fdc42c2aa231240369a72a6a6c5aca361b3fc6c4432d071fe6b18",
+   "uploaded_at": "2026-11-22T05:13:00.417727+09:00"
+  },
+  {
+   "name": "battle_20261122_050512_debug11.json",
+   "sha256": "ec561c73392f4f7f1d3d9acdaf635ab11dcba963901a2fd5e5f40f986753abce",
+   "uploaded_at": "2026-11-22T05:13:02.271478+09:00"
+  },
+  {
+   "name": "battle_20261122_050512_debug12.jpg",
+   "sha256": "36d790ecf715bcd974326ce41437d0946b77973cee3684f38c510c4f5ca7affb",
+   "uploaded_at": "2026-11-22T05:13:05.156736+09:00"
+  },
+  {
+   "name": "battle_20261122_050512_debug12.json",
+   "sha256": "575e597526edb64bf5e2287400f0d057891af2227ee5d68f409eb5e8f3796147",
+   "uploaded_at": "2026-11-22T05:13:07.030393+09:00"
+  },
+  {
+   "name": "battle_20261122_050512_debug13.jpg",
+   "sha256": "a42fbe62d769d828893af31a1541b38a71a617bb4b53e7fb4e7821a6e3d50809",
+   "uploaded_at": "2026-11-22T05:13:10.464065+09:00"
+  },
+  {
+   "name": "battle_20261122_050512_debug13.json",
+   "sha256": "a8e66295068e4b58636d40827962d6a6f22a70172977df5a27bcdb7566923789",
+   "uploaded_at": "2026-11-22T05:13:12.317144+09:00"
+  },
+  {
+   "name": "battle_20261122_050512_final.log",
+   "sha256": "c518a02fe623ba6162b5b2617e556756154e7c9120aa7bb6592dd6bc62f828be",
+   "uploaded_at": "2026-11-22T05:13:14.149758+09:00"
+  },
+  {
+   "name": "battle_20261122_050512_final_protocol.log",
+   "sha256": "31bac1f408f9b3255997f3381b04379b582f488c57f7236cc280737f1dcedb49",
+   "uploaded_at": "2026-11-22T05:13:15.903736+09:00"
+  },
+  {
    "name": "battle_20261122_050512_inference.json",
-   "sha256": "5c8bb4d5db1197a393021379cc4b51605f3d764d965156e601d5dda8d484698d",
-   "uploaded_at": "2026-11-22T05:12:19.386060+09:00"
+   "sha256": "e0bcffd211eaf570f7ddbbc1078f2e72a865cd732be435c37f532f6405c77f32",
+   "uploaded_at": "2026-11-22T05:13:18.965360+09:00"
   },
   {
    "name": "battle_20261122_050512_interrupted.log",
