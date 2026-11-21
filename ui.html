@@ -3107,9 +3107,23 @@ function attachEstimate(spec) {
   spec.estMovePred = view && view.bayes ? (view.movePred || null) : null;
   if (!view) return;
   if (view.bayes) {
-    // MAP 型をそのまま採用する (性格は手動で直された場合はそちらを優先)
+    // 性格は MAP 型のものを採用する (手動で直された場合はそちらを優先)。
+    // 計算用 SP は MAP 型のものをそのまま使わず、推定レンジの中で実数値が
+    // 最大になる候補の SP を能力ごとに使う (相手を最も強い前提で計算する、
+    // フォールバック側と同じ規約)。候補は事後 90% の信用集合から取り、
+    // パネルの性格と一致する候補を優先する
     if (!spec.estManual || !spec.estManual.nature) { spec.nature = view.map.nature; markCorrected(spec, '性格'); }
-    for (const k of Object.keys(view.sp)) spec.sp[k] = view.map.sp[k] || 0;
+    const cov = bayesCover(spec.species);
+    const coverCands = cov && Array.isArray(cov.cover) ? cov.cover : [];
+    for (const k of Object.keys(view.sp)) {
+      const valOf = c => (spec.mega && c.valuesMega) ? c.valuesMega[k] : (c.values ? c.values[k] : null);
+      const withVal = coverCands.filter(c => valOf(c) != null);
+      const sameNature = withVal.filter(c => c.nature === spec.nature);
+      const pool = sameNature.length ? sameNature : withVal;
+      let best = null;
+      for (const c of pool) if (!best || valOf(c) > valOf(best)) best = c;
+      spec.sp[k] = best ? (best.sp[k] || 0) : view.sp[k][1];
+    }
     markCorrected(spec, 'EV');
     return;
   }
