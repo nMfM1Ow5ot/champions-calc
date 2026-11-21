@@ -15,7 +15,7 @@
   "data/names_index.json": "8fc270e04e42c28610c7cc7b5904fcd621c7d17327f7c1cfc767d334f16bee11",
   "data/names_ja.json": "9b3ec39dd6aa9e7752b115f8441c0a4934de8187a07f0bd9c304d035661c3408",
   "data/pokedb_parsed.json": "bba36692be2b33ff42edeb7c62c8d0cd9b9c3cf2c123a7c95e49bec3b7c3fe63",
-  "data/preview_features.json": "c733fc83f586bdef9cab092e5aa1c69d99dbc9180ccd5ea6e897654175cc4805",
+  "data/preview_features.json": "83c8db70abebe997e8d1de44ffa14d222ba110290d24e628d2fc1527495e27a6",
   "data/regulation.json": "7efedfe7d41be04452c974d699af484e8cc7837c4ac33227e78198a0982149db",
   "data/species_abilities.json": "0f541543571d04385c8b54b7aca5e8f57bcebdc216177684c14b5aeb02a4c8cf",
   "data/species_moves.json": "e150e7645889ede9cf0ca9d83b660dce6263754511fe883b875052b026fb0948",
@@ -40,5 +40,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_1825"
+ "rev": "20261121_1829"
 }
