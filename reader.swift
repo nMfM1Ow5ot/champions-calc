@@ -2356,7 +2356,7 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
         // 主語が解決できないエントリでも、確度の高い信号だけは救済する。
         // ランク変化は直近ターンのエントリだけ (古いエントリからの適用は
         // 実況経路の一本化方針に反し、二重適用の危険があるため)
-        _ = salvageFromText(text, allowBoost: turn >= currentTurn - 1)
+        _ = salvageFromText(text, allowBoost: turn >= currentTurn - 1, fromLogScreen: true)
         if debugMode { print("    -> 種族名が本文に無いため取り込めませんでした") }
         return
     }
@@ -2443,27 +2443,63 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
     checkStatusText(text: text, side: side, speciesEn: sp.en, slot: slot)
     // ランク変化はここでは適用しない: 実況メッセージで取り込み済みの変化が
     // ログ画面のエントリから二重に適用されてしまうため (ログが 2 重に出る
-    // 原因の 1 つ)。ランク変化の取り込みは実況メッセージ経路に一本化する
-    checkFieldText(text: text)
+    // 原因の 1 つ)。ランク変化の取り込みは実況メッセージ経路に一本化する。
+    // 天候・フィールドも、古いエントリの開始/終了文で現行の状態を
+    // 上書きしないよう fromLogScreen を伝える (setter 側で stale 判定)
+    checkFieldText(text: text, fromLogScreen: true)
 }
 
 // 天候・フィールドの setter (ログ行は変化したときだけ出す)
-func setWeather(_ ui: String, _ logName: String) {
+func setWeather(_ ui: String, _ logName: String, via text: String = "", stale: Bool = false) {
     if logFieldWeather == ui { return }
+    // ログ画面経由の古い開始文は、実況で追えている現行の天候を上書きしない
+    // (地形側と同じ再適用の穴。現行が空のときの復旧は従来どおり行う)
+    if stale && !logFieldWeather.isEmpty {
+        print("[field] ログ画面の古い天候文を採用しませんでした: \(ui) (現在: \(logFieldWeather))")
+        debugCapture(kind: "weather_change", key: "weather_change_blocked:\(ui)", rawText: text,
+                     detail: ["from": logFieldWeather, "to": ui, "turn": currentTurn, "blocked": true])
+        return
+    }
+    let prev = logFieldWeather
     fieldWeatherSetAt = Date()
     emitLog("|-weather|\(logName)")  // 状態への反映は applyEvent が行う
     attributeFieldAbilities()
+    // 天候の変化は根拠テキストごと残す (変化の経路を後から特定できるように)
+    if !text.isEmpty {
+        debugCapture(kind: "weather_change", key: "weather_change:\(currentTurn):\(ui)", rawText: text,
+                     detail: ["from": prev, "to": ui, "turn": currentTurn])
+    }
 }
-func clearWeather() {
+func clearWeather(stale: Bool = false) {
     if logFieldWeather.isEmpty { return }
+    if stale {
+        print("[field] ログ画面の古い天候終了文で現行の天候を消しませんでした: \(logFieldWeather)")
+        return
+    }
     emitLog("|-weather|none")
 }
-func setTerrain(_ ui: String) {
+func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
     if logFieldTerrain == ui { return }
+    // ログ画面経由の古い開始文は、実況で追えている現行の地形を上書きしない
+    // (実例: 2026-11-21 battle_20261121_161334、対戦開始時のサイコフィールドの
+    //  文がターン2終了時に再適用され、グラスフィールド下でサイコシードの
+    //  消費まで補完された。現行が空のときの復旧は従来どおり行う)
+    if stale && !logFieldTerrain.isEmpty {
+        print("[field] ログ画面の古い地形文を採用しませんでした: \(ui) (現在: \(logFieldTerrain))")
+        debugCapture(kind: "terrain_change", key: "terrain_change_blocked:\(ui)", rawText: text,
+                     detail: ["from": logFieldTerrain, "to": ui, "turn": currentTurn, "blocked": true])
+        return
+    }
+    let prev = logFieldTerrain
     fieldTerrainSetAt = Date()
     emitLog("|-fieldstart|move: \(ui) Terrain")  // 状態への反映は applyEvent が行う
     attributeFieldAbilities()
     retroSeedCheck(terrain: ui)
+    // 地形の変化は根拠テキストごと残す (変化の経路を後から特定できるように)
+    if !text.isEmpty {
+        debugCapture(kind: "terrain_change", key: "terrain_change:\(currentTurn):\(ui)", rawText: text,
+                     detail: ["from": prev, "to": ui, "turn": currentTurn])
+    }
 }
 
 // フィールドが張られた瞬間、その地形に対応するシードを持つ場のポケモンは
@@ -2707,8 +2743,12 @@ func awaitingReplacement(_ platePrefix: String, _ side: String) -> Bool {
     let onField = Set(lastSlots.filter { $0.key.hasPrefix(platePrefix) }.map { $0.value.speciesEn })
     return seen.contains { !onField.contains($0) && (monStates["\(side):\($0)"]?.hpPercent ?? 0) > 0 }
 }
-func clearTerrain() {
+func clearTerrain(stale: Bool = false) {
     if logFieldTerrain.isEmpty { return }
+    if stale {
+        print("[field] ログ画面の古い地形終了文で現行の地形を消しませんでした: \(logFieldTerrain)")
+        return
+    }
     let old = logFieldTerrain
     emitLog("|-fieldend|move: \(old) Terrain")  // 状態への反映は applyEvent が行う
 }
@@ -2946,14 +2986,16 @@ func flushHeldBoostsTimeout() {
     }
 }
 
-// 天候・フィールドの開始/終了の本文パターン
+// 天候・フィールドの開始/終了の本文パターン。
+// fromLogScreen=true の文は過去のエントリの再読であり得るため、setter 側で
+// 現行の状態を上書きしない (setTerrain/setWeather の stale 引数を参照)
 @discardableResult
-func checkFieldText(text: String) -> Bool {
+func checkFieldText(text: String, fromLogScreen: Bool = false) -> Bool {
     // フィールドの終了文 (実機の文面は漢字混じり。OCR 崩れにも耐えるよう緩く照合する)
-    if (text.contains("不思議") || text.contains("フィールド")) && (text.contains("なくな") || text.contains("消え") || text.contains("きえ") || text.contains("きれ")) { clearTerrain(); return true }
-    if text.contains("霧が") && text.contains("はれた") { clearTerrain(); return true }
-    if text.contains("電気が") && text.contains("消えた") { clearTerrain(); return true }
-    if text.contains("草が") && (text.contains("なくな") || text.contains("消え") || text.contains("きえ")) { clearTerrain(); return true }
+    if (text.contains("不思議") || text.contains("フィールド")) && (text.contains("なくな") || text.contains("消え") || text.contains("きえ") || text.contains("きれ")) { clearTerrain(stale: fromLogScreen); return true }
+    if text.contains("霧が") && text.contains("はれた") { clearTerrain(stale: fromLogScreen); return true }
+    if text.contains("電気が") && text.contains("消えた") { clearTerrain(stale: fromLogScreen); return true }
+    if text.contains("草が") && (text.contains("なくな") || text.contains("消え") || text.contains("きえ")) { clearTerrain(stale: fromLogScreen); return true }
     // トリックルーム (地形・天候とは別枠のフィールド効果)
     if text.contains("時空") && (text.contains("ゆがめ") || text.contains("歪め")) {
         if !logTrickRoom { emitLog("|-fieldstart|move: Trick Room") }
@@ -2966,35 +3008,37 @@ func checkFieldText(text: String) -> Bool {
     // フィールドの開始文 (特性サージ系は種族名・特性名が出ず、この文だけが出る。
     // 「足下が不思議な感じになった」はサイコフィールド専用の文。
     // 「感じになった」はこの文にしか出ないため、足下・不思議が OCR 崩れ
-    // しても拾う (実例: 2026-11-20「下か不態議な感じになった！」の漏れ))
-    if text.contains("感じ") && text.contains("なった") { setTerrain("Psychic"); return true }
-    if text.contains("足下が") && text.contains("不思議な感じに") { setTerrain("Psychic"); return true }
-    if (text.contains("足下に") || text.contains("足下が")) && text.contains("電気が") && text.contains("かけめぐ") { setTerrain("Electric"); return true }
-    if (text.contains("足下に") || text.contains("足下が") || text.contains("足元")) && text.contains("草が") && (text.contains("生い茂") || text.contains("おいしげ") || text.contains("しげった") || text.contains("茂った")) { setTerrain("Grassy"); return true }
-    if text.contains("足下が") && text.contains("霧に") && text.contains("包まれ") { setTerrain("Misty"); return true }
+    // しても拾う (実例: 2026-11-20「下か不態議な感じになった！」の漏れ)。
+    // ただし「感じ+なった」だけでは広すぎるため、地形文らしい断片
+    // (不思議/議/足下/下が/下か) の併存を必須にする)
+    if text.contains("感じ") && text.contains("なった") && (text.contains("不思議") || text.contains("議") || text.contains("足下") || text.contains("下が") || text.contains("下か")) { setTerrain("Psychic", via: text, stale: fromLogScreen); return true }
+    if text.contains("足下が") && text.contains("不思議な感じに") { setTerrain("Psychic", via: text, stale: fromLogScreen); return true }
+    if (text.contains("足下に") || text.contains("足下が")) && text.contains("電気が") && text.contains("かけめぐ") { setTerrain("Electric", via: text, stale: fromLogScreen); return true }
+    if (text.contains("足下に") || text.contains("足下が") || text.contains("足元")) && text.contains("草が") && (text.contains("生い茂") || text.contains("おいしげ") || text.contains("しげった") || text.contains("茂った")) { setTerrain("Grassy", via: text, stale: fromLogScreen); return true }
+    if text.contains("足下が") && text.contains("霧に") && text.contains("包まれ") { setTerrain("Misty", via: text, stale: fromLogScreen); return true }
     // 天候の終了文 (晴れの実機文面は「日差しが元に戻った！」。
     // 『弱く』だけを条件にしていたため実機の文面では成立せず、晴れが
     // 解除されないまま残った。実例: 2026-11-21 battle_20261121_155801
     // 「ひざ日差しが元に戻った！」— 先頭に読みの重複が付いた崩れでも
     // 『戻った』で拾う)
-    if (text.contains("日差し") || text.contains("ひざし")) && (text.contains("戻った") || text.contains("もどった") || text.contains("弱く")) { clearWeather(); return true }
-    if text.contains("雨") && (text.contains("やんだ") || text.contains("止んだ") || text.contains("上がった")) { clearWeather(); return true }
-    if (text.contains("あめ") && (text.contains("やんだ") || text.contains("おさまった"))) { clearWeather(); return true }
-    if (text.contains("砂あらし") || text.contains("すなあらし")) && (text.contains("おさま") || text.contains("弱ま")) { clearWeather(); return true }
-    if text.contains("雪") && (text.contains("やんだ") || text.contains("止んだ")) { clearWeather(); return true }
-    if text.contains("ゆき") && text.contains("やんだ") { clearWeather(); return true }
+    if (text.contains("日差し") || text.contains("ひざし")) && (text.contains("戻った") || text.contains("もどった") || text.contains("弱く")) { clearWeather(stale: fromLogScreen); return true }
+    if text.contains("雨") && (text.contains("やんだ") || text.contains("止んだ") || text.contains("上がった")) { clearWeather(stale: fromLogScreen); return true }
+    if (text.contains("あめ") && (text.contains("やんだ") || text.contains("おさまった"))) { clearWeather(stale: fromLogScreen); return true }
+    if (text.contains("砂あらし") || text.contains("すなあらし")) && (text.contains("おさま") || text.contains("弱ま")) { clearWeather(stale: fromLogScreen); return true }
+    if text.contains("雪") && (text.contains("やんだ") || text.contains("止んだ")) { clearWeather(stale: fromLogScreen); return true }
+    if text.contains("ゆき") && text.contains("やんだ") { clearWeather(stale: fromLogScreen); return true }
     // 天候の開始文 (実機の文面: 「日差しが強くなった」「雨が降り始めた」等。
     // 従来は ひざし/あめ 等の平仮名だけで照合しており、漢字表記に一致せず
     // ひでり等の天候を拾えていなかった)
-    if (text.contains("日差し") || text.contains("ひざし")) && text.contains("強く") { setWeather("Sun", "Sunny Day"); return true }
-    if text.contains("雨") && (text.contains("降り始") || text.contains("降ってき")) { setWeather("Rain", "Rain Dance"); return true }
-    if text.contains("あめ") && (text.contains("ふりはじめ") || text.contains("ふってき")) { setWeather("Rain", "Rain Dance"); return true }
-    if (text.contains("砂あらし") || text.contains("すなあらし")) && (text.contains("吹き始") || text.contains("吹き荒") || text.contains("ふきあれ")) { setWeather("Sand", "Sandstorm"); return true }
-    if text.contains("雪") && (text.contains("降り始") || text.contains("降ってき")) { setWeather("Snow", "Snow"); return true }
-    if text.contains("ゆき") && (text.contains("ふりはじめ") || text.contains("ふってき")) { setWeather("Snow", "Snow"); return true }
+    if (text.contains("日差し") || text.contains("ひざし")) && text.contains("強く") { setWeather("Sun", "Sunny Day", via: text, stale: fromLogScreen); return true }
+    if text.contains("雨") && (text.contains("降り始") || text.contains("降ってき")) { setWeather("Rain", "Rain Dance", via: text, stale: fromLogScreen); return true }
+    if text.contains("あめ") && (text.contains("ふりはじめ") || text.contains("ふってき")) { setWeather("Rain", "Rain Dance", via: text, stale: fromLogScreen); return true }
+    if (text.contains("砂あらし") || text.contains("すなあらし")) && (text.contains("吹き始") || text.contains("吹き荒") || text.contains("ふきあれ")) { setWeather("Sand", "Sandstorm", via: text, stale: fromLogScreen); return true }
+    if text.contains("雪") && (text.contains("降り始") || text.contains("降ってき")) { setWeather("Snow", "Snow", via: text, stale: fromLogScreen); return true }
+    if text.contains("ゆき") && (text.contains("ふりはじめ") || text.contains("ふってき")) { setWeather("Snow", "Snow", via: text, stale: fromLogScreen); return true }
     if text.contains("フィールド") && text.contains("ひろが") {
         for (ja, en) in [("エレキ", "Electric"), ("グラス", "Grassy"), ("ミスト", "Misty"), ("サイコ", "Psychic")] where text.contains(ja) {
-            setTerrain(en)
+            setTerrain(en, via: text, stale: fromLogScreen)
             return true
         }
     }
@@ -3422,9 +3466,9 @@ func salvageItem(in t: String) -> Bool {
     return true
 }
 
-func salvageField(in t: String) -> Bool {
+func salvageField(in t: String, fromLogScreen: Bool = false) -> Bool {
     // 天気・フィールドは正規の照合をそのまま使う (setter は冪等)
-    if checkFieldText(text: t) { return true }
+    if checkFieldText(text: t, fromLogScreen: fromLogScreen) { return true }
     // サイドコンディションの告知 (種族に依存しない)。開始/終了の語が
     // 明確な場合だけ反映し、重複は lastSideCondAt で抑える (正規経路と共有)
     let scSide = (t.contains("相手") || t.contains("あいて")) ? "p2" : "p1"
@@ -3466,9 +3510,9 @@ func salvageField(in t: String) -> Bool {
 // allowBoost=false は古いログエントリ用: ランク変化は実況経路に一本化する
 // 方針 (translateLogEntry の末尾コメント参照) のため、古いエントリからは
 // 適用しない
-func salvageFromText(_ text: String, allowBoost: Bool = true) -> Bool {
+func salvageFromText(_ text: String, allowBoost: Bool = true, fromLogScreen: Bool = false) -> Bool {
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
-    if salvageField(in: t) { return true }
+    if salvageField(in: t, fromLogScreen: fromLogScreen) { return true }
     if allowBoost && salvageBoost(in: t) { return true }
     if salvageStatus(in: t) { return true }
     if salvageItem(in: t) { return true }
@@ -3933,7 +3977,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     //  日本語のまま漏れた。通常形は種族解決後の「守られている」分岐が処理する)
     if sp == nil && t.contains("守られている") {
         for (ja, en) in [("サイコフィールド", "Psychic"), ("エレキフィールド", "Electric"), ("グラスフィールド", "Grassy"), ("ミストフィールド", "Misty")] where t.contains(ja) {
-            setTerrain(en)
+            setTerrain(en, via: t)
             break
         }
         return true
@@ -3967,6 +4011,22 @@ func translateBattleMessage(_ text: String) -> Bool {
     else if t.contains("味方の") || t.contains("じぶんの") { side = "p1" }
     else { side = inOpp && !inMine ? "p2" : "p1" }
     if inMine != inOpp { side = inOpp ? "p2" : "p1" }
+    // オーラ特性の告知: 「(相手の) <種族>は <オーラ名>を 放っている！」
+    // (フェアリーオーラ/ダークオーラ/オーラブレイク。場に出た直後に
+    //  表示される)。従来はこの形の分岐自体が無く、読み重なりの崩れで
+    //  帰属も決まらないまま |-message| に落ち、特性が最後まで記録
+    //  されなかった (実例: 2026-11-21 battle_20261121_161334、
+    //  「あいて相手のフラエッテははなフェアリーオーラを放っている！」)。
+    //  オーラ名と「放って」の併存はこの告知にしか現れないため、
+    //  崩れに強い部分一致で拾う
+    if t.contains("放って") && (t.contains("オーラを") || t.contains("オーラブレイク")) {
+        let auras: [(String, String)] = [("フェアリーオーラ", "Fairy Aura"), ("ダークオーラ", "Dark Aura"), ("オーラブレイク", "Aura Break")]
+        if let aura = auras.first(where: { t.contains($0.0) }) {
+            let aslot = slotFor(side: side, speciesEn: sp.en)
+            emitAbilityOnce(slot: aslot, side: side, speciesEn: sp.en, abilityEn: aura.1)
+            return true
+        }
+    }
     // 救済登録: 種族が確実に解決できた (緩い照合ではない) のに、その側の
     // 場にいない場合、その側の空き枠がちょうど 1 つだけなら、その枠へ
     // 繰り出しとして登録してから帰属させる。プレート未確定 (遮蔽・OCR
@@ -4083,7 +4143,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // フィールドに守られた (優先度技の無効化): フィールド状態の裏付けにもなる
     if t.contains("守られている") {
         for (ja, en) in [("サイコフィールド", "Psychic"), ("エレキフィールド", "Electric"), ("グラスフィールド", "Grassy"), ("ミストフィールド", "Misty")] where t.contains(ja) {
-            setTerrain(en)
+            setTerrain(en, via: t)
             emitLog("|-activate|\(slot): \(sp.en)|move: \(en) Terrain")
             return true
         }
@@ -5920,7 +5980,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1636"
+let readerBuild = "20261121_1653"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
