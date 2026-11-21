@@ -1352,54 +1352,203 @@ function resolveAbility(name) {
   const a = gen.abilities.get(idOf(t));
   return a ? a.name : null;
 }
-// Showdown 書き出しの先頭行から種族を解決する。末尾の性別表記 (M)/(F)
-// と、ニックネーム形式「ニックネーム (種族名)」に対応する。性別で
-// フォルムが分かれる種族 (イダイトウ・イエッサン等) は、(F) なら
-// -F フォルムを優先し、無ければ通常フォルムで解決する
-function resolveSpeciesHead(raw) {
-  let t = String(raw || '').trim();
-  let gender = null;
-  const gm = t.match(/\s*\(([MF])\)\s*$/i);
-  if (gm) { gender = gm[1].toUpperCase(); t = t.slice(0, gm.index).trim(); }
-  const nm = t.match(/\(([^()]+)\)\s*$/);
-  if (nm && !resolveSpecies(t)) t = nm[1].trim();
-  if (gender === 'F') return resolveSpecies(t + '-F') || resolveSpecies(t);
-  if (gender === 'M') return resolveSpecies(t) || resolveSpecies(t + '-M');
-  return resolveSpecies(t);
+// ---- Showdown の読み込み (sim/teams.ts の Teams.import /
+// parseExportedTeamLine / unpack を可能な限り再現する) ----
+// 対応形式: 書き出しテキスト形式・JSON 形式・packed 形式。
+// Champions 固有の拡張として、EVs 欄の SP 読み (全て 32 以下で合計 66
+// 以下なら SP として読む) と SPs: 行は残す。IV は Champions が固定の
+// ため読み捨てる
+const STAT_ID_BY_TOKEN = { hp: 'hp', atk: 'atk', def: 'def', spa: 'spa', spd: 'spd', spe: 'spe' };
+function parseStatLine(s) {
+  // Showdown の EVs/IVs 行: "252 Atk / 4 SpD" を [statId, value] の列にする
+  const parts = [];
+  for (const part of String(s).split('/')) {
+    const toks = part.trim().split(' ');
+    if (toks.length < 2) continue;
+    const k = STAT_ID_BY_TOKEN[idOf(toks[1])];
+    const v = parseInt(toks[0], 10);
+    if (k && !Number.isNaN(v)) parts.push([k, v]);
+  }
+  return parts;
 }
-function parseSet(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
-  if (!lines.length) return null;
-  const out = { moves: [], sp: {} };
-  const head = lines[0].split('@');
-  out.species = resolveSpeciesHead(head[0]);
-  if (!out.species) return null;
-  if (head[1]) out.item = head[1].trim();
-  const statMap = { HP: 'hp', Atk: 'atk', Def: 'def', SpA: 'spa', SpD: 'spd', Spe: 'spe' };
-  for (const line of lines.slice(1)) {
-    let m;
-    if ((m = line.match(/^Ability:\s*(.+)$/i))) out.ability = resolveAbility(m[1]) || m[1].trim();
-    else if ((m = line.match(/^Tera Type:\s*(.+)$/i))) { const tt = TERA_TYPES.find(t => t.toLowerCase() === m[1].trim().toLowerCase()); if (tt) out.teraType = tt; }
-    else if ((m = line.match(/^(\w+)\s+Nature$/i))) out.nature = m[1];
-    else if ((m = line.match(/^SPs:\s*(.+)$/i))) for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) out.sp[statMap[p[2]]] = Math.min(32, +p[1]); }
-    else if ((m = line.match(/^EVs:\s*(.+)$/i))) {
-      const parts = [];
-      for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) parts.push([statMap[p[2]], +p[1]]); }
-      // Champions 形式の書き出しでは EVs 欄に SP (各 0-32、合計 66) が
-      // そのまま入っていることがある。全て 32 以下で合計 66 以下なら
-      // SP として読み、通常の EV (合計 510 前後) は従来どおり 8 で割る
-      const total = parts.reduce((a, [, v]) => a + v, 0);
-      const asSp = parts.length > 0 && parts.every(([, v]) => v <= 32) && total <= 66;
-      for (const [k, v] of parts) out.sp[k] = asSp ? Math.min(32, v) : Math.min(32, Math.round(v / 8));
+function parseExportedTeamLine(line, isFirstLine, set) {
+  if (isFirstLine) {
+    // Showdown は ' @ ' で分割する。区切りに空白が無い手書き入力にも
+    // 対応するため、見つからなければ '@' でも分割する (拡張)
+    let item = '';
+    let at = line.indexOf(' @ ');
+    if (at >= 0) { item = line.slice(at + 3); line = line.slice(0, at); }
+    else { at = line.indexOf('@'); if (at >= 0) { item = line.slice(at + 1); line = line.slice(0, at); } }
+    if (item) {
+      item = item.trim();
+      if (idOf(item) === 'noitem') item = '';
+      if (item) set.item = resolveItem(item) || item;
     }
-    else if (line.startsWith('-')) { const mv = resolveMove(line.slice(1)); if (mv) out.moves.push(mv); }
+    if (line.endsWith(' (M)')) { set.gender = 'M'; line = line.slice(0, -4); }
+    if (line.endsWith(' (F)')) { set.gender = 'F'; line = line.slice(0, -4); }
+    if (line.endsWith(')') && line.includes('(')) {
+      const open = line.indexOf('(');
+      set.speciesRaw = line.slice(open + 1, -1).trim();
+      set.name = line.slice(0, open).trim();
+    } else {
+      set.speciesRaw = line.trim();
+      set.name = '';
+    }
+    return;
+  }
+  if (line.startsWith('Trait: ')) { const a = line.slice(7).trim(); set.ability = resolveAbility(a) || a; }
+  else if (line.startsWith('Ability: ')) { const a = line.slice(9).trim(); set.ability = resolveAbility(a) || a; }
+  else if (line === 'Shiny: Yes') set.shiny = true;
+  else if (line.startsWith('Level: ')) set.level = +line.slice(7);
+  else if (line.startsWith('Happiness: ')) set.happiness = +line.slice(11);
+  else if (line.startsWith('Pokeball: ')) { /* UI では使わない */ }
+  else if (line.startsWith('Hidden Power: ')) set.hpType = line.slice(14).trim();
+  else if (line.startsWith('Tera Type: ')) { const tt = TERA_TYPES.find(t => t.toLowerCase() === line.slice(11).replace(/[^a-zA-Z0-9]/g, '').toLowerCase()); if (tt) set.teraType = tt; }
+  else if (line === 'Gigantamax: Yes') set.gigantamax = true;
+  else if (line.startsWith('Dynamax Level: ')) { /* UI では使わない */ }
+  else if (line.startsWith('EVs: ')) set.evParts = parseStatLine(line.slice(5));
+  else if (line.startsWith('SPs: ')) set.spParts = parseStatLine(line.slice(5));
+  else if (line.startsWith('IVs: ')) { /* Champions は IV 固定のため読み捨てる */ }
+  else if (/^[A-Za-z]+ (N|n)ature/.test(line)) {
+    let ni = line.indexOf(' Nature');
+    if (ni === -1) ni = line.indexOf(' nature');
+    if (ni !== -1) { const n = line.slice(0, ni); if (n !== 'undefined') set.nature = n; }
+  }
+  else if (line.startsWith('-') || line.startsWith('~')) {
+    let mv = line.slice(line.charAt(1) === ' ' ? 2 : 1).trim();
+    if (mv.startsWith('Hidden Power [')) mv = 'Hidden Power ' + mv.slice(14, -1);
+    const r = resolveMove(mv) || (mv.startsWith('Hidden Power ') ? resolveMove('Hidden Power') : null);
+    if (r) set.moves.push(r);
+  }
+}
+// 解析途中のセットを UI の取り込み形式に確定させる。性別でフォルムが
+// 分かれる種族 (イダイトウ・イエッサン等) は、Showdown の検証器と同様に
+// 性別からフォルムを決める ((F) なら -F を優先)。キョダイマックスは
+// ダイマックスとして取り込む (キョダイマックス技は種族から自動で適用
+// されるため、専用フォルムにはしない)
+function finalizeImportedSet(set) {
+  if (!set || !set.speciesRaw) return null;
+  let species = null;
+  if (set.gender === 'F') species = resolveSpecies(set.speciesRaw + '-F') || resolveSpecies(set.speciesRaw);
+  else if (set.gender === 'M') species = resolveSpecies(set.speciesRaw) || resolveSpecies(set.speciesRaw + '-M');
+  else species = resolveSpecies(set.speciesRaw);
+  if (!species) return null;
+  const out = { species, moves: set.moves || [], sp: {} };
+  if (set.item) out.item = set.item;
+  if (set.ability) out.ability = set.ability;
+  if (set.nature) { const n = NATURES.find(x => idOf(x) === idOf(set.nature)); out.nature = n || set.nature; }
+  if (set.teraType) out.teraType = set.teraType;
+  if (set.gigantamax) out.dynamax = true;
+  if (set.spParts && set.spParts.length) for (const [k, v] of set.spParts) out.sp[k] = Math.min(32, v);
+  else if (set.evParts && set.evParts.length) {
+    const total = set.evParts.reduce((a, [, v]) => a + v, 0);
+    const asSp = set.evParts.every(([, v]) => v <= 32) && total <= 66;
+    for (const [k, v] of set.evParts) out.sp[k] = asSp ? Math.min(32, v) : Math.min(32, Math.round(v / 8));
   }
   return out;
 }
+function finalizeJsonSet(o) {
+  if (!o || typeof o !== 'object') return null;
+  const set = { moves: [], speciesRaw: o.species || '', gender: o.gender || '', gigantamax: !!o.gigantamax };
+  if (o.item) { const it = String(o.item); if (idOf(it) !== 'noitem') set.item = resolveItem(it) || it; }
+  if (o.ability) set.ability = resolveAbility(o.ability) || o.ability;
+  if (o.nature) set.nature = o.nature;
+  if (o.teraType) { const tt = TERA_TYPES.find(t => t.toLowerCase() === String(o.teraType).toLowerCase()); if (tt) set.teraType = tt; }
+  if (Array.isArray(o.moves)) for (const m of o.moves) { const r = resolveMove(m); if (r) set.moves.push(r); }
+  for (const [src, dst] of [['evs', 'evParts'], ['sps', 'spParts']]) {
+    if (o[src] && typeof o[src] === 'object') { set[dst] = []; for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) if (typeof o[src][k] === 'number') set[dst].push([k, o[src][k]]); }
+  }
+  return finalizeImportedSet(set);
+}
+// packed 形式 (Teams.unpack の再現)。名前類は英数字のみに詰められている
+// ため、各リゾルバの ID 照合で元に戻す
+function unpackShowdownTeam(buf) {
+  const team = [];
+  let i = 0;
+  for (let count = 0; count < 24; count++) {
+    const set = { moves: [] };
+    let j = buf.indexOf('|', i); if (j < 0) return null;
+    const name = buf.substring(i, j); i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    set.speciesRaw = buf.substring(i, j) || name; i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const itemRaw = buf.substring(i, j); i = j + 1;
+    if (itemRaw) set.item = resolveItem(itemRaw) || itemRaw;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const abilityRaw = buf.substring(i, j); i = j + 1;
+    if (['', '0', '1', 'H', 'S'].includes(abilityRaw)) {
+      if (abilityRaw) { const sd = gen.species.get(idOf(set.speciesRaw)); const ab = sd && sd.abilities ? sd.abilities[abilityRaw] : null; if (ab) set.ability = ab; }
+    } else set.ability = resolveAbility(abilityRaw) || abilityRaw;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const movesRaw = buf.substring(i, j); i = j + 1;
+    for (const m of movesRaw.split(',').slice(0, 24)) { if (!m) continue; const r = resolveMove(m); if (r) set.moves.push(r); }
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const natureRaw = buf.substring(i, j); i = j + 1;
+    if (natureRaw) { const n = NATURES.find(x => idOf(x) === idOf(natureRaw)); if (n) set.nature = n; }
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    if (j !== i) { const evs = buf.substring(i, j).split(',', 6); const keys = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']; set.evParts = keys.map((k, ix) => [k, Number(evs[ix]) || 0]).filter(([, v]) => v > 0); }
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    if (i !== j) set.gender = buf.substring(i, j);
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null; // IVs (読み捨て)
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null; // shiny
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null; // level
+    const afterLevel = j;
+    j = buf.indexOf(']', i);
+    let misc = null;
+    if (j < 0) { if (afterLevel + 1 < buf.length || i < buf.length) misc = buf.substring(afterLevel + 1).split(',', 6); }
+    else misc = buf.substring(afterLevel + 1, j).split(',', 6);
+    if (misc) {
+      if (misc[3]) set.gigantamax = true;
+      if (misc[5]) { const tt = TERA_TYPES.find(t => t.toLowerCase() === String(misc[5]).toLowerCase()); if (tt) set.teraType = tt; }
+    }
+    team.push(set);
+    if (j < 0) break;
+    i = j + 1;
+    if (i >= buf.length) break;
+  }
+  const out = team.map(finalizeImportedSet).filter(Boolean);
+  return out.length ? out : null;
+}
+function importShowdownTeam(buffer) {
+  if (!buffer || typeof buffer !== 'string') return [];
+  const trimmed = buffer.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr)) return arr.map(finalizeJsonSet).filter(Boolean);
+    } catch (e) { /* JSON でなければテキスト形式として続ける */ }
+  }
+  const lines = buffer.split('\n');
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const nonEmpty = lines.filter(l => l.trim() !== '');
+  if (nonEmpty.length === 1 && nonEmpty[0].includes('|')) {
+    const packed = unpackShowdownTeam(nonEmpty[0].trim());
+    if (packed) return packed;
+  }
+  const sets = [];
+  let cur = null;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line === '' || line === '---') cur = null;
+    else if (line.startsWith('===')) { /* チーム見出し行は読み飛ばす */ }
+    else if (!cur) { cur = { moves: [] }; sets.push(cur); parseExportedTeamLine(line, true, cur); }
+    else parseExportedTeamLine(line, false, cur);
+  }
+  return sets.map(finalizeImportedSet).filter(Boolean);
+}
+function parseSet(text) {
+  const sets = importShowdownTeam(text);
+  return sets.length ? sets[0] : null;
+}
 
 function parseTeam(text) {
-  // Showdown のチーム書き出し形式: セット同士は空行区切り。読めないセットは読み飛ばす
-  return text.split(/\n\s*\n/).map(parseSet).filter(Boolean).slice(0, 6);
+  // Showdown の読み込み (Teams.import) で解釈し、読めないセットは読み飛ばす
+  return importShowdownTeam(text).slice(0, 6);
 }
 
 /* ---------- displayed spec ---------- */
@@ -2351,7 +2500,7 @@ function normalizeMegaPaste(parsed) {
   return out;
 }
 function applyImport(side, parsed) {
-  if (!parsed.species) return;
+  if (!parsed || !parsed.species) return;
   const idx = state.sel[side];
   const keep = state[side][idx];
   const mp = normalizeMegaPaste(parsed);
@@ -2364,7 +2513,7 @@ function applyImport(side, parsed) {
     moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
     curHPPercent: keep.curHPPercent, boosts: keep.boosts, status: keep.status,
     megaSpecies, megaAbility, mega: mp ? true : (!!megaSpecies && keep.mega),
-    teraType: parsed.teraType || '', terastallized: !!parsed.teraType,
+    teraType: parsed.teraType || '', terastallized: !!parsed.teraType, dynamax: !!parsed.dynamax,
     knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
     note: 'Imported set', corrected: ['読み込み'],
   };
@@ -2383,6 +2532,7 @@ function applyImportAll(side, list) {
       moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
       curHPPercent: 100, boosts: blankBoosts(), status: '',
       megaSpecies, megaAbility, mega: mp ? true : false,
+      teraType: parsed.teraType || '', terastallized: !!parsed.teraType, dynamax: !!parsed.dynamax,
       knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
       note: 'Imported set', corrected: ['読み込み'],
     };
