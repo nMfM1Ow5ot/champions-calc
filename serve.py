@@ -200,6 +200,24 @@ def _is_upload_target(name):
 # ファイル名の種類によらず同じ試合のファイルを 1 つのキーに束ねる。
 _BATTLE_KEY_RE = re.compile(r"^\d{8}_\d{6}(_salvage)?$")
 
+# 備考ゲートの適用開始 (キー先頭の試合開始時刻、JST)。ゲート導入
+# (2026-11-21 13:13 の push) より前に始まった試合はゲートの対象に
+# しない。導入時点で未送信のまま残っていた旧試合のログ (前日の
+# salvage 残りなど) にまでゲートがかかり、次の試合の開始直後に
+# 「入力待ち」の通知とプロンプトが出てしまった件 (2026-11-21、
+# battle_20261120_124322_salvage) への対策。判定はファイルの保存
+# 時刻ではなくキー先頭の試合開始時刻で行うため、導入後に salvage
+# されて現れた旧試合も対象外になり、導入後の試合は salvage でも
+# 従来どおりゲート対象になる。
+_NOTE_GATE_SINCE = "20261121_131309"
+
+
+def _note_gate_applies(key):
+    """その試合に備考ゲートがかかるか (導入後に始まった試合だけ)。"""
+    if not key:
+        return False
+    return key[:15] >= _NOTE_GATE_SINCE
+
 
 def _battle_key(name):
     """logs/ のファイル名から試合キーを返す。対象外の名前は None。"""
@@ -268,6 +286,10 @@ def list_pending_log_notes():
     pending = []
     for key, names in sorted(groups.items()):
         if _note_exists(key):
+            continue
+        if not _note_gate_applies(key):
+            # ゲート導入前の試合は備考待ちに数えない (旧試合のログが
+            # 後から salvage で現れてもプロンプトを出さない)
             continue
         log_names = [n for n in names if n.endswith(".log")]
         if not log_names:
@@ -400,7 +422,7 @@ def _upload_logs_once_locked():
     for n, data, h in pending_all:
         key = _battle_key(n)
         if (key is not None and not n.endswith("_note.txt")
-                and not _note_exists(key)):
+                and not _note_exists(key) and _note_gate_applies(key)):
             # 備考が入るまでは、その試合のファイルは種別を問わず保留する。
             # デバッグ同梱は試合の途中で作られるため、ログが保存される前
             # でも保留対象に含める (以前はログのある試合だけが保留され、
