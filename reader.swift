@@ -4608,6 +4608,9 @@ struct PvSlotInfo {
     var types: [String] = []              // その枠で読み取ったタイプアイコン
     var candidates: [(String, Double)] = []  // その枠の候補上位 (種族, スコア)
     var gender: String = ""               // 読み取った性別マーク ("M" / "F" / "" = 不明)
+    var panel: [Int] = []                 // 検出パネル矩形 [x, y, w, h] (証跡用)
+    var iconDiag: [String] = []           // アイコン分類の診断文字列 (証跡用)
+    var genderCounts: [Int] = []          // 性別読みの生カウント [赤, 青] (証跡用)
 }
 var pvSpeciesTypes: [String: [String]] = [:]
 var pvSpeciesGender: [String: [String]] = [:]   // 種族 → なりうる性別 ("M"/"F"/"N")
@@ -4912,11 +4915,11 @@ func pvClassifyIconSearch(_ buf: (data: [UInt8], w: Int, h: Int), _ x0: Int, _ y
 // 円は鮮やかな単色で、窓内の該当色ピクセル数が反対色の 2 倍未満の
 // 場合は判定しない。読めない場合は nil を返す (性別なしの種族は
 // マーク自体が出ないため、「読めない = 性別なし」とは扱わない)
-func pvReadGender(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: Int, w: Int, h: Int)) -> String? {
+func pvReadGender(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: Int, w: Int, h: Int)) -> (String?, Int, Int) {
     let cx = panel.x + Int(0.716 * Double(panel.w))
     let cy = panel.y + Int(0.75 * Double(panel.h))
     let half = Int(0.08 * Double(panel.w))
-    if half <= 0 || buf.w <= 0 { return nil }
+    if half <= 0 || buf.w <= 0 { return (nil, 0, 0) }
     var red = 0, blue = 0
     for yy in (cy - half)..<(cy + half) {
         if yy < 0 || yy >= buf.h { continue }
@@ -4929,8 +4932,8 @@ func pvReadGender(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: I
         }
     }
     let best = max(red, blue)
-    if best < 25 || best < 2 * min(red, blue) { return nil }
-    return red > blue ? "F" : "M"
+    if best < 25 || best < 2 * min(red, blue) { return (nil, red, blue) }
+    return (red > blue ? "F" : "M", red, blue)
 }
 
 // パネル左側の 3D モデルを背景色との差分で切り出し、特徴量を取る
@@ -5092,6 +5095,9 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
     var slotExpanded: [Bool] = []
     var slotTypes: [[String]] = []
     var slotGender: [String] = []
+    var slotPanels: [[Int]] = []
+    var slotIconDiags: [[String]] = []
+    var slotGenderCounts: [[Int]] = []
     // 全種族への再照合 (候補を広げたランキングを返す)。性別が読めて
     // いれば、その性別になりえない種族は広げた先でも除外する
     func rankedAll(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double), _ gender: String?) -> [(String, Double)] {
@@ -5104,9 +5110,12 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         return all
     }
     for panel in panels {
-        let gender = pvReadGender(buf, panel)
+        let (gender, gRed, gBlue) = pvReadGender(buf, panel)
         slotGender.append(gender ?? "")
+        slotGenderCounts.append([gRed, gBlue])
+        slotPanels.append([panel.x, panel.y, panel.w, panel.h])
         var types: [String] = []
+        var iconDiags: [String] = []
         var unknownPresent = false
         // アイコン位置はパネル相対 (2026-11-20 の実機フレームで再実測:
         // アイコン中心は slot1 x=0.70w, slot2 x=0.89w, y=0.25h、一辺 0.403h。
@@ -5116,9 +5125,11 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         for slot in 0..<2 {
             let ix = panel.x + Int((slot == 0 ? 0.620 : 0.810) * Double(panel.w))
             let iy = panel.y + Int(0.050 * Double(panel.h))
-            let (t, present, _) = pvClassifyIconSearch(buf, ix, iy, iconS)
+            let (t, present, diag) = pvClassifyIconSearch(buf, ix, iy, iconS)
+            iconDiags.append(diag)
             if let t { types.append(t) } else if present { unknownPresent = true }
         }
+        slotIconDiags.append(iconDiags)
         slotTypes.append(types)
         var pool: [String] = []
         if types.count == 2 {
@@ -5205,6 +5216,9 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         slots[i].types = slotTypes[i]
         slots[i].candidates = Array(slotRanked[i].prefix(3))
         slots[i].gender = slotGender[i]
+        slots[i].panel = slotPanels[i]
+        slots[i].iconDiag = slotIconDiags[i]
+        slots[i].genderCounts = slotGenderCounts[i]
     }
     var noteByIdx: [Int: String] = [:]
     var order = panels.indices.filter { !slotRanked[$0].isEmpty }
@@ -5947,7 +5961,8 @@ func runOnce(image: CGImage) {
         let slotDetails: [[String: Any]] = previewEvidenceSlots.map { s in
             ["pick": s.pick ?? "", "score": (s.score * 1000).rounded() / 1000,
              "decisive": s.decisive, "expanded": s.expanded, "types": s.types, "gender": s.gender,
-             "candidates": s.candidates.map { [$0.0, ($0.1 * 1000).rounded() / 1000] as [Any] }]
+             "candidates": s.candidates.map { [$0.0, ($0.1 * 1000).rounded() / 1000] as [Any] },
+             "panel": s.panel, "iconDiag": s.iconDiag, "genderCounts": s.genderCounts]
         }
         debugCapture(kind: "preview_id", key: "preview_id", rawText: "",
                      detail: ["team": previewEvidenceTeam.map { $0 ?? "" },
@@ -6028,7 +6043,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1716"
+let readerBuild = "20261121_1726"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -6779,7 +6794,8 @@ func handlePreviewTestRequest() -> String {
     let slotDetails: [[String: Any]] = (result?.slots ?? []).map { s in
         ["pick": s.pick ?? "", "score": (s.score * 1000).rounded() / 1000,
          "decisive": s.decisive, "expanded": s.expanded, "types": s.types, "gender": s.gender,
-         "candidates": s.candidates.map { [$0.0, ($0.1 * 1000).rounded() / 1000] as [Any] }]
+         "candidates": s.candidates.map { [$0.0, ($0.1 * 1000).rounded() / 1000] as [Any] },
+         "panel": s.panel, "iconDiag": s.iconDiag, "genderCounts": s.genderCounts]
     }
     var oppTeam: [String] = (result?.team ?? []).map { $0 ?? "" }
     while oppTeam.count < 6 { oppTeam.append("") }
