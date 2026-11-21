@@ -26915,6 +26915,8 @@ function createEstimator(deps) {
   let bayes = null, lastSpeCtx = null;
   let pendingOpts = null;
   let teamContextSpecies = null;
+  let infLog = [], infLogSeq = 0, infLogTurn = null;
+  let logTrigger = null;
   const INF_BLACKLIST = /* @__PURE__ */ new Set(["Foul Play", "Gyro Ball", "Electro Ball", "Endeavor", "Final Gambit", "Seismic Toss", "Night Shade", "Dragon Rage", "Sonic Boom", "Super Fang", "Nature's Madness", "Fissure", "Horn Drill", "Guillotine", "Sheer Cold", "Counter", "Mirror Coat", "Metal Burst", "Comeuppance", "Pain Split"]);
   function infEntry(species) {
     if (!inference.bySpecies[species]) inference.bySpecies[species] = { pairs: { atk: null, spa: null, def: null, spd: null, spe: null }, hpSps: null, used: 0, dropped: 0 };
@@ -26932,15 +26934,66 @@ function createEstimator(deps) {
       defSide: { isReflect: active(ds.reflect, 5), isLightScreen: active(ds.light, 5), isAuroraVeil: active(ds.veil, 5) }
     };
   }
+  function logSnapshot(species, turn, trigger) {
+    try {
+      const ent = bayes && bayes.bySpecies ? bayes.bySpecies[species] : null;
+      let map = null, cover90 = null, cands = null, used = null, hpLifted = false;
+      if (ent && ent.cands) {
+        const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
+        const top = sorted[0];
+        map = { nature: top.nature, sp: { ...top.sp }, item: top.item, ability: top.ability, p: +top.post.toFixed(6) };
+        let acc = 0, n = 0;
+        for (const c of sorted) {
+          acc += c.post;
+          n++;
+          if (acc >= 0.9) break;
+        }
+        cover90 = { n, mass: +acc.toFixed(6) };
+        cands = sorted.map((c) => ({
+          nature: c.nature,
+          sp: { ...c.sp },
+          item: c.item,
+          ability: c.ability,
+          p: +c.post.toFixed(6),
+          src: c.moveExact ? "corpus" : c.generic ? "generic" : c.bulkSynth || c.shapeSynth ? "synth" : "pokedb"
+        }));
+        used = ent.used;
+        hpLifted = !!ent.hpLifted;
+      }
+      const ie = inference.bySpecies[species];
+      const inf = ie ? {
+        used: ie.used,
+        dropped: ie.dropped,
+        pairs: {
+          atk: ie.pairs.atk ? ie.pairs.atk.size : null,
+          spa: ie.pairs.spa ? ie.pairs.spa.size : null,
+          def: ie.pairs.def ? ie.pairs.def.size : null,
+          spd: ie.pairs.spd ? ie.pairs.spd.size : null,
+          spe: ie.pairs.spe ? ie.pairs.spe.size : null
+        },
+        hpSps: ie.hpSps ? ie.hpSps.size : null
+      } : null;
+      infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, cover90, cands, inf });
+      if (infLog.length > 2e3) infLog.splice(0, infLog.length - 2e3);
+    } catch (e) {
+    }
+  }
+  function takeInferenceLog() {
+    const out = infLog;
+    infLog = [];
+    return out;
+  }
   function infIntersect(species, statKey, feasible, hpSps) {
     const e = infEntry(species);
     if (!feasible || !feasible.size) {
       e.dropped++;
+      logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false });
       return;
     }
     const next = e.pairs[statKey] ? new Set([...e.pairs[statKey]].filter((x) => feasible.has(x))) : feasible;
     if (!next.size) {
       e.dropped++;
+      logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false });
       return;
     }
     let nh = null;
@@ -26948,6 +27001,7 @@ function createEstimator(deps) {
       nh = e.hpSps ? new Set([...e.hpSps].filter((x) => hpSps.has(x))) : hpSps;
       if (!nh.size) {
         e.dropped++;
+        logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false });
         return;
       }
     }
@@ -26955,8 +27009,10 @@ function createEstimator(deps) {
     if (hpSps) e.hpSps = nh;
     e.used++;
     dirty = true;
+    logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: true });
   }
   function processDamageInf(ev, ctx) {
+    if (typeof ev.turn === "number") infLogTurn = ev.turn;
     pendingOpts = null;
     const md = moveData(ev.move);
     if (!md || md.category === "Status" || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
@@ -27046,6 +27102,7 @@ function createEstimator(deps) {
     return { prio, last };
   }
   function processMoveInf(ev, io) {
+    if (typeof ev.turn === "number") infLogTurn = ev.turn;
     const intents = [];
     const side = labelSide(ev.label);
     if (ev.move === "Tailwind") {
@@ -27120,6 +27177,7 @@ function createEstimator(deps) {
   }
   const AB_ORDER_EXEMPT = /* @__PURE__ */ new Set(["Unnerve", "As One (Glastrier)", "As One (Spectrier)", "Neutralizing Gas"]);
   function infProcessAbility(ev, io) {
+    if (typeof ev.turn === "number") infLogTurn = ev.turn;
     if (typeof ev.batch !== "number") return;
     if (AB_ORDER_EXEMPT.has(ev.ability)) return;
     const list = infCtx.abBatches[ev.batch] || (infCtx.abBatches[ev.batch] = []);
@@ -27325,6 +27383,7 @@ function createEstimator(deps) {
     if (tot > 0) for (const c of ent.cands) c.post /= tot;
     ent.used++;
     dirty = true;
+    logSnapshot(species, infLogTurn, { kind: "moveSeen", added, removed, applied: true });
   }
   function metaNameEn(kind, name) {
     syncData();
@@ -27645,7 +27704,8 @@ function createEstimator(deps) {
         return null;
       }
       applyTeamItemBoost(cands, species);
-      bayes.bySpecies[species] = { cands, used: 0, revKey: "" };
+      bayes.bySpecies[species] = { species, cands, used: 0, revKey: "" };
+      logSnapshot(species, infLogTurn, { kind: "entry" });
     }
     return bayes.bySpecies[species];
   }
@@ -27663,6 +27723,9 @@ function createEstimator(deps) {
     };
   }
   function bayesApply(ent, counts, bulk) {
+    const lt = logTrigger;
+    logTrigger = null;
+    const liftedBefore = !!ent.hpLifted;
     if (bulk && !ent.hpLifted && counts.some((n) => n > 0)) {
       let firstHit = false, penHit = false;
       ent.cands.forEach((c, i) => {
@@ -27684,6 +27747,7 @@ function createEstimator(deps) {
     }
     if (!counts.some((n) => n > 0)) {
       bayes.skipped++;
+      if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: false });
       return;
     }
     let tot = 0;
@@ -27691,10 +27755,14 @@ function createEstimator(deps) {
       c.post *= Math.max(counts[i] / 16, BAYES_FLOOR);
       tot += c.post;
     });
-    if (!(tot > 0)) return;
+    if (!(tot > 0)) {
+      if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: false });
+      return;
+    }
     for (const c of ent.cands) c.post /= tot;
     ent.used++;
     dirty = true;
+    if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: true, lifted: !!ent.hpLifted && !liftedBefore });
   }
   function processDamageBayes(ev, ctx) {
     const opts = pendingOpts;
@@ -27712,6 +27780,7 @@ function createEstimator(deps) {
         const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts);
         return rolls.filter((r) => r === ev.amt).length;
       });
+      logTrigger = { turn: ev.turn, trig: { kind: "damage", move: md.name, by: "opp", amt: ev.amt, crit: !!ev.crit } };
       bayesApply(ent, counts, true);
     } else {
       if (typeof ev.pct !== "number" || ev.pct <= 0) return;
@@ -27727,6 +27796,7 @@ function createEstimator(deps) {
         for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
         return n;
       });
+      logTrigger = { turn: ev.turn, trig: { kind: "damage", move: md.name, by: "mine", pct: ev.pct, crit: !!ev.crit } };
       bayesApply(ent, counts, true);
     }
   }
@@ -27761,6 +27831,7 @@ function createEstimator(deps) {
       const ok = ctx.trick ? ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff : ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff;
       return ok ? 16 : 0;
     });
+    logTrigger = { turn: ev.turn, trig: { kind: "moveOrder", move: ctx.oppMd ? ctx.oppMd.name : null, firstIsOpp: !!ctx.firstIsOpp } };
     bayesApply(ent, counts);
   }
   function applyRevealed(list) {
@@ -27794,6 +27865,7 @@ function createEstimator(deps) {
         if (tot > 0) for (const c of ent.cands) c.post /= tot;
         dirty = true;
       }
+      logSnapshot(species, infLogTurn, { kind: "revealed", item, ability, applied: changed });
     }
   }
   function bayesCover(species) {
@@ -27933,6 +28005,10 @@ function createEstimator(deps) {
     infLastMove = null;
     dirty = false;
     pendingOpts = null;
+    infLog = [];
+    infLogSeq = 0;
+    infLogTurn = null;
+    logTrigger = null;
     bayesReset();
     lastSpeCtx = null;
   }
@@ -27962,6 +28038,7 @@ function createEstimator(deps) {
       dirty = false;
       return d;
     },
+    takeInferenceLog,
     getSeen() {
       return inference.seen;
     },
