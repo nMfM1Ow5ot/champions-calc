@@ -1211,7 +1211,10 @@ function calcAll() {
     }
   }
   lastCalc = calcMatchup({
-    mine: [DS('mine')], opps: [DS('opps')],
+    // KO% は相手の現在 HP を前提にする (Calcdex 本家と同じ仕様)。
+    // withCurHP でパネルの現在 HP を実数に変換して渡すと、@smogon/calc の
+    // kochance が defender.curHP() 基準で計算する。両方向とも同じ前提。
+    mine: [withCurHP(DS('mine'))], opps: [withCurHP(DS('opps'))],
     field: { weather: state.field.weather, terrain: state.field.terrain, attackerSide: atkSide, defenderSide: defSide, oppAttackerSide: oppAtkSide, oppDefenderSide: oppDefSide, tailwindMine: !!state.side.mine.tailwind, tailwindOpp: !!state.side.opp.tailwind },
     crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
     singleMoves,
