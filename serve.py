@@ -350,6 +350,24 @@ def _note_exists(key):
     return os.path.exists(os.path.join(LOG_DIR, _note_name(key)))
 
 
+def _gate_key(key):
+    """備考ゲートとプロンプトで試合を束ねるキーを返す。
+
+    salvage で救済されたログは <元の試合ID>_salvage のキーになるが、
+    デバッグ一式 (preview_id を含む) は元の試合 ID のままで保存される。
+    末尾の _salvage を落として束ねないと、一式だけが別の試合として
+    残り、備考待ちにならずゲートに残り続けて届かなくなる。
+    """
+    if key and key.endswith("_salvage"):
+        return key[: -len("_salvage")]
+    return key
+
+
+def _note_exists_any(key):
+    """その試合の備考があるか (salvage 変種のキーで保存された備考も含む)。"""
+    return _note_exists(key) or _note_exists(_gate_key(key))
+
+
 def _load_upload_state():
     if os.path.exists(LOG_STATE_PATH):
         try:
@@ -382,24 +400,47 @@ def list_pending_log_notes():
         key = _battle_key(name)
         if key is None:
             continue
-        groups.setdefault(key, []).append(name)
+        # salvage 変種は元の試合と 1 つのグループに束ねる (デバッグ
+        # 一式は元の試合 ID、救済されたログは _salvage 付きの ID で
+        # 保存されるため、束ねないと一式が備考待ちにならない)
+        groups.setdefault(_gate_key(key), []).append(name)
     pending = []
     for key, names in sorted(groups.items()):
         if _note_exists(key):
+            continue
+        if any(_note_exists(_battle_key(n) or "") for n in names):
+            # salvage 変種のキーで保存された備考がある場合も入力済み
             continue
         if not _note_gate_applies(key):
             # ゲート導入前の試合は備考待ちに数えない (旧試合のログが
             # 後から salvage で現れてもプロンプトを出さない)
             continue
+        mtime = 0.0
+        for n in names:
+            try:
+                mtime = max(mtime, os.path.getmtime(os.path.join(LOG_DIR, n)))
+            except OSError:
+                pass
         log_names = [n for n in names if n.endswith(".log")]
-        if not log_names:
-            continue
-        # ログが全て送信済みなら、備考待ちではない (備考機能より前に
-        # 送信された試合や、送信後に残ったデバッグ一式だけの状態)
-        unsent = [n for n in log_names
-                  if state.get(n) != _file_hash(os.path.join(LOG_DIR, n))]
-        if not unsent:
-            continue
+        if log_names:
+            # ログが全て送信済みなら、備考待ちではない (備考機能より前に
+            # 送信された試合や、送信後に残ったデバッグ一式だけの状態)
+            unsent = [n for n in log_names
+                      if state.get(n) != _file_hash(os.path.join(LOG_DIR, n))]
+            if not unsent:
+                continue
+        else:
+            # ログの無い試合 (reader の異常終了で salvage も効かなかった
+            # 場合など) は、デバッグ一式だけが残って通常は備考待ちに
+            # ならず、証拠が届かないままになる。最後のファイルから
+            # 10 分経っていれば備考待ちに数える (対戦中の試合は
+            # ファイルが新しいため対象にならない)
+            unsent = [n for n in names
+                      if state.get(n) != _file_hash(os.path.join(LOG_DIR, n))]
+            if not unsent:
+                continue
+            if not mtime or time.time() - mtime < 600:
+                continue
         kind = "final" if any("_final" in n for n in log_names) else "interrupted"
         opponent = ""
         for n in log_names:
@@ -413,12 +454,6 @@ def list_pending_log_notes():
             if m:
                 opponent = m.group(1).strip()
                 break
-        mtime = 0.0
-        for n in names:
-            try:
-                mtime = max(mtime, os.path.getmtime(os.path.join(LOG_DIR, n)))
-            except OSError:
-                pass
         pending.append({
             "key": key, "kind": kind, "opponent": opponent,
             "files": sorted(names),
@@ -532,7 +567,7 @@ def _upload_logs_once_locked():
     for n, data, h in pending_all:
         key = _battle_key(n)
         if (key is not None and not n.endswith("_note.txt")
-                and not _note_exists(key) and _note_gate_applies(key)):
+                and not _note_exists_any(key) and _note_gate_applies(key)):
             # 備考が入るまでは、その試合のファイルは種別を問わず保留する。
             # デバッグ同梱は試合の途中で作られるため、ログが保存される前
             # でも保留対象に含める (以前はログのある試合だけが保留され、
