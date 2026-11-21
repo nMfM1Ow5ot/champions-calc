@@ -1193,7 +1193,8 @@ func emitLog(_ line: String, applyNow: Bool) {
                 print("[reader] ターン行ガードが発火しました: |turn|\(n) を先に出します (きっかけ: \(line))")
                 fflush(stdout)
                 debugCapture(kind: "turn_guard", key: "turn_guard:\(n)", rawText: "",
-                             detail: ["turn": n, "line": line, "readerBuild": readerBuild])
+                             detail: ["turn": n, "line": line, "readerBuild": readerBuild,
+                                      "action": "inserted_turn_line"])
                 suppressNextDetectorTurn = true
                 emitLog("|turn|\(n)")   // この呼び出しで追跡状態はリセットされる
             }
@@ -3964,6 +3965,13 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 照合は空白を除いた形で行う (OCR のボックス分割で空白位置が揺れるため)
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
     let nt = normalize(t)
+    // ポケモンの詳細画面 (様子を見る) の文は対戦文ではない。画面内の
+    // 設定ラベル「つよさの表示」は対戦文には現れないため、これを含む
+    // 文は詳細画面の混入として消費だけする (実例: 2026-11-21
+    // battle_20261121_234913、詳細画面の「特性 もうか / 持ち物
+    // リザードナイトY / つよさの表示 オフ / 戻る」が対戦文の経路に
+    // 入り、種族の誤認と既定枠への帰属が起きた)
+    if t.contains("つよさの表示") { return true }
     // 勝敗: 「<相手>との 勝負に 負けた！/勝った！」
     // (実機ログでは「勝った」が「勝つた」と OCR 崩れしていたため、
     //  小さい「っ」を通常の「つ」に寄せた形でも判定する)
@@ -4092,16 +4100,38 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 辞書で引けた場合に限って反応文として扱い、引けない場合は
         // 消費せず後段 (証拠として |-message|) に委ねる
         var stoneResolved = false
-        if let sp = findSpeciesJa(in: t) {
+        // 種族はまずストーン名から引く。ストーン名は種族名の途中までを
+        // 含むことがあり (リザードナイトY に対する リザードン)、文中の
+        // 種族名を素直に検索すると別の種族に誤認する (リザード =
+        // Charmeleon。実例: 2026-11-21 battle_20261121_234913、
+        // 場にいない Charmeleon の持ち物行が出た)。英語名は
+        // 「<種族>ite (X/Y)」の形で機械的なため、そちらから引く
+        var megaSp: SpeciesEntry? = nil
+        var megaStoneJa: String? = nil
+        if let sJa = findInDict(in: t, itemDict), sJa.contains("ナイト"), let sEn = itemJa2En[sJa] {
+            megaStoneJa = sJa
+            var baseEn = sEn
+            for suf in ["ite X", "ite Y", "ite"] where baseEn.hasSuffix(suf) {
+                baseEn = String(baseEn.dropLast(suf.count)); break
+            }
+            megaSp = speciesDict.first(where: { $0.en == baseEn })
+        }
+        if megaSp == nil { megaSp = findSpeciesJa(in: t) }
+        if let sp = megaSp {
             let side = megaTextSide(t, baseEn: sp.en)
             // 完了済みのメガの反応文が再読された場合は、持ち物行や保留を
             // 出し直さない (実例: 2026-11-21 vs Toshiro 戦、終盤に
             // カメックスのストーン反応が再読され |-item| が漏れた)
             if let ms = monStates["\(side):\(sp.en)"]?.megaSpecies, !ms.isEmpty { return true }
             if monStates["\(side):\(sp.en)"] == nil { monStates["\(side):\(sp.en)"] = MonState() }
-            // ストーンの切り出しは生テキストで行う (正規化すると助詞の「と」と
-            // 「〜ナイト」の「ト」が区別できなくなるため)
-            if let r = t.range(of: sp.ja + "の") {
+            if let itJa = megaStoneJa {
+                stoneResolved = true
+                emitItemOnce(slot: slotFor(side: side, speciesEn: sp.en), side: side, speciesEn: sp.en, itemJa: itJa)
+                pendingMegaStone[side] = itJa
+                pendingMegaSpecies[side] = sp.en
+            } else if let r = t.range(of: sp.ja + "の") {
+                // ストーンの切り出しは生テキストで行う (正規化すると助詞の「と」と
+                // 「〜ナイト」の「ト」が区別できなくなるため)
                 let stoneCand = String(t[r.upperBound...].prefix(while: { $0 != "と" }))
                 if let itJa = itemDict[normalize(stoneCand)] {
                     stoneResolved = true
@@ -6647,7 +6677,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0009"
+let readerBuild = "20261122_0020"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
