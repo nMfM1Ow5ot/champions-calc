@@ -27614,7 +27614,7 @@ function createEstimator(deps) {
       const statKey = md.name === "Body Press" ? "def" : md.category === "Physical" ? "atk" : "spa";
       const defSpec = ctx.myDef;
       const bases = ctx.basesAtk;
-      const table = statTable(atkSpecies);
+      const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
       if (!defSpec || !bases.length || !table) return;
       const byValue = /* @__PURE__ */ new Map();
       for (const row of table[statKey]) {
@@ -27636,7 +27636,7 @@ function createEstimator(deps) {
       const defKey = md.category === "Physical" ? "def" : "spd";
       const atkSpec = ctx.myAtk;
       const bases = ctx.basesDef;
-      const table = statTable(defSpecies);
+      const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
       if (!atkSpec || !bases.length || !table) return;
       const hpBySp = /* @__PURE__ */ new Map();
       for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
@@ -27955,35 +27955,30 @@ function createEstimator(deps) {
     moves = moves.filter(inUniverse);
     const prev = ent.revMoves || [];
     const added = moves.filter((mv) => !prev.includes(mv));
-    const removed = prev.filter((mv) => !moves.includes(mv));
-    if (!added.length && !removed.length) return;
+    if (!added.length) return;
+    const union = [...prev, ...added];
     const pairSet = (list) => {
       const s = /* @__PURE__ */ new Set();
       for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) s.add(bayesPairKey(list[i], list[j]));
       return s;
     };
-    const oldPairs = pairSet(prev), newPairs = pairSet(moves);
+    const oldPairs = pairSet(prev), newPairs = pairSet(union);
     for (const c of ent.cands) {
       let f = 1;
       for (const mv of added) f *= bayesMoveFactorSingle(c, mv, stats);
-      for (const mv of removed) f /= bayesMoveFactorSingle(c, mv, stats);
       for (const key of newPairs) if (!oldPairs.has(key)) {
         const [a, b] = key.split("\0");
         f *= bayesPairFactor(c, a, b, stats);
       }
-      for (const key of oldPairs) if (!newPairs.has(key)) {
-        const [a, b] = key.split("\0");
-        f /= bayesPairFactor(c, a, b, stats);
-      }
       if (f !== 1) c.post *= f;
     }
-    ent.revMoves = [...moves];
+    ent.revMoves = union;
     let tot = 0;
     for (const c of ent.cands) tot += c.post;
     if (tot > 0) for (const c of ent.cands) c.post /= tot;
     ent.used++;
     dirty = true;
-    logSnapshot(species, infLogTurn, { kind: "moveSeen", added, removed, applied: true });
+    logSnapshot(species, infLogTurn, { kind: "moveSeen", added, removed: [], applied: true });
   }
   function metaNameEn(kind, name) {
     syncData();
@@ -28579,8 +28574,8 @@ function createEstimator(deps) {
       const ability = corr.includes("\u7279\u6027") ? normAbility(p.ability) : null;
       const key = (item ?? "?") + "|" + (ability ?? "?");
       if (key === ent.revKey) continue;
-      ent.revKey = key;
       if (item === null && ability === null) continue;
+      ent.revKey = key;
       const itemHard = item !== null && !p.itemLost;
       const matchItem = (c) => !itemHard || c.item === item;
       const matchAbility = (c) => ability === null || c.ability === ability || p.mega && c.megaAbility === ability;
