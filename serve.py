@@ -261,6 +261,52 @@ def _gh_delete_file(path, token, message, sha):
     return _gh_request("DELETE", path, token, {"message": message, "sha": sha})
 
 
+# ---- チームプリセットの共有 (POST /presets) ----
+# プリセットの正本はリポジトリ直下の presets.json (UI が raw から
+# 直接読む)。localhost の UI はこのエンドポイント経由で保存し、
+# デバッグ用ページはページ側のトークンで直接 PUT する。同期
+# マニフェストの対象外で、備考ゲートにもかけない。
+PRESETS_PATH = os.path.join(BASE_DIR, "presets.json")
+_PRESETS_MAX_BYTES = 1024 * 1024
+_presets_lock = threading.Lock()
+
+
+def _save_and_upload_presets(body):
+    """プリセットストア全体を受けて保存し、GitHub へ即時反映する。
+
+    戻り値: (status, payload_dict)。検証不正は 400、保存や
+    アップロードの失敗は 500 (payload に理由を入れる)。
+    """
+    try:
+        data = json.loads(body)
+    except Exception:
+        return 400, {"ok": False, "error": "invalid json"}
+    if not isinstance(data, dict) \
+            or not isinstance(data.get("mine"), list) \
+            or not isinstance(data.get("opps"), list):
+        return 400, {"ok": False, "error": "mine/opps must be arrays"}
+    with open(PRESETS_PATH, "wb") as f:
+        f.write(body)
+    token = _log_token()
+    if not token:
+        return 500, {"ok": False,
+                     "error": "github_log_token.txt is not configured"}
+    with _presets_lock:
+        _, sha = _gh_get_file("presets.json", token)
+        try:
+            _gh_put_file("presets.json", body, token,
+                         "Update presets.json via serve.py", sha=sha)
+        except urllib.error.HTTPError as e:
+            if e.code != 409:
+                raise
+            # デバッグ用ページ側の PUT と競合した場合は、sha を
+            # 取り直して 1 回だけ再試行する (内容はこちらの保存が正)
+            _, sha = _gh_get_file("presets.json", token)
+            _gh_put_file("presets.json", body, token,
+                         "Update presets.json via serve.py", sha=sha)
+    return 200, {"ok": True}
+
+
 # 見せ合いテストの送信セッション。通常起動 (start_all.sh) の
 # serve.py は、logs/ に残った過去の見せ合いテスト結果を送らない
 # (通常起動でテスト結果が送信されると、テストが起動したように
@@ -929,6 +975,46 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 return
             payload = json.dumps({"ok": True, "file": name}).encode()
             self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if path == "/presets":
+            # チームプリセットの共有 (localhost の UI からストア全体
+            # が POST される)。検証して presets.json に保存し、既存の
+            # GitHub 経路でリポジトリ直下の presets.json へ即時反映
+            # する。備考ゲートの対象外。結果は JSON で返す
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            if length <= 0:
+                status, payload_obj = 400, {"ok": False, "error": "empty body"}
+            elif length > _PRESETS_MAX_BYTES:
+                # 本体を読まずに返すと接続がリセットされ、送信側が
+                # 413 を受け取れないことがあるため、適度な量までは
+                # 読み捨ててから返す
+                if length <= 8 * 1024 * 1024:
+                    remaining = length
+                    while remaining > 0:
+                        chunk = self.rfile.read(min(65536, remaining))
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                status, payload_obj = 413, {"ok": False, "error": "too large"}
+            else:
+                body = self.rfile.read(length)
+                try:
+                    status, payload_obj = _save_and_upload_presets(body)
+                except Exception as e:
+                    _record_crash("presets_save", e)
+                    status, payload_obj = 500, {"ok": False, "error": str(e)}
+            if status == 200:
+                print("[log] プリセットを受け取り、リポジトリへ反映しました",
+                      flush=True)
+            payload = json.dumps(payload_obj).encode()
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
