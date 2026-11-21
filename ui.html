@@ -263,8 +263,11 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 @media (max-width:640px){ .tables{flex-direction:column; align-items:stretch} .metarow{flex-direction:column} .presetbox{min-width:0; width:auto} .presethead{flex-wrap:wrap} }
 
 /* ---------- 端末別レイアウト (data-layout は head のスクリプトが ?layout= か画面幅で決める) ---------- */
-/* PC レイアウトには専用ルールなし (端末別ページ追加前の表示方法のまま。
-   head のスクリプトが viewport メタを外し、ブラウザ標準の幅で描画される) */
+/* PC レイアウト: 描画方法は端末別ページ追加前のまま (head のスクリプトが
+   viewport メタを外し、ブラウザ標準の幅で描画される)。全体の表示倍率だけ
+   0.9 倍にし、ブラウザ 100% 表示で従来の 90% 縮小表示と同じ見た目にする
+   (ユーザー指示 2026-11-21) */
+html[data-layout="pc"] body{zoom:.9}
 /* iPad 用: 2カラムのまま余白と最小幅を詰めて、縦持ちでも横スクロールなしに収める */
 html[data-layout="tablet"]{font-size:12.5px}
 html[data-layout="tablet"] .wrap{padding:1rem 1rem 1.4rem}
