@@ -141,7 +141,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .spritewrap{position:relative; display:inline-block; cursor:pointer}
 .formepop{position:absolute; top:calc(100% + 6px); left:0; z-index:45; display:flex; gap:.3rem; background:#f7f7f7; border-radius:.8rem; padding:.55rem; box-shadow:0 4px 18px rgba(0,0,0,.45)}
 .formeopt{display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.4rem .55rem; border-radius:.6rem; background:none; border:none; cursor:pointer}
-.formeopt img{width:44px; height:44px; image-rendering:pixelated}
+.formeopt img{width:44px; height:44px; object-fit:contain; image-rendering:pixelated}
 .formeopt span{font-size:.85rem; color:#555; letter-spacing:.08em; font-weight:600}
 .formeopt.sel{background:rgba(33,150,243,.30)}
 .formeopt:hover{background:rgba(33,150,243,.18)}
@@ -590,6 +590,23 @@ function spriteURL(speciesEn) { return `https://play.pokemonshowdown.com/sprites
 function spriteImg(en, baseEn, cls) {
   return `<img class="${cls}" src="${spriteURL(en)}" data-spr="0" data-sid="${spriteId(en)}" data-base="${spriteId(baseEn || en)}" alt="">`;
 }
+// 画像フォールバック: gen5 スプライトに無い種族 (一部の新メガ等) は、読み込み
+// 失敗のたびに (1) ani GIF → (2) ベース種族の gen5 PNG の順に切り替え、
+// それも無ければ壊れた画像アイコンを出さず非表示にする (data-spr が段階)
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (!img || img.tagName !== 'IMG' || img.dataset.spr === undefined) return;
+  if (img.dataset.spr === '0') {
+    img.dataset.spr = '1';
+    img.src = `https://play.pokemonshowdown.com/sprites/ani/${img.dataset.sid}.gif`;
+  } else if (img.dataset.spr === '1' && img.dataset.base !== img.dataset.sid) {
+    img.dataset.spr = '2';
+    img.src = `https://play.pokemonshowdown.com/sprites/gen5/${img.dataset.base}.png`;
+  } else {
+    img.dataset.spr = '3';
+    img.style.visibility = 'hidden';
+  }
+}, true);
 function typeChips(spec) {
   return speciesData(spec).types.map(t => `<span class="typechip" style="background:${TYPE_COLOR[t] || '#555'}">${TYPE_JA[t] || t}</span>`).join('');
 }
