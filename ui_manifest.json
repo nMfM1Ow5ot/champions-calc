@@ -14,7 +14,7 @@
   "data/log_names.json": "4abc4e7011872a2b09d3676adaaf4be86db9e6c5dd5c5529d37c501caf37f403",
   "data/meta_sets.json": "b54373e03e837cab2bdde7d1095b994591d8fd71c72c9a6c7e70959882da2245",
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
-  "data/names_ja.json": "ac7ee1b1c7f0db090623ab72f3d0ff3aa4b5f94fb9425ddcbe1abda411fe75d3",
+  "data/names_ja.json": "6f900267d7914eef7feacd0487fb0fa354e2cb4cadadbff37e5b6c9a08e2c7bf",
   "data/pokedb_parsed.json": "bba36692be2b33ff42edeb7c62c8d0cd9b9c3cf2c123a7c95e49bec3b7c3fe63",
   "data/preview_features.json": "cbe32c7324d5bb1358d878c582e6371a7a8cd04a544cb321c2b85ba9ee320c94",
   "data/regulation.json": "8111f5ff4ce0c7b0592a6af77e3c1a2ca0b340c71d930f1ba97e3eb94a83c290",
@@ -43,5 +43,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_2231"
+ "rev": "20261121_2232"
 }
