@@ -28257,12 +28257,12 @@ function createEstimator(deps) {
     const keyOf = (c) => c.nature + "|" + JSON.stringify(c.sp) + "|" + c.item + "|" + c.ability + "|" + (c.megaSpecies || "");
     const byKey = new Map(corpus.map((c) => [keyOf(c), c]));
     const merged = [...corpus];
-    for (const c of corpus) c.post *= 0.6;
+    for (const c of corpus) c.post *= 0.75;
     for (const c of out) {
       const hit = byKey.get(keyOf(c));
-      if (hit) hit.post += 0.4 * c.post;
+      if (hit) hit.post += 0.25 * c.post;
       else {
-        c.post *= 0.4;
+        c.post *= 0.25;
         merged.push(c);
       }
     }
