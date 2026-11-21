@@ -1257,9 +1257,19 @@ function dispStat(spec, key, raw, sideKey) {
   if (modChain !== 4096) { const x = v * modChain / 4096; v = (x % 1 > 0.5) ? Math.ceil(x) : Math.floor(x); }
   if (key === 'spe') {
     if (itm === 'Choice Scarf') v = Math.floor(v * 1.5);
+    // 天候・フィールドで素早さが上がる特性 (ダメージ計算側では自動で
+    // 効いているため、実数値の表示にも合わせる)
+    const w = state.field.weather;
+    if (ab === 'Chlorophyll' && (w === 'Sun' || w === 'Harsh Sunshine')) v *= 2;
+    if (ab === 'Swift Swim' && (w === 'Rain' || w === 'Heavy Rain')) v *= 2;
+    if (ab === 'Sand Rush' && w === 'Sand') v *= 2;
+    if (ab === 'Slush Rush' && w === 'Snow') v *= 2;
+    if (ab === 'Surge Surfer' && state.field.terrain === 'Electric') v *= 2;
     if (spec.unburden && ab === 'Unburden') v *= 2;
     if (state.side[sideKey].tailwind) v *= 2;
-    if (spec.status === 'par') v = Math.floor(v / 2);
+    // はやあし: 状態異常で 1.5 倍 (まひの素早さ低下は無効)
+    if (ab === 'Quick Feet' && spec.status) v = Math.floor(v * 1.5);
+    else if (spec.status === 'par') v = Math.floor(v / 2);
   }
   return [v, v > raw[key] ? 'green' : v < raw[key] ? 'red' : ''];
 }
