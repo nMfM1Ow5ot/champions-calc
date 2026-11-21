@@ -762,7 +762,7 @@ function bayesBuildCandidates(species) {
     if (added) { const t2 = out.reduce((s, c) => s + c.post, 0) || 1; for (const c of out) c.post /= t2; }
   }
   // 上位勢コーパス (meta_sets) の実在型を候補へ統合する: 事前確率は
-  // コーパス側 6 割 (weight 按分) / pokedb 合成候補側 4 割 (従来の使用率積)。
+  // コーパス側 7.5 割 (weight 按分) / pokedb 合成候補側 2.5 割 (使用率積)。
   // pokedb 候補と同一の型がコーパスにある場合は、その質量をコーパス候補へ
   // 寄せて二重計上を避ける。コーパスが無い種族は従来動作のまま
   const corpus = bayesCorpusCandidates(species, table, { topAbility: topAbility.en, megaAbility, megaSpecies: u.megaSpecies || undefined });
@@ -770,11 +770,11 @@ function bayesBuildCandidates(species) {
   const keyOf = c => c.nature + '|' + JSON.stringify(c.sp) + '|' + c.item + '|' + c.ability + '|' + (c.megaSpecies || '');
   const byKey = new Map(corpus.map(c => [keyOf(c), c]));
   const merged = [...corpus];
-  for (const c of corpus) c.post *= 0.6;
+  for (const c of corpus) c.post *= 0.75;
   for (const c of out) {
     const hit = byKey.get(keyOf(c));
-    if (hit) hit.post += 0.4 * c.post;
-    else { c.post *= 0.4; merged.push(c); }
+    if (hit) hit.post += 0.25 * c.post;
+    else { c.post *= 0.25; merged.push(c); }
   }
   const tot2 = merged.reduce((s, c) => s + c.post, 0) || 1;
   for (const c of merged) c.post /= tot2;
