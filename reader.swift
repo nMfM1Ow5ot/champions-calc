@@ -616,6 +616,8 @@ var itemLostActive: Set<String> = []               // 持ち物を消費・喪�
 var subActive: Set<String> = []                    // 身代わりが出ている種族 ("side:Species"。出現文の二重出力防止)
 var boostTouchedStats: Set<String> = []            // この対戦でランク変化を記録した "side:Species|stat" (地形シード遡及補完の二重適用防止)
 var heldBoostLines: [String: [(stat: String, delta: Int, at: Date)]] = [:]  // 交代行より先に届いたランク変化の保留 (枠は出す時点で付け直す)
+var faintedSpecies: Set<String> = []   // "p2:Sneasler" 形式: ひんし行が出て、まだ交代で戻っていない種族 (あり得ない技行の抑止用)
+var heldEntryBoosts: [(key: String, line: String, at: Date)] = []  // 入場特性 (いかく等) の効果行が原因側の交代行より先に届いた場合の保留
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
 var protectMoveTurn: [String: Int] = [:]         // 枠 -> まもるを使ったターン (activate 行の照合用)
@@ -1048,6 +1050,7 @@ func applyEvent(_ line: String) {
             if monStates[key] == nil { monStates[key] = MonState() }
             monStates[key]?.hpPercent = 0
             subActive.remove(key)
+            faintedSpecies.insert(key)
         }
     } else if line.hasPrefix("|switch|") || line.hasPrefix("|drag|") {
         lastSwitchEmitSeq = actionSeq
@@ -1064,6 +1067,7 @@ func applyEvent(_ line: String) {
             let key = "\(ss.side):\(ss.speciesEn)"
             if monStates[key] == nil { monStates[key] = MonState() }
             monStates[key]?.boosts = [:]  // 入場時はランク変化なし
+            faintedSpecies.remove(key)   // 交代で戻れば、ひんし済み扱いは解ける
         }
     } else if line.hasPrefix("|detailschange|") {
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
@@ -1144,6 +1148,73 @@ func isRoundEventLine(_ line: String) -> Bool {
     return false
 }
 
+// 同一種族ファミリーか (ベース名と、そのフォルム・メガは同一視する)。
+// 行の主語が場の実在と食い違う「あり得ない行」を弾く判定に使う
+func sameSpeciesFamily(_ a: String, _ b: String) -> Bool {
+    if a == b { return true }
+    func famKey(_ n: String) -> String {
+        for suf in ["-Mega-X", "-Mega-Y", "-Mega-Z", "-Mega", "-Blade", "-Shield"] where n.hasSuffix(suf) {
+            return String(n.dropLast(suf.count))
+        }
+        return n
+    }
+    if famKey(a) == famKey(b) { return true }
+    return a.hasPrefix(b + "-") || b.hasPrefix(a + "-")
+}
+
+// |-ability| 行の妥当性: その種族ファミリー (ベース+全フォルム+メガ) の
+// 持ち得る特性に含まれない特性行は、崩れた文の誤帰属として弾く
+// (実例: 2026-11-22 battle_20261122_050512、ターン3に
+//  「|-ability|p1a: Charizard|Intimidate」という不可能な行が出た)。
+// ファミリーのデータが無い種族は判定できないため通す。コピー特性
+// (トレース等) を持つ種族は、相手の特性を名乗る行があり得るため通す
+func abilityLinePlausible(_ line: String) -> Bool {
+    let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+    guard f.count >= 4, let ss = parseSlotSpecies(f[2]) else { return true }
+    let ability = f[3].trimmingCharacters(in: .whitespaces)
+    let familyKeys = speciesAbilityMap.keys.filter {
+        $0 == ss.speciesEn || $0.hasPrefix(ss.speciesEn + "-") || ss.speciesEn.hasPrefix($0 + "-")
+    }
+    guard !familyKeys.isEmpty else { return true }
+    var pool = Set<String>()
+    for k in familyKeys { pool.formUnion(speciesAbilityMap[k] ?? []) }
+    if pool.contains(ability) { return true }
+    let copyAbilities: Set<String> = ["Trace", "Receiver", "Power of Alchemy"]
+    if !pool.isDisjoint(with: copyAbilities) { return true }
+    return false
+}
+
+// |move| 行の決定的な不可能性: 使用者がひんし済みで場に戻って
+// いない場合は、崩れた文の誤帰属として弾く (実例: 2026-11-22
+// battle_20261122_050512、ターン2で倒れた Sneasler がターン3に
+//  p2a の技行として現れた)
+func moveLineHardImplausible(_ line: String) -> Bool {
+    let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+    guard f.count >= 3, let ss = parseSlotSpecies(f[2]) else { return false }
+    return faintedSpecies.contains("\(ss.side):\(ss.speciesEn)")
+}
+
+// |move| 行の使用者が、その側のどちらの枠の現 occupants でもないか。
+// 交代の取りこぼし時は既定帰属で技行を出すのが従来方針のため、
+// これは行を弾く判定には使わず、証拠記録専用とする。枠の
+// occupants はプレート側 (lastSlots) が正 (交代行がガードで
+// 破棄されても場には出ているため、行ベースの記録は予備に回す)
+func moveLineOffField(_ line: String) -> Bool {
+    let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+    guard f.count >= 3, let ss = parseSlotSpecies(f[2]) else { return false }
+    let slotA = "\(ss.side)a", slotB = "\(ss.side)b"
+    let plateOf: (String) -> String = { s in (ss.side == "p1" ? "mine" : "opp") + (s.hasSuffix("a") ? "A" : "B") }
+    guard let occ = lastSlots[plateOf(ss.slot)]?.speciesEn ?? eventSlotSpecies[ss.slot] else { return false }
+    if sameSpeciesFamily(occ, ss.speciesEn) { return false }
+    if occ.hasPrefix("Ditto") { return false }   // へんしん中は相手の姿で技文が出る
+    let sibSlot = ss.slot == slotA ? slotB : slotA
+    if let sib = lastSlots[plateOf(sibSlot)]?.speciesEn ?? eventSlotSpecies[sibSlot], sameSpeciesFamily(sib, ss.speciesEn) { return false }
+    // その種族がちょうど交代で入ってくる途中なら、確定待ちの誤差として扱う
+    let prefix = ss.side == "p1" ? "mine" : "opp"
+    for plate in ["\(prefix)A", "\(prefix)B"] where pendingSwitchSpecies[plate] == ss.speciesEn { return false }
+    return true
+}
+
 func emitLog(_ line: String) { emitLog(line, applyNow: true) }
 
 // applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
@@ -1159,6 +1230,38 @@ func emitLog(_ line: String, applyNow: Bool) {
     // startBattleLog 内のヘッダー行は resetLogState で winLogged が
     // 落ちた後に emitLog されるため、ここで再帰はしない
     if winLogged { startBattleLog() }
+    // あり得ない行のガード: 文の取得が崩れて断片が誤帰属された場合、
+    // 場の実在と矛盾する特性行・技行は記録しない (証拠は残す)。
+    // 実例: 2026-11-22 battle_20261122_050512 のターン3、
+    // 「|-ability|p1a: Charizard|Intimidate」 (メガ後の特性ではあり得ない)
+    // と「|move|p2a: Sneasler|Heat Wave」 (前ターンに倒れた種族) が出た
+    if line.hasPrefix("|-ability|"), !abilityLinePlausible(line) {
+        print("[reader] あり得ない特性行を記録しませんでした: \(line)")
+        fflush(stdout)
+        debugCapture(kind: "ability_guard", key: "ability_guard:\(line)", rawText: "",
+                     detail: ["line": line, "turn": currentTurn])
+        return
+    }
+    if line.hasPrefix("|move|") {
+        // 前の行動で倒れた個体のひんし行が、次の技行より後ろに
+        // ならないよう、先に流す (実例: 2026-11-22
+        // battle_20261122_050512、ウルガモスのひんし行が
+        // てみだしの技行の後に置かれた)
+        emitPendingFaints()
+        if moveLineHardImplausible(line) {
+            print("[reader] あり得ない技行を記録しませんでした: \(line)")
+            fflush(stdout)
+            debugCapture(kind: "move_guard", key: "move_guard:\(line)", rawText: "",
+                         detail: ["line": line, "turn": currentTurn])
+            return
+        }
+        // 場にいない種族の技行は、交代の取りこぼし時の既定帰属が
+        // あり得るため行は出すが、証拠だけ残す
+        if moveLineOffField(line) {
+            debugCapture(kind: "move_guard", key: "move_guard:\(line)", rawText: "",
+                         detail: ["line": line, "turn": currentTurn, "mode": "off_field_evidence"])
+        }
+    }
     // ターン行の構造ガード: ターン判定 (コマンドフェーズ検出) が遅れて、
     // ラウンドの出来事がそのラウンドの |turn| 行より先に記録されることが
     // ある (実例: 2026-11-21 battle_20261121_140658、初回ラウンド全体が
@@ -1428,6 +1531,7 @@ func resetLogState() {
     heldWeatherStart = nil; heldTerrainStart = nil; fieldHoldBypass = false
     wishSetTurn = [:]
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
+    faintedSpecies = []; heldEntryBoosts = []
     battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
     debugShotsThisBattle = 0; debugRoutineShots = 0; debugEventShots = 0; debugSeenEntries = []; debugFrameRing = []
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
@@ -1494,12 +1598,68 @@ func battleStamp(for date: Date = Date()) -> String {
     return f.string(from: date)
 }
 
+// アーカイブ時のヘッダー補完: 見せ合いが取得できなかった試合
+// (late_start) では、ヘッダーの |poke| が先発の 2 体だけで、途中から
+// 出た種族の宣言が無いままになる (実例: 2026-11-22
+// battle_20261122_050512、Salamence / Rillaboom の宣言が無かった)。
+// 交代行に実際に現れた種族は対戦にいたことが確定しているため、
+// 保存時に限り、現れた順で宣言へ補う (ライブの状態には触れない)
+func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (protocolLines: [String], displayLines: [String], added: [String]) {
+    var proto = protocolLines
+    var added: [String] = []
+    for side in ["p1", "p2"] {
+        var declared: [String] = []
+        var lastPokeIdx: Int? = nil
+        for (i, l) in proto.enumerated() {
+            if l.hasPrefix("|poke|\(side)|") {
+                declared.append(String(l.dropFirst("|poke|\(side)|".count)))
+                lastPokeIdx = i
+            }
+            if l == "|start" { break }
+        }
+        var appeared: [String] = []
+        for l in proto {
+            guard l.hasPrefix("|switch|") || l.hasPrefix("|drag|") else { continue }
+            let f = l.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            guard f.count >= 4, let ss = parseSlotSpecies(f[2]), ss.side == side else { continue }
+            if !appeared.contains(f[3]) { appeared.append(f[3]) }
+        }
+        let missing = appeared.filter { a in !declared.contains { sameSpeciesFamily($0, a) } }
+        if missing.isEmpty { continue }
+        let insertAt = lastPokeIdx.map { $0 + 1 } ?? (proto.firstIndex(of: "|start") ?? proto.count)
+        proto.insert(contentsOf: missing.map { "|poke|\(side)|\($0)" }, at: insertAt)
+        added += missing.map { "\(side):\($0)" }
+    }
+    var disp = displayLines
+    if !added.isEmpty {
+        // 表示側: チーム見出し行 (2 つあるうち 1 つ目が自軍、2 つ目が相手)
+        // の次の行が種族の一覧行。補った種族を側ごとに追記する
+        var teamLineIdxs: [Int] = []
+        for (i, l) in disp.enumerated() where l == "Your team:" || l.hasSuffix("'s team:") { teamLineIdxs.append(i) }
+        for (n, side) in ["p1", "p2"].enumerated() {
+            let sideAdded = added.filter { $0.hasPrefix("\(side):") }.map { String($0.dropFirst(3)) }
+            guard !sideAdded.isEmpty, teamLineIdxs.count > n else { continue }
+            let namesIdx = teamLineIdxs[n] + 1
+            guard namesIdx < disp.count else { continue }
+            let existing = disp[namesIdx].isEmpty ? [] : disp[namesIdx].components(separatedBy: " / ")
+            let extra = sideAdded.filter { a in !existing.contains { sameSpeciesFamily($0, a) } }
+            if !extra.isEmpty { disp[namesIdx] = (existing + extra).joined(separator: " / ") }
+        }
+    }
+    return (proto, disp, added)
+}
+
 func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String) {
     guard protocolLines.contains("|start") else { return }
+    let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines)
+    if !completed.added.isEmpty {
+        print("[log] ヘッダーに宣言の無かった種族を補いました: \(completed.added.joined(separator: ", "))")
+        fflush(stdout)
+    }
     try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
     let base = "battle_\(id)_\(final ? "final" : "interrupted")"
-    let protoText = protocolLines.joined(separator: "\n") + "\n"
-    let dispText = displayLines.joined(separator: "\n") + "\n"
+    let protoText = completed.protocolLines.joined(separator: "\n") + "\n"
+    let dispText = completed.displayLines.joined(separator: "\n") + "\n"
     try? protoText.write(to: logsDirURL.appendingPathComponent(base + "_protocol.log"), atomically: true, encoding: .utf8)
     try? dispText.write(to: logsDirURL.appendingPathComponent(base + ".log"), atomically: true, encoding: .utf8)
     print("[log] 試合ログを保存しました: logs/\(base).log / logs/\(base)_protocol.log")
@@ -1765,9 +1925,14 @@ func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int,
     // バビリのみ所持に引っ張られて [from] 無しになった)
     let knownItem = key.hasPrefix("p2") ? revealedItems[speciesEn]
         : ((teamEntries[speciesEn]?["item"] as? String) ?? revealedItems[speciesEn])
-    if fromPct <= 50 && (20...30).contains(delta) {
-        if knownItem == nil || knownItem == "オボンのみ" { return ("item: Sitrus Berry", "オボンのみ") }
-        return nil
+    if fromPct <= 50 && (12...30).contains(delta) {
+        // 持ち物がオボンのみと判明している場合は、プレート読みの
+        // ぶれ (実例: 2026-11-22 battle_20261122_050512、回復量が
+        // +16% と読まれた) を許容して幅を広げる。未判明の場合は
+        // 従来どおり +25% 前後の狭い幅でだけ推定する
+        if knownItem == "オボンのみ" { return ("item: Sitrus Berry", "オボンのみ") }
+        if knownItem == nil && delta >= 20 { return ("item: Sitrus Berry", "オボンのみ") }
+        if delta >= 20 { return nil }
     }
     if (3...8).contains(delta) {
         let abilityJa = key.hasPrefix("p2") ? revealedAbilities[speciesEn]
@@ -1919,6 +2084,13 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     lastDamageTime[plateName] = Date()
     lastEmittedPct[plateName] = toPct
     if lastPendingLabel == "\(slot): \(speciesEn)" { lastPendingLabel = "" }
+    // 基準値そのものが「疑わしい跳び」として保留中の値か (下の解消で
+    // suspectJump は消えるため、ここで控える)。基準が疑わしい場合、
+    // 発生源不明の回復は「幻の回復」ではなく基準側の誤りの訂正として
+    // 扱う必要がある (実例: 2026-11-22 battle_20261122_050512、
+    // 保留された 25% が基準に固定され、実値 41% への回復が
+    // 発生源なしとして抑止され、状態が 25% のまま固定された)
+    let baselineWasSuspect = suspectJump[plateName].map { $0.toPct == effFrom } ?? false
     // 疑わしい大きな跳びの解消: 保留していた値と同じ読みが次のターン
     // でも続くなら、誤読は内部状態の方だったとみなし、行を出さずに
     // 値だけを取り込む (実例: 2026-11-21 battle_20261121_230402、
@@ -1946,13 +2118,22 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 出来事では起こり得ない (設置物は最大でも 25%、反動も技が
         // 先行する)。最後の出来事が交代行で、その後に技が出ていない
         // 場合は、繰り出し演出中のプレート誤読の疑いとして行を出さず
-        // に保留する (実例: 2026-11-21 battle_20261121_230402、
+        // に保留する。ただし、直近の技がまだ解決中 (その技の被ダメが
+        // 1 件も記録されていない) 場合は対象外: 交代で入った本人が
+        // その技を受ける場面では、技行→交代行の順に記録されても
+        // 被弾は本物であり、保留すると被ダメが交代行の HP に
+        // 畳み込まれて消える (実例: 2026-11-22
+        // battle_20261122_050512、交代で入ったガオガエンへの
+        // インファイト 75% が保留され、回復もろとも記録が崩れた)。
+        // (実例: 2026-11-21 battle_20261121_230402、
         // ペリッパーを倒した直後の交代演出中にサーナイトが 10/145 と
         // 読まれ、93% 喪失の幻行が出た)。状態異常の経過ダメージは
         // 対象外 (どくの経過は大きくなることがある)。保留した値は
         // 上の解消規則で、持続すれば次のターンに取り込まれる
+        let moveInFlight = !lastMoveLabel.isEmpty && lastMoveSeq == actionSeq
+            && (damagedBySeq[actionSeq] ?? []).isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 20
         if effFrom - toPct > 55, toPct != 0, (monStates[key]?.status ?? "").isEmpty,
-           pendingStatusFrom[key] == nil,
+           pendingStatusFrom[key] == nil, !moveInFlight,
            lastSwitchEmitSeq >= 0, lastSwitchEmitSeq >= lastMoveEmitSeq {
             suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
             lastEmittedPct[plateName] = effFrom
@@ -2017,6 +2198,28 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                 } else if recoilMoves.contains(lastMoveName) {
                     fromCode = "move: \(lastMoveName)"
                     selfClassified = true
+                } else if (11...18).contains(drop) {
+                    // 接触した相手の特性・持ち物による反動 (さめはだ/
+                    // てつのトゲ = 最大の 1/8、ゴツゴツメット = 1/6)。
+                    // 技を受けた側の特性・持ち物が判明している場合に
+                    // 限って帰属させる (実例: 2026-11-22
+                    // battle_20261122_050512、ねこだましを受けた
+                    // ガブリアスの さめはだ反動に [from] が付かなかった)
+                    for targetLabel in damagedBySeq[actionSeq] ?? [] where targetLabel != "\(slot): \(speciesEn)" {
+                        guard let tp = parseSlotSpecies(targetLabel) else { continue }
+                        let tAbility = tp.side == "p1" ? (teamEntries[tp.speciesEn]?["ability"] as? String) : revealedAbilities[tp.speciesEn]
+                        let tItem = tp.side == "p1" ? (teamEntries[tp.speciesEn]?["item"] as? String) : revealedItems[tp.speciesEn]
+                        if (11...14).contains(drop), tAbility == "さめはだ" {
+                            fromCode = "ability: Rough Skin"; selfClassified = true; break
+                        }
+                        if (11...14).contains(drop), tAbility == "てつのトゲ" {
+                            fromCode = "ability: Iron Barbs"; selfClassified = true; break
+                        }
+                        if (15...18).contains(drop), tItem == "ゴツゴツメット" {
+                            emitItemOnce(slot: tp.slot, side: tp.side, speciesEn: tp.speciesEn, itemJa: "ゴツゴツメット")
+                            fromCode = "item: Rocky Helmet"; selfClassified = true; break
+                        }
+                    }
                 }
             }
         }
@@ -2079,6 +2282,21 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                 : ((teamEntries[speciesEn]?["ability"] as? String) ?? revealedAbilities[speciesEn])
             if !healExplained(key: key, slot: slot, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct,
                               knownItem: knownItem, abilityJa: knownAbility) {
+                // 基準値が疑わしい跳びとして保留中の値だった場合は、
+                // 回復行は出さないが、値だけは訂正として取り込む
+                // (基準の誤りを固定すると、以後の全ての喪失率が
+                // 狂う。実例: 2026-11-22 battle_20261122_050512)
+                if baselineWasSuspect {
+                    lastEmittedPct[plateName] = toPct
+                    monStates[key]?.hpPercent = toPct
+                    monStates[key]?.hpText = hpText
+                    debugCapture(kind: "hp_jump_adopted", key: "hp_jump_adopted|\(plateName)", rawText: "",
+                                 detail: ["slot": slot, "species": speciesEn, "toPct": toPct,
+                                          "via": "heal_from_suspect_baseline"])
+                    print("[reader] 疑わしい基準値からの回復を、状態訂正として取り込みました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+                    fflush(stdout)
+                    return true
+                }
                 lastEmittedPct[plateName] = effFrom
                 print("[reader] 発生源を特定できない回復を記録し、行は出しませんでした: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
                 fflush(stdout)
@@ -2366,6 +2584,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     // 直後に受けた技 (や さいせいさいぼう の回復) の分。
                     // 交代行の HP に吸収されて被ダメ行が出ないため、後で補う
                     let prevPct = monStates[key]?.hpPercent ?? 100
+                    let prevText = monStates[key]?.hpText ?? (s.hpMax.map { "\($0)/\($0)" } ?? "100/100")
                     pendingDamagePct[plate.name] = nil
                     heldLine[plate.name] = nil
                     // 試合開始時の先発は必ず満タンで出る。登場アニメーション
@@ -2391,10 +2610,24 @@ func processPlates(_ hits: [String: SlotState]) {
                     let adoptFull = openingLead || replacementEntry
                     let effPct = adoptFull ? 100 : s.hpPercent
                     let effText = adoptFull ? (s.hpMax.map { "\($0)/\($0)" } ?? "100/100") : hpTextFor(s)
-                    lastEmittedPct[plate.name] = effPct
+                    // 交代行の HP は「入場時点の値」として前回出場時の
+                    // 値 (prevPct / prevText) を載せ、入場までに受けた
+                    // ダメージ・回復は直後の補完行に担わせる (実例:
+                    // 2026-11-22 battle_20261122_050512、ガブリアスの
+                    // 交代行が被弾後の 156/185 を載せて同値の被ダメ行と
+                    // 重なり、地形回復込みの交代行にも同値の回復行が
+                    // 重なった)。ログの基準値 (lastEmittedPct) も交代行
+                    // の値に合わせ、補完行がその差分を進める。補完行が
+                    // 抑止された場合も、基準は交代行と一致したまま
+                    // 次のプレート読みが差分を再駆動する
+                    let compensating = effPct != prevPct && !adoptFull
+                    lastEmittedPct[plate.name] = compensating ? prevPct : effPct
                     monStates[key]?.hpPercent = effPct
                     monStates[key]?.hpText = effText
-                    var hp = monStates[key]!.hpText
+                    // 初登場は前回記録が無いため、入場時点の表記は
+                    // その種族の満タン表記で組み立てる
+                    let entryText = firstEntry ? (s.hpMax.map { "\($0)/\($0)" } ?? "100/100") : prevText
+                    var hp = compensating ? entryText : effText
                     if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
                     emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
                     sitrusWatch[key] = nil   // 交代を挟んだ監視は持ち越さない
@@ -2515,10 +2748,14 @@ func processPlates(_ hits: [String: SlotState]) {
         }
     }
     // 保留していた天候・地形の開始行を流す: 交代の確定が済んだ時点
-    // (確定待ちが空になった) か、2.5 秒を超えたら強制的に出す
+    // (確定待ちが空になった) か、6 秒を超えたら強制的に出す。
+    // 以前は 2.5 秒だったが、登場演出が長いと確定前に強制分が流れ、
+    // 開始行が交代行より前に出た (実例: 2026-11-22
+    // battle_20261122_050512、グラスフィールド開始行が
+    // ゴリランダーの交代行より前に置かれた)
     if heldWeatherStart != nil || heldTerrainStart != nil {
         let ready = pendingSwitchSpecies.isEmpty
-            || Date().timeIntervalSince((heldWeatherStart?.at ?? heldTerrainStart?.at) ?? .distantPast) > 2.5
+            || Date().timeIntervalSince((heldWeatherStart?.at ?? heldTerrainStart?.at) ?? .distantPast) > 6.0
         if ready {
             fieldHoldBypass = true
             if let h = heldWeatherStart { heldWeatherStart = nil; setWeather(h.ui, h.logName, via: h.text) }
@@ -2526,6 +2763,8 @@ func processPlates(_ hits: [String: SlotState]) {
             fieldHoldBypass = false
         }
     }
+    // 入場特性の効果として保留した行: 交代の確定待ちが空になったら流す
+    if !heldEntryBoosts.isEmpty && pendingSwitchSpecies.isEmpty { flushHeldEntryBoosts() }
 }
 
 // MARK: - ゲーム内ログ画面の解析
@@ -3068,6 +3307,8 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
     }
     // この種族宛てに保留していたランク変化行を、交代行の後に出す
     flushHeldBoosts(forKey: key, slot: slot)
+    // 入場特性の効果として保留していた行も、この交代行の後に流す
+    flushHeldEntryBoosts()
     // 交代前にシード消費を検知していた場合、かるわざ の発動をここで出す
     if pendingUnburden.remove(key) != nil { noteItemLost(slot: slot, side: side, speciesEn: speciesEn) }
 }
@@ -3303,6 +3544,15 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
         //  実際の枠と食い違う。実例: 2026-11-20、オオニューラの
         //  サイコシード発動行が p1a で出た (実際は p1b))
         heldBoostLines[key, default: []].append((stat, delta, Date()))
+    } else if stat == "atk" && delta < 0 && Date().timeIntervalSince(lastMoveMsgAt) > 3
+                && !pendingSwitchSpecies.filter({ $0.key.hasPrefix(key.hasPrefix("p1") ? "opp" : "mine") }).isEmpty {
+        // 入場特性 (いかく) の効果とみられる攻撃低下が、原因側の
+        // 交代確定より先に届いた場合は、行だけを保留して交代行の
+        // 後に流す (状態への適用は上の applyEvent で済んでいる)。
+        // 技の文が直近にある場合は技の効果なので保留しない
+        // (実例: 2026-11-22 battle_20261122_050512、ボーマンダの
+        //  いかくの低下行が交代行・特性行より前に並んだ)
+        heldEntryBoosts.append((key: key, line: line, at: Date()))
     } else {
         emitLog(line, applyNow: false)
     }
@@ -3332,7 +3582,18 @@ func flushHeldBoosts(forKey key: String, slot: String) {
     for h in arr { emitLog(boostLine(slot: slot, speciesEn: speciesEn, stat: h.stat, delta: h.delta), applyNow: false) }
 }
 
+// 入場特性の効果として保留したランク変化行を流す。先に いかく の
+// 帰属を試すことで、交代行 → 特性行 → 低下行 の順に並べる
+func flushHeldEntryBoosts() {
+    if heldEntryBoosts.isEmpty { return }
+    let held = heldEntryBoosts
+    heldEntryBoosts = []
+    for ts in Set(held.map { String($0.key.prefix(2)) }) { attributeIntimidate(targetSide: ts) }
+    for h in held { emitLog(h.line, applyNow: false) }
+}
+
 func flushHeldBoostsTimeout() {
+    if heldEntryBoosts.contains(where: { Date().timeIntervalSince($0.at) > 6 }) { flushHeldEntryBoosts() }
     if heldBoostLines.isEmpty { return }
     let now = Date()
     for k in Array(heldBoostLines.keys) {
@@ -4168,7 +4429,10 @@ func translateBattleMessage(_ text: String) -> Bool {
     // (部分一致の最長マッチだとキーアイテム名などと競合しうるため)
     // 「反応した」は OCR で「受応した」と崩れることがある (実例:
     // 2026-11-20 vs leslie 戦。崩れた文は |-message| に漏れていた)
-    if (t.contains("反応した") || t.contains("受応した")) && (t.contains("リングが") || t.contains("ナイト")) {
+    // 「反応した」の「反」は OCR で 受/設 などにも崩れるため、「応した」
+    // で拾う (実例: 2026-11-22 battle_20261122_050512、「設応した」と
+    // 崩れて反応文として扱われず、メガ行にストーンが付かなかった)
+    if t.contains("応した") && (t.contains("リングが") || t.contains("ナイト")) {
         // 「リングが」を含む形が基本だが、相手のメガでは末尾の語が
         // 読み落ちて「<種族>の<ストーン>と <相手>の 反応した！」だけが
         // 残ることがある (実例: 2026-11-21 battle_20261121_230402、
@@ -6839,7 +7103,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0525"
+let readerBuild = "20261122_0535"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
