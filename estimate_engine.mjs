@@ -170,6 +170,7 @@ function processMoveInf(ev, io) {
   const foeSide = side === 'p1' ? 'p2' : 'p1';
   if (ev.move === 'Stealth Rock' || ev.move === 'Stone Axe') intents.push({ t: 'side', side: foeSide, key: 'rock', turn: ev.turn });
   else if (ev.move === 'Spikes') intents.push({ t: 'spikes', side: foeSide });
+  else if (ev.move === 'Toxic Spikes') intents.push({ t: 'toxicSpikes', side: foeSide });
   else if (ev.move === 'Rapid Spin' || ev.move === 'Mortal Spin' || ev.move === 'Tidy Up') intents.push({ t: 'clear', side });
   else if (ev.move === 'Defog') { intents.push({ t: 'clear', side: 'p1' }); intents.push({ t: 'clear', side: 'p2' }); }
   else if (ev.move === 'Court Change') intents.push({ t: 'court' });
