@@ -1216,6 +1216,21 @@
    "uploaded_at": "2026-11-21T23:41:28.040484+09:00"
   },
   {
+   "name": "battle_20261121_234913_interrupted.log",
+   "sha256": "d01ef6c5450de62c8fc92b3c805b27217e2c119e37885901db98d6a08f10efbc",
+   "uploaded_at": "2026-11-21T23:50:18.215959+09:00"
+  },
+  {
+   "name": "battle_20261121_234913_interrupted_protocol.log",
+   "sha256": "91f6e1225ba0e16485c5efe6c02a7109150e59feb83b627c79fabcc03eb464ea",
+   "uploaded_at": "2026-11-21T23:50:20.467918+09:00"
+  },
+  {
+   "name": "battle_20261121_234913_note.txt",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "uploaded_at": "2026-11-21T23:50:22.208818+09:00"
+  },
+  {
    "name": "preview_test_20261121_171223.jpg",
    "sha256": "ced24ca23e913b67e1caded0f4f2000f8a198a3c7da3b848bfb44864d1ddf375",
    "uploaded_at": "2026-11-21T17:12:47.381610+09:00"
