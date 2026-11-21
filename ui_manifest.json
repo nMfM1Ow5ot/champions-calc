@@ -24,7 +24,7 @@
   "data/species_types.json": "ce11f9ae2d01f8a6061b473ed9260b61c95c1c3d58c40e5231cfde9df05623ec",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "232a446e1c95db0cc1695533394addf1e6b005969d1a523a1ae3b088d0fe33b8",
-  "data/vgc_pastes.json": "82bbcecbb790199d53c7a5540aea59127762197376294211c4a07126fd16c6fe",
+  "data/vgc_pastes.json": "7cd039d0628c7d6ed7822f8ac8125ac4d8670f37fd16826478cbf124649933fb",
   "data/vgc_pastes_stats.json": "94c2211fea37f32390a17e1086173a427ef4de89082ab27bd6f0f12c0a43440d",
   "data/vgcpastes_sets.json": "6232518a3c8b11dae770b0a3b5f2941da6cbc41a8c2defe142d3c8320a3a543c",
   "estimate_engine.mjs": "ad89a9c8e51c7655aed5c90409094ef6dfff4bd25671519ef1be06528eee4e0b",
@@ -33,7 +33,7 @@
   "fetch_species_abilities.mjs": "1f1221256a11ead833ec1a18a73e65bdb71c70f651b7bc800ed7d7db7afc1603",
   "fetch_species_moves.mjs": "0c9ee8b701167e5c03fbbe4e2b3693ac33e079cfd386b0cde83af39eee495817",
   "fetch_usage.mjs": "e6e2df5d0b361c2b78c19a1f9a4ce97f70bc4ef502e898133358f82fe30af44b",
-  "fetch_vgcpastes.mjs": "26cce8d45a13e4e2a94c28f811249a30b52c339379b5b538fa30bdb27732f973",
+  "fetch_vgcpastes.mjs": "38142ebadf2ec7bb473204e070dfdd388c159548ed47a51e6fb3ab8c6abef75e",
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
@@ -48,5 +48,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_0347"
+ "rev": "20261122_0357"
 }
