@@ -176,9 +176,12 @@ body{margin:0;background:var(--bg);color:var(--ink);
 #capStatusText.ng{color:#ef5350}
 .spritewrap{position:relative; display:inline-block; cursor:pointer}
 .formepop{position:absolute; top:calc(100% + 6px); left:0; z-index:45; display:flex; gap:.3rem; background:#f7f7f7; border-radius:.8rem; padding:.55rem; box-shadow:0 4px 18px rgba(0,0,0,.45)}
-.presetwrap{position:relative; display:inline-block; margin-left:.45rem; align-self:center}
-.presetbtn{font-size:.95rem}
-.presetpop{position:absolute; top:calc(100% + 6px); right:0; left:auto; z-index:45; display:flex; flex-direction:column; gap:.35rem; background:var(--bg); border:1px solid rgba(127,127,127,.35); border-radius:.6rem; padding:.6rem; box-shadow:0 4px 18px rgba(0,0,0,.45); min-width:16rem; max-width:calc(100vw - 1rem)}
+.presetwrap{position:relative; display:inline-block; align-self:center}
+.presetbtn{display:flex; align-items:center; width:21rem; max-width:62vw; background:rgba(255,255,255,.05); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); padding:.2rem .5rem; cursor:pointer; color:#fff; font:inherit; transition:background-color .15s, box-shadow .15s}
+.presetbtn:hover{background:rgba(255,255,255,.1)}
+.presetbtn-label{flex:1; min-width:0; font-size:1rem; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:.3rem 0; text-align:left}
+:root[data-theme="light"] .presetbtn{background:rgba(0,0,0,.05); color:#111}
+.presetpop{position:absolute; top:calc(100% + 6px); left:0; right:auto; z-index:45; display:flex; flex-direction:column; gap:.35rem; background:var(--bg); border:1px solid rgba(127,127,127,.35); border-radius:.6rem; padding:.6rem; box-shadow:0 4px 18px rgba(0,0,0,.45); min-width:16rem; max-width:calc(100vw - 1rem)}
 .statuswrap{position:relative; display:inline-flex; align-items:center; gap:.35rem; flex:none}
 .statuspop{position:absolute; top:calc(100% + 6px); left:0; z-index:45; display:flex; flex-direction:column; gap:.1rem; background:var(--bg); border:1px solid rgba(127,127,127,.35); border-radius:.6rem; padding:.45rem; box-shadow:0 4px 18px rgba(0,0,0,.45); min-width:9.5rem}
 .statusrow{display:flex; align-items:center; gap:.45rem; padding:.18rem .3rem; cursor:pointer; white-space:nowrap; border-radius:.3rem}
@@ -912,6 +915,7 @@ function applyVgcTeam(side, teamId) {
   state.active[side] = [0, Math.min(1, specs.length - 1)];
   if (side === 'opps') { state.oppTeam = specs.map(s => s.species); resetInference(); syncTeamContext(); }
   ui.presetPop = null; ui.presetRename = null;
+  presetApplied[side] = t.description || t.teamId || '';
   applySetterAbility(specs[0]);
   calcAll();
 }
@@ -1459,7 +1463,7 @@ function playerBar(side) {
       <div class="username">${isOpp ? '相手' : '自分'}</div>
       <div class="playeractions"><button class="tgl on" data-noop="1">AUTO</button></div>
     </div>
-    <div class="rack">${rack}<span class="presetwrap"><button class="tgl presetbtn" data-presetbtn="${side}">プリセット</button>${ui.presetPop === side ? presetPopHTML(side) : ''}</span></div>
+    <div class="rack"><span class="presetwrap"><button class="presetbtn" data-presetbtn="${side}" title="${esc(presetApplied[side] || 'プリセット')}"><span class="presetbtn-label">${esc(presetApplied[side] || 'プリセット')}</span><span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span></button>${ui.presetPop === side ? presetPopHTML(side) : ''}</span>${rack}</div>
   </div>`;
 }
 /* ---------- チームプリセット (サイドごとの構成の保存/切替/削除) ---------- */
@@ -1567,20 +1571,26 @@ function savePreset(side, name) {
   if (ex >= 0) store[side][ex] = rec; else store[side].push(rec);
   savePresetStore(store);
 }
+// 現在そのサイドに適用されているプリセット / VGCPastes チームの名前
+// (プリセットボタンに表示する)
+const presetApplied = { mine: '', opps: '' };
 function renamePreset(side, idx, name) {
   const nm = String(name || '').trim();
   if (!nm) return false;
   const store = loadPresetStore();
   if (!store[side][idx]) return false;
+  const old = store[side][idx].name;
   store[side][idx].name = nm;
   savePresetStore(store);
+  if (presetApplied[side] === old) presetApplied[side] = nm;
   return true;
 }
 function deletePreset(side, idx) {
   const store = loadPresetStore();
   if (idx < 0 || idx >= store[side].length) return;
-  store[side].splice(idx, 1);
+  const [gone] = store[side].splice(idx, 1);
   savePresetStore(store);
+  if (gone && presetApplied[side] === gone.name) presetApplied[side] = '';
 }
 function applyPreset(side, idx) {
   const store = loadPresetStore();
@@ -1598,6 +1608,7 @@ function applyPreset(side, idx) {
   }
   ui.presetPop = null;
   ui.presetRename = null;
+  presetApplied[side] = p.name || '';
   applySetterAbility(specs[0]);
   calcAll();
 }
