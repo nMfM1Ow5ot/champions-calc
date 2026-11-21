@@ -213,6 +213,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .mspecwrap{display:inline-flex; align-items:center; gap:.18rem; flex:none; margin-left:.35rem; margin-right:.55rem}
 .mspeclab{font-size:.68rem; color:var(--label); white-space:nowrap}
 .mspecsel{font:inherit; font-size:.72rem; line-height:1; padding:.18rem .15rem; background:rgba(255,255,255,.08); color:var(--ink); border:1px solid rgba(255,255,255,.18); border-radius:999px; cursor:pointer}
+.zfx{font-size:.72rem; color:var(--faint); white-space:nowrap}
 .spreadtgl{display:flex; flex:none; border:1px solid rgba(255,255,255,.18); border-radius:999px; overflow:hidden}
 .spreadtgl button{font:inherit; font-size:.72rem; line-height:1; padding:.24rem .42rem; background:none; border:none; color:var(--label); cursor:pointer; white-space:nowrap}
 .sdd-control .spreadtgl{margin-left:.35rem; margin-right:.55rem}
@@ -346,7 +347,7 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
   <p class="note">相手の型は <span id="regname">レギュレーションM-C</span> の使用率データ（pokedb）から最も使われている型を初期値にしています。判明した情報（技・持ち物・特性）があれば reader が自動で、なければ手動で訂正でき、判明した技だけが青くハイライトされます（特性・持ち物も同様）。相手の型に判明情報が1つでもあれば、SET の表示は相手トレーナー名になります。フレンドガードは、その側のもう1体が特性フレンドガードを持つ想定で、受けるダメージが0.75倍になります。レイアウトと操作系は Showdex（Calcdex）の再現です（1体 vs 1体表示、アイコンで表示するポケモンを切替）。</p>
 </div>
 <script type="module">
-import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData, createEstimator, labelSide, labelSpecies } from './bundle.mjs';
+import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData, createEstimator, labelSide, labelSpecies, exclusiveZMove, zMoveNameOf, Z_STATUS, Z_EXCLUSIVE_FX } from './bundle.mjs';
 
 const gen = Generations.get(9);const STATJ = [['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SPA'],['spd','SPD'],['spe','SPE']];
 const TYPE_JA = {Normal:'ノーマル',Fire:'ほのお',Water:'みず',Electric:'でんき',Grass:'くさ',Ice:'こおり',Fighting:'かくとう',Poison:'どく',Ground:'じめん',Flying:'ひこう',Psychic:'エスパー',Bug:'むし',Rock:'いわ',Ghost:'ゴースト',Dragon:'ドラゴン',Dark:'あく',Steel:'はがね',Fairy:'フェアリー',Stellar:'ステラ'};
@@ -1320,6 +1321,34 @@ function buildMoveSpecs(spec) {
   });
   return out;
 }
+// calcMatchup の state.moveZ 用: {技名: true} (Zワザ化する技だけ)
+function buildMoveZs(spec) {
+  const out = {};
+  (spec.moves || []).forEach((mv, i) => {
+    if (mv && spec.moveZ && spec.moveZ[i]) out[mv] = true;
+  });
+  return out;
+}
+// Z変化技の効果の表示文 (ダメージ計算には現れないため情報表示のみ)
+const Z_STAT_JA = { atk: 'こうげき', def: 'ぼうぎょ', spa: 'とくこう', spd: 'とくぼう', spe: 'すばやさ', accuracy: '命中率', evasion: '回避率' };
+const Z_EFFECT_JA = { heal: 'HP全回復', clearnegativeboost: '下がった能力を元に戻す', crit2: '急所ランク+2', curse: 'ゴースト: こうげき+1 / その他: HP全回復', redirect: '攻撃を引きつける', healreplacement: '控えのHP・状態異常を全回復' };
+function zFxText(fx) {
+  if (!fx) return '';
+  const parts = [];
+  if (fx.b) for (const [k, v] of Object.entries(fx.b)) parts.push(`${Z_STAT_JA[k] || k}+${v}`);
+  if (fx.e && Z_EFFECT_JA[fx.e]) parts.push(Z_EFFECT_JA[fx.e]);
+  return parts.join('・');
+}
+// その技を Zワザ化できる場合に {name, fx} を返す (できなければ null)
+function zInfoFor(spec, mv) {
+  if (!mv) return null;
+  const excl = exclusiveZMove(effSpecies(spec), spec.itemLost ? '' : spec.item, mv);
+  if (excl) return { name: excl, fx: Z_EXCLUSIVE_FX[excl] ? zFxText(Z_EXCLUSIVE_FX[excl]) : '' };
+  const md = moveData(mv);
+  if (md && md.zPower) return { name: zMoveNameOf(mv), fx: '' };
+  if (Z_STATUS[mv]) return { name: null, fx: zFxText(Z_STATUS[mv]) };
+  return null;
+}
 // 単体/全体の現在モード: 手動選択があればそれ、なければ相手の場の残数で決める
 function spreadMode(side, moveName) {
   const sel = ui.spreadSel[side][moveName];
@@ -1346,11 +1375,18 @@ function movesBox(side, res) {
           out += `<span class="spreadtgl"><button data-spread="${side}:${mi}:single" class="${mode === 'single' ? 'on' : ''}">単体</button><button data-spread="${side}:${mi}:spread" class="${mode === 'spread' ? 'on' : ''}">全体</button></span>`;
         }
         const ms = moveSpecOf(mv0);
-        if (ms) out += mspecHTML(side, mi, ms, spec);
+        if (ms && !(spec.moveZ && spec.moveZ[mi])) out += mspecHTML(side, mi, ms, spec);
+        const zi = zInfoFor(spec, mv0);
+        if (zi) {
+          const zon = !!(spec.moveZ && spec.moveZ[mi]);
+          const zja = zi.name ? (NAMES.moves[idOf(zi.name)] || zi.name) : '';
+          out += `<button class="tgl${zon ? ' on' : ''}" data-zmove="${side}:${mi}" title="${esc(zi.name ? 'Zワザ: ' + zja + ' (' + zi.name + ')' : 'Zワザ')}">Z</button>`;
+          if (zon && zi.fx) out += `<span class="zfx">${esc(zi.fx)}</span>`;
+        }
         return out;
       })(),
       highlight: side === 'opps' && !!spec.moves[mi] && (spec.knownMoves || []).includes(spec.moves[mi]),
-      onPick: v => { const old = spec.moves[mi]; spec.moves[mi] = v || ''; if (spec.moveSpec) delete spec.moveSpec[mi]; if (side === 'opps') { markCorrected(spec, '技'); if (!Array.isArray(spec.knownMoves)) spec.knownMoves = []; if (v && !spec.knownMoves.includes(v)) spec.knownMoves.push(v); if (old && old !== v && !spec.moves.includes(old)) spec.knownMoves = spec.knownMoves.filter(m => m !== old); } calcAll(); },
+      onPick: v => { const old = spec.moves[mi]; spec.moves[mi] = v || ''; if (spec.moveSpec) delete spec.moveSpec[mi]; if (spec.moveZ) delete spec.moveZ[mi]; if (side === 'opps') { markCorrected(spec, '技'); if (!Array.isArray(spec.knownMoves)) spec.knownMoves = []; if (v && !spec.knownMoves.includes(v)) spec.knownMoves.push(v); if (old && old !== v && !spec.moves.includes(old)) spec.knownMoves = spec.knownMoves.filter(m => m !== old); } calcAll(); },
     });
     const mr = res && res.moveResults ? res.moveResults[mi] : null;
     const r = mr && mr.vs ? mr.vs[0] : null;
@@ -1524,6 +1560,7 @@ function calcAll() {
     crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
     singleMoves,
     moveSpecs: { mine: [buildMoveSpecs(DS('mine'))], opps: [buildMoveSpecs(DS('opps'))] },
+    moveZ: { mine: [buildMoveZs(DS('mine'))], opps: [buildMoveZs(DS('opps'))] },
   });
   lastCalc.candRanges = computeCandRanges();
   renderAll();
@@ -1753,6 +1790,15 @@ document.addEventListener('click', e => {
     calcAll();
     return;
   }
+  const zb = t.closest('[data-zmove]');
+  if (zb) {
+    const [zsd, zmi] = zb.dataset.zmove.split(':');
+    const spec = DS(zsd);
+    spec.moveZ = spec.moveZ || {};
+    if (spec.moveZ[+zmi]) delete spec.moveZ[+zmi]; else spec.moveZ[+zmi] = true;
+    calcAll();
+    return;
+  }
   const spb = t.closest('[data-spread]');
   if (spb) {
     if (Date.now() - (ui.spreadGuard || 0) < 1000) return;
@@ -1887,6 +1933,7 @@ function applyRevealedPreserving(spec, rev) {
   fresh.knownMoves = [...new Set([...(fresh.knownMoves || []), ...(spec.knownMoves || [])])];
   fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status; fresh.moveSpec = spec.moveSpec;
   fresh.teraType = spec.teraType; fresh.terastallized = spec.terastallized;
+  fresh.moveZ = spec.moveZ;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
