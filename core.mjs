@@ -3,6 +3,61 @@
 import { Generations, Pokemon, Move, Field, calculate, calcStat } from '@smogon/calc';
 
 export const gen = Generations.get(9);
+
+// ---- 仕様差分レイヤー (バランス調整への対応) ----
+// data/spec_patches.json のバージョンを @smogon/calc の gen データへ直接
+// 上書きする。calc のデータオブジェクトは凍結されておらず、上書きは
+// calculate() / statTable / damageRolls / 型推定エンジン (同じ gen を参照)
+// のすべてに反映される。差分が無い (未適用) 状態では一切触らないため、
+// 計算結果は従来と完全に同一になる。対象はデータで表せるもの (種族値・
+// タイプ・技の威力/命中/タイプ/分類/優先度・タイプ相性) に限る。特性や
+// 道具の効果そのものの変更は calc 内部のコード依存のため対象外。
+let specPatchData = null;
+let activeSpecPatchVer = null;
+const specPristine = new Map(); // key -> { obj, prop, value } (復元用)
+const patchIdOf = name => String(name).toLowerCase().replace(/[^a-z0-9]/g, '');
+function patchAssign(obj, prop, value, key) {
+  if (!specPristine.has(key)) specPristine.set(key, { obj, prop, value: obj[prop] });
+  obj[prop] = value;
+}
+export function setSpecPatchData(data) {
+  specPatchData = data && Array.isArray(data.versions) ? data : { versions: [] };
+}
+export function specPatchVersions() { return specPatchData ? specPatchData.versions : []; }
+export function activeSpecPatch() { return activeSpecPatchVer; }
+// id のバージョンを適用する。null/空は全て復元して現行仕様に戻す
+export function applySpecPatch(id) {
+  for (const { obj, prop, value } of specPristine.values()) obj[prop] = value;
+  specPristine.clear();
+  activeSpecPatchVer = null;
+  // statTable のキャッシュは gen データから作られているため、切り替え時は破棄する
+  for (const k of Object.keys(_statTables)) delete _statTables[k];
+  if (!id || !specPatchData) return null;
+  const v = specPatchData.versions.find(x => x.id === id);
+  if (!v) return null;
+  for (const [name, patch] of Object.entries(v.species || {})) {
+    const sp = gen.species.get(patchIdOf(name));
+    if (!sp) continue;
+    for (const [prop, val] of Object.entries(patch)) {
+      if (prop === 'baseStats' && val && typeof val === 'object') {
+        for (const [k, bv] of Object.entries(val)) patchAssign(sp.baseStats, k, bv, `sp:${sp.id}:bs:${k}`);
+      } else patchAssign(sp, prop, val, `sp:${sp.id}:${prop}`);
+    }
+  }
+  for (const [name, patch] of Object.entries(v.moves || {})) {
+    const mv = gen.moves.get(patchIdOf(name));
+    if (!mv) continue;
+    for (const [prop, val] of Object.entries(patch)) patchAssign(mv, prop, val, `mv:${mv.id}:${prop}`);
+  }
+  for (const [atkType, defs] of Object.entries(v.types || {})) {
+    const t = gen.types.get(patchIdOf(atkType));
+    if (!t || !t.effectiveness) continue;
+    for (const [defType, mult] of Object.entries(defs)) patchAssign(t.effectiveness, defType, mult, `ty:${t.name}:${defType}`);
+  }
+  activeSpecPatchVer = v;
+  return v;
+}
+
 const IVS = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 export const STAT_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
 
