@@ -190,6 +190,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .formeopt.sel{background:rgba(33,150,243,.30)}
 .formeopt:hover{background:rgba(33,150,243,.18)}
 .oppinfo .corrected{color:var(--green)}
+.oppinfo .marginalnote{color:var(--dim)}
 
 /* ---------- ToggleButton ---------- */
 .tgl{font-family:'Work Sans',sans-serif; font-size:.8rem; text-transform:uppercase; letter-spacing:.03em;
@@ -755,7 +756,7 @@ function ownSpeciesSpec(speciesEn, kind) {
   const ns = { ...u, moves: [...(u.moves || [])], sp: { ...(u.sp || {}) }, boosts: blankBoosts(), status: '', curHPPercent: 100 };
   ns.kind = kind || 'usage';
   delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
-  delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual;
+  delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual; delete ns.estMarginal;
   delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
   delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec;
   return ns;
@@ -1441,10 +1442,20 @@ function metaRow(side) {
     <div class="col"><div class="ddlabel">持ち物</div>${ddHTML(`item:${side}`)}</div>
   </div>`;
 }
+// 推定の周辺分布の首位 (MAP と食い違う場合のみ) の併記
+function marginalNoteHTML(spec) {
+  const m = spec.estMarginal;
+  if (!m) return '';
+  const parts = [];
+  if (m.nature) parts.push(`性格は ${NAT_JA[m.nature.value] || m.nature.value} が首位 ${Math.round(m.nature.mass * 100)}%`);
+  if (m.item) parts.push(`持ち物は ${(NAMES._itemEn2ja || {})[idOf(m.item.value)] || m.item.value} が首位 ${Math.round(m.item.mass * 100)}%`);
+  if (!parts.length) return '';
+  return `<span class="marginalnote">推定の分布では${parts.join('、')}</span>`;
+}
 function oppInfoLine() {
   const spec = DS('opps');
   const rates = spec.usageRates || spec.rates;
-  if (spec.kind !== 'usage' || !rates) return '<div class="oppinfo"></div>';
+  if (spec.kind !== 'usage' || !rates) return `<div class="oppinfo">${marginalNoteHTML(spec)}</div>`;
   const corr = spec.corrected || [];
   const parts = [];
   if (rates.ability && !corr.includes('特性')) parts.push(`特性 ${ja('abilities', spec.ability)} ${rates.ability}%`);
@@ -1456,7 +1467,8 @@ function oppInfoLine() {
   if (rates.patternLabel && !corr.includes('EV')) parts.push(`EV型 ${rates.patternLabel} ${rates.pattern || ''}%`);
   const head = `pokedb 使用率トップ型${USAGE_SEASON ? `（${USAGE_SEASON}）` : ''}: `;
   const corrLine = corr.length ? `<br><span class="corrected">判明情報で訂正済み: ${corr.map(c => c === 'EV' ? '努力値' : c).join('・')}</span>` : '';
-  return `<div class="oppinfo">${head}${parts.join(' / ')}${corrLine}</div>`;
+  const marg = marginalNoteHTML(spec);
+  return `<div class="oppinfo">${head}${parts.join(' / ')}${corrLine}${marg ? `<br>${marg}` : ''}</div>`;
 }
 function megaFormeOf(speciesEn) {
   for (const suf of ['-Mega', '-Mega-X', '-Mega-Y', '-Mega-Z']) {
@@ -2428,6 +2440,14 @@ function attachEstimate(spec) {
   spec.estStat = view ? view.stat : null;
   spec.estNature = view ? view.nature : null;
   spec.estMapProb = view && view.bayes ? view.mapProb : null;
+  // MAP の確率が低い局面では、周辺分布の首位が MAP と食い違うものを併記用に保持する
+  spec.estMarginal = null;
+  if (view && view.bayes && view.marginals && view.mapProb < 0.5) {
+    const mg = {};
+    if (view.marginals.nature && view.marginals.nature.value && view.marginals.nature.value !== view.map.nature) mg.nature = view.marginals.nature;
+    if (view.map.item && view.marginals.item && view.marginals.item.value && view.marginals.item.value !== view.map.item) mg.item = view.marginals.item;
+    if (mg.nature || mg.item) spec.estMarginal = mg;
+  }
   spec.estMovePred = view && view.bayes ? (view.movePred || null) : null;
   if (!view) return;
   if (view.bayes) {
