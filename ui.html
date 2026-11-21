@@ -622,6 +622,20 @@ function inferBucketKey() {
   const key = String(lastBattleKey || '').replace(/^battle_/, '');
   return /^[0-9]{8}_[0-9]{6}(_salvage)?$/.test(key) ? key : '';
 }
+// 試合中のダメ計ログ (再計算の記録)。推論過程ログと同方式で、対戦別
+// アーカイブに蓄積し serve.py へ全件再送する (battle_<試合キー>_calclog.json)
+let calcLog = [];
+const calcArchive = {};
+const calcPendingKeys = new Set();
+let calcSendAt = 0;
+let calcSendChain = Promise.resolve();
+let calcSrcPending = null; // 次の再計算のきっかけ ('user' / 'preset' / 'estimate')
+let calcAutoPending = null; // 間引かれた自動再計算の最新スナップショット
+let calcLastSig = ''; // 直前に記録した入力+出力の署名 (重複記録の抑止)
+let calcLastAt = 0; // 直前に記録した時刻 (自動再計算の間引き判定)
+let curTurn = null; // 対戦の現在ターン (イベントから追跡。不明なら null)
+const CALCLOG_MAX = 300; // 1対戦あたりの記録上限
+function markCalcSrc(src) { calcSrcPending = { src, at: Date.now() }; }
 function confirmNewBattle() {
   battleResetPending = false;
   faintLock.mine.clear();
@@ -892,6 +906,7 @@ function vgcBuildSpec(entry, keep) {
 }
 // 収集型をパネルへ一括反映する。sp が null の型は現在の SP を維持する
 function applyVgcBuild(side, entry, kindValue) {
+  markCalcSrc('preset');
   if (!entry || !entry.build) return;
   const keep = DS(side);
   const ns = vgcBuildSpec(entry, keep);
@@ -913,6 +928,7 @@ function ensureVgcTeams() {
 }
 // 収集チームをそのサイドへ丸ごと読み込む
 function applyVgcTeam(side, teamId) {
+  markCalcSrc('preset');
   if (!VGC_TEAMS) return;
   const t = VGC_TEAMS.teams.find(x => x.teamId === teamId);
   if (!t || !Array.isArray(t.members) || !t.members.length) return;
@@ -1378,6 +1394,7 @@ function closeDD() {
   }
 }
 function pickDD(id, v) {
+  markCalcSrc('user');
   const d = DDREG[id];
   closeDD();
   if (d && d.onPick) d.onPick(v);
@@ -1615,6 +1632,7 @@ function deletePreset(side, idx) {
   if (gone && presetApplied[side] === gone.name) presetApplied[side] = '';
 }
 function applyPreset(side, idx) {
+  markCalcSrc('preset');
   const store = loadPresetStore();
   const p = store[side][idx];
   if (!p) return;
@@ -2200,6 +2218,7 @@ function calcAll() {
   });
   lastCalc.candRanges = computeCandRanges();
   renderAll();
+  recordCalcLog();
 }
 
 /* ---------- import (adapted to displayed spec) ---------- */
@@ -2683,7 +2702,12 @@ let infDirty = false;
 let autoSideTurn;
 function resetInference() {
   sendInferenceLog(true); // 前の対戦分の最終送信 (送信は直列化され、実行中でも省略されない)
+  if (calcAutoPending) { const p = calcAutoPending; calcAutoPending = null; commitCalcRecord(p); }
+  sendCalcLog(true); // ダメ計ログも同様に最終送信する
   estimator.reset();
+  calcLog = calcArchive[inferBucketKey()] || [];
+  calcLastSig = '';
+  curTurn = null;
   // 蓄積は対戦別アーカイブに残る。inferLog は現在の対戦分のアーカイブを
   // 指し続けるため、同一対戦内のリセットで記録が切り捨てられることはない
   inferLog = inferArchive[inferBucketKey()] || [];
@@ -2839,6 +2863,97 @@ function sendInferenceLog(force) {
   inferPendingKeys.add(key);
   const p = inferSendChain.then(async () => { try { await doSendInferenceLog(key); } finally { inferPendingKeys.delete(key); } });
   inferSendChain = p.catch(() => {});
+  return p;
+}
+/* ---------- 試合中のダメ計ログ (再計算の記録) ---------- */
+// パネルの入力スナップショット (計算を再現できる形で記録する)
+function calcPanelSnap(spec) {
+  if (!spec) return null;
+  const out = {
+    species: effSpecies(spec), nature: spec.nature || '',
+    ability: (spec.mega && spec.megaAbility) ? spec.megaAbility : (spec.ability || ''),
+    item: spec.itemLost ? '' : (spec.item || ''),
+    sp: { ...spec.sp }, boosts: { ...spec.boosts }, status: spec.status || '',
+    hp: spec.curHPPercent ?? 100, moves: [...(spec.moves || [])],
+  };
+  if (spec.terastallized) out.tera = spec.teraType || '';
+  if (spec.dynamax) out.dynamax = true;
+  return out;
+}
+// 表示された計算結果 (両方向の各技のダメージ幅と KO 表記)
+function calcOutSnap(side) {
+  const res = lastCalc && lastCalc[side] && lastCalc[side][0];
+  const spec = DS(side);
+  if (!res || !res.moveResults || !spec) return [];
+  const rows = [];
+  for (let mi = 0; mi < 4; mi++) {
+    const mv = spec.moves && spec.moves[mi];
+    if (!mv) continue;
+    const mr = res.moveResults[mi];
+    const r = mr && mr.vs ? mr.vs[0] : null;
+    if (!r) { rows.push({ move: mv }); continue; }
+    if (r.status) { rows.push({ move: mv, status: true }); continue; }
+    if (r.immune) { rows.push({ move: mv, immune: true }); continue; }
+    if (r.error) { rows.push({ move: mv, error: true }); continue; }
+    rows.push({ move: mv, minPct: r.minPct, maxPct: r.maxPct, ko: r.ko || '' });
+  }
+  return rows;
+}
+function commitCalcRecord(rec) {
+  const bucket = inferBucketKey();
+  const arr = calcArchive[bucket] || (calcArchive[bucket] = []);
+  arr.push(rec);
+  if (arr.length > CALCLOG_MAX) {
+    // 上限超過分は自動再計算の古い記録から間引く (手動・プリセット・推定の記録を優先して残す)
+    let over = arr.length - CALCLOG_MAX;
+    for (let i = 0; i < arr.length && over > 0;) { if (arr[i].src === 'auto') { arr.splice(i, 1); over--; } else i++; }
+    while (arr.length > CALCLOG_MAX) arr.shift();
+  }
+  calcLog = arr;
+  calcLastAt = Date.now();
+  sendCalcLog(false);
+}
+// calcAll の末尾から呼ばれる。入力+出力が前回記録と同一なら残さず、
+// 自動再計算は短時間の連続を最新分だけに間引く
+function recordCalcLog() {
+  if (!lastCalc) return;
+  let src = 'auto';
+  if (calcSrcPending) { if (Date.now() - calcSrcPending.at < 3000) src = calcSrcPending.src; calcSrcPending = null; }
+  const rec = {
+    at: new Date().toISOString(), battle: lastBattleKey, turn: curTurn, src,
+    field: { weather: state.field.weather || '', terrain: state.field.terrain || '', mine: { ...state.side.mine }, opp: { ...state.side.opp } },
+    mine: calcPanelSnap(DS('mine')), opps: calcPanelSnap(DS('opps')),
+    out: { mine: calcOutSnap('mine'), opps: calcOutSnap('opps') },
+  };
+  const sig = JSON.stringify([rec.mine, rec.opps, rec.field, rec.out]);
+  if (sig === calcLastSig) { calcAutoPending = null; return; }
+  calcLastSig = sig;
+  if (src === 'auto' && Date.now() - calcLastAt < 1500) { calcAutoPending = rec; return; }
+  calcAutoPending = null;
+  commitCalcRecord(rec);
+}
+async function doSendCalcLog(key) {
+  const host = (typeof location !== 'undefined' && location.hostname) || '';
+  if (host !== 'localhost' && host !== '127.0.0.1') return;
+  const records = calcArchive[key];
+  if (!records || !records.length) return;
+  calcSendAt = Date.now();
+  let ok = false;
+  try {
+    const res = await fetch('./calclog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'calc-log', version: 1, battle: key, entries: records }) });
+    ok = !res || res.ok !== false;
+  } catch (e) { /* serve.py 未起動時は黙って諦める (次の更新で再送される) */ }
+  if (ok && key !== inferBucketKey()) delete calcArchive[key];
+}
+// 送信は推論過程ログと同様に直列化し、リセット時の最終送信が省略されないようにする
+function sendCalcLog(force) {
+  const key = inferBucketKey();
+  if (!key) return Promise.resolve();
+  if (!force && Date.now() - calcSendAt < 5000) return Promise.resolve();
+  if (!force && calcPendingKeys.has(key)) return Promise.resolve();
+  calcPendingKeys.add(key);
+  const p = calcSendChain.then(async () => { try { await doSendCalcLog(key); } finally { calcPendingKeys.delete(key); } });
+  calcSendChain = p.catch(() => {});
   return p;
 }
 // エンジンが返した場への副作用の意図を、UI 側の状態へ適用する
@@ -3175,7 +3290,7 @@ function applyState(j) {
     for (let i = estimator.getSeen(); i < j.events.length; i++) {
       const ev = j.events[i];
       if (!ev || typeof ev !== 'object') continue;
-      if (typeof ev.turn === 'number') expireAutoSide(ev.turn);
+      if (typeof ev.turn === 'number') { expireAutoSide(ev.turn); if (curTurn === null || ev.turn > curTurn) curTurn = ev.turn; }
       if (ev.k === 'mv') { infProcessMove(ev); bayesProcessMove(ev); }
       else if (ev.k === 'dmg') { infProcessDamage(ev); bayesProcessDamage(ev); }
       else if (ev.k === 'ab') { infProcessAbility(ev); }
@@ -3186,7 +3301,9 @@ function applyState(j) {
     if (infDirty) { infDirty = false; changed = true; }
   }
   drainInferenceLog();
+  const estSigBefore = state.opps.map(s => s ? JSON.stringify([s.estStat || null, s.estSp || null, s.estMarginal || null]) : '');
   for (const spec of state.opps) if (spec) attachEstimate(spec);
+  if (state.opps.some((s, i) => s && JSON.stringify([s.estStat || null, s.estSp || null, s.estMarginal || null]) !== estSigBefore[i])) markCalcSrc('estimate');
   if (changed) calcAll();
 }
 let lastStateText = '';
