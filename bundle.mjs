@@ -26428,7 +26428,7 @@ function koHazards(defender, side) {
   }
   return { damage: isNaN(damage) ? 0 : damage, texts };
 }
-function koEndOfTurn(attacker, defender, move, field, ingrain) {
+function koEndOfTurn(attacker, defender, move, field, ingrain, aquaring) {
   let damage = 0;
   const texts = [];
   const loseItem = move.named("Knock Off") && !defender.hasAbility("Sticky Hold");
@@ -26503,6 +26503,10 @@ function koEndOfTurn(attacker, defender, move, field, ingrain) {
   if (ingrain && !healBlock) {
     damage += Math.floor(maxHP / 16);
     texts.push("Ingrain recovery");
+  }
+  if (aquaring && !healBlock) {
+    damage += Math.floor(maxHP / 16);
+    texts.push("Aqua Ring recovery");
   }
   if (defender.hasStatus("psn")) {
     if (defender.hasAbility("Poison Heal")) {
@@ -26593,6 +26597,7 @@ function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) 
   if (!damage || !damage.length || damage[damage.length - 1] === 0) return null;
   const maxHP = defender.maxHP();
   const ingrain = !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[defIdx]);
+  const aquaring = !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[defIdx]);
   const loseItem = move.named("Knock Off") && !defender.hasAbility("Sticky Hold");
   const healBlock = move.named("Psychic Noise") && !(attacker.hasAbility("Sheer Force") || defender.hasItem("Covert Cloak") || defender.hasAbility("Shield Dust", "Aroma Veil"));
   let berryHeal = 0, berryName = "";
@@ -26606,11 +26611,11 @@ function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) 
       berryName = "Oran Berry";
     }
   }
-  if (!berryHeal && !ingrain) return null;
+  if (!berryHeal && !ingrain && !aquaring) return null;
   const hazards = koHazards(defender, field.defenderSide);
   let hp = defender.curHP() - hazards.damage;
   if (hp <= 0) return null;
-  const eot = koEndOfTurn(attacker, defender, move, field, ingrain);
+  const eot = koEndOfTurn(attacker, defender, move, field, ingrain, aquaring);
   const toxicCounter = defender.hasStatus("tox") && !defender.hasAbility("Magic Guard", "Poison Heal") ? defender.toxicCounter || 0 : 0;
   let berry = berryHeal;
   if (berry > 0 && hp <= maxHP / 2) {
@@ -26748,7 +26753,7 @@ function calcMatchup(state, names) {
     const allAb = [...fa.mine || [], ...fa.opps || []];
     const gas = allAb.includes("Neutralizing Gas");
     const unnerve = !gas && atkAb.some((a) => a === "Unnerve" || a === "As One (Glastrier)" || a === "As One (Spectrier)");
-    return { unnerve, defIngrain: (defSpecs || []).map((s) => !!s.ingrain) };
+    return { unnerve, defIngrain: (defSpecs || []).map((s) => !!s.ingrain), defAquaRing: (defSpecs || []).map((s) => !!s.aquaring) };
   };
   out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine, state.moveZ && state.moveZ.mine, koCtxFor("mine", "opps", state.opps));
   out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps, state.moveZ && state.moveZ.opps, koCtxFor("opps", "mine", state.mine));
