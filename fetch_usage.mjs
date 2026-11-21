@@ -36,7 +36,7 @@ const ITEM_JA2EN = {
   'とつげきチョッキ': 'Assault Vest', 'じゃくてんほけん': 'Weakness Policy', 'シルクのスカーフ': 'Silk Scarf', 'もくたん': 'Charcoal',
   'しんぴのしずく': 'Mystic Water', 'りゅうのキバ': 'Dragon Fang', 'メタルコート': 'Metal Coat', 'くろいメガネ': 'Black Glasses',
   'どくバリ': 'Poison Barb', 'じしゃく': 'Magnet', 'かたいいし': 'Hard Stone', 'きせきのタネ': 'Miracle Seed',
-  'のろいの札': 'Spell Tag', 'まがったスプーン': 'Twisted Spoon', 'フェアリーフェザー': 'Fairy Feather', 'ようせいのハネ': 'Fairy Feather', 'ノーマルジュエル': 'Normal Gem', 'パンチグローブ': 'Punching Glove',
+  'のろいのおふだ': 'Spell Tag', 'まがったスプーン': 'Twisted Spoon', 'フェアリーフェザー': 'Fairy Feather', 'ようせいのハネ': 'Fairy Feather', 'ノーマルジュエル': 'Normal Gem', 'パンチグローブ': 'Punching Glove',
   'サイコシード': 'Psychic Seed', 'グラスシード': 'Grassy Seed', 'ミストシード': 'Misty Seed', 'エレキシード': 'Electric Seed',
   'ひかりのねんど': 'Light Clay', 'だっしゅつボタン': 'Eject Button', 'レッドカード': 'Red Card', 'メンタルハーブ': 'Mental Herb',
   'パワフルハーブ': 'Power Herb', 'しろいハーブ': 'White Herb', 'きあいのハチマキ': 'Focus Band', 'おうじゃのしるし': "King's Rock",
