@@ -741,9 +741,29 @@
    "uploaded_at": "2026-11-21T17:19:30.459271+09:00"
   },
   {
+   "name": "preview_test_20261121_180727.jpg",
+   "sha256": "a88d2e43d119e70aad54cbb99261982411cbe7645625764f31204d530a69d18d",
+   "uploaded_at": "2026-11-21T20:49:51.652598+09:00"
+  },
+  {
+   "name": "preview_test_20261121_180727.json",
+   "sha256": "e9a5159f8231efddc106861ca2fc9c12cda40a9091c5019af63f5bb51dec32d0",
+   "uploaded_at": "2026-11-21T20:49:53.265896+09:00"
+  },
+  {
+   "name": "preview_test_20261121_180739.jpg",
+   "sha256": "a88d2e43d119e70aad54cbb99261982411cbe7645625764f31204d530a69d18d",
+   "uploaded_at": "2026-11-21T20:49:56.030844+09:00"
+  },
+  {
+   "name": "preview_test_20261121_180739.json",
+   "sha256": "2e3d605b86e3d5afec973090e52855f2faeca5db14a3875476fc272c01ed86c5",
+   "uploaded_at": "2026-11-21T20:49:57.983395+09:00"
+  },
+  {
    "name": "serve_crashes.log",
-   "sha256": "60fd99746e9936fc5c9ea802af03060f214293cb5f4408213142e2ec58eed68a",
-   "uploaded_at": "2026-11-21T18:06:44.607544+09:00"
+   "sha256": "16cdd5d3ac5c8d6582a8bffa7cc2d85ac0906437a32d11f69b3ad3b9ec1d8d56",
+   "uploaded_at": "2026-11-21T20:49:59.634600+09:00"
   }
  ]
 }
