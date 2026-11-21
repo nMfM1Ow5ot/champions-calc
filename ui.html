@@ -353,7 +353,7 @@ const NAT_JA = {Hardy:'がんばりや',Lonely:'さみしがり',Brave:'ゆう�
 const NAT_UPDOWN = {Lonely:['atk','def'],Brave:['atk','spe'],Adamant:['atk','spa'],Naughty:['atk','spd'],Bold:['def','atk'],Relaxed:['def','spe'],Impish:['def','spa'],Lax:['def','spd'],Timid:['spe','atk'],Hasty:['spe','def'],Jolly:['spe','spa'],Naive:['spe','spd'],Modest:['spa','atk'],Mild:['spa','def'],Quiet:['spa','spe'],Rash:['spa','spd'],Calm:['spd','atk'],Gentle:['spd','def'],Sassy:['spd','spe'],Careful:['spd','spa']};
 const itemLabel = en => en ? ((typeof NAMES !== 'undefined' && NAMES._itemEn2ja && NAMES._itemEn2ja[en]) || en) : 'なし';
 const NAT_JA2EN = Object.fromEntries(Object.entries(NAT_JA).map(([en, jaName]) => [jaName, en]));
-const NAT_STAT_JA = { atk: 'こうげき', def: 'ぼうぎょ', spa: 'とくこう', spd: 'とくぼう', spe: 'すばやさ' };
+const NAT_STAT_JA = { atk: 'ATK', def: 'DEF', spa: 'SPA', spd: 'SPD', spe: 'SPE' };
 // 性格の上昇・下降を色付きで示す断片 (プルダウン一覧のラベル右横に付ける)
 function natureExtraHTML(n) {
   const ud = NAT_UPDOWN[n];
