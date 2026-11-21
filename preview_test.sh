@@ -88,11 +88,13 @@ fi
 if [ $need_serve -eq 1 ]; then
   echo "serve.py を起動します (出力は $SERVE_LOG へ)"
   # 備考のターミナル入力が効くよう、start_all.sh と同じく標準入力は
-  # 制御端末 (/dev/tty) につなぐ
+  # 制御端末 (/dev/tty) につなぐ。見せ合いテスト結果の送信は、この
+  # スクリプトが起動した serve.py でのみ有効になるよう環境変数で
+  # 明示する (通常起動の serve.py は過去のテスト結果を送らない)
   if [ -e /dev/tty ]; then
-    python3 serve.py < /dev/tty >> "$SERVE_LOG" 2>&1 &
+    CHAMPIONS_PREVIEW_TEST_SESSION=1 python3 serve.py < /dev/tty >> "$SERVE_LOG" 2>&1 &
   else
-    python3 serve.py >> "$SERVE_LOG" 2>&1 &
+    CHAMPIONS_PREVIEW_TEST_SESSION=1 python3 serve.py >> "$SERVE_LOG" 2>&1 &
   fi
   STARTED+=($!)
   SERVE_STARTED=1
@@ -132,6 +134,12 @@ do_capture() {
   if [ -f "$SERVE_LOG" ]; then
     log_offset=$(wc -c < "$SERVE_LOG")
   fi
+  # 見せ合いテスト結果の送信を、動いている serve.py で有効化する
+  # (通常起動の serve.py はテスト結果を送らないための明示スイッチ。
+  # このスクリプトが起動した serve.py は環境変数でも有効化済み。
+  # serve.py の自動再起動で有効化が落ちた場合に備え、撮影のたびに
+  # 送り直す)
+  curl -s --max-time 5 -X POST "http://localhost:8765/preview_test_session" > /dev/null 2>&1 || true
   RESP=$(curl -s --max-time 90 "http://localhost:8899/previewtest")
   RC=$?
   if [ $RC -ne 0 ] || [ -z "$RESP" ]; then
