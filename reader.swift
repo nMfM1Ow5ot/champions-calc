@@ -3901,6 +3901,29 @@ var previewFrames = 0
 var previewAttempts = 0                    // この選出セッションでの同定試行回数
 var previewBestTeam: [String?] = []        // 試行をまたいでマージした最良の同定結果
 var previewTeamWritten = false             // このセッションで oppReset 付きの初回書き込みをしたか
+// 複数フレーム投票 (第1段 (a)): 枠ごとに種族への票と最良スコアを蓄積し、
+// 2 フレームで一致した種族 (またはタイプで確定した種族) をその枠の
+// 「確定」としてロックする。従来の「後勝ち」マージでは、確定度の高い
+// 結果が後の不安定な照合で上書きされうるため、確定した枠は以後
+// 別の種族に置き換えない。未確定の枠は票の多い順 (同数なら最良
+// スコアの小さい順) の暫定 1 位を表示する。
+var previewVotes: [[String: Int]] = []          // 枠ごとの種族別投票数
+var previewVoteScore: [[String: Double]] = []   // 枠ごとの種族別ベストスコア
+var previewLocked: [String?] = []               // 枠ごとの確定種族 (nil = 未確定)
+// タイプ関門の緩和 (第1段 (b)): タイプで絞った候補内の最良スコアが
+// この値より悪い場合は、アイコンの読み違いとみなして全種族へ候補を
+// 広げて再照合する。閾値は tests/preview_eval.py --calibrate の測定で
+// 較正した (正しいプールの最良スコア p90 ≈ 0.10、誤ったプールの
+// 最良スコア中央値 ≈ 0.39。同定率は閾値 0.35 で正解時 86% /
+// 読み違い時 54%、0.25 で 86% / 75% と、0.25 が最もバランスが良い)。
+let pvSoftGateScore = 0.25
+// 選出同定 1 枠分の結果 (投票・マージ用)
+struct PvSlotInfo {
+    var pick: String? = nil        // このフレームで割り当てた種族
+    var score: Double = 9          // 割り当て種族の照合スコア (小さいほど良い)
+    var decisive: Bool = false     // タイプで確定 (かつ照合でも裏付けあり)
+    var expanded: Bool = false     // タイプ関門を広げて再照合した結果か
+}
 var pvSpeciesTypes: [String: [String]] = [:]
 var pvFeatures: [String: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)] = [:]
 var pvTypeIcons: [String: (rgb: [Double], glyph: [Double])] = [:]
@@ -3987,6 +4010,33 @@ func pvPearson(_ a: [Double], _ b: [Double]) -> Double {
     }
     if da == 0 || db == 0 { return 0 }
     return num / sqrt(da * db)
+}
+
+// バイリニアリサイズ (cv2.INTER_LINEAR 相当)。参照特徴
+// (preview_features.json) は生成時にバイリニア縮小で作られており、
+// モデル照合のハッシュはこの方式に合わせないと、同一画像同士でも
+// ハミング距離が 70〜90 ビット開いて照合が大きく鈍る (2026-11-21 に
+// tests/preview_eval.py の再現検証で確認。面積平均では 68〜90 ビット、
+// バイリニアでは 1〜4 ビット)。アイコンのグリフ照合は従来の面積平均の
+// まま (テンプレート抽出時の方式が異なるため pvResizeGray を使う)。
+func pvResizeBilinear(_ src: [Double], _ sw: Int, _ sh: Int, _ dw: Int, _ dh: Int) -> [Double] {
+    var out = [Double](repeating: 0, count: dw * dh)
+    for dy in 0..<dh {
+        let fy = (Double(dy) + 0.5) * Double(sh) / Double(dh) - 0.5
+        let y0 = Int(floor(fy))
+        let wy = fy - Double(y0)
+        let ya = max(0, min(y0, sh - 1)), yb = max(0, min(y0 + 1, sh - 1))
+        for dx in 0..<dw {
+            let fx = (Double(dx) + 0.5) * Double(sw) / Double(dw) - 0.5
+            let x0 = Int(floor(fx))
+            let wx = fx - Double(x0)
+            let xa = max(0, min(x0, sw - 1)), xb = max(0, min(x0 + 1, sw - 1))
+            let top = src[ya * sw + xa] * (1 - wx) + src[ya * sw + xb] * wx
+            let bot = src[yb * sw + xa] * (1 - wx) + src[yb * sw + xb] * wx
+            out[dy * dw + dx] = top * (1 - wy) + bot * wy
+        }
+    }
+    return out
 }
 
 // 面積平均リサイズ (cv2.INTER_AREA 相当)
@@ -4234,7 +4284,7 @@ func pvModelFeatures(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y
     }
     if cnt == 0 { return nil }
     for i in 0..<24 { hue[i] /= Double(cnt) }
-    let small = pvResizeGray(gray, sw, sh, 17, 16)
+    let small = pvResizeBilinear(gray, sw, sh, 17, 16)
     var hash = [UInt8](repeating: 0, count: 32)
     for yy in 0..<16 {
         for xx in 0..<16 {
@@ -4257,7 +4307,13 @@ func pvScore(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double
 }
 
 // 選出画面 1 枚から相手チームを推定する。何も分からなければ nil
-func identifyPreview(image: CGImage) -> (team: [String?], notes: [String])? {
+// 第1段 (b) タイプ関門の緩和: タイプで絞った候補内の照合スコアが
+// 全体的に悪い (最良でも pvSoftGateScore 超) 場合は、アイコンを
+// 読み違えたとみなして全種族へ候補を広げて再照合する。タイプの
+// 組み合わせ自体が実在しない場合も同じ扱いにする。タイプで 1 種に
+// 定まる「確定」枠も、照合スコアが悪い場合は確定扱いを取り消して
+// 再照合する (読み違いアイコンによる誤確定の防止)。
+func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots: [PvSlotInfo])? {
     let buf = makeFullBuffer(image)
     let panels = pvDetectPanels(buf)
     var anyInfo = false
@@ -4266,6 +4322,11 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String])? {
     var slotDecisive: [Bool] = []
     var slotPoolCount: [Int] = []
     var slotMargin: [Double] = []
+    var slotExpanded: [Bool] = []
+    // 全種族への再照合 (候補を広げたランキングを返す)
+    func rankedAll(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)) -> [(String, Double)] {
+        pvFeatures.map { (n, ref) in (n, pvScore(f, ref)) }.sorted { $0.1 < $1.1 }
+    }
     for panel in panels {
         var types: [String] = []
         var unknownPresent = false
@@ -4290,28 +4351,58 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String])? {
                 pool = pvSpeciesTypes.filter { $0.value == types }.map { $0.key }
             }
         }
+        var expanded = false
+        if pool.isEmpty && !types.isEmpty {
+            // 読み取れたタイプの組み合わせを持つ種族が存在しない =
+            // アイコンの読み違いが確実。全種族で再照合する
+            pool = Array(pvFeatures.keys)
+            expanded = true
+        }
         if pool.isEmpty {
-            slotRanked.append([]); slotDecisive.append(false); slotPoolCount.append(0); slotMargin.append(0)
+            slotRanked.append([]); slotDecisive.append(false); slotPoolCount.append(0); slotMargin.append(0); slotExpanded.append(false)
             continue
         }
         anyInfo = true
-        slotPoolCount.append(pool.count)
-        if pool.count == 1 {
-            slotRanked.append([(pool[0], 0)]); slotDecisive.append(true); slotMargin.append(9)
-            continue
-        }
         guard let f = pvModelFeatures(buf, panel) else {
-            slotRanked.append([]); slotDecisive.append(false); slotMargin.append(0)
+            // モデル特徴が取れない場合: タイプで 1 種に定まれば従来どおり
+            // 確定として扱い、それ以外は判定できない
+            if pool.count == 1 && !expanded {
+                slotRanked.append([(pool[0], 0)]); slotDecisive.append(true); slotPoolCount.append(1); slotMargin.append(9); slotExpanded.append(false)
+            } else {
+                slotRanked.append([]); slotDecisive.append(false); slotPoolCount.append(pool.count); slotMargin.append(0); slotExpanded.append(expanded)
+            }
             continue
         }
-        let ranked = pool.compactMap { n -> (String, Double)? in
+        var ranked = pool.compactMap { n -> (String, Double)? in
             pvFeatures[n].map { (n, pvScore(f, $0)) }
         }.sorted { $0.1 < $1.1 }
         if ranked.isEmpty {
-            slotRanked.append([]); slotDecisive.append(false); slotMargin.append(0)
+            slotRanked.append([]); slotDecisive.append(false); slotPoolCount.append(pool.count); slotMargin.append(0); slotExpanded.append(expanded)
             continue
         }
-        slotRanked.append(ranked); slotDecisive.append(false)
+        var decisive = false
+        if pool.count == 1 && !expanded {
+            // タイプで 1 種に定まる枠でも、照合スコアが悪ければ確定に
+            // しない (誤ったアイコン読みで別種族が一意に定まる事故の
+            // 防止)。スコアが良ければ確定として扱う
+            if ranked[0].1 <= pvSoftGateScore {
+                decisive = true
+            } else {
+                let all = rankedAll(f)
+                if let top = all.first, top.1 < ranked[0].1 - 0.03 {
+                    ranked = all; expanded = true
+                }
+            }
+        } else if ranked[0].1 > pvSoftGateScore {
+            // 関門の緩和: 候補内の照合が全体的に悪い場合は候補を広げる。
+            // 広げた先の最良が元の最良より明確に良い場合だけ採用する
+            let all = rankedAll(f)
+            if let top = all.first, top.1 < ranked[0].1 - 0.03 {
+                ranked = all; expanded = true
+            }
+        }
+        slotRanked.append(ranked); slotDecisive.append(decisive); slotExpanded.append(expanded)
+        slotPoolCount.append(expanded ? pvFeatures.count : pool.count)
         slotMargin.append(ranked.count > 1 ? ranked[1].1 - ranked[0].1 : 1.0)
     }
     // 同じ種族が 2 枠に出ることはないため、重複しないよう割り当てる。
@@ -4319,6 +4410,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String])? {
     // (従来は枠ごとに独立に 1 位を採っており、同種族が重複登録されていた)
     var used = Set<String>()
     var team: [String?] = Array(repeating: nil, count: panels.count)
+    var slots: [PvSlotInfo] = Array(repeating: PvSlotInfo(), count: panels.count)
     var noteByIdx: [Int: String] = [:]
     var order = panels.indices.filter { !slotRanked[$0].isEmpty }
     order.sort { a, b in
@@ -4333,9 +4425,14 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String])? {
         }
         used.insert(pickCand.0)
         team[i] = pickCand.0
+        slots[i] = PvSlotInfo(pick: pickCand.0, score: pickCand.1,
+                               decisive: slotDecisive[i], expanded: slotExpanded[i])
         let rank = ranked.firstIndex(where: { $0.0 == pickCand.0 }) ?? 0
         if slotDecisive[i] {
             noteByIdx[i] = "選出\(i + 1): \(pvJa(pickCand.0)) (タイプで確定)"
+        } else if slotExpanded[i] {
+            let cands = ranked.prefix(5).map { pvJa($0.0) }.joined(separator: " / ")
+            noteByIdx[i] = "選出\(i + 1): \(pvJa(pickCand.0)) (タイプ再照合で仮置き — 候補: \(cands))"
         } else if slotPoolCount[i] <= 2 && slotMargin[i] >= 0.05 && rank == 0 {
             noteByIdx[i] = "選出\(i + 1): \(pvJa(pickCand.0)) (モデル照合で推定)"
         } else {
@@ -4347,7 +4444,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String])? {
     for i in panels.indices {
         notes.append(noteByIdx[i] ?? "選出\(i + 1): 読み取れませんでした")
     }
-    return anyInfo ? (team, notes) : nil
+    return anyInfo ? (team, notes, slots) : nil
 }
 
 // MARK: - プレート位置の自動検出
@@ -4667,11 +4764,47 @@ func runOnce(image: CGImage) {
             lastSlots["oppA"] = nil
             lastSlots["oppB"] = nil
             if pvDataLoaded, let r = identifyPreview(image: image) {
-                // 試行をまたいでマージする: 一度埋まった枠は空に戻さない
+                // 試行をまたいでマージする: 従来の「後勝ち」をやめ、
+                // 枠ごとに投票で決める (第1段 (a))。2 フレームで一致
+                // した種族、またはタイプで確定した種族はその枠に
+                // ロックし、後の試行では置き換えない。未確定の枠は
+                // 票数 → 最良スコアの順で暫定 1 位を出す。一度埋まった
+                // 枠が空に戻らない点は従来どおり
                 if previewBestTeam.count != r.team.count {
                     previewBestTeam = Array(repeating: nil, count: r.team.count)
+                    previewVotes = Array(repeating: [:], count: r.team.count)
+                    previewVoteScore = Array(repeating: [:], count: r.team.count)
+                    previewLocked = Array(repeating: nil, count: r.team.count)
                 }
-                for i in r.team.indices where r.team[i] != nil { previewBestTeam[i] = r.team[i] }
+                for i in r.team.indices {
+                    guard let pick = r.team[i] else { continue }
+                    previewVotes[i][pick, default: 0] += 1
+                    let sc = r.slots[i].score
+                    if sc < (previewVoteScore[i][pick] ?? Double.greatestFiniteMagnitude) {
+                        previewVoteScore[i][pick] = sc
+                    }
+                    if previewLocked[i] == nil
+                        && (r.slots[i].decisive || previewVotes[i][pick, default: 0] >= 2) {
+                        previewLocked[i] = pick
+                    }
+                }
+                for i in r.team.indices {
+                    if let locked = previewLocked[i] {
+                        previewBestTeam[i] = locked
+                    } else if !previewVotes[i].isEmpty {
+                        // 暫定 1 位: 票数が多い順、同数なら最良スコアが
+                        // 小さい順、それも同点なら種族名順 (フレーム間で
+                        // 表示が揺れないよう決定的に選ぶ)
+                        let leader = previewVotes[i].keys.sorted { a, b in
+                            let ca = previewVotes[i][a, default: 0], cb = previewVotes[i][b, default: 0]
+                            if ca != cb { return ca > cb }
+                            let sa = previewVoteScore[i][a] ?? 9, sb = previewVoteScore[i][b] ?? 9
+                            if sa != sb { return sa < sb }
+                            return a < b
+                        }.first
+                        if let leader { previewBestTeam[i] = leader }
+                    }
+                }
                 let filled = previewBestTeam.compactMap { $0 }
                 oppTeamSeen = filled
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
@@ -4723,6 +4856,9 @@ func runOnce(image: CGImage) {
         previewFrames = 0
         previewAttempts = 0
         previewBestTeam = []
+        previewVotes = []
+        previewVoteScore = []
+        previewLocked = []
         previewTeamWritten = false
     }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
@@ -4812,7 +4948,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1341"
+let readerBuild = "20261121_1401"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
