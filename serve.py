@@ -265,6 +265,12 @@ def _is_upload_target(name):
         # クラッシュジャーナルは試合に紐づかないため備考ゲートの
         # 対象外とし、内容が変わるたびにそのまま送る
         return True
+    if name.startswith("preview_test_") and (
+            name.endswith(".jpg") or name.endswith(".json")):
+        # 見せ合いテストの成果物 (撮影画像と検出結果)。試合に紐づか
+        # ないため備考ゲートの対象外とし、そのまま送る。受信側では
+        # preview_test_ 始まりが「見せ合いテストの到着」の目印になる
+        return True
     if not name.startswith("battle_"):
         return False
     if name.endswith(".log"):
@@ -646,7 +652,11 @@ def _upload_logs_once_locked():
             changed_index = True
             if _battle_key(n) is not None:
                 sent_battle += 1
-            print(f"[log] 試合ログを送信しました: {n}", flush=True)
+            if n.startswith("preview_test_"):
+                print(f"[log] 見せ合いテストの結果を送信しました: {n}",
+                      flush=True)
+            else:
+                print(f"[log] 試合ログを送信しました: {n}", flush=True)
         if prune_due or changed_index:
             if _prune_debug_entries(index, token):
                 changed_index = True
