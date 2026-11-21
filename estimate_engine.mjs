@@ -846,6 +846,11 @@ function bayesEntry(species) {
   if (!bayes.bySpecies[species]) {
     // 使用率データがまだ読み込めていない間は「候補なし」を確定させない
     if (!POKEDB_PARSED || !USAGE_SETS || !META_SETS_LOADED) return null;
+    // 持ち物名マップ (items_ja) が無い状態で候補を作ると、合成候補の持ち物が
+    // 全て空になり、そのまま対戦中ずっと固定されて判明した持ち物とも
+    // 一致できなくなる (battle_20261122_051707 の Tyranitar/Leftovers が実例)。
+    // マップの読み込みが済むまでは候補を作らず、回復後に作り直せるようにする
+    if (!NAMES || !NAMES._itemJa2en || !Object.keys(NAMES._itemJa2en).length) return null;
     const cands = bayesBuildCandidates(species);
     if (!cands || !cands.length) { bayes.bySpecies[species] = null; return null; }
     applyTeamItemBoost(cands, species);
