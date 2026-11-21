@@ -3010,7 +3010,27 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
         }
     case "持ち物":
         if let itJa = findInDict(in: text, itemDict) {
-            emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: itJa)  // 判明登録は applyEvent が行う
+            // メガストーンが特定できた場合は、種族をストーンから
+            // 決め直す。ログ画面の小さい文字では種族名の末尾が
+            // 落ちやすく (リザードン → リザード)、本文の名前検索
+            // だけでは別種に一致するため (実例: 2026-11-22
+            // battle_20261122_051707、Charmeleon の持ち物行)。
+            // 実況側のメガ反応分岐 (build 20261122_0552) と同じ規則
+            var useSp = sp
+            var useSide = side
+            var useSlot = slot
+            if itJa.contains("ナイト"), let sEn = itemJa2En[itJa] {
+                var baseEn = sEn
+                for suf in ["ite X", "ite Y", "ite Z", "ite"] where baseEn.hasSuffix(suf) {
+                    baseEn = String(baseEn.dropLast(suf.count)); break
+                }
+                if let stoneSp = speciesDict.first(where: { $0.en == baseEn }), stoneSp.en != sp.en {
+                    useSp = stoneSp
+                    useSide = validatedSide(forSpecies: stoneSp.en, claimed: side)
+                    useSlot = slotFor(side: useSide, speciesEn: stoneSp.en)
+                }
+            }
+            emitItemOnce(slot: useSlot, side: useSide, speciesEn: useSp.en, itemJa: itJa)  // 判明登録は applyEvent が行う
         }
     case "特性":
         if let abJa = findInDict(in: text, abilityDict) {
@@ -7234,7 +7254,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0559"
+let readerBuild = "20261122_0603"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
