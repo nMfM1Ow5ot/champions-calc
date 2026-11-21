@@ -1048,6 +1048,7 @@ function stoneForForme(forme) {
 }
 function spriteId(en) {
   if (en === 'Greninja-Bond') return 'greninja-ash';
+  if (en === 'Aegislash-Shield') return 'aegislash';
   let s = String(en).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   s = s.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   s = s.replace(/-mega-([xyz])$/, '-mega$1').replace(/^mr-/, 'mr')
@@ -1057,8 +1058,19 @@ function spriteId(en) {
   return s;
 }
 function spriteURL(speciesEn) { return `https://play.pokemonshowdown.com/sprites/gen5/${spriteId(speciesEn)}.png`; }
+// Showdown の画像ファイル名の別表記: 種族名が複合語の場合はハイフンを除き
+// (great-tusk → greattusk)、フォルム名内のハイフンは詰める
+// (basculin-blue-striped → basculin-bluestriped)
+function spriteIdAlt(id) {
+  const first = id.indexOf('-');
+  if (first < 0) return id;
+  const rest = id.slice(first + 1);
+  if (!rest.includes('-')) return id.replace('-', '');
+  return id.slice(0, first + 1) + rest.replace(/-/g, '');
+}
 function spriteImg(en, baseEn, cls) {
-  return `<img class="${cls}" src="${spriteURL(en)}" data-spr="0" data-sid="${spriteId(en)}" data-base="${spriteId(baseEn || en)}" alt="">`;
+  const sid = spriteId(en), bid = spriteId(baseEn || en);
+  return `<img class="${cls}" src="${spriteURL(en)}" data-spr="0" data-sid="${sid}" data-alt="${spriteIdAlt(sid)}" data-base="${bid}" data-basealt="${spriteIdAlt(bid)}" alt="">`;
 }
 // 持ち物アイコン (Calcdex のようにポケモンアイコンの右下に重ねる)。
 // PokeAPI のアイテム画像を主にし、無ければ Showdown の itemicons、
@@ -1087,16 +1099,14 @@ document.addEventListener('error', e => {
     return;
   }
   if (img.dataset.spr === undefined) return;
-  if (img.dataset.spr === '0') {
-    img.dataset.spr = '1';
-    img.src = `https://play.pokemonshowdown.com/sprites/ani/${img.dataset.sid}.gif`;
-  } else if (img.dataset.spr === '1' && img.dataset.base !== img.dataset.sid) {
-    img.dataset.spr = '2';
-    img.src = `https://play.pokemonshowdown.com/sprites/gen5/${img.dataset.base}.png`;
-  } else {
-    img.dataset.spr = '3';
-    img.style.visibility = 'hidden';
-  }
+  // 候補を順に試す: gen5 → ani → 別表記 (gen5 → ani) → ベース種族の gen5 → 別表記
+  const sid = img.dataset.sid, alt = img.dataset.alt || sid, base = img.dataset.base || sid, basealt = img.dataset.basealt || base;
+  const cands = [];
+  for (const u of [`https://play.pokemonshowdown.com/sprites/gen5/${sid}.png`, `https://play.pokemonshowdown.com/sprites/ani/${sid}.gif`, `https://play.pokemonshowdown.com/sprites/gen5/${alt}.png`, `https://play.pokemonshowdown.com/sprites/ani/${alt}.gif`, `https://play.pokemonshowdown.com/sprites/gen5/${base}.png`, `https://play.pokemonshowdown.com/sprites/gen5/${basealt}.png`]) if (!cands.includes(u)) cands.push(u);
+  const n = (parseInt(img.dataset.spr, 10) || 0) + 1;
+  if (n >= cands.length) { img.dataset.spr = '9'; img.style.visibility = 'hidden'; return; }
+  img.dataset.spr = String(n);
+  img.src = cands[n];
 }, true);
 function typeChips(spec) {
   if (spec.terastallized && spec.teraType) {
