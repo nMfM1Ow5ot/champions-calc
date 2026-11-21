@@ -1060,7 +1060,19 @@ function closeDD() {
   const id = openDDId;
   openDDId = null;
   const host = document.querySelector(`[data-sdd="${CSS.escape(id)}"]`);
-  if (host) { host.classList.remove('open'); const m = host.querySelector('.sdd-menu'); if (m) m.remove(); }
+  if (host) {
+    host.classList.remove('open');
+    const m = host.querySelector('.sdd-menu'); if (m) m.remove();
+    // 開いたときに入力欄へ差し替えた表示を、閉じた状態の値ラベルへ戻す
+    // (戻さないとプレースホルダの灰色文字が表示名として残ってしまう)
+    if (host.querySelector('.sdd-input') && DDREG[id]) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = ddHTML(id);
+      const ctl = tmp.querySelector('.sdd-control');
+      const old = host.querySelector('.sdd-control');
+      if (ctl && old) old.replaceWith(ctl);
+    }
+  }
 }
 function pickDD(id, v) {
   const d = DDREG[id];
