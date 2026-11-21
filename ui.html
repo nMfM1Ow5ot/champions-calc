@@ -162,7 +162,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 /* ---------- meta row (Ability / Nature / Item) ---------- */
 .metarow{display:flex; gap:1.2rem; margin:.3rem 1.2rem 0}
 .metarow .col{flex:1; min-width:0}
-.oppinfo{font-size:.9rem; color:var(--dim); margin:.6rem 1.2rem 0; line-height:1.5}
+.oppinfo{font-size:.9rem; color:var(--dim); margin:.6rem 1.2rem 0; line-height:1.5; min-height:calc(.9rem * 1.5 * 2)}
 #capStatusText{font-size:1.15rem; color:var(--muted)}
 #capStatusText.ok{color:#4caf50}
 #capStatusText.ng{color:#ef5350}
@@ -1309,7 +1309,7 @@ function metaRow(side) {
 function oppInfoLine() {
   const spec = DS('opps');
   const rates = spec.usageRates || spec.rates;
-  if (spec.kind !== 'usage' || !rates) return '';
+  if (spec.kind !== 'usage' || !rates) return '<div class="oppinfo"></div>';
   const corr = spec.corrected || [];
   const parts = [];
   if (rates.ability && !corr.includes('特性')) parts.push(`特性 ${ja('abilities', spec.ability)} ${rates.ability}%`);
@@ -1411,7 +1411,7 @@ function movesBox(side, res) {
   const spec = DS(side);
   const canMega = spec.megaSpecies || megaFormeOf(spec.species);
   const megaSuffix = spec.mega && spec.megaSpecies ? (spec.megaSpecies.match(/-(X|Y|Z)$/)?.[1] || '') : '';
-  const head = `<div class="mvhead">技${canMega ? ` <button class="tgl${spec.mega ? ' on' : ''}" data-mega="${side}">メガ${megaSuffix}</button>` : ''}</div>
+  const head = `<div class="mvhead">技${canMega ? ` <button class="tgl${spec.mega ? ' on' : ''}" data-mega="${side}">メガ${megaSuffix}</button>` : ' <button class="tgl megares" style="visibility:hidden" aria-hidden="true" tabindex="-1">メガ</button>'}</div>
     <div class="mvhead mid">ダメージ <button class="tgl${ui.crit[side] ? ' on' : ''}" data-crit="${side}">CRIT</button></div>
     <div class="mvhead mid">KO %</div>`;
   const rows = [0, 1, 2, 3].map(mi => {
