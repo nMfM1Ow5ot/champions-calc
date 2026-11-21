@@ -28320,6 +28320,7 @@ function createEstimator(deps) {
     if (!bayes) return null;
     if (!bayes.bySpecies[species]) {
       if (!POKEDB_PARSED || !USAGE_SETS || !META_SETS_LOADED) return null;
+      if (!NAMES || !NAMES._itemJa2en || !Object.keys(NAMES._itemJa2en).length) return null;
       const cands = bayesBuildCandidates(species);
       if (!cands || !cands.length) {
         bayes.bySpecies[species] = null;
