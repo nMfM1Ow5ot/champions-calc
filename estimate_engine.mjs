@@ -135,7 +135,10 @@ function processDamageInf(ev, ctx) {
     const statKey = md.name === 'Body Press' ? 'def' : (md.category === 'Physical' ? 'atk' : 'spa');
     const defSpec = ctx.myDef;
     const bases = ctx.basesAtk;
-    const table = statTable(atkSpecies);
+    // 制約テーブルの値グループ化は、ロール計算で実際に使うフォルムの
+    // 実数値と一致させる (メガ進化中はメガ側の表。素の表でグループ化
+    // すると、値が衝突する行同士で代表ロールの判定がずれる)
+    const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
     if (!defSpec || !bases.length || !table) return;
     const byValue = new Map();
     for (const row of table[statKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
@@ -155,7 +158,8 @@ function processDamageInf(ev, ctx) {
     const defKey = md.category === 'Physical' ? 'def' : 'spd';
     const atkSpec = ctx.myAtk;
     const bases = ctx.basesDef;
-    const table = statTable(defSpecies);
+    // 攻撃側と同じく、メガ進化中はメガ側の表で値グループ化する
+    const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
     if (!atkSpec || !bases.length || !table) return;
     const hpBySp = new Map();
     for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
@@ -512,25 +516,29 @@ function bayesMoveUpdate(ent, species, moves) {
   moves = moves.filter(inUniverse);
   const prev = ent.revMoves || [];
   const added = moves.filter(mv => !prev.includes(mv));
-  const removed = prev.filter(mv => !moves.includes(mv));
-  if (!added.length && !removed.length) return;
+  // 技の判明は単調に扱う: 一度使われた技は対戦中ずっと判明済みであり、
+  // パネル側の状態再処理で技が消えたように見えても反証拠にはならない。
+  // 削除で係数を割り戻す作りだと、UI 側の再処理のたびに同じ技の
+  // 追加・削除が反復して事後分布が振動し、推論ログが氾濫する
+  // (battle_20261122_070237: Milotic の Scald が58回反復記録された)。
+  // 新規の技が無ければ何もしない (記録も残さない)
+  if (!added.length) return;
+  const union = [...prev, ...added];
   const pairSet = list => { const s = new Set(); for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) s.add(bayesPairKey(list[i], list[j])); return s; };
-  const oldPairs = pairSet(prev), newPairs = pairSet(moves);
+  const oldPairs = pairSet(prev), newPairs = pairSet(union);
   for (const c of ent.cands) {
     let f = 1;
     for (const mv of added) f *= bayesMoveFactorSingle(c, mv, stats);
-    for (const mv of removed) f /= bayesMoveFactorSingle(c, mv, stats);
     for (const key of newPairs) if (!oldPairs.has(key)) { const [a, b] = key.split('\u0000'); f *= bayesPairFactor(c, a, b, stats); }
-    for (const key of oldPairs) if (!newPairs.has(key)) { const [a, b] = key.split('\u0000'); f /= bayesPairFactor(c, a, b, stats); }
     if (f !== 1) c.post *= f;
   }
-  ent.revMoves = [...moves];
+  ent.revMoves = union;
   let tot = 0;
   for (const c of ent.cands) tot += c.post;
   if (tot > 0) for (const c of ent.cands) c.post /= tot;
   ent.used++;
   dirty = true;
-  logSnapshot(species, infLogTurn, { kind: 'moveSeen', added, removed, applied: true });
+  logSnapshot(species, infLogTurn, { kind: 'moveSeen', added, removed: [], applied: true });
 }
 // meta_sets の名前は英語表記が正本だが、和名で来ても解決できるよう両対応にする
 function metaNameEn(kind, name) {
@@ -1095,10 +1103,13 @@ function applyRevealed(list) {
     const ability = corr.includes('特性') ? normAbility(p.ability) : null;
     const key = (item ?? '?') + '|' + (ability ?? '?');
     if (key === ent.revKey) continue;
-    ent.revKey = key;
     // 判明内容が無い呼び出し (item/ability とも null) は記録しない
-    // (空の revealed スナップショットの抑制)
+    // (空の revealed スナップショットの抑制)。revKey も更新しない:
+    // 内容なしの呼び出しが間に挟まると重複抑制が壊れ、同じ判明が
+    // 何度も処理・記録される (battle_20261122_070237: Milotic の
+    // Leftovers 判明が20回記録された)
     if (item === null && ability === null) continue;
+    ent.revKey = key;
     // 判明情報はハード制約として固定する: 確定した持ち物・特性と矛盾する
     // 候補は確率0で除外する (行動順と同じ原則。乗算の尤度更新では0は
     // 復活しないため、その後の証拠で覆ることはない)。持ち物を失った
