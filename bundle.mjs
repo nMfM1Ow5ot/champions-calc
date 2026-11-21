@@ -27938,28 +27938,51 @@ function createEstimator(deps) {
       if (!ent) continue;
       bayesMoveUpdate(ent, species, p.knownMoves || []);
       const corr = p.corrected || [];
-      const item = p.itemLost ? "" : corr.includes("\u6301\u3061\u7269") ? p.item || "" : null;
-      const ability = corr.includes("\u7279\u6027") ? p.ability : null;
+      const normItem = (v) => v == null ? null : (NAMES._itemJa2en || {})[v] || v;
+      const normAbility = (v) => v == null ? null : (NAMES._abilityJa2en || {})[v] || v;
+      const item = p.itemLost ? "" : corr.includes("\u6301\u3061\u7269") ? normItem(p.item || "") : null;
+      const ability = corr.includes("\u7279\u6027") ? normAbility(p.ability) : null;
       const key = (item ?? "?") + "|" + (ability ?? "?");
       if (key === ent.revKey) continue;
       ent.revKey = key;
-      let changed = false;
+      if (item === null && ability === null) continue;
+      const itemHard = item !== null && !p.itemLost;
+      const matchItem = (c) => !itemHard || c.item === item;
+      const matchAbility = (c) => ability === null || c.ability === ability || p.mega && c.megaAbility === ability;
+      let survivorMass = 0, excluded = 0;
       for (const c of ent.cands) {
-        let f = 1;
-        if (item !== null && c.item !== item) f *= BAYES_REV_KEEP;
-        if (ability !== null && c.ability !== ability && !(p.mega && c.megaAbility === ability)) f *= BAYES_REV_KEEP;
-        if (f !== 1) {
-          c.post *= f;
-          changed = true;
+        if (matchItem(c) && matchAbility(c)) survivorMass += c.post;
+        else if (c.post > 0) excluded++;
+      }
+      const hardMode = (itemHard || ability !== null) && survivorMass > 0;
+      let applied = false;
+      if (hardMode) {
+        if (excluded > 0) {
+          for (const c of ent.cands) if (!(matchItem(c) && matchAbility(c))) c.post = 0;
+          for (const c of ent.cands) c.post /= survivorMass;
+          dirty = true;
         }
+        applied = true;
+      } else {
+        let changed = false;
+        for (const c of ent.cands) {
+          let f = 1;
+          if (item !== null && c.item !== item) f *= BAYES_REV_KEEP;
+          if (ability !== null && c.ability !== ability && !(p.mega && c.megaAbility === ability)) f *= BAYES_REV_KEEP;
+          if (f !== 1) {
+            c.post *= f;
+            changed = true;
+          }
+        }
+        if (changed) {
+          let tot = 0;
+          for (const c of ent.cands) tot += c.post;
+          if (tot > 0) for (const c of ent.cands) c.post /= tot;
+          dirty = true;
+        }
+        applied = changed;
       }
-      if (changed) {
-        let tot = 0;
-        for (const c of ent.cands) tot += c.post;
-        if (tot > 0) for (const c of ent.cands) c.post /= tot;
-        dirty = true;
-      }
-      logSnapshot(species, infLogTurn, { kind: "revealed", item, ability, applied: changed });
+      logSnapshot(species, infLogTurn, { kind: "revealed", item, ability, applied, hard: hardMode, excluded: hardMode ? excluded : 0 });
     }
   }
   function bayesCover(species) {
