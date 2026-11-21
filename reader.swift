@@ -2791,8 +2791,21 @@ func boostSubjects(in t: String) -> [SpeciesEntry] {
     let inRegion = found.filter {
         region.contains(normalize($0.ja)) || foldedRegion.contains(foldDakuten(normalize($0.ja)))
     }
-    // 複合主語 (「Aと Bの」) のときだけ、領域内の全員を対象にする
-    if region.contains("と"), inRegion.count >= 2 { return inRegion }
+    // 複合主語 (「Aと Bの」) のときだけ、領域内の全員を対象にする。
+    // 正規化で「と」は「ト」になるため両形を見る。種族名の一部
+    // (ドラパルトの「ト」等) と誤認しないよう、2 つの名前の間に
+    // 助詞がある場合だけ複合とみなす
+    if inRegion.count >= 2 {
+        var compound = false
+        for i in 0..<(inRegion.count - 1) {
+            let a = normalize(inRegion[i].ja), b = normalize(inRegion[i + 1].ja)
+            guard let ra = region.range(of: a),
+                  let rb = region.range(of: b, range: ra.upperBound..<region.endIndex) else { continue }
+            let between = region[ra.upperBound..<rb.lowerBound]
+            if between.contains("と") || between.contains("ト") { compound = true }
+        }
+        if compound { return inRegion }
+    }
     // 単独主語: 主語領域に現れる最後の種族だけが文法上の主語
     if let last = inRegion.last { return [last] }
     return found
@@ -5907,7 +5920,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1624"
+let readerBuild = "20261121_1629"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
