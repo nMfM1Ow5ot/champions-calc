@@ -1676,7 +1676,7 @@ document.addEventListener('mousedown', e => {
   const ctl = e.target.closest('[data-ddctl]');
   if (ctl) {
     const id = ctl.dataset.ddctl;
-    if (openDDId === id) { /* already open: keep open (input focus) */ const inp = ctl.querySelector('.sdd-input'); if (inp && e.target !== inp) { e.preventDefault(); inp.focus(); } }
+    if (openDDId === id) { /* already open */ const inp = ctl.querySelector('.sdd-input'); if (inp && e.target === inp && document.activeElement === inp) { e.preventDefault(); closeDD(); } else if (inp && e.target !== inp) { e.preventDefault(); inp.focus(); } }
     else { e.preventDefault(); openDD(id); }
     return;
   }
