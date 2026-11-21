@@ -285,6 +285,9 @@ const itemLabel = en => en ? ((typeof NAMES !== 'undefined' && NAMES._itemEn2ja 
 let NAMES = { species: {}, moves: {}, abilities: {} };
 const idOf = en => String(en).toLowerCase().replace(/[^a-z0-9]/g, '');
 const ja = (table, en) => (NAMES[table] && NAMES[table][idOf(en)]) || en;
+// プルダウン表示名: 日本語名の横に英名を併記する (例: カビゴン (Snorlax))。
+// 日本語名が無い場合は英名のみ。検索はラベル・値の双方に当たるため日英どちらでも探せる
+const biLabel = (jaName, en) => (!jaName || jaName === en) ? String(en) : `${jaName} (${en})`;
 
 const $ = id => document.getElementById(id);
 const state = {
@@ -489,6 +492,17 @@ function oppSpec(speciesEn, kind) {
   return { species: speciesEn, kind, sp: { ...a.sp }, nature: a.nature, ability: a.ability, item: '',
     moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [],
     noUsage: kind === 'usage' && !USAGE_SETS ? true : undefined };
+}
+// 自分のポケモンをプルダウンで変更したときの初期型: 使用率トップ型を土台に、
+// 相手側専用の推定・訂正まわりのフィールドを取り除いたものを返す
+function ownSpeciesSpec(speciesEn) {
+  const u = oppSpec(speciesEn, 'usage');
+  const ns = { ...u, moves: [...(u.moves || [])], sp: { ...(u.sp || {}) }, boosts: blankBoosts(), status: '', curHPPercent: 100 };
+  delete ns.kind; delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
+  delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual;
+  delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
+  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec;
+  return ns;
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
 function applyRevealed(spec, rev) {
@@ -936,7 +950,7 @@ function pokeInfo(side) {
   if (side === 'opps') {
     regDD('species:opps', {
       options: SPECIES_OPTIONS, value: spec.species, bare: true,
-      valueLabel: ja('species', eff),
+      valueLabel: biLabel(ja('species', eff), eff),
       onPick: v => {
         if (!v || v === spec.species) return;
         const keep = DS('opps');
@@ -949,7 +963,19 @@ function pokeInfo(side) {
     });
     nameHTML = ddHTML('species:opps');
   } else {
-    nameHTML = `<span class="speciesname">${esc(ja('species', eff))}</span>`;
+    regDD('species:mine', {
+      options: SPECIES_OPTIONS, value: spec.species, bare: true,
+      valueLabel: biLabel(ja('species', eff), eff),
+      onPick: v => {
+        if (!v || v === spec.species) return;
+        const keep = DS('mine');
+        const ns = ownSpeciesSpec(v);
+        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+        state.mine[state.sel.mine] = ns;
+        calcAll();
+      },
+    });
+    nameHTML = ddHTML('species:mine');
   }
   const hp = Math.max(0, Math.min(100, Math.round(spec.curHPPercent ?? 100)));
   return `<div class="pokeinfo">
@@ -972,18 +998,18 @@ function metaRow(side) {
   if (spec.ability && !abs.includes(spec.ability)) abs.push(spec.ability);
   if (spec.mega && spec.megaAbility && !abs.includes(spec.megaAbility)) abs.push(spec.megaAbility);
   regDD(`ability:${side}`, {
-    options: abs.map(a => ({ v: a, l: ja('abilities', a) })),
+    options: abs.map(a => ({ v: a, l: biLabel(ja('abilities', a), a) })),
     value: (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability, highlight: corr('特性'),
     onPick: v => { if (spec.mega && spec.megaAbility) spec.megaAbility = v; else spec.ability = v; if (side === 'opps') markCorrected(spec, '特性'); calcAll(); },
   });
   regDD(`nature:${side}`, {
-    options: NATURES.map(n => ({ v: n, l: NAT_JA[n] || n })),
+    options: NATURES.map(n => ({ v: n, l: biLabel(NAT_JA[n] || n, n) })),
     value: spec.nature, highlight: corr('性格'),
     onPick: v => { spec.nature = v; if (side === 'opps') { markCorrected(spec, '性格'); (spec.estManual ||= {}).nature = true; } calcAll(); },
   });
   regDD(`item:${side}`, {
     options: ITEM_OPTIONS, value: spec.itemLost ? '' : (spec.item || ''), clearable: true, placeholder: 'なし',
-    valueLabel: !spec.itemLost && spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : '',
+    valueLabel: !spec.itemLost && spec.item ? biLabel((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item, spec.item) : '',
     highlight: corr('持ち物'),
     onPick: v => { spec.item = v || ''; spec.itemLost = false; if (side === 'opps') markCorrected(spec, '持ち物'); calcAll(); },
   });
@@ -1200,12 +1226,12 @@ function sideChips(which) {
 }
 function renderField() {
   regDD('weather', {
-    options: [{ v: '', l: 'なし' }, { v: 'Sun', l: 'はれ' }, { v: 'Rain', l: 'あめ' }, { v: 'Sand', l: 'すなあらし' }, { v: 'Snow', l: 'ゆき' }, { v: 'Harsh Sunshine', l: 'つよいひざし' }, { v: 'Heavy Rain', l: 'つよいあめ' }, { v: 'Strong Winds', l: 'らんきりゅう' }],
+    options: [{ v: '', l: 'なし' }, { v: 'Sun', l: 'はれ (Sun)' }, { v: 'Rain', l: 'あめ (Rain)' }, { v: 'Sand', l: 'すなあらし (Sand)' }, { v: 'Snow', l: 'ゆき (Snow)' }, { v: 'Harsh Sunshine', l: 'つよいひざし (Harsh Sunshine)' }, { v: 'Heavy Rain', l: 'つよいあめ (Heavy Rain)' }, { v: 'Strong Winds', l: 'らんきりゅう (Strong Winds)' }],
     value: state.field.weather || '',
     onPick: v => { setFieldManual('weather', v); calcAll(); },
   });
   regDD('terrain', {
-    options: [{ v: '', l: 'なし' }, { v: 'Electric', l: 'エレキフィールド' }, { v: 'Grassy', l: 'グラスフィールド' }, { v: 'Psychic', l: 'サイコフィールド' }, { v: 'Misty', l: 'ミストフィールド' }],
+    options: [{ v: '', l: 'なし' }, { v: 'Electric', l: 'エレキフィールド (Electric)' }, { v: 'Grassy', l: 'グラスフィールド (Grassy)' }, { v: 'Psychic', l: 'サイコフィールド (Psychic)' }, { v: 'Misty', l: 'ミストフィールド (Misty)' }],
     value: state.field.terrain || '',
     onPick: v => { setFieldManual('terrain', v); calcAll(); },
   });
@@ -2156,17 +2182,17 @@ async function poll() {
   SPECIES_OPTIONS = Object.entries(NAMES._ja2en || {})
     .filter(([, en]) => !CHAMP.species.size || CHAMP.species.has(en))
     .filter(([, en]) => { if (seen.has(en)) return false; seen.add(en); return true; })
-    .map(([jaName, en]) => ({ v: en, l: jaName }))
+    .map(([jaName, en]) => ({ v: en, l: biLabel(jaName, en) }))
     .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
   MOVE_OPTIONS = [{ v: '', l: '（技なし）' }].concat(
     Object.entries(NAMES._moveJa2en || {})
       .filter(([, en]) => !CHAMP.moves.size || CHAMP.moves.has(en))
-      .map(([jaName, en]) => ({ v: en, l: jaName }))
+      .map(([jaName, en]) => ({ v: en, l: biLabel(jaName, en) }))
       .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
   ITEM_OPTIONS = [{ v: '', l: 'なし' }].concat(
     [...gen.items].map(it => it.name)
       .filter(en => !CHAMP.items.size || CHAMP.items.has(en))
-      .map(en => ({ v: en, l: (NAMES._itemEn2ja || {})[idOf(en)] || en }))
+      .map(en => ({ v: en, l: biLabel((NAMES._itemEn2ja || {})[idOf(en)] || en, en) }))
       .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
   await loadMyTeam();
   calcAll();
