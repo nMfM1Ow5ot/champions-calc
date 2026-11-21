@@ -84,6 +84,12 @@ console.log(`champions_dex (universe): species ${universeSpecies.length} / items
 
 const regPath = new URL('./data/regulation.json', import.meta.url);
 const reg = JSON.parse(readFileSync(regPath, 'utf8'));
+// 仕様差分の対応バージョンは data/spec_patches.json の seasons が正本。
+// シーズンを切り替えて再生成すると、regulation 側の対応も切り替わる
+try {
+  const sp = JSON.parse(readFileSync(new URL('./data/spec_patches.json', import.meta.url), 'utf8'));
+  if (sp.seasons && reg.season in sp.seasons) reg.specPatch = sp.seasons[reg.season];
+} catch { /* spec_patches.json が無い場合は既存の specPatch を保持する */ }
 reg.species = scopeSpecies;
 reg.items = scopeItems;
 reg.moves = scopeMoves;
