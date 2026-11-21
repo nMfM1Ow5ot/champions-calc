@@ -4640,9 +4640,12 @@ func loadPreviewData() {
     }
     // 見せ合い画面に現れないフォルム (メガ進化と対戦中だけの姿) は
     // 同定候補から外す。名前の末尾で判定できるメガに、名前だけでは
-    // 区別できない対戦中フォルムを明示で加える
+    // 区別できない対戦中フォルムを明示で加える。-Mega-Z は当初
+    // 末尾ルールに無く、Absol/Garchomp/Lucario の Z メガ3種が候補に
+    // 漏れていた (2026-11-21 preview_test で確認)
     pvBattleOnlyFormes = Set(pvSpeciesTypes.keys.filter {
         $0.hasSuffix("-Mega") || $0.hasSuffix("-Mega-X") || $0.hasSuffix("-Mega-Y")
+            || $0.hasSuffix("-Mega-Z")
     }).union(["Greninja-Bond", "Palafin-Hero", "Mimikyu-Busted", "Morpeko-Hangry"]
         .filter { pvSpeciesTypes[$0] != nil })
     for (name, v) in fobj {
@@ -6025,7 +6028,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1701"
+let readerBuild = "20261121_1716"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
