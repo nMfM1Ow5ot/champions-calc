@@ -21,6 +21,16 @@
    "uploaded_at": "2026-11-20T12:30:39.211646+09:00"
   },
   {
+   "name": "battle_20261120_124322_salvage_final.log",
+   "sha256": "551a060d0c97ba5d018b4eb5d6f132793bf37b2f227d3b85e6701e090230085b",
+   "uploaded_at": "2026-11-21T14:10:27.141300+09:00"
+  },
+  {
+   "name": "battle_20261120_124322_salvage_final_protocol.log",
+   "sha256": "e0f974a6a9eeb0f756313abbc38f70008d9adcadd1a1e3abe9208098aa4b7bb3",
+   "uploaded_at": "2026-11-21T14:10:29.059553+09:00"
+  },
+  {
    "name": "battle_20261120_163448_final.log",
    "sha256": "041c558c0489c2fc8b014a0bf8b08d8a0c5d856370656d3c4fee645d73fd848c",
    "uploaded_at": "2026-11-20T16:42:41.584099+09:00"
