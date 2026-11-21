@@ -4599,6 +4599,13 @@ var pvBattleOnlyFormes: Set<String> = []
 // ロトムやツアリーナが上位に来る)。0.20 に広げても代理測定の
 // 読み違い救済率は下がらないことを tests/preview_eval.py で確認済み
 let pvExpandMargin = 0.20
+// パネルのレイアウト幅と高さの比 (実フレーム4件で実測: エンジ色幅が
+// 健全な全画面フレームでは高さの約2.5〜2.6倍)。アイコン・性別の
+// サンプリング幅は、エンジ色の実測幅がこれを下回る場合に高さから
+// 推定した幅を使う (ウィンドウ表示等の縮小フレームではエンジ色の
+// 本体がレイアウト幅より狭く取れ、第2アイコンがパネル外に出る。
+// 2026-11-21 preview_test_20261121_171741 で確認)
+let pvPanelAspect = 2.6
 // 選出同定 1 枠分の結果 (投票・マージ用)
 struct PvSlotInfo {
     var pick: String? = nil        // このフレームで割り当てた種族
@@ -4773,7 +4780,7 @@ func pvResizeGray(_ src: [Double], _ sw: Int, _ sh: Int, _ dw: Int, _ dh: Int) -
 // エンジ色の列分布から測って 6 枚の中央値でそろえる (背景の同色要素で
 // 1 枚だけ端が伸びても全体は崩れない)。アイコン位置もパネル相対で決めるため、
 // 取り込みフレーム側のずれ・拡大縮小があっても追従できる。
-func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int, w: Int, h: Int)] {
+func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int, w: Int, h: Int, cropW: Int)] {
     let W = buf.w, H = buf.h
     func isMaroon(_ x: Int, _ y: Int) -> Bool {
         let i = (y * W + x) * 4
@@ -4799,7 +4806,15 @@ func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int,
         }
     }
     if let s = start { groups.append((s, last)) }
-    let raw = groups.filter { $0.1 - $0.0 >= Int(0.05 * Double(H)) }
+    var raw = groups.filter { $0.1 - $0.0 >= Int(0.05 * Double(H)) }
+    if raw.count > 6 {
+        // 帯が 7 本以上ある場合は、高さが中央値に近い 6 本を残す
+        // (トレーナー名の帯など、パネル以外の帯が混ざる場合)
+        let hs = raw.map { $0.1 - $0.0 + 1 }.sorted()
+        let med = hs[hs.count / 2]
+        raw = raw.sorted { abs($0.1 - $0.0 + 1 - med) < abs($1.1 - $1.0 + 1 - med) }
+            .prefix(6).sorted { $0.0 < $1.0 }
+    }
     if raw.count == 6 {
         // 各パネルの左右端を列分布 (行の半分超がエンジ色の列) から測る
         var x0s: [Int] = [], x1s: [Int] = []
@@ -4815,19 +4830,32 @@ func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int,
         }
         if x0s.count == 6 {
             let mx0 = x0s.sorted()[3], mx1 = x1s.sorted()[3]
-            let mw = mx1 - mx0 + 1
-            // 実測値が想定範囲内のときだけ採用する
-            if mw >= Int(0.10 * Double(W)) && mw <= Int(0.22 * Double(W))
-                && mx0 >= Int(0.55 * Double(W)) && mx0 <= Int(0.90 * Double(W)) {
-                return raw.map { (x: mx0, y: $0.0, w: mw, h: $0.1 - $0.0 + 1) }
+            let maroonW = mx1 - mx0 + 1
+            let hs = raw.map { $0.1 - $0.0 + 1 }.sorted()
+            let medH = hs[3]
+            // 採用条件はレイアウト形状で判定する (エンジ色幅そのものは
+            // 縮小フレームで過小に出るため、幅の絶対範囲では判定しない):
+            // 帯の高さが揃っていること、左端とサンプリング幅が
+            // 全画面〜縮小表示の範囲に収まること
+            let uniform = raw.allSatisfy {
+                abs(Double($0.1 - $0.0 + 1) - Double(medH)) <= 0.35 * Double(medH)
+            }
+            // サンプリング幅: エンジ色幅と、高さから推定したレイアウト
+            // 幅の大きい方。モデル切り出し幅 (cropW) は従来どおり
+            // エンジ色幅を使う (較正済みの切り出しを変えないため)
+            let sampleW = max(maroonW, Int((Double(medH) * pvPanelAspect).rounded()))
+            if uniform
+                && mx0 >= Int(0.50 * Double(W)) && mx0 <= Int(0.92 * Double(W))
+                && sampleW >= Int(0.08 * Double(W)) && sampleW <= Int(0.30 * Double(W)) {
+                return raw.map { (x: mx0, y: $0.0, w: sampleW, h: $0.1 - $0.0 + 1, cropW: maroonW) }
             }
         }
         let pw = Int(0.154 * Double(W)), px = Int(0.811 * Double(W))
-        return raw.map { (x: px, y: $0.0, w: pw, h: $0.1 - $0.0 + 1) }
+        return raw.map { (x: px, y: $0.0, w: pw, h: $0.1 - $0.0 + 1, cropW: pw) }
     }
     let pw = Int(0.154 * Double(W)), px = Int(0.811 * Double(W))
     return [0.180, 0.279, 0.378, 0.473, 0.576, 0.670].map {
-        (x: px, y: Int($0 * Double(H)), w: pw, h: Int(0.094 * Double(H)))
+        (x: px, y: Int($0 * Double(H)), w: pw, h: Int(0.094 * Double(H)), cropW: pw)
     }
 }
 
@@ -5110,7 +5138,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         return all
     }
     for panel in panels {
-        let (gender, gRed, gBlue) = pvReadGender(buf, panel)
+        let (gender, gRed, gBlue) = pvReadGender(buf, (x: panel.x, y: panel.y, w: panel.w, h: panel.h))
         slotGender.append(gender ?? "")
         slotGenderCounts.append([gRed, gBlue])
         slotPanels.append([panel.x, panel.y, panel.w, panel.h])
@@ -5162,7 +5190,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
             continue
         }
         anyInfo = true
-        guard let f = pvModelFeatures(buf, panel) else {
+        guard let f = pvModelFeatures(buf, (x: panel.x, y: panel.y, w: panel.cropW, h: panel.h)) else {
             // モデル特徴が取れない場合: タイプで 1 種に定まれば従来どおり
             // 確定として扱い、それ以外は判定できない
             if pool.count == 1 && !expanded {
@@ -6043,7 +6071,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1726"
+let readerBuild = "20261121_1731"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
