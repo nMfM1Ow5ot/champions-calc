@@ -7234,7 +7234,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0552"
+let readerBuild = "20261122_0559"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -7717,6 +7717,22 @@ func expectedStats(base: [Int], sp: [String: Int], speciesEn: String, up: Int?, 
     return out
 }
 
+// 実数値 + SP が、その種族値で再現できるか (完全一致、または
+// 1 項目だけの補正で一致するか)。ステータス画面のフォルム判別用:
+// 画面には特性が出ないため、種族値の整合が判別材料になる
+func statsFitForme(base: [Int], stats: [String: Int], spHint: [String: Int], speciesEn: String) -> Bool {
+    let keys = ["hp", "atk", "def", "spa", "spd", "spe"]
+    let read = keys.map { stats[$0] ?? -1 }
+    var corrections = Set<String>()
+    for nt in natureTable {
+        let exp = expectedStats(base: base, sp: spHint, speciesEn: speciesEn, up: nt.up, down: nt.down)
+        if exp == read { return true }
+        let diffs = (0..<6).filter { exp[$0] != read[$0] }
+        if diffs.count == 1 { corrections.insert(keys[diffs[0]]) }
+    }
+    return corrections.count == 1
+}
+
 func captureTeamScreen(image: CGImage, tab: String) -> Int {
     if isBlankFrame(image) { noteBlankFrame(true); return 0 }
     noteBlankFrame(false)
@@ -7794,6 +7810,31 @@ func captureTeamScreen(image: CGImage, tab: String) -> Int {
                         }
                     }
                     flush()
+                }
+                // フォルム判別 (ステータス): 実数値 + SP が再現できる
+                // フォルムがグループ内で 1 つだけなら、そのフォルムと
+                // して登録する。ステータス画面には特性が無いため、
+                // 種族値の整合が唯一の判別材料になる (実例: 2026-11-22、
+                // キュウコンのステータス撮影が原種として登録され、
+                // 実数値が原種の種族値と整合せず丸ごと弾かれた。
+                // アローラ種族値では性格・SP 込みで完全一致する)
+                if group.count > 1 && stats.count == 6 && spHint.count == 6 {
+                    loadBaseStats()
+                    let fits = group.filter { g in
+                        guard let b = baseStatsMap[g.en] else { return false }
+                        return statsFitForme(base: b, stats: stats, spHint: spHint, speciesEn: g.en)
+                    }
+                    if fits.count == 1, let f = fits.first, f.en != species.en {
+                        diagPrint("  フォルム判別(ステータス): \(species.ja) -> \(f.en)")
+                        if let existing = teamEntries[f.en] {
+                            var merged = existing
+                            for (k, v) in entry { merged[k] = v }  // 今回読んだ値を優先
+                            entry = merged
+                        }
+                        teamEntries.removeValue(forKey: species.en)
+                        teamOrder.removeAll { $0 == species.en }
+                        species = f
+                    }
                 }
                 // SP が 6 項目とも読めた場合は、実数値が「種族値 + SP + 性格」で
                 // 再現できるか検証する。ステータス画面の 1 桁誤読 (例: HP 162 を
@@ -7931,6 +7972,18 @@ func captureTeamScreen(image: CGImage, tab: String) -> Int {
         if teamOrder.count != screenSpecies.count || !teamOrder.allSatisfy({ keep.contains($0) }) {
             teamEntries = teamEntries.filter { keep.contains($0.key) }
             teamOrder = screenSpecies
+            pruned = true
+        }
+    } else if screenSpecies.count >= 2 {
+        // 部分的にしか読めなかった場合も、読めた分は画面の並び順に
+        // 揃えて書く (読めなかった分は従来の相対順のまま後ろに残す)。
+        // 検出順のまま末尾へ追加されると、UI のアイコン列の並びが
+        // 画面とずれる (実例: 2026-11-22、4 番目のキュウコンが
+        // 最後尾に並んだ)
+        let onScreen = Set(screenSpecies)
+        let rest = teamOrder.filter { !onScreen.contains($0) }
+        if teamOrder != screenSpecies + rest {
+            teamOrder = screenSpecies + rest
             pruned = true
         }
     }
