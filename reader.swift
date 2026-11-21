@@ -1372,7 +1372,7 @@ func resetLogState() {
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
     battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
-    debugShotsThisBattle = 0; debugSeenEntries = []; debugFrameRing = []
+    debugShotsThisBattle = 0; debugRoutineShots = 0; debugEventShots = 0; debugSeenEntries = []; debugFrameRing = []
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -1467,13 +1467,23 @@ func archiveCurrentBattle(final: Bool) {
 // JPEG で logs/ に保存し、イベントごとの JSON を添える。serve.py が試合
 // ログと同じ暗号化の便で logs_enc/ へ送り、ログ分析側がログ2点と突き合わ
 // せる。ファイル名は battle_<試合ID>_debugNN.jpg/.json で、ログファイルと
-// battle_<日時> の接頭辞を共有する。1 試合あたり上限 10 件、同一文・同一
-// 箇所の繰り返しは 1 件にまとめる (類似文の集約は再読対策として直近
-// 30 秒のみ)。Mac ローカルの保持は 14 日。
-let debugMaxPerBattle = 10
+// battle_<日時> の接頭辞を共有する。同一文・同一箇所の繰り返しは
+// 1 件にまとめる (類似文の集約は再読対策として直近 30 秒のみ)。
+// 上限はクラス別: preview_id は毎試合保証のため対象外、ターン判定の
+// 定常記録 (turn_decided / turn_guard) は合計 6 件、それ以外の
+// イベント記録は 12 件 (全体の安全上限 19 件)。従来の一律 10 件では
+// 定常記録とイベント記録が枠を取り合い、長引いた試合の終盤で証拠が
+// 残らなかった (実例: 2026-11-21 battle_20261121_155801、ターン 9 で
+// 上限に達しターン 10 以降の異常を切り分けられなかった)。
+// Mac ローカルの保持は 14 日。
+let debugRoutineMaxPerBattle = 6
+let debugEventMaxPerBattle = 12
+let debugTotalMaxPerBattle = 19
 let debugRingSize = 4   // 参照されるのは最新フレームだけのため、全画面で保持してもメモリを抑える
 let debugRetentionDays = 14
 var debugShotsThisBattle = 0
+var debugRoutineShots = 0
+var debugEventShots = 0
 var debugSeenEntries: [(key: String, at: Date)] = []
 var debugFrameRing: [(at: Date, img: CGImage)] = []
 
@@ -1518,10 +1528,23 @@ func debugUpdateRing(_ image: CGImage) {
     if debugFrameRing.count > debugRingSize { debugFrameRing.removeFirst(debugFrameRing.count - debugRingSize) }
 }
 
+// デバッグ記録のクラス: 0 = 上限対象外 (preview_id)、
+// 1 = 定常系 (ターン判定)、2 = イベント系 (その他)
+func debugKindClass(_ kind: String) -> Int {
+    if kind == "preview_id" { return 0 }
+    if kind == "turn_decided" || kind == "turn_guard" { return 1 }
+    return 2
+}
+
 func debugCapture(kind: String, key: String, rawText: String, detail: [String: Any], image: CGImage? = nil) {
-    guard debugShouldCapture(seen: debugSeenEntries, count: debugShotsThisBattle, key: key, cap: debugMaxPerBattle, now: Date()) else { return }
+    let cls = debugKindClass(kind)
+    if cls == 1 && debugRoutineShots >= debugRoutineMaxPerBattle { return }
+    if cls == 2 && debugEventShots >= debugEventMaxPerBattle { return }
+    guard debugShouldCapture(seen: debugSeenEntries, count: debugShotsThisBattle, key: key, cap: debugTotalMaxPerBattle, now: Date()) else { return }
     debugSeenEntries.append((key: key, at: Date()))
     debugShotsThisBattle += 1
+    if cls == 1 { debugRoutineShots += 1 }
+    if cls == 2 { debugEventShots += 1 }
     let seq = debugShotsThisBattle
     let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
     let base = String(format: "battle_%@_debug%02d", id, seq)
@@ -2746,6 +2769,35 @@ func applyMoveField(_ mvJa: String, side: String) {
 // 素通りして |-message| に落ち、ランク変化が一切ダメ計に反映されなかった
 // (実例: 2026-11-20 vs Mark 戦の いかく/ちいさくなる/たくわえる 全件)。
 // 能力名はフリガナ+漢字の二重表記 (こうげき攻撃 等) で読めることがある。
+// ランク変化文の文法上の主語を返す。能力変化の告知は 1 文 1 主語が
+// 原則で、複合主語は「Aと Bの …」の形のときだけ現れる。画面端の
+// プレート名や前後の文の断片が混入して無関係な種族名が文中にある
+// 場合、その種族にまで変化を付けない (実例: 2026-11-21
+// battle_20261121_155801、くだけるよろいの防御低下が、混入した
+// イエッサンの名前のためにイエッサン♀にも付いた)
+func boostSubjects(in t: String) -> [SpeciesEntry] {
+    let found = findAllSpeciesJa(in: t).map { fieldAnchoredSpecies($0) }
+    if found.count <= 1 { return found }
+    // 最初の能力名より前が主語の領域
+    let statWords = ["こうげき", "攻撃", "ぼうぎょ", "防御", "とくこう", "特攻", "とくぼう", "特防",
+                     "すばやさ", "素早さ", "めいちゅう", "命中率", "かいひ", "回避率",
+                     "コウゲキ", "ボウギョ", "トクコウ", "トクボウ", "スバヤサ", "メイチュウ", "カイヒ"]
+    var cut = t.endIndex
+    for w in statWords {
+        if let r = t.range(of: w), r.lowerBound < cut { cut = r.lowerBound }
+    }
+    let region = normalize(String(t[..<cut]))
+    let foldedRegion = foldDakuten(region)
+    let inRegion = found.filter {
+        region.contains(normalize($0.ja)) || foldedRegion.contains(foldDakuten(normalize($0.ja)))
+    }
+    // 複合主語 (「Aと Bの」) のときだけ、領域内の全員を対象にする
+    if region.contains("と"), inRegion.count >= 2 { return inRegion }
+    // 単独主語: 主語領域に現れる最後の種族だけが文法上の主語
+    if let last = inRegion.last { return [last] }
+    return found
+}
+
 func checkBoostText(text: String, side: String, speciesEn: String, slot: String) {
     if text.contains("あがらない") || text.contains("さがらない") || text.contains("上がらない") || text.contains("下がらない") { return }
     // 小さい「っ」が通常の「つ」に崩れる OCR ゆれも拾う
@@ -2907,8 +2959,12 @@ func checkFieldText(text: String) -> Bool {
     if (text.contains("足下に") || text.contains("足下が")) && text.contains("電気が") && text.contains("かけめぐ") { setTerrain("Electric"); return true }
     if (text.contains("足下に") || text.contains("足下が") || text.contains("足元")) && text.contains("草が") && (text.contains("生い茂") || text.contains("おいしげ") || text.contains("しげった") || text.contains("茂った")) { setTerrain("Grassy"); return true }
     if text.contains("足下が") && text.contains("霧に") && text.contains("包まれ") { setTerrain("Misty"); return true }
-    // 天候の終了文
-    if (text.contains("日差し") || text.contains("ひざし")) && text.contains("弱く") { clearWeather(); return true }
+    // 天候の終了文 (晴れの実機文面は「日差しが元に戻った！」。
+    // 『弱く』だけを条件にしていたため実機の文面では成立せず、晴れが
+    // 解除されないまま残った。実例: 2026-11-21 battle_20261121_155801
+    // 「ひざ日差しが元に戻った！」— 先頭に読みの重複が付いた崩れでも
+    // 『戻った』で拾う)
+    if (text.contains("日差し") || text.contains("ひざし")) && (text.contains("戻った") || text.contains("もどった") || text.contains("弱く")) { clearWeather(); return true }
     if text.contains("雨") && (text.contains("やんだ") || text.contains("止んだ") || text.contains("上がった")) { clearWeather(); return true }
     if (text.contains("あめ") && (text.contains("やんだ") || text.contains("おさまった"))) { clearWeather(); return true }
     if (text.contains("砂あらし") || text.contains("すなあらし")) && (text.contains("おさま") || text.contains("弱ま")) { clearWeather(); return true }
@@ -4294,8 +4350,10 @@ func translateBattleMessage(_ text: String) -> Bool {
         || t.contains("あがつた") || t.contains("さがつた") || t.contains("上がつた") || t.contains("下がつた") {
         // 主語を場のフォルムに寄せる (イエッサン -> イエッサンF 等)。寄せないと
         // 枠が特定できず、二重適用防止のキーが他方と衝突して変化が丸ごと落ちる
-        // (実例: 2026-11-20 vs BigGuyMan 戦、いかくのイエッサン分が消えた)
-        let subjects = findAllSpeciesJa(in: t).map { fieldAnchoredSpecies($0) }
+        // (実例: 2026-11-20 vs BigGuyMan 戦、いかくのイエッサン分が消えた)。
+        // さらに文法上の主語だけに絞る (boostSubjects): 文中に紛れた
+        // 無関係な種族名への重複付与を防ぐ
+        let subjects = boostSubjects(in: t)
         // いかくの帰属はランク変化の行より先に [特性] 行を出すため、適用前に行う
         if (t.contains("さがった") || t.contains("下がった") || t.contains("さがつた") || t.contains("下がつた")) && (t.contains("攻撃") || t.contains("こうげき") || t.contains("コウゲキ")) && !t.contains("ぐーんと") {
             var targetSides = Set<String>()
@@ -4317,6 +4375,14 @@ func translateBattleMessage(_ text: String) -> Bool {
                 let sSide = inOpp && !inMine ? "p2" : "p1"
                 checkBoostText(text: t, side: sSide, speciesEn: e.en, slot: slotFor(side: sSide, speciesEn: e.en))
             }
+        } else if subjects.count == 1, subjects[0].en != sp.en {
+            // 文法上の主語が、照合で先に掴んだ種族 (混入した名前等) と
+            // 食い違う場合は、主語の方へ適用する
+            let e = subjects[0]
+            let inOpp = lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en
+            let inMine = lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en || teamEntries[e.en] != nil
+            let sSide = inOpp && !inMine ? "p2" : "p1"
+            checkBoostText(text: t, side: sSide, speciesEn: e.en, slot: slotFor(side: sSide, speciesEn: e.en))
         } else {
             checkBoostText(text: t, side: side, speciesEn: sp.en, slot: slot)
         }
@@ -5841,7 +5907,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1619"
+let readerBuild = "20261121_1624"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
