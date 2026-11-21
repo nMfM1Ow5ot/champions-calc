@@ -698,6 +698,24 @@ def _upload_logs_once_locked(session_only=False):
         h = hashlib.sha256(data).hexdigest()
         if state.get(n) != h:
             pending_all.append((n, data, h))
+    # 安全網の下書き (interrupted) は、確定版 (final) がある試合では
+    # 送らない。下書きは対戦序盤の断片でしかなく、確定版が正である
+    # (reader 側でも確定保存時に下書きは消される)。両方が届くと、
+    # 序盤で途切れた下書きが「対戦本体が記録されていない試合」に
+    # 見えてしまう (実例: 2026-11-21 battle_20261121_234913、
+    # 下書きはヘッダーのみ、確定版は 10 ターン完結していた)
+    final_gate_keys = set()
+    for n in names:
+        if "_final" in n and n.endswith(".log"):
+            k = _battle_key(n)
+            if k is not None:
+                final_gate_keys.add(_gate_key(k))
+    if final_gate_keys:
+        pending_all = [(n, d, h) for n, d, h in pending_all
+                       if not ("_interrupted" in n and n.endswith(".log")
+                               and _battle_key(n) is not None
+                               and _gate_key(_battle_key(n))
+                               in final_gate_keys)]
     # 備考ゲート: 備考ファイルが無い試合のログ・デバッグ一式は送信しない。
     # 備考ファイル自体は「入力済み」の印なので常に対象にする
     pending_log_keys = {_battle_key(n) for n, _, _ in pending_all
