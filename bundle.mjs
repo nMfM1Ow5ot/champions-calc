@@ -26351,7 +26351,267 @@ function isImmune(atkP, defP, moveObj) {
   }
   return false;
 }
-function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ) {
+function koSerializeTexts(texts) {
+  if (!texts.length) return "";
+  if (texts.length === 1) return texts[0];
+  if (texts.length === 2) return texts[0] + " and " + texts[1];
+  return texts.slice(0, -1).join(", ") + ", and " + texts[texts.length - 1];
+}
+function koHazards(defender, side) {
+  let damage = 0;
+  const texts = [];
+  if (!side) return { damage, texts };
+  if (side.isSR && !defender.hasAbility("Magic Guard", "Mountaineer")) {
+    const rockType = gen.types.get("rock");
+    const eff = defender.teraType && defender.teraType !== "Stellar" ? rockType.effectiveness[defender.teraType] : rockType.effectiveness[defender.types[0]] * (defender.types[1] ? rockType.effectiveness[defender.types[1]] : 1);
+    damage += Math.max(Math.floor(eff * defender.maxHP() / 8), 1);
+    texts.push("Stealth Rock");
+  }
+  if (!defender.hasType("Flying") && !defender.hasAbility("Magic Guard", "Levitate", "Eelevate") && !defender.hasItem("Air Balloon")) {
+    if (side.spikes === 1) {
+      damage += Math.floor(defender.maxHP() / 8);
+      texts.push("1 layer of Spikes");
+    } else if (side.spikes === 2) {
+      damage += Math.floor(defender.maxHP() / 6);
+      texts.push("2 layers of Spikes");
+    } else if (side.spikes === 3) {
+      damage += Math.floor(defender.maxHP() / 4);
+      texts.push("3 layers of Spikes");
+    }
+  }
+  return { damage: isNaN(damage) ? 0 : damage, texts };
+}
+function koEndOfTurn(attacker, defender, move, field, ingrain) {
+  let damage = 0;
+  const texts = [];
+  const loseItem = move.named("Knock Off") && !defender.hasAbility("Sticky Hold");
+  const healBlock = move.named("Psychic Noise") && !(attacker.hasAbility("Sheer Force") || defender.hasItem("Covert Cloak") || defender.hasAbility("Shield Dust", "Aroma Veil"));
+  const maxHP = defender.maxHP();
+  if (field.hasWeather("Sun", "Harsh Sunshine")) {
+    if (defender.hasAbility("Dry Skin", "Solar Power")) {
+      damage -= Math.floor(maxHP / 8);
+      texts.push(defender.ability + " damage");
+    }
+  } else if (field.hasWeather("Rain", "Heavy Rain") && !healBlock) {
+    if (defender.hasAbility("Dry Skin")) {
+      damage += Math.floor(maxHP / 8);
+      texts.push("Dry Skin recovery");
+    } else if (defender.hasAbility("Rain Dish")) {
+      damage += Math.floor(maxHP / 16);
+      texts.push("Rain Dish recovery");
+    }
+  } else if (field.hasWeather("Sand")) {
+    if (!defender.hasType("Rock", "Ground", "Steel") && !defender.hasAbility("Magic Guard", "Overcoat", "Sand Force", "Sand Rush", "Sand Veil") && !defender.hasItem("Safety Goggles")) {
+      damage -= Math.floor(maxHP / 16);
+      texts.push("sandstorm damage");
+    }
+  } else if (field.hasWeather("Hail", "Snow")) {
+    if (defender.hasAbility("Ice Body") && !healBlock) {
+      damage += Math.floor(maxHP / 16);
+      texts.push("Ice Body recovery");
+    } else if (!defender.hasType("Ice") && !defender.hasAbility("Magic Guard", "Overcoat", "Snow Cloak") && !defender.hasItem("Safety Goggles") && field.hasWeather("Hail")) {
+      damage -= Math.floor(maxHP / 16);
+      texts.push("hail damage");
+    }
+  }
+  if (defender.hasItem("Leftovers") && !loseItem && !healBlock) {
+    damage += Math.floor(maxHP / 16);
+    texts.push("Leftovers recovery");
+  } else if (defender.hasItem("Black Sludge") && !loseItem) {
+    if (defender.hasType("Poison")) {
+      if (!healBlock) {
+        damage += Math.floor(maxHP / 16);
+        texts.push("Black Sludge recovery");
+      }
+    } else if (!defender.hasAbility("Magic Guard", "Klutz")) {
+      damage -= Math.floor(maxHP / 8);
+      texts.push("Black Sludge damage");
+    }
+  } else if (defender.hasItem("Sticky Barb") && !loseItem && !defender.hasAbility("Magic Guard", "Klutz")) {
+    damage -= Math.floor(maxHP / 8);
+    texts.push("Sticky Barb damage");
+  }
+  if (field.defenderSide && field.defenderSide.isSeeded && !defender.hasAbility("Magic Guard")) {
+    damage -= Math.floor(maxHP / 8);
+    texts.push("Leech Seed damage");
+  }
+  if (field.attackerSide && field.attackerSide.isSeeded && !attacker.hasAbility("Magic Guard")) {
+    let recovery = Math.floor(attacker.maxHP() / 8);
+    if (defender.hasItem("Big Root")) recovery = Math.trunc(recovery * 5324 / 4096);
+    if (attacker.hasAbility("Liquid Ooze")) {
+      damage -= recovery;
+      texts.push("Liquid Ooze damage");
+    } else if (!healBlock) {
+      damage += recovery;
+      texts.push("Leech Seed recovery");
+    }
+  }
+  if (field.hasTerrain("Grassy")) {
+    const grounded = !defender.hasType("Flying") && !defender.hasAbility("Levitate") && !defender.hasItem("Air Balloon");
+    if (grounded && !healBlock) {
+      damage += Math.floor(maxHP / 16);
+      texts.push("Grassy Terrain recovery");
+    }
+  }
+  if (ingrain && !healBlock) {
+    damage += Math.floor(maxHP / 16);
+    texts.push("Ingrain recovery");
+  }
+  if (defender.hasStatus("psn")) {
+    if (defender.hasAbility("Poison Heal")) {
+      if (!healBlock) {
+        damage += Math.floor(maxHP / 8);
+        texts.push("Poison Heal");
+      }
+    } else if (!defender.hasAbility("Magic Guard")) {
+      damage -= Math.floor(maxHP / 8);
+      texts.push("poison damage");
+    }
+  } else if (defender.hasStatus("tox")) {
+    if (defender.hasAbility("Poison Heal")) {
+      if (!healBlock) {
+        damage += Math.floor(maxHP / 8);
+        texts.push("Poison Heal");
+      }
+    } else if (!defender.hasAbility("Magic Guard")) {
+      texts.push("toxic damage");
+    }
+  } else if (defender.hasStatus("brn")) {
+    if (defender.hasAbility("Heatproof")) {
+      damage -= Math.floor(maxHP / 32);
+      texts.push("reduced burn damage");
+    } else if (!defender.hasAbility("Magic Guard")) {
+      damage -= Math.floor(maxHP / 16);
+      texts.push("burn damage");
+    }
+  } else if ((defender.hasStatus("slp") || defender.hasAbility("Comatose")) && attacker.hasAbility("Bad Dreams") && !defender.hasAbility("Magic Guard")) {
+    damage -= Math.floor(maxHP / 8);
+    texts.push("Bad Dreams");
+  }
+  return { damage, texts };
+}
+function koChanceRec(damage, hp, eot, toxicCounter, maxHP, berryHeal, hits) {
+  let toxicDamage = 0, tc = toxicCounter;
+  if (tc > 0) {
+    toxicDamage = Math.floor(tc * maxHP / 16);
+    tc++;
+  }
+  const n = damage.length;
+  if (hits === 1) {
+    let e = eot, t = toxicDamage;
+    if (e - t > 0) {
+      e = 0;
+      t = 0;
+    }
+    for (let i = 0; i < n; i++) {
+      if (damage[n - 1] - e + t < hp) return 0;
+      if (damage[i] - e + t >= hp) return (n - i) / n;
+    }
+    return 0;
+  }
+  let sum = 0;
+  const cache = /* @__PURE__ */ new Map();
+  for (let i = 0; i < n; i++) {
+    const afterHit = hp - damage[i];
+    let c;
+    if (afterHit <= 0) c = 1;
+    else {
+      let nh = afterHit, nb = berryHeal;
+      if (nb > 0 && nh <= maxHP / 2) {
+        nh += nb;
+        nb = 0;
+      }
+      nh += eot - toxicDamage;
+      if (nh <= 0) c = 1;
+      else {
+        const key = nh + "|" + nb;
+        if (cache.has(key)) c = cache.get(key);
+        else {
+          c = koChanceRec(damage, nh, eot, tc, maxHP, nb, hits - 1);
+          cache.set(key, c);
+        }
+      }
+    }
+    if (c === 1) {
+      sum += n - i;
+      break;
+    }
+    sum += c;
+  }
+  return sum / n;
+}
+function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) {
+  const raw = result.damage;
+  const damage = Array.isArray(raw) ? raw.every((x) => typeof x === "number") ? raw : null : typeof raw === "number" ? [raw] : null;
+  if (!damage || !damage.length || damage[damage.length - 1] === 0) return null;
+  const maxHP = defender.maxHP();
+  const ingrain = !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[defIdx]);
+  const loseItem = move.named("Knock Off") && !defender.hasAbility("Sticky Hold");
+  const healBlock = move.named("Psychic Noise") && !(attacker.hasAbility("Sheer Force") || defender.hasItem("Covert Cloak") || defender.hasAbility("Shield Dust", "Aroma Veil"));
+  let berryHeal = 0, berryName = "";
+  if (!(koCtx && koCtx.unnerve) && !loseItem && !healBlock && !defender.hasAbility("Klutz")) {
+    const ripen = defender.hasAbility("Ripen") ? 2 : 1;
+    if (defender.hasItem("Sitrus Berry")) {
+      berryHeal = Math.floor(maxHP / 4) * ripen;
+      berryName = "Sitrus Berry";
+    } else if (defender.hasItem("Oran Berry")) {
+      berryHeal = 10 * ripen;
+      berryName = "Oran Berry";
+    }
+  }
+  if (!berryHeal && !ingrain) return null;
+  const hazards = koHazards(defender, field.defenderSide);
+  let hp = defender.curHP() - hazards.damage;
+  if (hp <= 0) return null;
+  const eot = koEndOfTurn(attacker, defender, move, field, ingrain);
+  const toxicCounter = defender.hasStatus("tox") && !defender.hasAbility("Magic Guard", "Poison Heal") ? defender.toxicCounter || 0 : 0;
+  let berry = berryHeal;
+  if (berry > 0 && hp <= maxHP / 2) {
+    hp += berry;
+    berry = 0;
+  }
+  const texts = [];
+  if (berryHeal) texts.push(berryName + " recovery");
+  for (const t of hazards.texts) texts.push(t);
+  for (const t of eot.texts) texts.push(t);
+  const after = texts.length ? " after " + koSerializeTexts(texts) : "";
+  const roundChance = (c) => Math.max(Math.min(Math.round(c * 1e3), 999), 1) / 10;
+  const c1 = koChanceRec(damage, hp, eot.damage, toxicCounter, maxHP, berry, 1);
+  if (c1 > 0) {
+    if (c1 === 1) return "guaranteed OHKO";
+    return `${roundChance(c1)}% chance to OHKO${after}`;
+  }
+  for (let n = 2; n <= 4; n++) {
+    const c = koChanceRec(damage, hp, eot.damage, toxicCounter, maxHP, berry, n);
+    if (c > 0) {
+      if (c === 1) return `guaranteed ${n}HKO${after}`;
+      return `${roundChance(c)}% chance to ${n}HKO${after}`;
+    }
+  }
+  const predict = (roll, n) => {
+    let h = hp, b = berry;
+    for (let k = 0; k < n; k++) {
+      h -= roll;
+      if (h <= 0) return true;
+      if (b > 0 && h <= maxHP / 2) {
+        h += b;
+        b = 0;
+      }
+      if (k < n - 1) {
+        const td = toxicCounter + k > 0 ? Math.floor((toxicCounter + k) * maxHP / 16) : 0;
+        h += eot.damage - td;
+        if (h <= 0) return true;
+      }
+    }
+    return false;
+  };
+  for (let n = 5; n <= 9; n++) {
+    if (predict(damage[0], n)) return `guaranteed ${n}HKO${after}`;
+    if (predict(damage[damage.length - 1], n)) return `possible ${n}HKO${after}`;
+  }
+  return null;
+}
+function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ, koCtx) {
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
@@ -26377,13 +26637,20 @@ function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSi
           const r = (0, import_calc.calculate)(gen, attackers[i], defenders[j], moveObj, useField);
           const range = r.range();
           const defMaxHP = defenders[j].maxHP();
+          let koText = r.kochance().text;
+          let descText = r.desc();
+          const customKo = recoveryKoText(attackers[i], defenders[j], moveObj, useField, r, koCtx, j);
+          if (customKo) {
+            koText = customKo;
+            if (koText && descText.endsWith(r.kochance().text)) descText = descText.slice(0, descText.length - r.kochance().text.length) + customKo;
+          }
           row.vs.push({
             min: range[0],
             max: range[1],
             minPct: Math.round(range[0] / defMaxHP * 1e3) / 10,
             maxPct: Math.round(range[1] / defMaxHP * 1e3) / 10,
-            ko: r.kochance().text,
-            desc: r.desc()
+            ko: koText,
+            desc: descText
           });
         } catch (e) {
           row.vs.push({ error: e.message });
@@ -26427,8 +26694,17 @@ function calcMatchup(state, names) {
     defenderSide: state.field.oppDefenderSide || {}
   });
   const out = { results: [], oppResults: [], speeds: { mine: [], opps: [] } };
-  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine, state.moveZ && state.moveZ.mine);
-  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps, state.moveZ && state.moveZ.opps);
+  const effAbilityOf = (s) => s && s.mega && s.megaAbility ? s.megaAbility : s ? s.ability : "";
+  const koCtxFor = (atkKey, defKey, defSpecs) => {
+    const fa = state.fieldAbilities || {};
+    const atkAb = fa[atkKey] && fa[atkKey].length ? fa[atkKey] : (state[atkKey] || []).map(effAbilityOf);
+    const allAb = [...fa.mine || [], ...fa.opps || []];
+    const gas = allAb.includes("Neutralizing Gas");
+    const unnerve = !gas && atkAb.some((a) => a === "Unnerve" || a === "As One (Glastrier)" || a === "As One (Spectrier)");
+    return { unnerve, defIngrain: (defSpecs || []).map((s) => !!s.ingrain) };
+  };
+  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine, state.moveZ && state.moveZ.mine, koCtxFor("mine", "opps", state.opps));
+  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps, state.moveZ && state.moveZ.opps, koCtxFor("opps", "mine", state.mine));
   out.speeds.mine = mine.map((p) => boostedSpe(p, state.field.tailwindMine));
   out.speeds.opps = opps.map((p) => boostedSpe(p, state.field.tailwindOpp));
   out.stats = {
@@ -28184,7 +28460,7 @@ function createEstimator(deps) {
   };
 }
 
-// .bundle_entry_tmp.mjs
+// bundle_entry.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
