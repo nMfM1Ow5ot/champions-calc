@@ -177,6 +177,15 @@ function processDamageInf(ev, ctx) {
     infIntersect(defSpecies, defKey, feasPairs, feasHp);
   }
 }
+// 【Champions 差分レイヤーの watch 点】ここから moveBracket までの素早さ・
+// 優先度の力学 (スカーフ ×1.5、天候素早さ特性 ×2、かるわざ ×2、おいかぜ
+// ×2、はやあし ×1.5 と まひ無効、まひ 半減、いたずらごころ +1、
+// あとだし 最後尾) と、反動取り込みの割合窓 [8,11]% (いのちのたま 10%) は、
+// @smogon/calc 本体の力学をエンジン側で再実装したものである。種族値・技・
+// 特性の「データ」は core.mjs (statTable / damageRolls / moveData / gen) を
+// 経由するため差分レイヤーが効くが、上記の「効果そのもの」が差分対象に
+// なる場合は、calc 側の差分とあわせてここも更新すること
+// (監査: 2026-11-22、総合チャットの依頼による)
 const WEATHER_SPE = { Chlorophyll: 'Sun', 'Swift Swim': 'Rain', 'Sand Rush': 'Sand', 'Slush Rush': 'Snow' };
 function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, terrain, unburden) {
   let v = statVal;
