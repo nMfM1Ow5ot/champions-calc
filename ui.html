@@ -758,6 +758,7 @@ let USAGE_SETS = null; // data/usage_sets.json の sets (pokedb 使用率トッ�
 let POKEDB_PARSED = null; // data/pokedb_parsed.json (pokedb の使用率分布一式。ベイズ推定の候補生成用)
 let META_SETS = null;      // data/meta_sets.json (上位勢の実在型コーパス。ベイズ推定の候補へ統合する)
 let META_SETS_LOADED = false; // meta_sets の読み込み成否が確定したか (ファイルが無い場合も確定扱い)
+let VGC_SETS = null;       // data/vgcpastes_sets.json (VGCPastes 収集型。SET プルダウンから選択可能にする)
 let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
 let USAGE_SEASON = '';
 // 使用率型の解決: フォルム名 (イルカマン(ヒーロー)等) には使用率データが
@@ -824,6 +825,57 @@ function ownSpeciesSpec(speciesEn, kind) {
   delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
   delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seedDmg; delete ns.seedHeal; delete ns.hand; delete ns.octolock; delete ns.curse; delete ns.bind; delete ns.saltcure; delete ns.nightmare;
   return ns;
+}
+// VGCPastes 収集型: パネルの種族 (ベース種族とそのフォルム、メガ含む) に
+// ついて収集データにある型を返す。表示名は Team Description をそのまま使う
+function vgcBuildsFor(spec) {
+  if (!VGC_SETS || !VGC_SETS.species || !spec || !spec.species) return [];
+  const reg = currentRegulation();
+  if (VGC_SETS.regulation && reg && VGC_SETS.regulation !== reg) return [];
+  const sd = gen.species.get(idOf(spec.species));
+  const base = (sd && sd.baseSpecies) || spec.species;
+  const bsd = gen.species.get(idOf(base));
+  const keys = [];
+  const push = k => { if (k && VGC_SETS.species[k] && !keys.includes(k)) keys.push(k); };
+  push(effSpecies(spec)); push(spec.species); push(base);
+  for (const f of ((bsd && bsd.otherFormes) || [])) push(f);
+  const out = [];
+  for (const k of keys) for (const b of VGC_SETS.species[k]) out.push({ key: k, build: b });
+  return out;
+}
+// 収集型をパネルへ一括反映する。sp が null の型は現在の SP を維持する
+function applyVgcBuild(side, entry, kindValue) {
+  if (!entry || !entry.build) return;
+  const keep = DS(side);
+  const { key, build } = entry;
+  const sd = gen.species.get(idOf(key));
+  const base = (sd && sd.baseSpecies) || key;
+  const megaKey = build.megaSpecies || (key !== base ? key : null);
+  const b = {
+    species: base, ability: build.ability || '', item: build.item || '',
+    nature: build.nature || 'Hardy',
+    sp: build.sp ? { ...build.sp } : { ...(keep.sp || {}) },
+    moves: [...(build.moves || [])],
+  };
+  if (megaKey) {
+    b.megaSpecies = megaKey; b.mega = true;
+    const msd = gen.species.get(idOf(megaKey));
+    const mabs = msd ? Object.values(msd.abilities || {}) : [];
+    const bsd = gen.species.get(idOf(base));
+    const baseList = bsd ? Object.values(bsd.abilities || {}) : [];
+    if (mabs.includes(b.ability)) { b.megaAbility = b.ability; b.ability = baseList[0] || ''; }
+    else { b.megaAbility = mabs[0] || null; if (baseList.length && !baseList.includes(b.ability)) b.ability = baseList[0]; }
+  }
+  const ns = specFromPresetBuild(b);
+  ns.kind = kindValue;
+  if (side === 'mine') {
+    delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
+    delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual; delete ns.estMarginal;
+    delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
+    delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seedDmg; delete ns.seedHeal; delete ns.hand; delete ns.octolock; delete ns.curse; delete ns.bind; delete ns.saltcure; delete ns.nightmare;
+  }
+  ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+  state[side][state.sel[side]] = ns;
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
 function applyRevealed(spec, rev) {
@@ -1511,6 +1563,7 @@ function presetBox(side) {
   if (side === 'mine') {
     // 相手側と同じ型選択方式にする。登録済みの自チーム型は「カスタム」として
     // 表示し、カスタムを選ぶとその種族の登録型に戻す
+    const vgcOpts = vgcBuildsFor(spec).map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }));
     regDD('preset:mine', {
       options: [
         { v: 'usage', l: '使用率トップ型 (pokedb)' },
@@ -1518,10 +1571,12 @@ function presetBox(side) {
         { v: 'bulky', l: '耐久型' },
         { v: 'none', l: '素の種族値' },
         { v: 'custom', l: 'カスタム' },
+        ...vgcOpts,
       ],
       value: spec.kind || 'custom',
       onPick: v => {
         const keep = DS('mine');
+        if (v.startsWith('vgc:')) { applyVgcBuild('mine', vgcBuildsFor(keep)[+v.slice(4)], v); calcAll(); return; }
         let ns;
         if (v === 'custom') {
           const pi = PRESETS.findIndex(p => p.species === keep.species);
@@ -1536,6 +1591,7 @@ function presetBox(side) {
     });
     dd = ddHTML('preset:mine');
   } else {
+    const vgcOpts = vgcBuildsFor(spec).map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }));
     regDD('preset:opps', {
       options: [
         { v: 'usage', l: '使用率トップ型 (pokedb)' },
@@ -1543,11 +1599,13 @@ function presetBox(side) {
         { v: 'bulky', l: '耐久型' },
         { v: 'none', l: '素の種族値' },
         { v: 'custom', l: 'カスタム' },
+        ...vgcOpts,
       ],
       value: spec.kind || 'usage',
       valueLabel: (spec.corrected && spec.corrected.length && oppTrainerName) ? oppTrainerName : '',
       onPick: v => {
         const keep = DS('opps');
+        if (v.startsWith('vgc:')) { applyVgcBuild('opps', vgcBuildsFor(keep)[+v.slice(4)], v); calcAll(); return; }
         const ns = oppSpec(keep.species, v);
         ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
         state.opps[state.sel.opps] = ns;
@@ -3190,6 +3248,10 @@ document.getElementById('specSel')?.addEventListener('change', e => {
       const ms = await (await fetch('./data/meta_sets.json')).json();
       if (ms && Array.isArray(ms.sets)) META_SETS = ms;
     } catch (e) { /* meta sets optional (bayes uses pokedb candidates only) */ } finally { META_SETS_LOADED = true; } })(),
+    (async () => { try {
+      const vg = await (await fetch('./data/vgcpastes_sets.json')).json();
+      if (vg && vg.species) VGC_SETS = vg;
+    } catch (e) { /* vgcpastes sets optional */ } })(),
     (async () => { try {
       const cd = await (await fetch('./data/champions_dex.json')).json();
       CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
