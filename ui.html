@@ -191,6 +191,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .sdd-list{max-height:30rem; overflow-y:auto; padding:.2rem 0}
 .sdd-opt{padding:.2rem .3rem; font-size:1rem; color:#fff; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .natp{color:#ff8787}.natm{color:#74c0fc}
+.ddrate{color:var(--faint); font-size:.92em}
 .sdd-opt:hover{background:rgba(255,255,255,.15)}
 .sdd-opt.focused{background:rgba(33,150,243,.25)}
 .sdd-opt.focused:hover{background:rgba(33,150,243,.5)}
@@ -376,6 +377,33 @@ function globalNatureRates() {
   _globalNatureRates = agg;
   return agg;
 }
+let _itemJa2en = null;
+function itemJa2en(jaName) {
+  if (!_itemJa2en) {
+    _itemJa2en = {};
+    for (const o of ITEM_OPTIONS) { if (!o.v) continue; const j = (NAMES._itemEn2ja || {})[idOf(o.v)]; if (j) _itemJa2en[z2h(j)] = o.v; }
+  }
+  return _itemJa2en[jaName] || null;
+}
+// 持ち物プルダウンの選択肢: その種族の使用率の降順 (% を併記) で並べ、
+// 使用率に入っていない残りはその下にあいうえお順で並べる
+function itemOptionsFor(spec) {
+  const byV = new Map(ITEM_OPTIONS.map(o => [o.v, o]));
+  const head = [{ v: '', l: 'なし' }];
+  const used = new Set(['']);
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  if (pd && Array.isArray(pd.items)) {
+    for (const it of pd.items) {
+      const en = it.name ? itemJa2en(z2h(it.name)) : null;
+      if (!en || used.has(en) || !byV.has(en)) continue;
+      used.add(en);
+      head.push({ ...byV.get(en), extra: ` <span class="ddrate">${it.rate}%</span>` });
+    }
+  }
+  const rest = ITEM_OPTIONS.filter(o => o.v && !used.has(o.v)).sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  return head.concat(rest);
+}
+
 // 性格プルダウンの選択肢: その種族の使用率の降順 (分布が無い種族は全種族の合算順)
 function natureOptionsFor(spec) {
   let rates = null;
@@ -1148,7 +1176,7 @@ function metaRow(side) {
     onPick: v => { spec.nature = v; if (side === 'opps') { markCorrected(spec, '性格'); (spec.estManual ||= {}).nature = true; } calcAll(); },
   });
   regDD(`item:${side}`, {
-    options: ITEM_OPTIONS, value: spec.itemLost ? '' : (spec.item || ''), clearable: true, placeholder: 'なし',
+    options: itemOptionsFor(spec), value: spec.itemLost ? '' : (spec.item || ''), clearable: true, placeholder: 'なし',
     valueLabel: !spec.itemLost && spec.item ? biLabel((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item, spec.item) : '',
     highlight: corr('持ち物'),
     onPick: v => { spec.item = v || ''; spec.itemLost = false; if (side === 'opps') markCorrected(spec, '持ち物'); calcAll(); },
