@@ -27822,7 +27822,7 @@ function createEstimator(deps) {
   const NATURE_JA2EN = { "\u304C\u3093\u3070\u308A\u3084": "Hardy", "\u3055\u307F\u3057\u304C\u308A": "Lonely", "\u3086\u3046\u304B\u3093": "Brave", "\u3044\u3058\u3063\u3071\u308A": "Adamant", "\u3084\u3093\u3061\u3083": "Naughty", "\u305A\u3076\u3068\u3044": "Bold", "\u3059\u306A\u304A": "Docile", "\u306E\u3093\u304D": "Relaxed", "\u308F\u3093\u3071\u304F": "Impish", "\u306E\u3093\u3066\u3093\u304D": "Lax", "\u304A\u304F\u3073\u3087\u3046": "Timid", "\u305B\u3063\u304B\u3061": "Hasty", "\u307E\u3058\u3081": "Serious", "\u3088\u3046\u304D": "Jolly", "\u3080\u3058\u3083\u304D": "Naive", "\u3072\u304B\u3048\u3081": "Modest", "\u304A\u3063\u3068\u308A": "Mild", "\u308C\u3044\u305B\u3044": "Quiet", "\u3066\u308C\u3084": "Bashful", "\u3046\u3063\u304B\u308A\u3084": "Rash", "\u304A\u3060\u3084\u304B": "Calm", "\u304A\u3068\u306A\u3057\u3044": "Gentle", "\u306A\u307E\u3044\u304D": "Sassy", "\u3057\u3093\u3061\u3087\u3046": "Careful", "\u304D\u307E\u3050\u308C": "Quirky" };
   const BAYES_FLOOR = 0.02;
   const BAYES_REV_KEEP = 0.05;
-  const HP_FIRST_FACTOR = 0.1;
+  const HP_FIRST_FACTOR = 1;
   const hpFirstCand = (c) => (c.sp.hp || 0) >= 32 || !(c.sp.def > 0) && !(c.sp.spd > 0);
   function bayesReset() {
     bayes = { bySpecies: {}, skipped: 0 };
