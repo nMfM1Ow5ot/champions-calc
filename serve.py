@@ -386,6 +386,20 @@ def _is_upload_target(name):
     return "_debug" in name and (name.endswith(".jpg") or name.endswith(".json"))
 
 
+_receipt_printed = set()
+
+
+def _announce_receipt(tag, label, name, count):
+    """受け取り表示は、同じ試合・同じ種類につきプロセス内で 1 回
+    だけ出す。UI は蓄積全件を数秒おきに再送するため、毎回出すと
+    対戦中のターミナルに送信が行われているかのような表示が並ぶ
+    (2026-11-22 のユーザー指摘)。保存そのものは毎回行う"""
+    if tag in _receipt_printed:
+        return
+    _receipt_printed.add(tag)
+    print(f"[log] {label}を受け取りました: {name} ({count} 件)", flush=True)
+
+
 def _save_inference_log(body):
     """推論過程ログ (UI からの POST /inference_log) を保存する。
 
@@ -427,8 +441,8 @@ def _save_inference_log(body):
     except OSError:
         ended_before_start = False
     if not ended_before_start:
-        print(f"[log] 推論過程ログを受け取りました: {name} "
-              f"({len(data['entries'])} 件)", flush=True)
+        _announce_receipt(("inference", battle), "推論過程ログ",
+                          name, len(data["entries"]))
     return name
 
 
@@ -472,8 +486,8 @@ def _save_calc_log(body):
     except OSError:
         ended_before_start = False
     if not ended_before_start:
-        print(f"[log] ダメ計ログを受け取りました: {name} "
-              f"({len(data['entries'])} 件)", flush=True)
+        _announce_receipt(("calclog", battle), "ダメ計ログ",
+                          name, len(data["entries"]))
     return name
 
 
@@ -750,11 +764,27 @@ def _prune_debug_entries(index, token, limit=10):
     return removed
 
 
+_upload_battle_deferred = False
+
+
 def upload_logs_once(session_only=False):
     # 備考の送信ボタンからも呼ばれるため、二重送信を防ぐ。
     # session_only=True (自動送信) では、このプロセスの起動前から
     # 残っている試合 (滞留分) を扱わない (2026-11-21 のユーザー指示:
     # 起動時に過去分の備考解消や送信が始まらないようにする)
+    global _upload_battle_deferred
+    if session_only and _battle_in_progress():
+        # 対戦中は、前の試合の分も含めて自動送信をしない
+        # (2026-11-22 のユーザー指示: 対戦中にターミナルへ送信の
+        # 動きが出ること自体が問題とされた)。判定は備考プロンプトの
+        # 保留と同じ _battle_in_progress を使い、対戦終了後の周期で
+        # まとめて送る。手動経路 (session_only=False) は従来どおり
+        # 即時に送る
+        if not _upload_battle_deferred:
+            _upload_battle_deferred = True
+            print("[log] 対戦中のため、試合ログの送信を対戦終了まで保留します", flush=True)
+        return
+    _upload_battle_deferred = False
     if not _upload_lock.acquire(blocking=False):
         return
     try:
