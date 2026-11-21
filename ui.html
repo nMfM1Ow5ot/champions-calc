@@ -1258,7 +1258,7 @@ function statusPopHTML(side, spec) {
 }
 function statusDDHTML(side, spec) {
   const n = statusActiveCount(spec);
-  return `<span class="statuswrap"><button class="tgl${n ? ' on' : ''}" data-statusbtn="${side}">状態 (${n})</button>${n ? `<button class="tgl statusx" data-statusclear="${side}" title="状態をすべて解除">✕</button>` : ''}${ui.statusPop === side ? statusPopHTML(side, spec) : ''}</span>`;
+  return `<span class="statuswrap"><button class="tgl${n ? ' on' : ''}" data-vstatusbtn="${side}">状態 (${n})</button>${n ? `<button class="tgl statusx" data-statusclear="${side}" title="状態をすべて解除">✕</button>` : ''}${ui.statusPop === side ? statusPopHTML(side, spec) : ''}</span>`;
 }
 
 /* ---------- panel parts (1 vs 1, Showdex PlayerCalc structure) ---------- */
@@ -2077,7 +2077,7 @@ document.addEventListener('mousedown', e => {
   if (!e.target.closest('.stpop') && !e.target.closest('[data-statusbtn]')) closeStPop();
   if (ui.formePop && !e.target.closest('[data-forme]') && !e.target.closest('.formepop')) { ui.formePop = null; renderAll(); }
   if (ui.presetPop && !e.target.closest('[data-presetbtn]') && !e.target.closest('.presetpop')) { ui.presetPop = null; renderAll(); }
-  if (ui.statusPop && !e.target.closest('[data-statusbtn]') && !e.target.closest('.statuspop') && !e.target.closest('[data-statusclear]')) { ui.statusPop = null; renderAll(); }
+  if (ui.statusPop && !e.target.closest('[data-vstatusbtn]') && !e.target.closest('.statuspop') && !e.target.closest('[data-statusclear]')) { ui.statusPop = null; renderAll(); }
 });
 document.addEventListener('click', e => {
   const t = e.target;
@@ -2220,8 +2220,8 @@ document.addEventListener('click', e => {
     calcAll();
     return;
   }
-  const stb = t.closest('[data-statusbtn]');
-  if (stb) { ui.statusPop = ui.statusPop === stb.dataset.statusbtn ? null : stb.dataset.statusbtn; renderAll(); return; }
+  const stb = t.closest('[data-vstatusbtn]');
+  if (stb) { ui.statusPop = ui.statusPop === stb.dataset.vstatusbtn ? null : stb.dataset.vstatusbtn; renderAll(); return; }
   const stc = t.closest('[data-statusclear]');
   if (stc) {
     const spec = DS(stc.dataset.statusclear);
