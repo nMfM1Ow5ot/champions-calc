@@ -499,8 +499,8 @@ const $ = id => document.getElementById(id);
 const state = {
   field: { weather: '', terrain: '' },
   side: {
-    mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0 },
-    opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0 },
+    mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 },
+    opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 },
   },
   mine: [], opps: [],
   oppTeam: ['Garchomp', 'Rillaboom'],
@@ -1543,8 +1543,10 @@ function sideChips(which) {
   const s = state.side[which];
   const defs = [['light', 'ひかりのかべ'], ['reflect', 'リフレクター'], ['veil', 'オーロラベール'], ['tailwind', 'おいかぜ'], ['hand', 'てだすけ'], ['guard', 'フレンドガード'], ['rock', 'ステルスロック']];
   const sp = s.spikes || 0;
+  const ts = s.toxicSpikes || 0;
   return defs.map(([k, label]) => `<button class="tgl primary${s[k] ? ' on' : ''}" data-sidechip="${which}:${k}">${label}</button>`).join('')
-    + `<button class="tgl primary${sp ? ' on' : ''}" data-spikechip="${which}">まきびし${sp ? '×' + sp : ''}</button>`;
+    + `<button class="tgl primary${sp ? ' on' : ''}" data-spikechip="${which}">まきびし${sp ? '×' + sp : ''}</button>`
+    + `<button class="tgl primary${ts ? ' on' : ''}" data-toxicchip="${which}" title="どくびし (2層目で もうどく)">どくびし${ts ? '×' + ts : ''}</button>`;
 }
 function renderField() {
   regDD('weather', {
@@ -1592,9 +1594,9 @@ function calcAll() {
   ui.formePop = null;
   if (!DS('mine') || !DS('opps')) { lastCalc = null; renderAll(); return; }
   const atkSide = { isHelpingHand: !!state.side.mine.hand };
-  const defSide = { isLightScreen: !!state.side.opp.light, isReflect: !!state.side.opp.reflect, isAuroraVeil: !!state.side.opp.veil, isFriendGuard: !!state.side.opp.guard, isSR: !!state.side.opp.rock, spikes: state.side.opp.spikes || 0 };
+  const defSide = { isLightScreen: !!state.side.opp.light, isReflect: !!state.side.opp.reflect, isAuroraVeil: !!state.side.opp.veil, isFriendGuard: !!state.side.opp.guard, isSR: !!state.side.opp.rock, spikes: state.side.opp.spikes || 0, toxicSpikes: state.side.opp.toxicSpikes || 0 };
   const oppAtkSide = { isHelpingHand: !!state.side.opp.hand };
-  const oppDefSide = { isLightScreen: !!state.side.mine.light, isReflect: !!state.side.mine.reflect, isAuroraVeil: !!state.side.mine.veil, isFriendGuard: !!state.side.mine.guard, isSR: !!state.side.mine.rock, spikes: state.side.mine.spikes || 0 };
+  const oppDefSide = { isLightScreen: !!state.side.mine.light, isReflect: !!state.side.mine.reflect, isAuroraVeil: !!state.side.mine.veil, isFriendGuard: !!state.side.mine.guard, isSR: !!state.side.mine.rock, spikes: state.side.mine.spikes || 0, toxicSpikes: state.side.mine.toxicSpikes || 0 };
   const singleMoves = { mine: [], opps: [] };
   for (const sd of ['mine', 'opps']) {
     for (const mv of DS(sd).moves || []) {
@@ -1888,6 +1890,13 @@ document.addEventListener('click', e => {
     calcAll();
     return;
   }
+  const tox = t.closest('[data-toxicchip]');
+  if (tox) {
+    const which = tox.dataset.toxicchip;
+    state.side[which].toxicSpikes = ((state.side[which].toxicSpikes || 0) + 1) % 3;
+    calcAll();
+    return;
+  }
   const sb = t.closest('[data-statusbtn]');
   if (sb) { openStPop(sb.dataset.statusbtn, sb); return; }
   const sp = t.closest('[data-statuspick]');
@@ -2031,7 +2040,7 @@ function resetInference() {
   // 対戦イベントから自動反映したサイドコンディション (おいかぜ・壁・てだすけ) の
   // セットされたターン。新しい対戦では場の状態ごとリセットする
   autoSideTurn = { mine: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 }, opp: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 } };
-  state.side = { mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0 }, opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0 } };
+  state.side = { mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 }, opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 } };
 }
 // 設置物 (ステルスロック/まきびし) をそのサイドから消す
 // 設置物 (ステルスロック/まきびし) をそのサイドから消す
@@ -2040,6 +2049,7 @@ function clearSideHazardsUI(sideP) {
   if (state.side[sk].rock) { state.side[sk].rock = false; infDirty = true; }
   if (autoSideTurn) autoSideTurn[sk].rock = -99;
   if (state.side[sk].spikes) { state.side[sk].spikes = 0; infDirty = true; }
+  if (state.side[sk].toxicSpikes) { state.side[sk].toxicSpikes = 0; infDirty = true; }
 }
 // 技の使用イベントからサイドコンディションをチップ状態へ反映する
 function setAutoSide(sideP, key, turn) {
@@ -2124,11 +2134,17 @@ function applyEstIntent(it) {
     const nv = Math.min(3, (state.side[sk].spikes || 0) + 1);
     if (nv !== state.side[sk].spikes) { state.side[sk].spikes = nv; infDirty = true; }
   }
+  else if (it.t === 'toxicSpikes') {
+    const sk = it.side === 'p1' ? 'mine' : 'opp';
+    const nv = Math.min(2, (state.side[sk].toxicSpikes || 0) + 1);
+    if (nv !== state.side[sk].toxicSpikes) { state.side[sk].toxicSpikes = nv; infDirty = true; }
+  }
   else if (it.t === 'clear') clearSideHazardsUI(it.side);
   else if (it.t === 'court') {
     const a = state.side.mine, b = state.side.opp;
     const rk = a.rock; a.rock = b.rock; b.rock = rk;
     const sp2 = a.spikes || 0; a.spikes = b.spikes || 0; b.spikes = sp2;
+    const ts2 = a.toxicSpikes || 0; a.toxicSpikes = b.toxicSpikes || 0; b.toxicSpikes = ts2;
     const tt = autoSideTurn.mine.rock; autoSideTurn.mine.rock = autoSideTurn.opp.rock; autoSideTurn.opp.rock = tt;
     infDirty = true;
   }
