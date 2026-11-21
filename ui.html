@@ -234,6 +234,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .sdd-menu{position:absolute; top:calc(100% + 2px); left:0; width:100%; min-width:14rem; background:rgba(0,0,0,.975); border-radius:.5rem; box-shadow:var(--dd-shadow); z-index:40; overflow:hidden}
 .sdd-list{max-height:30rem; overflow-y:auto; padding:.2rem 0}
 .sdd-opt{padding:.2rem .3rem; font-size:1rem; color:#fff; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.sdd-divider{padding:.3rem .3rem .15rem; margin-top:.25rem; border-top:1px solid rgba(127,127,127,.35); color:var(--muted); font-size:.85em; white-space:nowrap}
 .natp{color:#ff8787}.natm{color:#74c0fc}
 .ddrate{color:var(--faint); font-size:.92em}
 .sdd-opt:hover{background:rgba(255,255,255,.15)}
@@ -1282,9 +1283,16 @@ function ddHTML(id) {
 const kanaFold = s => String(s).replace(/[ぁ-ゞ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
 function ddListHTML(d, query, focusIdx) {
   const q = kanaFold(z2h(query || '')).toLowerCase();
-  const list = d.options.filter(o => !q || kanaFold(z2h(o.l)).toLowerCase().includes(q) || kanaFold(String(o.v)).toLowerCase().includes(q));
-  if (!list.length) return { html: '<div class="sdd-empty">該当なし</div>', list };
-  const html = list.map((o, i) => `<div class="sdd-opt${o.v === d.value ? ' selected' : ''}${i === focusIdx ? ' focused' : ''}" data-ddopt="${esc(o.v)}" data-ddidx="${i}">${esc(o.l)}${o.extra || ''}</div>`).join('');
+  // 区切り行 (divider) は検索で絞られても残し、選択・フォーカスの対象にはしない
+  const matched = d.options.filter(o => o.divider || !q || kanaFold(z2h(o.l)).toLowerCase().includes(q) || kanaFold(String(o.v)).toLowerCase().includes(q));
+  const list = matched.filter(o => !o.divider);
+  if (!matched.length) return { html: '<div class="sdd-empty">該当なし</div>', list };
+  let idx = -1;
+  const html = matched.map(o => {
+    if (o.divider) return `<div class="sdd-divider">${esc(o.l)}</div>`;
+    idx++;
+    return `<div class="sdd-opt${o.v === d.value ? ' selected' : ''}${idx === focusIdx ? ' focused' : ''}" data-ddopt="${esc(o.v)}" data-ddidx="${idx}">${esc(o.l)}${o.extra || ''}</div>`;
+  }).join('');
   return { html, list };
 }
 function openDD(id) {
@@ -1305,7 +1313,7 @@ function openDD(id) {
   menu.innerHTML = '<div class="sdd-list"></div>';
   host.appendChild(menu);
   const input = ctl.querySelector('.sdd-input');
-  let focusIdx = Math.max(0, d.options.findIndex(o => o.v === d.value));
+  let focusIdx = Math.max(0, d.options.filter(o => !o.divider).findIndex(o => o.v === d.value));
   const paint = () => {
     const { html, list } = ddListHTML(d, input.value, focusIdx);
     menu.querySelector('.sdd-list').innerHTML = html;
@@ -1629,7 +1637,8 @@ function presetBox(side) {
   if (side === 'mine') {
     // 相手側と同じ型選択方式にする。登録済みの自チーム型は「カスタム」として
     // 表示し、カスタムを選ぶとその種族の登録型に戻す
-    const vgcOpts = vgcBuildsFor(spec).map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }));
+    const vgcBuildsM = vgcBuildsFor(spec);
+    const vgcOpts = [...(vgcBuildsM.length ? [{ v: '__divider', l: 'from VGCPastes', divider: true }] : []), ...vgcBuildsM.map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }))];
     regDD('preset:mine', {
       options: [
         { v: 'usage', l: '使用率トップ型 (pokedb)' },
@@ -1657,7 +1666,8 @@ function presetBox(side) {
     });
     dd = ddHTML('preset:mine');
   } else {
-    const vgcOpts = vgcBuildsFor(spec).map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }));
+    const vgcBuildsO = vgcBuildsFor(spec);
+    const vgcOpts = [...(vgcBuildsO.length ? [{ v: '__divider', l: 'from VGCPastes', divider: true }] : []), ...vgcBuildsO.map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }))];
     regDD('preset:opps', {
       options: [
         { v: 'usage', l: '使用率トップ型 (pokedb)' },
