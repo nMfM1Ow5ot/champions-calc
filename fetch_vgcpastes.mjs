@@ -208,6 +208,9 @@ function megaFromStone(speciesName, item) {
   try { it = gen.items.get(toID(item)); } catch { return null; }
   const ms = it && it.megaStone;
   if (!ms) return null;
+  // ペーストがメガフォルム名そのもので書かれている場合 (例:
+  // "Meowstic-F-Mega @ Meowsticite") は、その名前をそのまま採用する
+  if (Object.values(ms).includes(speciesName)) return speciesName;
   if (ms[speciesName]) return ms[speciesName];
   // 性別フォルム表記などのずれ: 基本種族が一致するキーを採用する
   let ss;
@@ -223,12 +226,26 @@ function megaFromStone(speciesName, item) {
 }
 
 /* ---------------- 正規化と検証 (fetch_meta_sets.mjs の normalize と同じ) ---------------- */
+// ペースト側の表記ゆれ (小文字の性格名、"U-Turn" のような大文字違い) は
+// 正規スペルへ寄せてから検証する
+const canonMap = set => {
+  const m = new Map();
+  for (const v of set) m.set(v.toLowerCase(), v);
+  return m;
+};
+const NATURE_BY_LOWER = canonMap(NATURES);
+const ITEM_BY_LOWER = canonMap(DEX_ITEMS);
+const MOVE_BY_LOWER = canonMap(DEX_MOVES);
+
 const rejects = [];
 function normalizeSet(raw, ctx) {
+  // 素の "Aegislash" 表記は calc / dex に単独の項目が無く、交代時の
+  // 姿である Aegislash-Shield として解決する
+  const speciesName = raw.species === 'Aegislash' ? 'Aegislash-Shield' : raw.species;
   let spec;
-  try { spec = gen.species.get(toID(raw.species)); } catch { spec = null; }
-  if (!spec && /-(F|M)$/.test(raw.species)) {
-    try { spec = gen.species.get(toID(raw.species.replace(/-(F|M)$/, ''))); } catch { spec = null; }
+  try { spec = gen.species.get(toID(speciesName)); } catch { spec = null; }
+  if (!spec && /-(F|M)$/.test(speciesName)) {
+    try { spec = gen.species.get(toID(speciesName.replace(/-(F|M)$/, ''))); } catch { spec = null; }
   }
   if (!spec) { rejects.push(`${ctx}: unknown species "${raw.species}"`); return null; }
   const base = spec.baseSpecies ?? spec.name;
@@ -237,19 +254,40 @@ function normalizeSet(raw, ctx) {
   else if (spec.name !== base) forme = spec.name;
   const formeKey = forme || base;
   if (!DEX_SPECIES.has(formeKey)) { rejects.push(`${ctx}: ${formeKey} not in champions_dex`); return null; }
-  if (raw.item && !DEX_ITEMS.has(raw.item)) { rejects.push(`${ctx}: item "${raw.item}" not in dex (${formeKey})`); return null; }
-  const nature = raw.nature ? raw.nature.normalize('NFKD').replace(/[̀-ͯ]/g, '') : null;
-  if (!nature || !NATURES.has(nature)) { rejects.push(`${ctx}: bad nature "${raw.nature}" (${formeKey})`); return null; }
+  if (raw.item) {
+    const canonItem = ITEM_BY_LOWER.get(raw.item.toLowerCase());
+    if (canonItem) raw.item = canonItem;
+    if (!DEX_ITEMS.has(raw.item)) { rejects.push(`${ctx}: item "${raw.item}" not in dex (${formeKey})`); return null; }
+  }
+  const natureText = raw.nature ? raw.nature.normalize('NFKD').replace(/[̀-ͯ]/g, '') : null;
+  const nature = natureText ? NATURE_BY_LOWER.get(natureText.toLowerCase()) : null;
+  if (!nature) { rejects.push(`${ctx}: bad nature "${raw.nature}" (${formeKey})`); return null; }
+  raw.nature = nature;
   const legalAbilities = new Set([
     ...(speciesAbilities[formeKey] || []),
     ...(speciesAbilities[spec.name] || []),
     ...(speciesAbilities[base] || []),
     ...Object.values(spec.abilities || {}),
   ]);
-  if (!raw.ability || !legalAbilities.has(raw.ability)) {
+  // メガの型の Ability 欄は進化前の特性が書かれる。性別フォルムの
+  // メガ (Meowstic-F-Mega 等) は baseSpecies が無印側を指すため、
+  // メガ接尾辞を外したフォルムの特性も合法に含める
+  if (forme && /-Mega(-[A-Z])?$/.test(forme)) {
+    const preMega = forme.replace(/-Mega(-[A-Z])?$/, '');
+    for (const a of speciesAbilities[preMega] || []) legalAbilities.add(a);
+    try {
+      const pre = gen.species.get(toID(preMega));
+      for (const a of Object.values(pre.abilities || {})) legalAbilities.add(a);
+    } catch { /* 対応する項目が無い場合は無視する */ }
+  }
+  const legalByLower = canonMap(legalAbilities);
+  const ability = raw.ability ? legalByLower.get(raw.ability.toLowerCase()) : null;
+  if (!ability) {
     rejects.push(`${ctx}: ability "${raw.ability}" not legal for ${formeKey}`); return null;
   }
+  raw.ability = ability;
   if (!raw.moves.length || raw.moves.length > 4) { rejects.push(`${ctx}: moves count ${raw.moves.length} (${formeKey})`); return null; }
+  raw.moves = raw.moves.map(mv => MOVE_BY_LOWER.get(mv.toLowerCase()) || mv);
   for (const mv of raw.moves) {
     if (!DEX_MOVES.has(mv)) { rejects.push(`${ctx}: move "${mv}" not in dex (${formeKey})`); return null; }
   }
