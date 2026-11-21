@@ -18,6 +18,7 @@ import signal
 import subprocess
 import sys
 import threading
+import traceback
 import time
 import urllib.error
 import urllib.request
@@ -65,7 +66,13 @@ def sync_loop():
     # 先にサーバを立ち上げてから同期するので、ブラウザがすぐ開ける。
     # スリープ復帰直後などで一時的に失敗しても、スレッドごと死なずに
     # 次の周期で再試行する (サーバ本体は動き続ける)。
-    run_sync(True, force=True)
+    # 予期しない例外でスレッドが無言で死ぬと、サーバが生きているのに
+    # 送信だけが止まり続ける (2026-11-21 の送信停止の候補)。周期の
+    # 処理全体を囲み、異常はクラッシュジャーナルへ残して継続する
+    try:
+        run_sync(True, force=True)
+    except Exception as e:
+        _record_crash("sync_startup", e)
     try:
         maybe_restart_self()
     except Exception:
@@ -74,14 +81,18 @@ def sync_loop():
     cycles = 0
     while True:
         time.sleep(5)
-        run_sync(False)
         try:
-            maybe_restart_self()
-        except Exception:
-            print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
-        cycles += 1
-        if cycles % 6 == 0:   # 試合ログの送信チェックは約 30 秒ごと
-            upload_logs_once()
+            run_sync(False)
+            try:
+                maybe_restart_self()
+            except Exception:
+                print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
+            cycles += 1
+            if cycles % 6 == 0:   # 試合ログの送信チェックは約 30 秒ごと
+                upload_logs_once()
+        except Exception as e:
+            _record_crash("sync_loop", e)
+            time.sleep(2)
 
 
 # ---- 試合ログの自動送信 ----
@@ -130,6 +141,58 @@ _log_prune_done_date = None
 _log_hold_notice_keys = set()
 _upload_lock = threading.Lock()
 _note_prompt_waiting = False
+_note_prompt_current_key = None
+
+# ---- 異常記録 (クラッシュジャーナル) ----
+# 備考プロンプトのスレッドや serve.py 本体が異常終了した際の証拠を、
+# logs/serve_crashes.log へ追記保存する。ターミナルが消えると画面の
+# 表示は失われるため、証拠はファイルに残す (実例: 2026-11-21
+# battle_20261121_150535 の後、備考入力中にターミナルが異常終了し、
+# Mac 側の送信処理が止まったが、当時の版では記録が何も残らず原因を
+# 特定できなかった)。このファイル自体も通常の送信対象に含めるため、
+# 次回の送信で Muse 側にも届く (備考ゲートの対象外)。
+_CRASH_LOG_NAME = "serve_crashes.log"
+_CRASH_LOG_MAX = 256 * 1024
+
+
+def _record_crash(where, exc=None):
+    """異常の証拠 (発生時刻・発生箇所・当時の状態・トレースバック) を
+    クラッシュジャーナルへ追記する。この関数自体の失敗で本来の処理を
+    止めないよう、例外は握りつぶす。"""
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        head = (f"=== {datetime.now(JST).isoformat()} where={where} "
+                f"prompt_waiting={_note_prompt_waiting} "
+                f"prompt_key={_note_prompt_current_key or '-'}")
+        body = ""
+        if exc is not None:
+            body = "".join(traceback.format_exception(
+                type(exc), exc, exc.__traceback__))
+        path = os.path.join(LOG_DIR, _CRASH_LOG_NAME)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(head + "\n" + body + "\n")
+        _trim_crash_log(path)
+    except Exception:
+        pass
+
+
+def _trim_crash_log(path):
+    """クラッシュジャーナルが際限なく大きくならないよう、一定量を
+    超えたら古い分を間引いて後半だけ残す。"""
+    try:
+        if os.path.getsize(path) <= _CRASH_LOG_MAX:
+            return
+        with open(path, "rb") as f:
+            data = f.read()
+        keep = data[-_CRASH_LOG_MAX // 2:]
+        nl = keep.find(b"\n")
+        if nl >= 0:
+            keep = keep[nl + 1:]
+        with open(path, "wb") as f:
+            f.write("=== (古い記録は間引かれました)\n".encode("utf-8"))
+            f.write(keep)
+    except Exception:
+        pass
 
 
 def _log_token():
@@ -188,6 +251,10 @@ def _gh_delete_file(path, token, message, sha):
 
 
 def _is_upload_target(name):
+    if name == _CRASH_LOG_NAME:
+        # クラッシュジャーナルは試合に紐づかないため備考ゲートの
+        # 対象外とし、内容が変わるたびにそのまま送る
+        return True
     if not name.startswith("battle_"):
         return False
     if name.endswith(".log"):
@@ -575,13 +642,19 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True):
         # 既定も _prompt_input を使う (タイプアヘッド破棄などの保護を
         # --note の手動経路でも効かせるため)
         input_fn = lambda prompt: _prompt_input(sys.stdin, sys.stdout, prompt)  # noqa: E731
+    global _note_prompt_current_key
     count = 0
     for p in list_pending_log_notes():
         vs = f" vs {p['opponent']}" if p.get("opponent") else ""
         kind = "勝敗確定" if p.get("kind") == "final" else "中断"
         print(f"[log] 試合ログが保存されました (battle_{p['key']}{vs}、{kind})。"
               "送信前に備考を入力してください", flush=True)
-        note = input_fn("備考 (空欄で Enter = 備考なしで送信): ")
+        # 異常記録用に、現在聞いている試合を控える
+        _note_prompt_current_key = p["key"]
+        try:
+            note = input_fn("備考 (空欄で Enter = 備考なしで送信): ")
+        finally:
+            _note_prompt_current_key = None
         if save_log_note(p["key"], note or ""):
             count += 1
     if count and do_upload:
@@ -670,6 +743,7 @@ def _note_prompt_loop(in_stream=None, out_stream=None):
     if in_stream is None:
         in_stream, out_stream, _ = _open_prompt_io()
     if in_stream is None:
+        _record_crash("note_prompt_start_unavailable")
         return
 
     def _input_fn(prompt):
@@ -692,7 +766,10 @@ def _note_prompt_loop(in_stream=None, out_stream=None):
                 reopen_tries = 0
             else:
                 time.sleep(2)
-        except (EOFError, OSError):
+        except (EOFError, OSError) as e:
+            # EOF 以外の入出力エラー (端末の消失に伴う EIO 等) でも、
+            # 無言で死なずに記録を残してから復帰を試みる
+            _record_crash("note_prompt_loop", e)
             reopen_tries += 1
             if reopen_tries > 3:
                 print("[log] 備考の入力プロンプトを終了します。"
@@ -703,7 +780,8 @@ def _note_prompt_loop(in_stream=None, out_stream=None):
             new_in, new_out, _ = _open_prompt_io()
             if new_in is not None:
                 in_stream, out_stream = new_in, new_out
-        except Exception:
+        except Exception as e:
+            _record_crash("note_prompt_loop", e)
             time.sleep(2)
 
 
@@ -725,6 +803,10 @@ def cli_send_notes():
     try:
         count = prompt_for_pending_notes(do_upload=False)
     except (EOFError, OSError):
+        print("入力が中断されました")
+        return 1
+    except Exception as e:
+        _record_crash("note_cli", e)
         print("入力が中断されました")
         return 1
     if count:
@@ -759,11 +841,51 @@ if __name__ == "__main__":
     _pin, _pout, _plabel = _open_prompt_io()
     if _pin is not None:
         print(f"[log] 備考プロンプト: 有効 ({_plabel}で入力できます)", flush=True)
-        threading.Thread(target=_note_prompt_loop, args=(_pin, _pout), daemon=True).start()
+
+        def _prompt_thread_entry():
+            # プロンプトループから例外が漏れてスレッドが死んでも、
+            # 証拠を残して立て直す。立て直しの際は送信停止フラグ
+            # (_note_prompt_waiting) を必ず解除する (残ったままだと
+            # 送信が永久に止まるため)
+            global _note_prompt_waiting
+            cur_in, cur_out = _pin, _pout
+            for _attempt in range(3):
+                try:
+                    _note_prompt_loop(cur_in, cur_out)
+                    return
+                except BaseException as e:
+                    _note_prompt_waiting = False
+                    _record_crash("note_prompt_thread", e)
+                    time.sleep(2)
+                    new_in, new_out, _ = _open_prompt_io()
+                    if new_in is None:
+                        break
+                    cur_in, cur_out = new_in, new_out
+            _record_crash("note_prompt_thread_gave_up")
+
+        threading.Thread(target=_prompt_thread_entry, daemon=True).start()
     else:
         print("[log] 備考プロンプト: 無効 (ターミナル入力がありません)。"
               "送信待ちのログは別のターミナルで python3 serve.py --note を実行して送ってください",
               flush=True)
+    # 端末の異常終了に伴う SIGHUP 等でも、終了の証拠が残るようにする。
+    # 記録した後は通常どおり終了させる (ハンドラを既定へ戻して再送する)
+    def _signal_crash_handler(signum, frame):
+        try:
+            _sname = signal.Signals(signum).name
+        except Exception:
+            _sname = str(signum)
+        _record_crash(f"signal_{_sname}")
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    for _signame in ("SIGHUP", "SIGTERM"):
+        _sig = getattr(signal, _signame, None)
+        if _sig is not None:
+            try:
+                signal.signal(_sig, _signal_crash_handler)
+            except (ValueError, OSError):
+                pass
     handler = functools.partial(QuietHandler, directory=".")
     try:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 8765), handler)
@@ -773,4 +895,8 @@ if __name__ == "__main__":
         print("見つからない場合は次のコマンドで止められます: lsof -ti tcp:8765 | xargs kill")
         raise SystemExit(1)
     with server as httpd:
-        httpd.serve_forever()
+        try:
+            httpd.serve_forever()
+        except BaseException as e:
+            _record_crash("main", e)
+            raise
