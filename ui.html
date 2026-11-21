@@ -170,6 +170,15 @@ body{margin:0;background:var(--bg);color:var(--ink);
 #capStatusText.ng{color:#ef5350}
 .spritewrap{position:relative; display:inline-block; cursor:pointer}
 .formepop{position:absolute; top:calc(100% + 6px); left:0; z-index:45; display:flex; gap:.3rem; background:#f7f7f7; border-radius:.8rem; padding:.55rem; box-shadow:0 4px 18px rgba(0,0,0,.45)}
+.presetwrap{position:relative; display:inline-block; margin-left:.7rem}
+.presetpop{position:absolute; top:calc(100% + 6px); left:0; z-index:45; display:flex; flex-direction:column; gap:.35rem; background:var(--bg); border:1px solid rgba(127,127,127,.35); border-radius:.6rem; padding:.6rem; box-shadow:0 4px 18px rgba(0,0,0,.45); min-width:16rem}
+.presetsave{display:flex; gap:.4rem}
+.presetnamein{flex:1; min-width:0; background:var(--panel); border:1px solid rgba(127,127,127,.35); border-radius:.4rem; color:var(--ink); padding:.3rem .45rem; font:inherit}
+.presetrow{display:flex; align-items:center; gap:.4rem}
+.presetname{flex:1; text-align:left; background:none; border:none; color:var(--ink); cursor:pointer; padding:.3rem; border-radius:.4rem; font:inherit}
+.presetname:hover{background:var(--panel)}
+.presetdel{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .45rem; font:inherit}
+.presetempty{color:var(--dim); font-size:.85rem}
 .formeopt{display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.4rem .55rem; border-radius:.6rem; background:none; border:none; cursor:pointer}
 .formeopt img{width:44px; height:44px; object-fit:contain; image-rendering:pixelated}
 .formeopt span{font-size:.85rem; color:#555; letter-spacing:.08em; font-weight:600}
@@ -538,7 +547,7 @@ function confirmNewBattle() {
 // さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
 const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
-const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, spreadSel: { mine: {}, opps: {} } };
+const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, spreadSel: { mine: {}, opps: {} } };
 
 function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
 let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
@@ -1175,7 +1184,71 @@ function playerBar(side) {
       <div class="playeractions"><button class="tgl on" data-noop="1">AUTO</button></div>
     </div>
     <div class="rack">${rack}</div>
+    <span class="presetwrap"><button class="tgl" data-presetbtn="${side}">プリセット</button>${ui.presetPop === side ? presetPopHTML(side) : ''}</span>
   </div>`;
+}
+/* ---------- チームプリセット (サイドごとの構成の保存/切替/削除) ---------- */
+const PRESET_STORE_KEY = 'champions-calc-presets-v1';
+function loadPresetStore() {
+  try { const s = JSON.parse(localStorage.getItem(PRESET_STORE_KEY) || 'null'); if (s && Array.isArray(s.mine) && Array.isArray(s.opps)) return s; } catch (e) { /* ignore */ }
+  return { mine: [], opps: [] };
+}
+function savePresetStore(s) { try { localStorage.setItem(PRESET_STORE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
+function presetBuildOf(spec) {
+  return {
+    species: spec.species, megaSpecies: spec.megaSpecies || '', mega: !!spec.mega, megaAbility: spec.megaAbility || '',
+    ability: spec.ability || '', nature: spec.nature || 'Serious', sp: { ...(spec.sp || {}) }, item: spec.item || '',
+    moves: [...(spec.moves || [])], moveSpec: spec.moveSpec ? { ...spec.moveSpec } : undefined, moveZ: spec.moveZ ? { ...spec.moveZ } : undefined,
+    teraType: spec.teraType || '', terastallized: !!spec.terastallized, dynamax: !!spec.dynamax, kind: spec.kind || 'custom',
+  };
+}
+function specFromPresetBuild(b) {
+  return {
+    ...b, sp: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, ...(b.sp || {}) }, moves: [...(b.moves || [])],
+    origMoves: [...(b.moves || [])], knownMoves: [], corrected: [],
+    curHPPercent: 100, boosts: blankBoosts(), status: '',
+  };
+}
+function savePreset(side, name) {
+  const slots = state[side].filter(Boolean).map(presetBuildOf);
+  if (!slots.length) return;
+  const store = loadPresetStore();
+  const nm = String(name || '').trim() || `プリセット ${store[side].length + 1}`;
+  const rec = { name: nm, slots };
+  const ex = store[side].findIndex(p => p.name === nm);
+  if (ex >= 0) store[side][ex] = rec; else store[side].push(rec);
+  savePresetStore(store);
+}
+function deletePreset(side, idx) {
+  const store = loadPresetStore();
+  if (idx < 0 || idx >= store[side].length) return;
+  store[side].splice(idx, 1);
+  savePresetStore(store);
+}
+function applyPreset(side, idx) {
+  const store = loadPresetStore();
+  const p = store[side][idx];
+  if (!p) return;
+  const specs = p.slots.map(specFromPresetBuild).filter(s => s.species);
+  if (!specs.length) return;
+  state[side] = specs;
+  state.sel[side] = 0;
+  state.active[side] = [0, Math.min(1, specs.length - 1)];
+  if (side === 'opps') {
+    state.oppTeam = specs.map(s => s.species);
+    resetInference();
+    syncTeamContext();
+  }
+  ui.presetPop = null;
+  calcAll();
+}
+function presetPopHTML(side) {
+  const list = loadPresetStore()[side];
+  const rows = list.map((p, i) => `<div class="presetrow"><button class="presetname" data-presetload="${side}:${i}" title="このプリセットに切り替え">${esc(p.name)}</button><button class="presetdel" data-presetdel="${side}:${i}" title="削除">×</button></div>`).join('');
+  return `<span class="presetpop">
+    <div class="presetsave"><input type="text" class="presetnamein" data-presetname="${side}" placeholder="プリセット名" value="プリセット ${list.length + 1}"><button class="tgl" data-presetsave="${side}">保存</button></div>
+    ${rows || '<div class="presetempty">保存されたプリセットはありません</div>'}
+  </span>`;
 }
 function presetBox(side) {
   const spec = DS(side);
@@ -1753,6 +1826,7 @@ document.addEventListener('mousedown', e => {
   if (!e.target.closest('.sdd')) closeDD();
   if (!e.target.closest('.stpop') && !e.target.closest('[data-statusbtn]')) closeStPop();
   if (ui.formePop && !e.target.closest('[data-forme]') && !e.target.closest('.formepop')) { ui.formePop = null; renderAll(); }
+  if (ui.presetPop && !e.target.closest('[data-presetbtn]') && !e.target.closest('.presetpop')) { ui.presetPop = null; renderAll(); }
 });
 document.addEventListener('click', e => {
   const t = e.target;
@@ -1835,6 +1909,14 @@ document.addEventListener('click', e => {
   }
   const fo = t.closest('[data-forme]');
   if (fo) { const side = fo.dataset.forme; ui.formePop = ui.formePop === side ? null : side; renderAll(); return; }
+  const pb = t.closest('[data-presetbtn]');
+  if (pb) { const side = pb.dataset.presetbtn; ui.presetPop = ui.presetPop === side ? null : side; renderAll(); return; }
+  const psv = t.closest('[data-presetsave]');
+  if (psv) { const side = psv.dataset.presetsave; const inp = document.querySelector(`[data-presetname="${side}"]`); savePreset(side, inp ? inp.value : ''); renderAll(); return; }
+  const pld = t.closest('[data-presetload]');
+  if (pld) { const [side, idx] = pld.dataset.presetload.split(':'); applyPreset(side, +idx); return; }
+  const pdel = t.closest('[data-presetdel]');
+  if (pdel) { const [side, idx] = pdel.dataset.presetdel.split(':'); deletePreset(side, +idx); renderAll(); return; }
   const mg = t.closest('[data-mega]');
   if (mg) {
     const spec = DS(mg.dataset.mega);
