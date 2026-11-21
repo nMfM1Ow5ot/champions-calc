@@ -201,14 +201,14 @@ function isImmune(atkP, defP, moveObj) {
   return false;
 }
 
-function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs) {
+function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ) {
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
     for (const mv of spec.moves || []) {
       const row = { move: mv, vs: [] };
       if (!mv || !gen.moves.get(String(mv).toLowerCase().replace(/[^a-z0-9]/g, ''))) { for (let j = 0; j < defenders.length; j++) row.vs.push({ status: true }); entry.moveResults.push(row); continue; }
-      const moveObj = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : undefined, !!(critFlags && critFlags[i]));
+      const moveObj = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : undefined, !!(critFlags && critFlags[i]), !!(moveZ && moveZ[i] && moveZ[i][mv]), spec);
       const useField = fieldSingle && singleMoves && singleMoves.includes(mv) ? fieldSingle : field;
       for (let j = 0; j < defenders.length; j++) {
         if (moveObj.category === 'Status') { row.vs.push({ status: true }); continue; }
@@ -237,6 +237,7 @@ function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSi
 
 // state: { mine: [spec, spec], opps: [spec, spec], field: {weather, terrain, attackerSide, defenderSide, oppAttackerSide, oppDefenderSide, tailwindMine, tailwindOpp} }
 //   moveSpecs (任意): { mine: [{技名: 指定値}, ...], opps: [...] } 攻撃側スロットごとの技指定値 (moveSpecInfo 参照)
+//   moveZ (任意): { mine: [{技名: true}, ...], opps: [...] } Zワザ化する技 (スロットごと)
 //   attackerSide/defenderSide = 自分が攻撃する時 (自分の手助け / 相手の壁)
 //   oppAttackerSide/oppDefenderSide = 相手が攻撃する時 (相手の手助け / 自分の壁)
 // spec: {species, megaSpecies?, mega?, sp, nature, ability, megaAbility?, item, moves[], curHPPercent, boosts, status}
@@ -273,8 +274,8 @@ export function calcMatchup(state, names) {
     defenderSide: state.field.oppDefenderSide || {},
   });
   const out = { results: [], oppResults: [], speeds: { mine: [], opps: [] } };
-  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine);
-  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps);
+  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine, state.moveZ && state.moveZ.mine);
+  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps, state.moveZ && state.moveZ.opps);
   out.speeds.mine = mine.map(p => boostedSpe(p, state.field.tailwindMine));
   out.speeds.opps = opps.map(p => boostedSpe(p, state.field.tailwindOpp));
   out.stats = {
@@ -320,9 +321,314 @@ export function moveSpecInfo(name) {
   return spec;
 }
 
+
+/* ---------- Zワザ ---------- */
+// 専用 Zワザ: [種族, ベース技, Zクリスタル, Zワザ名]。威力・タイプ・分類は
+// calc の技データ側が持つ (専用 Z は実威力が入っている)。出典: Pokémon
+// Showdown data/items.ts の zMoveFrom / itemUser (2026-11-21 抽出)
+export const Z_EXCLUSIVE = [
+  ['Raichu-Alola', 'Thunderbolt', 'Aloraichium Z', 'Stoked Sparksurfer'],
+  ['Decidueye', 'Spirit Shackle', 'Decidium Z', 'Sinister Arrow Raid'],
+  ['Eevee', 'Last Resort', 'Eevium Z', 'Extreme Evoboost'],
+  ['Incineroar', 'Darkest Lariat', 'Incinium Z', 'Malicious Moonsault'],
+  ['Kommo-o', 'Clanging Scales', 'Kommonium Z', 'Clangorous Soulblaze'],
+  ['Kommo-o-Totem', 'Clanging Scales', 'Kommonium Z', 'Clangorous Soulblaze'],
+  ['Lunala', 'Moongeist Beam', 'Lunalium Z', 'Menacing Moonraze Maelstrom'],
+  ['Necrozma-Dawn-Wings', 'Moongeist Beam', 'Lunalium Z', 'Menacing Moonraze Maelstrom'],
+  ['Lycanroc', 'Stone Edge', 'Lycanium Z', 'Splintered Stormshards'],
+  ['Lycanroc-Midnight', 'Stone Edge', 'Lycanium Z', 'Splintered Stormshards'],
+  ['Lycanroc-Dusk', 'Stone Edge', 'Lycanium Z', 'Splintered Stormshards'],
+  ['Marshadow', 'Spectral Thief', 'Marshadium Z', 'Soul-Stealing 7-Star Strike'],
+  ['Mew', 'Psychic', 'Mewnium Z', 'Genesis Supernova'],
+  ['Mimikyu', 'Play Rough', 'Mimikium Z', "Let's Snuggle Forever"],
+  ['Mimikyu-Busted', 'Play Rough', 'Mimikium Z', "Let's Snuggle Forever"],
+  ['Pikachu', 'Volt Tackle', 'Pikanium Z', 'Catastropika'],
+  ['Pikachu-Original', 'Thunderbolt', 'Pikashunium Z', '10,000,000 Volt Thunderbolt'],
+  ['Pikachu-Hoenn', 'Thunderbolt', 'Pikashunium Z', '10,000,000 Volt Thunderbolt'],
+  ['Pikachu-Sinnoh', 'Thunderbolt', 'Pikashunium Z', '10,000,000 Volt Thunderbolt'],
+  ['Pikachu-Unova', 'Thunderbolt', 'Pikashunium Z', '10,000,000 Volt Thunderbolt'],
+  ['Pikachu-Kalos', 'Thunderbolt', 'Pikashunium Z', '10,000,000 Volt Thunderbolt'],
+  ['Pikachu-Alola', 'Thunderbolt', 'Pikashunium Z', '10,000,000 Volt Thunderbolt'],
+  ['Pikachu-Partner', 'Thunderbolt', 'Pikashunium Z', '10,000,000 Volt Thunderbolt'],
+  ['Primarina', 'Sparkling Aria', 'Primarium Z', 'Oceanic Operetta'],
+  ['Snorlax', 'Giga Impact', 'Snorlium Z', 'Pulverizing Pancake'],
+  ['Solgaleo', 'Sunsteel Strike', 'Solganium Z', 'Searing Sunraze Smash'],
+  ['Necrozma-Dusk-Mane', 'Sunsteel Strike', 'Solganium Z', 'Searing Sunraze Smash'],
+  ['Tapu Koko', "Nature's Madness", 'Tapunium Z', 'Guardian of Alola'],
+  ['Tapu Lele', "Nature's Madness", 'Tapunium Z', 'Guardian of Alola'],
+  ['Tapu Bulu', "Nature's Madness", 'Tapunium Z', 'Guardian of Alola'],
+  ['Tapu Fini', "Nature's Madness", 'Tapunium Z', 'Guardian of Alola'],
+  ['Necrozma-Ultra', 'Photon Geyser', 'Ultranecrozium Z', 'Light That Burns the Sky'],
+];
+// ベース技の汎用 Zワザ名 (エンジンに解決させる)
+export function zMoveNameOf(moveName) {
+  try { return new Move(gen, moveName, { useZ: true }).name; } catch (e) { return null; }
+}
+// 種族・持ち物・ベース技が専用 Z の組み合わせなら Zワザ名を返す
+export function exclusiveZMove(species, item, moveName) {
+  if (!species || !item || !moveName) return null;
+  for (const [sp, mv, it, zm] of Z_EXCLUSIVE) {
+    if (sp === species && mv === moveName && it === item) return zm;
+  }
+  return null;
+}
+// Z変化技の効果 (ダメージ計算には現れないため表示専用)。b = 能力上昇、
+// e = 特殊効果。出典: Pokémon Showdown data/moves.ts の zMove (2026-11-21 抽出)
+export const Z_STATUS = {
+"Acid Armor":{e:'clearnegativeboost'},
+"Acupressure":{e:'crit2'},
+"After You":{b:{spe:1}},
+"Agility":{e:'clearnegativeboost'},
+"Ally Switch":{b:{spe:2}},
+"Amnesia":{e:'clearnegativeboost'},
+"Aqua Ring":{b:{def:1}},
+"Aromatherapy":{e:'heal'},
+"Aromatic Mist":{b:{spd:2}},
+"Attract":{e:'clearnegativeboost'},
+"Aurora Veil":{b:{spe:1}},
+"Autotomize":{e:'clearnegativeboost'},
+"Baby-Doll Eyes":{b:{def:1}},
+"Baneful Bunker":{b:{def:1}},
+"Barrier":{e:'clearnegativeboost'},
+"Baton Pass":{e:'clearnegativeboost'},
+"Belly Drum":{e:'heal'},
+"Bestow":{b:{spe:2}},
+"Block":{b:{def:1}},
+"Bulk Up":{b:{atk:1}},
+"Calm Mind":{e:'clearnegativeboost'},
+"Camouflage":{b:{evasion:1}},
+"Captivate":{b:{spd:2}},
+"Celebrate":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Charge":{b:{spd:1}},
+"Charm":{b:{def:1}},
+"Coil":{e:'clearnegativeboost'},
+"Confide":{b:{spd:1}},
+"Confuse Ray":{b:{spa:1}},
+"Conversion":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Conversion 2":{e:'heal'},
+"Copycat":{b:{accuracy:1}},
+"Cosmic Power":{b:{spd:1}},
+"Cotton Guard":{e:'clearnegativeboost'},
+"Cotton Spore":{e:'clearnegativeboost'},
+"Crafty Shield":{b:{spd:1}},
+"Curse":{e:'curse'},
+"Dark Void":{e:'clearnegativeboost'},
+"Defend Order":{b:{def:1}},
+"Defense Curl":{b:{accuracy:1}},
+"Defog":{b:{accuracy:1}},
+"Destiny Bond":{e:'redirect'},
+"Detect":{b:{evasion:1}},
+"Disable":{e:'clearnegativeboost'},
+"Double Team":{e:'clearnegativeboost'},
+"Dragon Dance":{e:'clearnegativeboost'},
+"Eerie Impulse":{b:{spd:1}},
+"Electric Terrain":{b:{spe:1}},
+"Electrify":{b:{spa:1}},
+"Embargo":{b:{spa:1}},
+"Encore":{b:{spe:1}},
+"Endure":{e:'clearnegativeboost'},
+"Entrainment":{b:{spd:1}},
+"Fairy Lock":{b:{def:1}},
+"Fake Tears":{b:{spa:1}},
+"Feather Dance":{b:{def:1}},
+"Flash":{b:{evasion:1}},
+"Flatter":{b:{spd:1}},
+"Floral Healing":{e:'clearnegativeboost'},
+"Flower Shield":{b:{def:1}},
+"Focus Energy":{b:{accuracy:1}},
+"Follow Me":{e:'clearnegativeboost'},
+"Foresight":{e:'crit2'},
+"Forest's Curse":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Gastro Acid":{b:{spe:1}},
+"Gear Up":{b:{spa:1}},
+"Geomancy":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Glare":{b:{spd:1}},
+"Grass Whistle":{b:{spe:1}},
+"Grassy Terrain":{b:{def:1}},
+"Gravity":{b:{spa:1}},
+"Growl":{b:{def:1}},
+"Growth":{b:{spa:1}},
+"Grudge":{e:'redirect'},
+"Guard Split":{b:{spe:1}},
+"Guard Swap":{b:{spe:1}},
+"Hail":{b:{spe:1}},
+"Happy Hour":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Harden":{b:{def:1}},
+"Haze":{e:'heal'},
+"Heal Bell":{e:'heal'},
+"Heal Block":{b:{spa:2}},
+"Heal Order":{e:'clearnegativeboost'},
+"Heal Pulse":{e:'clearnegativeboost'},
+"Heart Swap":{e:'crit2'},
+"Helping Hand":{e:'clearnegativeboost'},
+"Hold Hands":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Hone Claws":{b:{atk:1}},
+"Howl":{b:{atk:1}},
+"Hypnosis":{b:{spe:1}},
+"Imprison":{b:{spd:2}},
+"Ingrain":{b:{spd:1}},
+"Instruct":{b:{spa:1}},
+"Ion Deluge":{b:{spa:1}},
+"Iron Defense":{e:'clearnegativeboost'},
+"Kinesis":{b:{evasion:1}},
+"King's Shield":{e:'clearnegativeboost'},
+"Laser Focus":{b:{atk:1}},
+"Leech Seed":{e:'clearnegativeboost'},
+"Leer":{b:{atk:1}},
+"Light Screen":{b:{spd:1}},
+"Lock-On":{b:{spe:1}},
+"Lovely Kiss":{b:{spe:1}},
+"Lucky Chant":{b:{evasion:1}},
+"Magic Coat":{b:{spd:2}},
+"Magic Room":{b:{spd:1}},
+"Magnet Rise":{b:{evasion:1}},
+"Magnetic Flux":{b:{spd:1}},
+"Mat Block":{b:{def:1}},
+"Me First":{b:{spe:2}},
+"Mean Look":{b:{spd:1}},
+"Meditate":{b:{atk:1}},
+"Memento":{e:'healreplacement'},
+"Metal Sound":{b:{spa:1}},
+"Milk Drink":{e:'clearnegativeboost'},
+"Mimic":{b:{accuracy:1}},
+"Mind Reader":{b:{spa:1}},
+"Minimize":{e:'clearnegativeboost'},
+"Miracle Eye":{b:{spa:1}},
+"Mirror Move":{b:{atk:2}},
+"Mist":{e:'heal'},
+"Misty Terrain":{b:{spd:1}},
+"Moonlight":{e:'clearnegativeboost'},
+"Morning Sun":{e:'clearnegativeboost'},
+"Mud Sport":{b:{spd:1}},
+"Nasty Plot":{e:'clearnegativeboost'},
+"Nightmare":{b:{spa:1}},
+"Noble Roar":{b:{def:1}},
+"Odor Sleuth":{b:{atk:1}},
+"Pain Split":{b:{def:1}},
+"Parting Shot":{e:'healreplacement'},
+"Perish Song":{e:'clearnegativeboost'},
+"Play Nice":{b:{def:1}},
+"Poison Gas":{b:{def:1}},
+"Poison Powder":{b:{def:1}},
+"Powder":{b:{spd:2}},
+"Power Split":{b:{spe:1}},
+"Power Swap":{b:{spe:1}},
+"Power Trick":{b:{atk:1}},
+"Protect":{e:'clearnegativeboost'},
+"Psych Up":{e:'heal'},
+"Psychic Terrain":{b:{spa:1}},
+"Psycho Shift":{b:{spa:2}},
+"Purify":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Quash":{b:{spe:1}},
+"Quick Guard":{b:{def:1}},
+"Quiver Dance":{e:'clearnegativeboost'},
+"Rage Powder":{e:'clearnegativeboost'},
+"Rain Dance":{b:{spe:1}},
+"Recover":{e:'clearnegativeboost'},
+"Recycle":{b:{spe:2}},
+"Reflect":{b:{def:1}},
+"Reflect Type":{b:{spa:1}},
+"Refresh":{e:'heal'},
+"Rest":{e:'clearnegativeboost'},
+"Roar":{b:{def:1}},
+"Rock Polish":{e:'clearnegativeboost'},
+"Role Play":{b:{spe:1}},
+"Roost":{e:'clearnegativeboost'},
+"Rototiller":{b:{atk:1}},
+"Safeguard":{b:{spe:1}},
+"Sand Attack":{b:{evasion:1}},
+"Sandstorm":{b:{spe:1}},
+"Scary Face":{b:{spe:1}},
+"Screech":{b:{atk:1}},
+"Sharpen":{b:{atk:1}},
+"Shed Tail":{e:'clearnegativeboost'},
+"Shell Smash":{e:'clearnegativeboost'},
+"Shift Gear":{e:'clearnegativeboost'},
+"Shore Up":{e:'clearnegativeboost'},
+"Simple Beam":{b:{spa:1}},
+"Sing":{b:{spe:1}},
+"Sketch":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Skill Swap":{b:{spe:1}},
+"Slack Off":{e:'clearnegativeboost'},
+"Sleep Powder":{b:{spe:1}},
+"Sleep Talk":{e:'crit2'},
+"Smokescreen":{b:{evasion:1}},
+"Snatch":{b:{spe:2}},
+"Soak":{b:{spa:1}},
+"Soft-Boiled":{e:'clearnegativeboost'},
+"Speed Swap":{b:{spe:1}},
+"Spider Web":{b:{def:1}},
+"Spikes":{b:{def:1}},
+"Spiky Shield":{b:{def:1}},
+"Spite":{e:'heal'},
+"Splash":{b:{atk:3}},
+"Spore":{e:'clearnegativeboost'},
+"Spotlight":{b:{spd:1}},
+"Stealth Rock":{b:{def:1}},
+"Sticky Web":{b:{spe:1}},
+"Stockpile":{e:'heal'},
+"Strength Sap":{b:{def:1}},
+"String Shot":{b:{spe:1}},
+"Stun Spore":{b:{spd:1}},
+"Substitute":{e:'clearnegativeboost'},
+"Sunny Day":{b:{spe:1}},
+"Supersonic":{b:{spe:1}},
+"Swagger":{e:'clearnegativeboost'},
+"Swallow":{e:'clearnegativeboost'},
+"Sweet Kiss":{b:{spa:1}},
+"Sweet Scent":{b:{accuracy:1}},
+"Switcheroo":{b:{spe:2}},
+"Swords Dance":{e:'clearnegativeboost'},
+"Synthesis":{e:'clearnegativeboost'},
+"Tail Glow":{e:'clearnegativeboost'},
+"Tail Whip":{b:{atk:1}},
+"Tailwind":{e:'crit2'},
+"Taunt":{b:{atk:1}},
+"Tearful Look":{b:{def:1}},
+"Teeter Dance":{b:{spa:1}},
+"Telekinesis":{b:{spa:1}},
+"Teleport":{e:'heal'},
+"Thunder Wave":{b:{spd:1}},
+"Tickle":{b:{def:1}},
+"Topsy-Turvy":{b:{atk:1}},
+"Torment":{b:{def:1}},
+"Toxic":{b:{def:1}},
+"Toxic Spikes":{b:{def:1}},
+"Toxic Thread":{b:{spe:1}},
+"Transform":{e:'heal'},
+"Trick":{b:{spe:2}},
+"Trick Room":{b:{accuracy:1}},
+"Trick-or-Treat":{b:{atk:1,def:1,spa:1,spd:1,spe:1}},
+"Venom Drench":{b:{def:1}},
+"Water Sport":{b:{spd:1}},
+"Whirlwind":{b:{spd:1}},
+"Wide Guard":{b:{def:1}},
+"Will-O-Wisp":{b:{atk:1}},
+"Wish":{b:{spd:1}},
+"Withdraw":{b:{def:1}},
+"Wonder Room":{b:{spd:1}},
+"Work Up":{b:{atk:1}},
+"Worry Seed":{b:{spe:1}},
+"Yawn":{b:{spe:1}}
+};
+
+// 専用 Z のうち変化技扱いのものの効果 (ベース技は攻撃技なので Z_STATUS に無い)
+export const Z_EXCLUSIVE_FX = {
+  'Extreme Evoboost': { b: { atk: 2, def: 2, spa: 2, spd: 2, spe: 2 } },
+};
+
 // 指定値を反映した Move を作る。指定が無い・不正な場合は従来どおり
 // (new Move(gen, name)) と完全に同じものになる。
-function buildMove(moveName, specValue, crit) {
+// zMode が真なら Zワザ化する (専用 Z の組み合わせなら専用 Zワザ、
+// それ以外はベース技からの汎用 Zワザ。エンジンが威力を解決する)
+function buildMove(moveName, specValue, crit, zMode, atkSpec) {
+  if (zMode) {
+    const effSp = atkSpec ? (atkSpec.mega && atkSpec.megaSpecies ? atkSpec.megaSpecies : atkSpec.species) : null;
+    const excl = atkSpec ? exclusiveZMove(effSp, atkSpec.itemLost ? '' : atkSpec.item, moveName) : null;
+    const zObj = excl ? new Move(gen, excl) : new Move(gen, moveName, { useZ: true });
+    if (crit) zObj.isCrit = true;
+    return zObj;
+  }
   const info = moveSpecInfo(moveName);
   let moveObj = null;
   if (info && specValue != null && Number.isFinite(+specValue)) {
@@ -412,7 +718,7 @@ export function moveData(name) {
     name: m.name, category: m.category, type: m.type, target: m.target,
     priority: m.priority || 0, multihit: m.multihit || null,
     fixedDamage: m.fixedDamage || null, basePower: m.basePower,
-    isZ: !!m.isZ, isMax: !!m.isMax,
+    isZ: !!m.isZ, isMax: !!m.isMax, zPower: (m.zMove && m.zMove.basePower) || null,
     spec: moveSpecInfo(name),
   };
 }
