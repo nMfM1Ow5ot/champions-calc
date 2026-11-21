@@ -121,6 +121,7 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 LOG_TOKEN_PATH = os.path.join(BASE_DIR, "github_log_token.txt")
 LOG_KEY_PATH = os.path.join(BASE_DIR, "team_key.txt")
 LOG_STATE_PATH = os.path.join(LOG_DIR, "uploaded.json")
+STATE_JSON_PATH = os.path.join(BASE_DIR, "state.json")
 GH_CONTENTS = "https://api.github.com/repos/nMfM1Ow5ot/champions-calc/contents/"
 JST = timezone(timedelta(hours=9))
 _log_notice_shown = False
@@ -128,6 +129,7 @@ _log_last_error = ""
 _log_prune_done_date = None
 _log_hold_notice_keys = set()
 _upload_lock = threading.Lock()
+_note_prompt_waiting = False
 
 
 def _log_token():
@@ -217,6 +219,37 @@ def _note_gate_applies(key):
     if not key:
         return False
     return key[:15] >= _NOTE_GATE_SINCE
+
+
+def _battle_in_progress():
+    """いま対戦中かどうかを state.json から判定する。
+
+    reader は対戦中だけ state.json に battle (現在の試合ID) を入れ、
+    その試合のログが保存されるまでは対戦中とみなす。reader が再起動
+    して進行中の試合を salvage した場合、その salvage は「中断」ログ
+    として即座に備考待ちになるが、試合自体は新しい試合IDで続いて
+    いるため、対戦中に備考プロンプトを出さないようにする
+    (2026-11-21 のユーザー報告: battle_20261121_140542_salvage)。
+    state.json が古い (reader が動いていない) 場合は対戦中とみなさ
+    ないので、放置された中断ログのプロンプトは従来どおり出る。
+    """
+    try:
+        if time.time() - os.path.getmtime(STATE_JSON_PATH) > 60:
+            return False
+        with open(STATE_JSON_PATH, encoding="utf-8") as f:
+            battle = json.load(f).get("battle")
+    except Exception:
+        return False
+    if not battle or not _BATTLE_KEY_RE.match(str(battle)):
+        return False
+    # その試合のログ (.log) がまだ保存されていなければ対戦中。
+    # デバッグ同梱 (.jpg/.json) は対戦中にも書かれるため対象にしない
+    try:
+        names = os.listdir(LOG_DIR)
+    except OSError:
+        return False
+    return not any(n.endswith(".log") and _battle_key(n) == battle
+                   for n in names)
 
 
 def _battle_key(name):
@@ -398,6 +431,13 @@ def upload_logs_once():
 def _upload_logs_once_locked():
     global _log_notice_shown, _log_last_error, _log_prune_done_date
     if not os.path.isdir(LOG_DIR):
+        return
+    if _note_prompt_waiting:
+        # 備考プロンプトが回答待ちの間は送信しない。回答前に別の試合の
+        # 「送信しました」や「入力待ちです」が出ると、プロンプト中の
+        # 試合が入力なしで送られたように見える (2026-11-21 のユーザー
+        # 報告)。回答が終わると prompt_for_pending_notes が改めて送信
+        # を呼ぶため、保留されていた分はそこでまとめて送られる
         return
     names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
     if not names:
@@ -586,12 +626,24 @@ def _note_prompt_loop(in_stream=None, out_stream=None):
         in_stream, out_stream, _ = _open_prompt_io()
     if in_stream is None:
         return
+
+    def _input_fn(prompt):
+        # 回答待ちの間は送信側を止める (入力していないのに送信された
+        # ように見える競合の解消。_upload_logs_once_locked を参照)
+        global _note_prompt_waiting
+        _note_prompt_waiting = True
+        try:
+            return _prompt_input(in_stream, out_stream, prompt)
+        finally:
+            _note_prompt_waiting = False
+
     reopen_tries = 0
     while True:
         try:
-            if list_pending_log_notes():
-                prompt_for_pending_notes(
-                    input_fn=lambda p: _prompt_input(in_stream, out_stream, p))
+            # 対戦中はプロンプトを出さない (進行中の試合の salvage 等が
+            # 備考待ちになっても、試合が終わってから聞く)
+            if list_pending_log_notes() and not _battle_in_progress():
+                prompt_for_pending_notes(input_fn=_input_fn)
                 reopen_tries = 0
             else:
                 time.sleep(2)
