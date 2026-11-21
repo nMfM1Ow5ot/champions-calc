@@ -19,7 +19,7 @@
   "data/regulation.json": "7efedfe7d41be04452c974d699af484e8cc7837c4ac33227e78198a0982149db",
   "data/species_abilities.json": "0f541543571d04385c8b54b7aca5e8f57bcebdc216177684c14b5aeb02a4c8cf",
   "data/species_moves.json": "e150e7645889ede9cf0ca9d83b660dce6263754511fe883b875052b026fb0948",
-  "data/species_types.json": "f9fa9b6477a3664284c7247662c25df3ea3fe7620bc8da813e7c2e07645087dd",
+  "data/species_types.json": "ac4442618f324572110613a29504ddad4528dd33fa8d6c927ab8fcc77fc2f3cb",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "1cf58a3d1ff20870453c4f8dd926e02f888c3896fe20110c0a142784523f3bd4",
   "estimate_engine.mjs": "fa2a9bd665c4d44f5905f9ac324103b96d1ab156104b12c40bba4667b6007ff2",
@@ -30,7 +30,7 @@
   "fetch_usage.mjs": "28c71b85cae10b8a8d45b84aee1ca9d3315c047b1cdf65a30ac4c90aae83b17d",
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
-  "reader.swift": "55ff0d1bc65226035bec2f67a481efcddde239d51bcdb16dc7a3d705f6e492b4",
+  "reader.swift": "2787be1121f9b7f46c82631be4b2d865ddf3864ed90399163f52df885aea9b6c",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "9d9a3fc4c61ed63fc4d8333bea803990eb1e5f9b4f2f781824f1ab84201e3941",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
@@ -39,5 +39,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_1447"
+ "rev": "20261121_1510"
 }
