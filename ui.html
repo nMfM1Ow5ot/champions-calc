@@ -2190,8 +2190,10 @@ async function poll() {
   ]);
   // dropdown option lists
   const seen = new Set();
+  // 種族は Champions 実装分に絞らない (レギュレーション変更で他種族が解禁されても
+  // そのまま選べるように、全ポケモンを候補にする)。技・持ち物は従来どおり
+  // Champions 実装分のみ
   SPECIES_OPTIONS = Object.entries(NAMES._ja2en || {})
-    .filter(([, en]) => !CHAMP.species.size || CHAMP.species.has(en))
     .filter(([, en]) => { if (seen.has(en)) return false; seen.add(en); return true; })
     .map(([jaName, en]) => ({ v: en, l: biLabel(jaName, en) }))
     .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
