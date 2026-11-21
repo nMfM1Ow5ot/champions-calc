@@ -3893,6 +3893,25 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
         if knownItem == sd.item {
             if emittedSwitchKeys.contains(key) { noteItemLost(slot: slot, side: sdSide, speciesEn: speciesEn) }
             else { pendingUnburden.insert(key) }
+        } else if !viaSalvage, knownItem == nil, sdSide == "p2", !itemLostActive.contains(key),
+                  emittedSwitchKeys.contains(key) {
+            // 持ち物が未判明の相手についても、地形シードの発動としか
+            // 読めない上昇 (入場直後か、地形が張られた直後に起きて、
+            // 本人の技による上昇ではない) は、そのシードを持って
+            // いたことの判明として記録する。ゲーム内ではシードの
+            // 発動が表示され、対戦ログ上も確定情報として扱われるが、
+            // 従来は持ち物が判明済みの場合しか記録しておらず、推定へ
+            // 判明情報が届かなかった (実例: 2026-11-22
+            // battle_20261122_054802、イエッサンのサイコシードと
+            // オオニューラのグラスシード)。自軍の持ち物は登録
+            // データで判明しているため、対象は相手のみ
+            let justEntered = lastSwitchIn[key].map { Date().timeIntervalSince($0.at) < 15 } ?? false
+            let terrainFresh = Date().timeIntervalSince(fieldTerrainSetAt) < 15
+            let ownMove = lastMoveLabel == "\(slot): \(speciesEn)" && Date().timeIntervalSince(lastMoveMsgAt) < 20
+            if (justEntered || terrainFresh) && !ownMove {
+                emitItemOnce(slot: slot, side: sdSide, speciesEn: speciesEn, itemJa: sd.item)
+                noteItemLost(slot: slot, side: sdSide, speciesEn: speciesEn)
+            }
         }
     }
 }
@@ -7504,7 +7523,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0625"
+let readerBuild = "20261122_0633"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
