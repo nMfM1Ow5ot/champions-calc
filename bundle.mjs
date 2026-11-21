@@ -26131,7 +26131,7 @@ var ALL_NATURES = [
 ];
 function deriveBuild(speciesName, actual) {
   const s = gen.species.get(speciesName.toLowerCase().replace(/[^a-z0-9]/g, ""));
-  if (!s || !actual) return [];
+  if (!s || !s.baseStats || !actual) return [];
   const base = s.baseStats;
   const solutions = [];
   for (const nature of ALL_NATURES) {
@@ -26236,6 +26236,7 @@ var TEAM_PRESETS = [
 ];
 function assumedSet(speciesName, kind = "attacker") {
   const s = gen.species.get(speciesName.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  if (!s || !s.baseStats) return { sp: {}, nature: "Serious", ability: "", item: void 0, note: "\u60F3\u5B9A\u30C7\u30FC\u30BF\u306A\u3057" };
   const bs = s.baseStats;
   const physical = bs.atk >= bs.spa;
   const offKey = physical ? "atk" : "spa";
@@ -26856,7 +26857,7 @@ var _statTables = {};
 function statTable(speciesName) {
   if (_statTables[speciesName]) return _statTables[speciesName];
   const s = gen.species.get(String(speciesName).toLowerCase().replace(/[^a-z0-9]/g, ""));
-  if (!s) return null;
+  if (!s || !s.baseStats) return null;
   const table = {};
   for (const stat of STAT_KEYS) {
     const rows = [];
