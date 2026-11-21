@@ -1721,6 +1721,16 @@ function renderAll() {
       if (presetFocus.sel != null) { try { inp.setSelectionRange(presetFocus.sel, presetFocus.sel); } catch (e) { /* noop */ } }
     }
   }
+  // プリセットのプルダウンが画面の左右にはみ出す場合は、収まるよう横にずらす
+  const presetPopEl = document.querySelector('.presetpop');
+  if (presetPopEl) {
+    const r = presetPopEl.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    let dx = 0;
+    if (r.left < 4) dx = 4 - r.left;
+    else if (r.right > vw - 4) dx = (vw - 4) - r.right;
+    if (dx) presetPopEl.style.transform = `translateX(${dx}px)`;
+  }
 }
 // プリセット名の下書き (再描画をまたいで入力内容を保持する)
 document.addEventListener('input', e => {
