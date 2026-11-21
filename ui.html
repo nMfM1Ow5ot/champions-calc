@@ -94,6 +94,8 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .topbar .theme-toggle{flex:none; white-space:nowrap}
 .topbar .layoutsw{margin-left:auto; display:flex; flex:none; border:1px solid rgba(255,255,255,.18); border-radius:999px; overflow:hidden}
 .topbar .dbgbox{display:flex; align-items:center; gap:.4rem; flex:none}
+.topbar .specsw{display:flex; align-items:center; gap:.35rem; flex:none; font-size:.85rem; color:var(--label)}
+.topbar .specsw select{font:inherit; font-size:.85rem; max-width:11rem}
 #dbgStatus{font-size:.8rem; color:var(--label)}
 .topbar .layoutsw button{font:inherit; font-size:.85rem; line-height:1; padding:.45rem .7rem; background:none; border:none; border-radius:0; box-shadow:none; color:var(--label); cursor:pointer; white-space:nowrap}
 .topbar .layoutsw button:hover{background:rgba(33,150,243,.15); color:var(--ink)}
@@ -184,6 +186,8 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .preseticon{width:1.7rem; height:1.7rem; object-fit:contain; image-rendering:pixelated}
 .presetdel{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .45rem; font:inherit}
 .presetempty{color:var(--dim); font-size:.85rem}
+.presetsync{display:flex; gap:.4rem; align-items:center; margin-top:.3rem}
+.presetsync input{flex:1; min-width:0}
 .formeopt{display:flex; flex-direction:column; align-items:center; gap:.25rem; padding:.4rem .55rem; border-radius:.6rem; background:none; border:none; cursor:pointer}
 .formeopt img{width:44px; height:44px; object-fit:contain; image-rendering:pixelated}
 .formeopt span{font-size:.85rem; color:#555; letter-spacing:.08em; font-weight:600}
@@ -346,6 +350,7 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
       <span id="camstat"></span>
     </div>
     <div class="dbgbox"><button type="button" id="dbgSend" title="現在の状態と表示内容のスナップショットを開発チャットへ送信します">デバッグ送信</button><span id="dbgStatus"></span></div>
+    <div class="specsw"><label for="specSel">仕様</label><select id="specSel" title="適用する仕様 (バランス調整のバージョン)。現行仕様がデフォルトです"><option value="">現行仕様</option></select></div>
     <div class="layoutsw" role="group" aria-label="ページレイアウト切り替え">
       <button type="button" data-layoutpick="sp">スマホ用</button>
       <button type="button" data-layoutpick="tablet">iPad用</button>
@@ -373,7 +378,7 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
   <p class="note">相手の型は <span id="regname">レギュレーションM-C</span> の使用率データ（pokedb）から最も使われている型を初期値にしています。判明した情報（技・持ち物・特性）があれば reader が自動で、なければ手動で訂正でき、判明した技だけが青くハイライトされます（特性・持ち物も同様）。相手の型に判明情報が1つでもあれば、SET の表示は相手トレーナー名になります。フレンドガードは、その側のもう1体が特性フレンドガードを持つ想定で、受けるダメージが0.75倍になります。レイアウトと操作系は Showdex（Calcdex）の再現です（1体 vs 1体表示、アイコンで表示するポケモンを切替）。</p>
 </div>
 <script type="module">
-import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData, createEstimator, labelSide, labelSpecies, exclusiveZMove, zMoveNameOf, Z_STATUS, Z_EXCLUSIVE_FX } from './bundle.mjs';
+import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData, createEstimator, labelSide, labelSpecies, exclusiveZMove, zMoveNameOf, Z_STATUS, Z_EXCLUSIVE_FX, setSpecPatchData, specPatchVersions, activeSpecPatch, applySpecPatch } from './bundle.mjs';
 
 const gen = Generations.get(9);const STATJ = [['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SPA'],['spd','SPD'],['spe','SPE']];
 const TYPE_JA = {Normal:'ノーマル',Fire:'ほのお',Water:'みず',Electric:'でんき',Grass:'くさ',Ice:'こおり',Fighting:'かくとう',Poison:'どく',Ground:'じめん',Flying:'ひこう',Psychic:'エスパー',Bug:'むし',Rock:'いわ',Ghost:'ゴースト',Dragon:'ドラゴン',Dark:'あく',Steel:'はがね',Fairy:'フェアリー',Stellar:'ステラ'};
@@ -552,7 +557,7 @@ function confirmNewBattle() {
 // さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
 const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
-const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, presetDraft: { save: {}, rename: '' }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
+const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, presetDraft: { save: {}, rename: '', token: '' }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
 
 function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
 let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
@@ -1199,7 +1204,64 @@ function loadPresetStore() {
   try { const s = JSON.parse(localStorage.getItem(PRESET_STORE_KEY) || 'null'); if (s && Array.isArray(s.mine) && Array.isArray(s.opps)) return s; } catch (e) { /* ignore */ }
   return { mine: [], opps: [] };
 }
-function savePresetStore(s) { try { localStorage.setItem(PRESET_STORE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
+function savePresetStore(s, fromRemote) {
+  if (!fromRemote) s.updatedAt = new Date().toISOString();
+  try { localStorage.setItem(PRESET_STORE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+  if (!fromRemote) schedulePresetPush();
+}
+/* ---------- プリセットの共有 (localhost ⇔ デバック用ページ) ----------
+   正本はリポジトリの presets.json。updatedAt の新しい方を採用する。
+   localhost からの保存は serve.py (POST ./presets) 経由で、デバック用
+   ページからの保存はユーザーが入力した GitHub トークンで Contents API
+   へ直接送る。 */
+const PRESET_REMOTE_URL = 'https://raw.githubusercontent.com/nMfM1Ow5ot/champions-calc/main/presets.json';
+const PRESET_GH_API = 'https://api.github.com/repos/nMfM1Ow5ot/champions-calc/contents/presets.json';
+const GH_TOKEN_KEY = 'champions-calc-gh-token';
+let presetPushTimer = null;
+let presetSyncMsg = '';
+function isLocalOrigin() { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname || ''); } catch (e) { return false; } }
+function ghToken() { try { return localStorage.getItem(GH_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+function schedulePresetPush() {
+  if (presetPushTimer) clearTimeout(presetPushTimer);
+  presetPushTimer = setTimeout(() => { pushPresets().catch(() => { /* 失敗表示は次回ポップオーバーで */ }); }, 800);
+}
+async function pushPresets() {
+  const s = loadPresetStore();
+  const body = JSON.stringify({ v: 1, updatedAt: s.updatedAt || null, mine: s.mine, opps: s.opps });
+  if (isLocalOrigin()) {
+    const r = await fetch('./presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    presetSyncMsg = r.ok ? '共有済み' : '共有に失敗しました';
+  } else {
+    const tok = ghToken();
+    if (!tok) { presetSyncMsg = 'トークン未設定のため、このページ内のみに保存されています'; return; }
+    const cur = await fetch(PRESET_GH_API, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' } });
+    const sha = cur.ok ? (await cur.json()).sha : undefined;
+    const content = btoa(unescape(encodeURIComponent(body)));
+    const r = await fetch(PRESET_GH_API, { method: 'PUT', headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'presets sync', content, sha }) });
+    presetSyncMsg = r.ok ? '共有済み' : '共有に失敗しました (トークンをご確認ください)';
+  }
+  if (ui.presetPop) renderAll();
+}
+async function syncPresetsFromRemote() {
+  const local = loadPresetStore();
+  try {
+    const r = await fetch(PRESET_REMOTE_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) { if (local.mine.length || local.opps.length) schedulePresetPush(); return; }
+    const remote = await r.json();
+    if (!remote || !Array.isArray(remote.mine) || !Array.isArray(remote.opps)) return;
+    const rt = Date.parse(remote.updatedAt || '') || 0;
+    const lt = Date.parse(local.updatedAt || '') || 0;
+    if (rt > lt) savePresetStore({ mine: remote.mine, opps: remote.opps, updatedAt: remote.updatedAt }, true);
+    else if (lt > rt && (local.mine.length || local.opps.length)) schedulePresetPush();
+  } catch (e) { /* オフライン等では何もしない */ }
+}
+function presetSyncHTML() {
+  const msg = presetSyncMsg ? `<div class="presetempty">${esc(presetSyncMsg)}</div>` : '';
+  if (isLocalOrigin()) return `<div class="presetempty">プリセットはデバック用ページと共有されます</div>${msg}`;
+  if (ghToken()) return `<div class="presetempty">プリセットは localhost と共有されます</div>${msg}`;
+  return `<div class="presetsync"><input type="password" class="presetnamein" data-presettoken placeholder="GitHub トークン" value="${esc(ui.presetDraft.token || '')}"><button class="tgl" data-presettokensave>保存</button></div>
+    <div class="presetempty">共有には GitHub トークン (このリポジトリの Contents の読み書き) が必要です</div>${msg}`;
+}
 function presetBuildOf(spec) {
   return {
     species: spec.species, megaSpecies: spec.megaSpecies || '', mega: !!spec.mega, megaAbility: spec.megaAbility || '',
@@ -1284,6 +1346,7 @@ function presetPopHTML(side) {
     <div class="presetsave"><input type="text" class="presetnamein" data-presetname="${side}" placeholder="プリセット名" value="${esc(draft != null ? draft : `プリセット ${list.length + 1}`)}"><button class="tgl" data-presetsave="${side}">保存</button></div>
     ${rows || '<div class="presetempty">保存されたプリセットはありません</div>'}
     ${hidden ? `<div class="presetempty">他のレギュレーションのプリセットが ${hidden} 件あります</div>` : ''}
+    ${presetSyncHTML()}
   </span>`;
 }
 function presetBox(side) {
@@ -1753,7 +1816,9 @@ document.addEventListener('input', e => {
   const sn = t.closest('[data-presetname]');
   if (sn) { ui.presetDraft.save[sn.dataset.presetname] = t.value; return; }
   const rn = t.closest('[data-presetrename]');
-  if (rn) { ui.presetDraft.rename = t.value; }
+  if (rn) { ui.presetDraft.rename = t.value; return; }
+  const tk = t.closest('[data-presettoken]');
+  if (tk) { ui.presetDraft.token = t.value; }
 });
 // 第2段: 選択中マッチアップについて、相手の事後上位候補を通じたダメージ幅。
 // 集計の実処理は推定エンジン側 (estimate_engine.mjs の candRanges)
@@ -2001,6 +2066,13 @@ document.addEventListener('click', e => {
   if (pb) { const side = pb.dataset.presetbtn; ui.presetPop = ui.presetPop === side ? null : side; if (!ui.presetPop) ui.presetRename = null; renderAll(); return; }
   const psv = t.closest('[data-presetsave]');
   if (psv) { const side = psv.dataset.presetsave; const inp = document.querySelector(`[data-presetname="${side}"]`); savePreset(side, ui.presetDraft.save[side] != null ? ui.presetDraft.save[side] : (inp ? inp.value : '')); delete ui.presetDraft.save[side]; renderAll(); return; }
+  const ptk = t.closest('[data-presettokensave]');
+  if (ptk) {
+    const tok = (ui.presetDraft.token || '').trim();
+    if (tok) { try { localStorage.setItem(GH_TOKEN_KEY, tok); } catch (e) { /* ignore */ } ui.presetDraft.token = ''; presetSyncMsg = 'トークンを保存しました'; schedulePresetPush(); }
+    renderAll();
+    return;
+  }
   const ped = t.closest('[data-presetedit]');
   if (ped) { const [side, idx] = ped.dataset.presetedit.split(':'); const cur = loadPresetStore()[side][+idx]; if (cur) { ui.presetRename = { side, idx: +idx }; ui.presetDraft.rename = cur.name; } renderAll(); return; }
   const prs = t.closest('[data-presetrenamesave]');
@@ -2809,6 +2881,21 @@ async function sendDebugSnapshot() {
   }
 }
 document.getElementById('dbgSend')?.addEventListener('click', sendDebugSnapshot);
+// 仕様差分 (バランス調整) の切り替え: 選択は保存し、適用は core の差分レイヤーへ
+function renderSpecSel() {
+  const sel = document.getElementById('specSel');
+  if (!sel) return;
+  const cur = activeSpecPatch() ? activeSpecPatch().id : '';
+  sel.innerHTML = '<option value="">現行仕様</option>' + specPatchVersions().map(v => `<option value="${v.id}">${v.label || v.id}</option>`).join('');
+  sel.value = cur;
+}
+document.getElementById('specSel')?.addEventListener('change', e => {
+  const id = e.target.value || '';
+  try { localStorage.setItem('champions-calc-specpatch', id); } catch (err) { /* 保存できなくても切り替えは行う */ }
+  applySpecPatch(id || null);
+  resetInference();
+  calcAll();
+});
 
 /* ---------- init ---------- */
 (async function init() {
@@ -2816,6 +2903,7 @@ document.getElementById('dbgSend')?.addEventListener('click', sendDebugSnapshot)
   // (選出画面・試合開始直後の反映を速くするため)
   poll();
   setInterval(poll, 200);
+  syncPresetsFromRemote();
   // データファイル群は並列に読み込む (逐次読みだと全て揃うまで時間がかかるため)
   await Promise.all([
     (async () => { try {
@@ -2892,6 +2980,14 @@ document.getElementById('dbgSend')?.addEventListener('click', sendDebugSnapshot)
     (async () => { try {
       SPECIES_MOVES = await (await fetch('./data/species_moves.json')).json();
     } catch (e) { /* species moves optional (初期技の補完用) */ } })(),
+    (async () => { try {
+      const sp = await (await fetch('./data/spec_patches.json')).json();
+      setSpecPatchData(sp);
+      let saved = '';
+      try { saved = localStorage.getItem('champions-calc-specpatch') || ''; } catch (e) { /* ignore */ }
+      if (saved) applySpecPatch(saved);
+      renderSpecSel();
+    } catch (e) { /* spec patches optional (無い場合は現行仕様のみ) */ } })(),
   ]);
   // dropdown option lists
   // 種族は実装範囲に絞らない (レギュレーション変更で他種族が解禁されても
