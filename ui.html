@@ -176,6 +176,11 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .presetwrap{position:relative; display:inline-block; margin-left:.45rem; align-self:center}
 .presetbtn{font-size:.95rem}
 .presetpop{position:absolute; top:calc(100% + 6px); right:0; left:auto; z-index:45; display:flex; flex-direction:column; gap:.35rem; background:var(--bg); border:1px solid rgba(127,127,127,.35); border-radius:.6rem; padding:.6rem; box-shadow:0 4px 18px rgba(0,0,0,.45); min-width:16rem; max-width:calc(100vw - 1rem)}
+.statuswrap{position:relative; display:inline-flex; align-items:center; gap:.35rem; flex:none}
+.statuspop{position:absolute; top:calc(100% + 6px); left:0; z-index:45; display:flex; flex-direction:column; gap:.1rem; background:var(--bg); border:1px solid rgba(127,127,127,.35); border-radius:.6rem; padding:.45rem; box-shadow:0 4px 18px rgba(0,0,0,.45); min-width:9.5rem}
+.statusrow{display:flex; align-items:center; gap:.45rem; padding:.18rem .3rem; cursor:pointer; white-space:nowrap; border-radius:.3rem}
+.statusrow:hover{background:rgba(127,127,127,.15)}
+.statusrow input{margin:0}
 .presetsave{display:flex; gap:.4rem}
 .presetnamein{flex:1; min-width:0; background:var(--panel); border:1px solid rgba(127,127,127,.35); border-radius:.4rem; color:var(--ink); padding:.3rem .45rem; font:inherit}
 .presetrow{display:flex; align-items:center; gap:.4rem}
@@ -607,7 +612,7 @@ function confirmNewBattle() {
 // さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
 const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
-const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, presetDraft: { save: {}, rename: '', token: '' }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
+const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, statusPop: null, presetDraft: { save: {}, rename: '', token: '' }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
 
 function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
 let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
@@ -813,7 +818,7 @@ function ownSpeciesSpec(speciesEn, kind) {
   delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
   delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual; delete ns.estMarginal;
   delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
-  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seeded; delete ns.hand; delete ns.octolock;
+  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seeded; delete ns.hand; delete ns.octolock; delete ns.curse; delete ns.bind; delete ns.saltcure; delete ns.nightmare;
   return ns;
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
@@ -1236,6 +1241,26 @@ function dispStat(spec, key, raw, sideKey) {
   return [v, v > raw[key] ? 'green' : v < raw[key] ? 'red' : ''];
 }
 
+/* ---------- 状態プルダウン (てだすけの右隣): 継続効果のチェックボックス集 ---------- */
+const STATUS_DEFS = [
+  ['curse', 'のろい', 'のろい状態 (ターン終了時に最大HPの1/4のダメージ。KO% の計算にも反映されます)'],
+  ['seeded', 'やどりぎ', 'やどりぎのタネを植えられている (ターン終了時に最大HPの1/8を吸収される。KO% の計算にも反映されます)'],
+  ['aquaring', 'アクアリング', 'ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます'],
+  ['ingrain', 'ねをはる', 'ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます'],
+  ['octolock', 'たこがため', 'ターン終了ごとに防御・特防が1段階ずつ下がる。KO% の計算にも反映されます'],
+  ['bind', 'まとわりつく', 'バインド状態 (ターン終了時に最大HPの1/8のダメージ。KO% の計算にも反映されます)'],
+  ['saltcure', 'しおづけ', 'ターン終了時に最大HPの1/8 (はがね・みずタイプは1/4) のダメージ。KO% の計算にも反映されます'],
+  ['nightmare', 'あくむ', 'ねむり状態の間、ターン終了時に最大HPの1/4のダメージ。KO% の計算にも反映されます'],
+];
+function statusActiveCount(spec) { return STATUS_DEFS.reduce((n, d) => n + (spec[d[0]] ? 1 : 0), 0); }
+function statusPopHTML(side, spec) {
+  return `<div class="statuspop">${STATUS_DEFS.map(d => `<label class="statusrow" title="${d[2]}"><input type="checkbox" data-status="${side}:${d[0]}"${spec[d[0]] ? ' checked' : ''}> ${d[1]}</label>`).join('')}</div>`;
+}
+function statusDDHTML(side, spec) {
+  const n = statusActiveCount(spec);
+  return `<span class="statuswrap"><button class="tgl${n ? ' on' : ''}" data-statusbtn="${side}">状態${n ? ` (${n})` : ''}</button>${n ? `<button class="tgl statusx" data-statusclear="${side}" title="状態をすべて解除">✕</button>` : ''}${ui.statusPop === side ? statusPopHTML(side, spec) : ''}</span>`;
+}
+
 /* ---------- panel parts (1 vs 1, Showdex PlayerCalc structure) ---------- */
 function playerBar(side) {
   const isOpp = side === 'opps';
@@ -1538,7 +1563,7 @@ function pokeInfo(side) {
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
       <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span></div>
-      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}<button class="tgl${spec.hand ? ' on' : ''}" data-hand="${side}" title="てだすけ (このポケモンの技の威力が1.5倍)">てだすけ</button><button class="tgl${spec.seeded ? ' on' : ''}" data-seeded="${side}" title="やどりぎのタネを植えられている (ターン終了時に最大HPの1/8を吸収される。KO% の計算にも反映されます)">やどりぎのタネ</button><button class="tgl${spec.aquaring ? ' on' : ''}" data-aquaring="${side}" title="アクアリング (ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます)">アクアリング</button><button class="tgl${spec.ingrain ? ' on' : ''}" data-ingrain="${side}" title="ねをはる (ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます)">ねをはる</button><button class="tgl${spec.octolock ? ' on' : ''}" data-octolock="${side}" title="たこがため (ターン終了ごとに防御・特防が1段階ずつ下がる。KO% の計算にも反映されます)">たこがため</button></div>
+      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}<button class="tgl${spec.hand ? ' on' : ''}" data-hand="${side}" title="てだすけ (このポケモンの技の威力が1.5倍)">てだすけ</button>${statusDDHTML(side, spec)}</div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
         <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
@@ -2052,6 +2077,7 @@ document.addEventListener('mousedown', e => {
   if (!e.target.closest('.stpop') && !e.target.closest('[data-statusbtn]')) closeStPop();
   if (ui.formePop && !e.target.closest('[data-forme]') && !e.target.closest('.formepop')) { ui.formePop = null; renderAll(); }
   if (ui.presetPop && !e.target.closest('[data-presetbtn]') && !e.target.closest('.presetpop')) { ui.presetPop = null; renderAll(); }
+  if (ui.statusPop && !e.target.closest('[data-statusbtn]') && !e.target.closest('.statuspop') && !e.target.closest('[data-statusclear]')) { ui.statusPop = null; renderAll(); }
 });
 document.addEventListener('click', e => {
   const t = e.target;
@@ -2194,31 +2220,19 @@ document.addEventListener('click', e => {
     calcAll();
     return;
   }
-  const ig = t.closest('[data-ingrain]');
-  if (ig) {
-    const spec = DS(ig.dataset.ingrain);
-    spec.ingrain = !spec.ingrain;
+  const stb = t.closest('[data-statusbtn]');
+  if (stb) { ui.statusPop = ui.statusPop === stb.dataset.statusbtn ? null : stb.dataset.statusbtn; renderAll(); return; }
+  const stc = t.closest('[data-statusclear]');
+  if (stc) {
+    const spec = DS(stc.dataset.statusclear);
+    for (const [k] of STATUS_DEFS) spec[k] = false;
     calcAll();
     return;
   }
-  const oc = t.closest('[data-octolock]');
-  if (oc) {
-    const spec = DS(oc.dataset.octolock);
-    spec.octolock = !spec.octolock;
-    calcAll();
-    return;
-  }
-  const aq = t.closest('[data-aquaring]');
-  if (aq) {
-    const spec = DS(aq.dataset.aquaring);
-    spec.aquaring = !spec.aquaring;
-    calcAll();
-    return;
-  }
-  const sd2 = t.closest('[data-seeded]');
-  if (sd2) {
-    const spec = DS(sd2.dataset.seeded);
-    spec.seeded = !spec.seeded;
+  const sti = t.closest('[data-status]');
+  if (sti) {
+    const [ssd, skey] = sti.dataset.status.split(':');
+    DS(ssd)[skey] = sti.checked;
     calcAll();
     return;
   }
@@ -2386,6 +2400,10 @@ function applyRevealedPreserving(spec, rev) {
   fresh.seeded = spec.seeded;
   fresh.hand = spec.hand;
   fresh.octolock = spec.octolock;
+  fresh.curse = spec.curse;
+  fresh.bind = spec.bind;
+  fresh.saltcure = spec.saltcure;
+  fresh.nightmare = spec.nightmare;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
