@@ -26602,13 +26602,94 @@ function fallbackKoText(attacker, defender, move, field, maxDmg, ingrain, aquari
     return null;
   }
 }
-function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) {
+function clampBoost(v) {
+  return Math.max(-6, Math.min(6, v));
+}
+function boostsWith(base, deltas) {
+  const b = { ...base || {} };
+  for (const k of ["atk", "def", "spa", "spd", "spe", "acc", "eva"]) if (deltas[k]) b[k] = clampBoost((b[k] || 0) + deltas[k]);
+  return b;
+}
+function convolveDist(a, b) {
+  const out = /* @__PURE__ */ new Map();
+  for (const [d1, p1] of a) for (const [d2, p2] of b) out.set(d1 + d2, (out.get(d1 + d2) || 0) + p1 * p2);
+  return out;
+}
+function damageDist(raw) {
+  if (typeof raw === "number") return /* @__PURE__ */ new Map([[raw, 1]]);
+  if (!Array.isArray(raw) || !raw.length) return null;
+  if (typeof raw[0] === "number") {
+    const m = /* @__PURE__ */ new Map();
+    for (const d of raw) m.set(d, (m.get(d) || 0) + 1 / raw.length);
+    return m;
+  }
+  let acc = /* @__PURE__ */ new Map([[0, 1]]);
+  for (const sub of raw) {
+    const sd = damageDist(sub);
+    if (!sd) return null;
+    acc = convolveDist(acc, sd);
+  }
+  return acc;
+}
+function koChanceDyn(dists, hp, eotDamage, toxicCounter, maxHP, berryHeal, turns) {
+  const memo = /* @__PURE__ */ new Map();
+  const rec = (ti, h, berry, tc, left) => {
+    if (left === 0) return 0;
+    const key = ti + "|" + h + "|" + berry + "|" + tc + "|" + left;
+    if (memo.has(key)) return memo.get(key);
+    const dist = dists[Math.min(ti, dists.length - 1)];
+    let sum = 0;
+    for (const [d, p] of dist) {
+      const afterHit = h - d;
+      if (afterHit <= 0) {
+        sum += p;
+        continue;
+      }
+      let nh = afterHit, nb = berry;
+      if (nb > 0 && nh <= maxHP / 2) {
+        nh += nb;
+        nb = 0;
+      }
+      const td = tc > 0 ? Math.floor(tc * maxHP / 16) : 0;
+      nh += eotDamage - td;
+      if (nh <= 0) {
+        sum += p;
+        continue;
+      }
+      sum += p * rec(ti + 1, nh, nb, tc > 0 ? tc + 1 : 0, left - 1);
+    }
+    memo.set(key, sum);
+    return sum;
+  };
+  return rec(0, hp, berryHeal, toxicCounter, turns);
+}
+function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx, atkSpec, defSpec) {
   const raw = result.damage;
   const damage = Array.isArray(raw) ? raw.every((x) => typeof x === "number") ? raw : null : typeof raw === "number" ? [raw] : null;
-  if (!damage || !damage.length || damage[damage.length - 1] === 0) return null;
+  const baseDist = damageDist(raw);
+  if (!baseDist || !baseDist.size) return null;
+  if (Math.max(...baseDist.keys()) === 0) return null;
   const maxHP = defender.maxHP();
   const ingrain = !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[defIdx]);
   const aquaring = !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[defIdx]);
+  const octolock = !!(koCtx && koCtx.defOctolock && koCtx.defOctolock[defIdx]);
+  const defPerHit = {};
+  const defCat = move.defensiveCategory || move.category;
+  if (defender.hasAbility("Stamina") && defCat === "Physical") defPerHit.def = (defPerHit.def || 0) + 1;
+  if (defender.hasAbility("Weak Armor") && move.category === "Physical") defPerHit.def = (defPerHit.def || 0) - 1;
+  if (defender.hasAbility("Justified") && move.type === "Dark") defPerHit.atk = (defPerHit.atk || 0) + 1;
+  let atkPerUse = 0, atkPerUseStat = null;
+  const rawMoveData = gen.moves.get(String(move.name).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const selfB = rawMoveData && rawMoveData.self && rawMoveData.self.boosts;
+  if (selfB) {
+    const stat = move.category === "Physical" ? "atk" : move.category === "Special" ? "spa" : null;
+    if (stat && selfB[stat]) {
+      atkPerUseStat = stat;
+      atkPerUse = attacker.hasAbility("Contrary") ? -selfB[stat] : selfB[stat];
+    }
+  }
+  const dyn = !!(Object.keys(defPerHit).length || atkPerUse || octolock);
+  if (!dyn && (!damage || !damage.length)) return null;
   const loseItem = move.named("Knock Off") && !defender.hasAbility("Sticky Hold");
   const healBlock = move.named("Psychic Noise") && !(attacker.hasAbility("Sheer Force") || defender.hasItem("Covert Cloak") || defender.hasAbility("Shield Dust", "Aroma Veil"));
   let berryHeal = 0, berryName = "";
@@ -26622,7 +26703,7 @@ function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) 
       berryName = "Oran Berry";
     }
   }
-  if (!berryHeal && !ingrain && !aquaring) return null;
+  if (!berryHeal && !ingrain && !aquaring && !dyn) return null;
   const hazards = koHazards(defender, field.defenderSide);
   let hp = defender.curHP() - hazards.damage;
   if (hp <= 0) return null;
@@ -26639,6 +26720,11 @@ function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) 
   for (const t of eot.texts) texts.push(t);
   const after = texts.length ? " after " + koSerializeTexts(texts) : "";
   const roundChance = (c) => Math.max(Math.min(Math.round(c * 1e3), 999), 1) / 10;
+  if (dyn) {
+    const hitsPerUse = Array.isArray(raw) && raw.length && Array.isArray(raw[0]) ? raw.length : move.hits || 1;
+    const dynText = dynamicKoText({ attacker, defender, move, field, atkSpec, defSpec, baseDist, hitsPerUse, defPerHit, atkPerUse, atkPerUseStat, octolock, hp, berry, eotDamage: eot.damage, toxicCounter, maxHP, after, roundChance, ingrain, aquaring });
+    if (dynText !== null) return dynText;
+  }
   const c1 = koChanceRec(damage, hp, eot.damage, toxicCounter, maxHP, berry, 1);
   if (c1 > 0) {
     if (c1 === 1) return "guaranteed OHKO";
@@ -26661,7 +26747,7 @@ function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) 
         b = 0;
       }
       if (k < n - 1) {
-        const td = toxicCounter + k > 0 ? Math.floor((toxicCounter + k) * maxHP / 16) : 0;
+        const td = toxicCounter > 0 ? Math.floor((toxicCounter + k) * maxHP / 16) : 0;
         h += eot.damage - td;
         if (h <= 0) return true;
       }
@@ -26674,7 +26760,97 @@ function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) 
   }
   return null;
 }
-function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ, koCtx) {
+function dynamicKoText(ctx) {
+  const { attacker, defender, move, field, atkSpec, defSpec, baseDist, hitsPerUse, defPerHit, atkPerUse, atkPerUseStat, octolock, hp, berry, eotDamage, toxicCounter, maxHP, after, roundChance, ingrain, aquaring } = ctx;
+  if (!atkSpec || !defSpec) return null;
+  const rawD = baseDist;
+  const TURNS = 10;
+  let oneHitMove = move;
+  if (hitsPerUse > 1) {
+    try {
+      oneHitMove = new import_calc.Move(gen, move.name, { hits: 1 });
+      if (move.isCrit) oneHitMove.isCrit = true;
+    } catch (e) {
+      return null;
+    }
+  }
+  const octoSign = defender.hasAbility("Contrary") ? 1 : -1;
+  const dists = [rawD];
+  try {
+    for (let t = 1; t < TURNS; t++) {
+      const aBoosts = atkPerUse ? boostsWith(atkSpec.boosts, { [atkPerUseStat]: atkPerUse * t }) : atkSpec.boosts;
+      const dStart = {};
+      for (const k in defPerHit) dStart[k] = defPerHit[k] * hitsPerUse * t;
+      if (octolock) {
+        dStart.def = (dStart.def || 0) + octoSign * t;
+        dStart.spd = (dStart.spd || 0) + octoSign * t;
+      }
+      const atkP = toPokemon({ ...atkSpec, boosts: aBoosts });
+      let dist = null;
+      if (hitsPerUse === 1) {
+        const rr = (0, import_calc.calculate)(gen, atkP, toPokemon({ ...defSpec, boosts: boostsWith(defSpec.boosts, dStart) }), move, field);
+        dist = damageDist(rr.damage);
+      } else {
+        let acc = /* @__PURE__ */ new Map([[0, 1]]);
+        for (let k = 0; k < hitsPerUse; k++) {
+          const dk = { ...dStart };
+          for (const key in defPerHit) dk[key] = (dk[key] || 0) + defPerHit[key] * k;
+          const rr = (0, import_calc.calculate)(gen, atkP, toPokemon({ ...defSpec, boosts: boostsWith(defSpec.boosts, dk) }), oneHitMove, field);
+          const hd = damageDist(rr.damage);
+          if (!hd) {
+            acc = null;
+            break;
+          }
+          acc = convolveDist(acc, hd);
+        }
+        dist = acc;
+      }
+      if (!dist) return null;
+      dists.push(dist);
+    }
+  } catch (e) {
+    return null;
+  }
+  const c1 = koChanceDyn(dists, hp, eotDamage, toxicCounter, maxHP, berry, 1);
+  if (c1 > 0) {
+    if (c1 === 1) return "guaranteed OHKO";
+    return `${roundChance(c1)}% chance to OHKO${after}`;
+  }
+  for (let n = 2; n <= 4; n++) {
+    const c = koChanceDyn(dists, hp, eotDamage, toxicCounter, maxHP, berry, n);
+    if (c > 0) {
+      if (c === 1) return `guaranteed ${n}HKO${after}`;
+      return `${roundChance(c)}% chance to ${n}HKO${after}`;
+    }
+  }
+  const distMin = dists.map((d) => Math.min(...d.keys()));
+  const distMax = dists.map((d) => Math.max(...d.keys()));
+  const predictDyn = (arr, n) => {
+    let h = hp, b = berry;
+    for (let k = 0; k < n; k++) {
+      h -= arr[Math.min(k, arr.length - 1)];
+      if (h <= 0) return true;
+      if (b > 0 && h <= maxHP / 2) {
+        h += b;
+        b = 0;
+      }
+      if (k < n - 1) {
+        const td = toxicCounter > 0 ? Math.floor((toxicCounter + k) * maxHP / 16) : 0;
+        h += eotDamage - td;
+        if (h <= 0) return true;
+      }
+    }
+    return false;
+  };
+  for (let n = 5; n <= 9; n++) {
+    if (predictDyn(distMin, n)) return `guaranteed ${n}HKO${after}`;
+    if (predictDyn(distMax, n)) return `possible ${n}HKO${after}`;
+  }
+  const fb = fallbackKoText(attacker, defender, move, field, distMax[distMax.length - 1], ingrain, aquaring);
+  const fm = fb && fb.match(/possible (\d+)HKO/);
+  return fm && +fm[1] > 9 ? fb : "";
+}
+function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ, koCtx) {
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
@@ -26702,12 +26878,16 @@ function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSi
           const defMaxHP = defenders[j].maxHP();
           let koText = r.kochance().text;
           let descText = r.desc();
-          const customKo = recoveryKoText(attackers[i], defenders[j], moveObj, useField, r, koCtx, j);
-          if (customKo) {
+          const customKo = recoveryKoText(attackers[i], defenders[j], moveObj, useField, r, koCtx, j, atkSpecs[i], defSpecs[j]);
+          if (customKo !== null) {
             koText = customKo;
-            if (koText && descText.endsWith(r.kochance().text)) descText = descText.slice(0, descText.length - r.kochance().text.length) + customKo;
+            if (customKo) {
+              const libKo = r.kochance().text;
+              if (libKo && descText.endsWith(libKo)) descText = descText.slice(0, descText.length - libKo.length) + customKo;
+              else if (!libKo) descText = descText + " -- " + customKo;
+            }
           }
-          if (!koText && range[1] > 0) {
+          if (!koText && customKo === null && range[1] > 0) {
             const fb = fallbackKoText(
               attackers[i],
               defenders[j],
@@ -26779,10 +26959,10 @@ function calcMatchup(state, names) {
     const allAb = [...fa.mine || [], ...fa.opps || []];
     const gas = allAb.includes("Neutralizing Gas");
     const unnerve = !gas && atkAb.some((a) => a === "Unnerve" || a === "As One (Glastrier)" || a === "As One (Spectrier)");
-    return { unnerve, defIngrain: (defSpecs || []).map((s) => !!s.ingrain), defAquaRing: (defSpecs || []).map((s) => !!s.aquaring) };
+    return { unnerve, defIngrain: (defSpecs || []).map((s) => !!s.ingrain), defAquaRing: (defSpecs || []).map((s) => !!s.aquaring), defOctolock: (defSpecs || []).map((s) => !!s.octolock) };
   };
-  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine, state.moveZ && state.moveZ.mine, koCtxFor("mine", "opps", state.opps));
-  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps, state.moveZ && state.moveZ.opps, koCtxFor("opps", "mine", state.mine));
+  out.results = calcDirection(mine, opps, state.mine, state.opps, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine, state.moveZ && state.moveZ.mine, koCtxFor("mine", "opps", state.opps));
+  out.oppResults = calcDirection(opps, mine, state.opps, state.mine, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps, state.moveZ && state.moveZ.opps, koCtxFor("opps", "mine", state.mine));
   out.speeds.mine = mine.map((p) => boostedSpe(p, state.field.tailwindMine));
   out.speeds.opps = opps.map((p) => boostedSpe(p, state.field.tailwindOpp));
   out.stats = {
