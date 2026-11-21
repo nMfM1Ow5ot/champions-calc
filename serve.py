@@ -617,6 +617,7 @@ def _upload_logs_once_locked():
                 index = {"files": []}
         known = {e.get("name"): e.get("sha256") for e in index.get("files", [])}
         changed_index = False
+        sent_battle = 0
         for n, data, h in pending:
             if known.get(n) == h:
                 state[n] = h
@@ -635,6 +636,8 @@ def _upload_logs_once_locked():
             known[n] = h
             state[n] = h
             changed_index = True
+            if _battle_key(n) is not None:
+                sent_battle += 1
             print(f"[log] 試合ログを送信しました: {n}", flush=True)
         if prune_due or changed_index:
             if _prune_debug_entries(index, token):
@@ -648,11 +651,47 @@ def _upload_logs_once_locked():
         with open(LOG_STATE_PATH, "w") as f:
             json.dump(state, f)
         _log_last_error = ""
+        if sent_battle:
+            _report_upload_completion(state)
     except Exception as e:
         msg = f"[log] 試合ログの送信に失敗しました (次回再試行します): {e}"
         if msg != _log_last_error:
             print(msg, flush=True)
             _log_last_error = msg
+
+
+def _report_upload_completion(state):
+    # 送信完了の表示 (2026-11-21 のユーザー指示)。このサイクルで試合の
+    # ファイルを実際に送信した後にだけ呼ばれる。残っている未送信
+    # ファイルを数え、全部送れていれば完了を表示し、備考待ちだけが
+    # 残っていればその旨を表示する (「全部終わった」と誤解させない)。
+    # 備考待ち以外の未送信が残っている場合は何も出さない
+    try:
+        names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
+    except OSError:
+        return
+    held = set()
+    other = 0
+    for n in names:
+        try:
+            data = open(os.path.join(LOG_DIR, n), "rb").read()
+        except OSError:
+            continue
+        if state.get(n) == hashlib.sha256(data).hexdigest():
+            continue
+        key = _battle_key(n)
+        if (key is not None and not n.endswith("_note.txt")
+                and not _note_exists_any(key) and _note_gate_applies(key)):
+            held.add(_gate_key(key))
+        else:
+            other += 1
+    if other:
+        return
+    if held:
+        print(f"[log] 送信できる分は完了しました "
+              f"(備考の入力待ちが {len(held)} 件あります)", flush=True)
+    else:
+        print("[log] 送信が完了しました", flush=True)
 
 
 def check_log_token():
