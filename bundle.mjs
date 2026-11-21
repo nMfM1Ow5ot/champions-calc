@@ -27459,12 +27459,14 @@ var labelSpecies = (label) => {
 function createEstimator(deps) {
   const effSpecies = deps.effSpecies;
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
+  let VGC_SETS = null;
   function syncData() {
     const d = deps.getData() || {};
     POKEDB_PARSED = d.POKEDB_PARSED ?? null;
     USAGE_SETS = d.USAGE_SETS ?? null;
     META_SETS = d.META_SETS ?? null;
     META_SETS_LOADED = !!d.META_SETS_LOADED;
+    VGC_SETS = d.VGC_SETS ?? null;
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
@@ -27986,11 +27988,14 @@ function createEstimator(deps) {
     return entry.species + "-" + entry.forme;
   }
   function bayesCorpusCandidates(species, table, fallback) {
-    if (!META_SETS || !Array.isArray(META_SETS.sets)) return [];
+    const corpora = [];
+    if (META_SETS && Array.isArray(META_SETS.sets)) corpora.push(...META_SETS.sets);
+    if (VGC_SETS && Array.isArray(VGC_SETS.sets)) corpora.push(...VGC_SETS.sets);
+    if (!corpora.length) return [];
     const sd = gen.species.get(idOf(species));
     const base = sd && sd.baseSpecies || species;
     const out = [];
-    for (const e of META_SETS.sets) {
+    for (const e of corpora) {
       if (!e || !e.species) continue;
       const full = metaFormeFullName(e);
       const isMega = full.includes("-Mega");
@@ -28748,7 +28753,7 @@ function createEstimator(deps) {
   };
 }
 
-// bundle_entry.mjs
+// bundle_entry_tmp.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
