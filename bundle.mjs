@@ -26277,7 +26277,9 @@ function toPokemon(spec) {
     // abilityOn は他の特性にも効くフラグのため、かるわざ以外では渡さない
     abilityOn: ability === "Unburden" && spec.unburden ? true : void 0,
     // テラスタル中のみテラスタイプを渡す (エンジンが STAB・タイプ変化を処理する)
-    teraType: spec.terastallized && spec.teraType ? spec.teraType : void 0
+    teraType: spec.terastallized && spec.teraType ? spec.teraType : void 0,
+    // ダイマックス中は HP が倍化する (エンジンが maxHP・現在 HP に反映する)
+    isDynamaxed: spec.dynamax ? true : void 0
   });
   return p;
 }
@@ -26373,7 +26375,7 @@ function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSi
         try {
           const r = (0, import_calc.calculate)(gen, attackers[i], defenders[j], moveObj, useField);
           const range = r.range();
-          const defMaxHP = defenders[j].stats.hp;
+          const defMaxHP = defenders[j].maxHP();
           row.vs.push({
             min: range[0],
             max: range[1],
@@ -26437,7 +26439,7 @@ function calcMatchup(state, names) {
 function withCurHP(spec) {
   if (spec.curHPPercent == null || spec.curHPPercent >= 100) return { ...spec, curHP: void 0 };
   const p = toPokemon({ ...spec, curHP: void 0 });
-  return { ...spec, curHP: Math.max(1, Math.floor(p.stats.hp * spec.curHPPercent / 100)) };
+  return { ...spec, curHP: Math.max(1, Math.floor(p.maxHP() * spec.curHPPercent / 100)) };
 }
 var _moveSpecCache = {};
 function moveSpecInfo(name) {
@@ -26746,13 +26748,64 @@ var Z_STATUS = {
 var Z_EXCLUSIVE_FX = {
   "Extreme Evoboost": { b: { atk: 2, def: 2, spa: 2, spd: 2, spe: 2 } }
 };
+var GMAX_MOVES = {
+  "Butterfree": { name: "G-Max Befuddle", type: "Bug" },
+  "Blastoise": { name: "G-Max Cannonade", type: "Water" },
+  "Centiskorch": { name: "G-Max Centiferno", type: "Fire" },
+  "Machamp": { name: "G-Max Chi Strike", type: "Fighting" },
+  "Eevee": { name: "G-Max Cuddle", type: "Normal" },
+  "Duraludon": { name: "G-Max Depletion", type: "Dragon" },
+  "Rillaboom": { name: "G-Max Drum Solo", type: "Grass" },
+  "Alcremie": { name: "G-Max Finale", type: "Fairy" },
+  "Cinderace": { name: "G-Max Fireball", type: "Fire" },
+  "Kingler": { name: "G-Max Foam Burst", type: "Water" },
+  "Meowth": { name: "G-Max Gold Rush", type: "Normal" },
+  "Orbeetle": { name: "G-Max Gravitas", type: "Psychic" },
+  "Inteleon": { name: "G-Max Hydrosnipe", type: "Water" },
+  "Garbodor": { name: "G-Max Malodor", type: "Poison" },
+  "Melmetal": { name: "G-Max Meltdown", type: "Steel" },
+  "Urshifu": { name: "G-Max One Blow", type: "Dark" },
+  "Urshifu-Rapid-Strike": { name: "G-Max Rapid Flow", type: "Water" },
+  "Snorlax": { name: "G-Max Replenish", type: "Normal" },
+  "Lapras": { name: "G-Max Resonance", type: "Ice" },
+  "Sandaconda": { name: "G-Max Sandblast", type: "Ground" },
+  "Hatterene": { name: "G-Max Smite", type: "Fairy" },
+  "Grimmsnarl": { name: "G-Max Snooze", type: "Dark" },
+  "Copperajah": { name: "G-Max Steelsurge", type: "Steel" },
+  "Drednaw": { name: "G-Max Stonesurge", type: "Water" },
+  "Toxtricity": { name: "G-Max Stun Shock", type: "Electric" },
+  "Appletun": { name: "G-Max Sweetness", type: "Grass" },
+  "Flapple": { name: "G-Max Tartness", type: "Grass" },
+  "Gengar": { name: "G-Max Terror", type: "Ghost" },
+  "Venusaur": { name: "G-Max Vine Lash", type: "Grass" },
+  "Coalossal": { name: "G-Max Volcalith", type: "Rock" },
+  "Pikachu": { name: "G-Max Volt Crash", type: "Electric" },
+  "Charizard": { name: "G-Max Wildfire", type: "Fire" },
+  "Corviknight": { name: "G-Max Wind Rage", type: "Flying" }
+};
+function gmaxMoveFor(species, moveType) {
+  if (!species || !moveType) return null;
+  let g = GMAX_MOVES[species];
+  if (!g) {
+    const sd = gen.species.get(String(species).toLowerCase().replace(/[^a-z0-9]/g, ""));
+    if (sd && sd.baseSpecies && sd.baseSpecies !== species) g = GMAX_MOVES[sd.baseSpecies];
+  }
+  return g && g.type === moveType ? g.name : null;
+}
 function buildMove(moveName, specValue, crit, zMode, atkSpec) {
+  const effSp = atkSpec ? atkSpec.mega && atkSpec.megaSpecies ? atkSpec.megaSpecies : atkSpec.species : null;
   if (zMode) {
-    const effSp = atkSpec ? atkSpec.mega && atkSpec.megaSpecies ? atkSpec.megaSpecies : atkSpec.species : null;
     const excl = atkSpec ? exclusiveZMove(effSp, atkSpec.itemLost ? "" : atkSpec.item, moveName) : null;
     const zObj = excl ? new import_calc.Move(gen, excl) : new import_calc.Move(gen, moveName, { useZ: true });
     if (crit) zObj.isCrit = true;
     return zObj;
+  }
+  if (atkSpec && atkSpec.dynamax) {
+    const raw = gen.moves.get(String(moveName).toLowerCase().replace(/[^a-z0-9]/g, ""));
+    const gm = raw && raw.category !== "Status" ? gmaxMoveFor(effSp, raw.type) : null;
+    const maxObj = new import_calc.Move(gen, moveName, gm ? { useMax: true, overrideMove: gm } : { useMax: true });
+    if (crit) maxObj.isCrit = true;
+    return maxObj;
   }
   const info = moveSpecInfo(moveName);
   let moveObj = null;
@@ -27921,6 +27974,7 @@ function createEstimator(deps) {
 var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
+  GMAX_MOVES,
   export_Generations as Generations,
   NATURES,
   STAT_KEYS,
@@ -27935,6 +27989,7 @@ export {
   deriveBuild,
   exclusiveZMove,
   gen,
+  gmaxMoveFor,
   labelSide,
   labelSpecies,
   moveData,
