@@ -129,7 +129,8 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .typechip{font-size:.8rem; font-weight:700; color:#fff; border-radius:.4rem; padding:.15rem .5rem; text-shadow:0 0 2px rgba(0,0,0,.45); white-space:nowrap}
 .typechip.tera{box-shadow:0 0 0 2px #fff inset, 0 0 6px rgba(255,255,255,.55)}
 .terarow{display:flex; align-items:center; gap:.35rem; margin-top:.35rem}
-.terarow .sdd{min-width:9.5rem}
+.terarow .sdd{width:10.5rem; flex:none}
+.terarow .sdd.teraoff{visibility:hidden; pointer-events:none}
 .terarow .tgl[data-tera]{width:6rem; flex:none; text-align:center}
 .secondline{display:flex; align-items:center; gap:.8rem; margin-top:.5rem}
 .hpbar{width:10rem; height:.4rem; border-radius:1.5rem; background:rgba(255,255,255,.15); overflow:hidden; flex:none}
@@ -1210,7 +1211,7 @@ function pokeInfo(side) {
     });
     nameHTML = ddHTML('species:mine');
   }
-  if (spec.terastallized) {
+  {
     regDD(`tera:${side}`, {
       options: TERA_TYPES.map(t => ({ v: t, l: biLabel(TYPE_JA[t] || t, t) })),
       value: spec.teraType || (sd && sd.types && sd.types[0]) || 'Normal',
@@ -1218,11 +1219,13 @@ function pokeInfo(side) {
     });
   }
   const hp = Math.max(0, Math.min(100, Math.round(spec.curHPPercent ?? 100)));
+  // テラスタイプのプルダウンはオフ時も (不可視で) 常に描画し、オン/オフで幅と高さが変わらないようにする
+  const teraDDHtml = ddHTML(`tera:${side}`).replace('class="sdd', spec.terastallized ? 'class="sdd' : 'class="sdd teraoff');
   return `<div class="pokeinfo">
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
-      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button></div>
-      <div class="terarow"><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${spec.terastallized ? ddHTML(`tera:${side}`) : ''}</div>
+      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span></div>
+      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}</div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
         <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
