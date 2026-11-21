@@ -304,7 +304,41 @@ def _is_upload_target(name):
         return True
     if name.endswith("_note.txt"):
         return True
+    if name.endswith("_inference.json"):
+        # 型推定エンジンの推論過程ログ (POST /inference_log で保存)。
+        # その試合のファイル一式の一部として、備考ゲート付きで
+        # 試合ログと一緒に送る
+        return True
     return "_debug" in name and (name.endswith(".jpg") or name.endswith(".json"))
+
+
+def _save_inference_log(body):
+    """推論過程ログ (UI からの POST /inference_log) を保存する。
+
+    ボディは {kind, version, battle, entries} の JSON で、battle は
+    試合キー (battle_ を除いた日時部分、_salvage 付きも可)。
+    検証できないものは ValueError を送出する。保存先は
+    logs/battle_<キー>_inference.json で、同じ試合への再送は
+    上書きする (UI はその試合の蓄積全件を送る方式のため)。
+    """
+    try:
+        data = json.loads(body)
+    except Exception:
+        raise ValueError("inference log is not JSON")
+    if not isinstance(data, dict):
+        raise ValueError("inference log is not an object")
+    battle = data.get("battle")
+    if not isinstance(battle, str) or not _BATTLE_KEY_RE.match(battle):
+        raise ValueError("inference log has no valid battle key")
+    if not isinstance(data.get("entries"), list):
+        raise ValueError("inference log has no entries list")
+    os.makedirs(LOG_DIR, exist_ok=True)
+    name = f"battle_{battle}_inference.json"
+    with open(os.path.join(LOG_DIR, name), "wb") as f:
+        f.write(body)
+    print(f"[log] 推論過程ログを受け取りました: {name} "
+          f"({len(data['entries'])} 件)", flush=True)
+    return name
 
 
 # ---- 備考ゲート ----
@@ -372,6 +406,8 @@ def _battle_key(name):
         return debug_stripped if _BATTLE_KEY_RE.match(debug_stripped) else None
     if rest.endswith("_note.txt"):
         rest = rest[: -len("_note.txt")]
+    elif rest.endswith("_inference.json"):
+        rest = rest[: -len("_inference.json")]
     elif rest.endswith(".log"):
         rest = rest[: -len(".log")]
         if rest.endswith("_protocol"):
@@ -773,6 +809,39 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             global _preview_test_session
             _preview_test_session = True
             payload = json.dumps({"ok": True}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if path == "/inference_log":
+            # 型推定エンジンの推論過程ログの受け口 (UI が対戦分を
+            # 蓄積して送る)。その試合のファイル一式の一部として
+            # logs/battle_<試合キー>_inference.json に保存し、備考
+            # ゲート付きで試合ログと一緒に送る。UI は 2xx 以外を
+            # 失敗として扱うため、失敗時は必ず非 2xx を返す
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            if length <= 0:
+                self.send_error(400)
+                return
+            if length > 10 * 1024 * 1024:
+                self.send_error(413)
+                return
+            body = self.rfile.read(length)
+            try:
+                name = _save_inference_log(body)
+            except ValueError:
+                self.send_error(400)
+                return
+            except Exception as e:
+                _record_crash("inference_log_save", e)
+                self.send_error(500)
+                return
+            payload = json.dumps({"ok": True, "file": name}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
