@@ -3065,6 +3065,23 @@ func moveNameLoose(_ cand: String) -> String? {
     return moveNameOrig[bk]
 }
 
+// メガシンカ関連の文 (反応・完了) の側判定。明示の主語 (相手の/味方の)
+// が最優先で、無い場合は保留中の反応記録と場の実態から決める。完了文や
+// 反応文はログ画面などから再読されることがあり、再読の断片に「相手の」が
+// 含まれないと、従来の「無ければ自分側」の判定では相手のメガシンカが
+// 自分の枠に誤帰属する (実例: 2026-11-21 vs Toshiro 戦、相手の
+// ムクホークの完了文の再読で p1a に幻のメガシンカが出た)
+func megaTextSide(_ t: String, baseEn: String) -> String {
+    if t.contains("相手の") || t.contains("あいての") { return "p2" }
+    if t.contains("味方の") || t.contains("じぶんの") { return "p1" }
+    let pend = ["p1", "p2"].filter { pendingMegaSpecies[$0] == baseEn }
+    if pend.count == 1 { return pend[0] }
+    let inMine = lastSlots["mineA"]?.speciesEn == baseEn || lastSlots["mineB"]?.speciesEn == baseEn
+    let inOpp = lastSlots["oppA"]?.speciesEn == baseEn || lastSlots["oppB"]?.speciesEn == baseEn
+    if inMine != inOpp { return inMine ? "p1" : "p2" }
+    return "p1"
+}
+
 func translateBattleMessage(_ text: String) -> Bool {
     let before = battleLog.count
     // 急所の文はダメージ確定 (行の出力) より前に表示されるため、
@@ -3192,7 +3209,11 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 2026-11-20 vs leslie 戦。崩れた文は |-message| に漏れていた)
     if (t.contains("反応した") || t.contains("受応した")) && t.contains("リングが") {
         if let sp = findSpeciesJa(in: t) {
-            let side = (t.contains("相手の") || t.contains("あいての")) ? "p2" : "p1"
+            let side = megaTextSide(t, baseEn: sp.en)
+            // 完了済みのメガの反応文が再読された場合は、持ち物行や保留を
+            // 出し直さない (実例: 2026-11-21 vs Toshiro 戦、終盤に
+            // カメックスのストーン反応が再読され |-item| が漏れた)
+            if let ms = monStates["\(side):\(sp.en)"]?.megaSpecies, !ms.isEmpty { return true }
             if monStates["\(side):\(sp.en)"] == nil { monStates["\(side):\(sp.en)"] = MonState() }
             // ストーンの切り出しは生テキストで行う (正規化すると助詞の「と」と
             // 「〜ナイト」の「ト」が区別できなくなるため)
@@ -3213,9 +3234,9 @@ func translateBattleMessage(_ text: String) -> Bool {
         let megaEntry = speciesDict.filter { $0.ja.hasPrefix("メガ") && nt.contains(normalize($0.ja)) }
             .max(by: { $0.ja.count < $1.ja.count })
         if let me = megaEntry {
-            let side = (t.contains("相手の") || t.contains("あいての")) ? "p2" : "p1"
             var baseEn = me.en
             if let r = baseEn.range(of: "-Mega") { baseEn = String(baseEn[..<r.lowerBound]) }
+            let side = megaTextSide(t, baseEn: baseEn)
             completeMega(side: side, baseEn: baseEn, megaEn: me.en)
         }
         return true
@@ -4687,7 +4708,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261120_1942"
+let readerBuild = "20261121_1313"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
