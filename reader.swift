@@ -1220,7 +1220,7 @@ func resetLogState() {
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastCritAt = [:]; actionSeq = 0
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
     battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
-    debugShotsThisBattle = 0; debugSeenKeys = []; debugFrameRing = []
+    debugShotsThisBattle = 0; debugSeenEntries = []; debugFrameRing = []
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
@@ -1314,19 +1314,29 @@ func archiveCurrentBattle(final: Bool) {
 // ログと同じ暗号化の便で logs_enc/ へ送り、ログ分析側がログ2点と突き合わ
 // せる。ファイル名は battle_<試合ID>_debugNN.jpg/.json で、ログファイルと
 // battle_<日時> の接頭辞を共有する。1 試合あたり上限 10 件、同一文・同一
-// 箇所の繰り返しは類似度で 1 件にまとめる。Mac ローカルの保持は 14 日。
+// 箇所の繰り返しは 1 件にまとめる (類似文の集約は再読対策として直近
+// 30 秒のみ)。Mac ローカルの保持は 14 日。
 let debugMaxPerBattle = 10
 let debugRingSize = 12
 let debugRetentionDays = 14
 var debugShotsThisBattle = 0
-var debugSeenKeys: [String] = []
+var debugSeenEntries: [(key: String, at: Date)] = []
 var debugFrameRing: [(at: Date, img: CGImage)] = []
 
 // 撮影可否の判定 (純粋関数: ハーネスの T84 で検証する)。
-// 上限到達、または既出キーと類似 (OCR ゆれの再読) なら撮らない
-func debugShouldCapture(seen: [String], count: Int, key: String, cap: Int) -> Bool {
+// 上限到達なら撮らない。完全一致のキーは試合中ずっと 1 件にまとめる。
+// 類似キーの集約は「直近 30 秒以内」だけに限る: OCR の再読は同じ文が
+// 表示されている数秒の間に起きるが、主語などの定型部分を共有する
+// 別イベントの文 (例: 身代わりの出現と身代わりへの被弾) は類似度が
+// 高くても別の出来事なので、時間を空けて現れたら撮り直す
+// (2026-11-21 の battle_20261121_132153 で実際に撮りこぼした)
+func debugShouldCapture(seen: [(key: String, at: Date)], count: Int, key: String, cap: Int, now: Date) -> Bool {
     if count >= cap { return false }
-    return !seen.contains { textSimilarity($0, key) >= 0.6 }
+    for e in seen {
+        if e.key == key { return false }
+        if now.timeIntervalSince(e.at) <= 30 && textSimilarity(e.key, key) >= 0.6 { return false }
+    }
+    return true
 }
 
 func debugStateExcerpt() -> [String: Any] {
@@ -1361,8 +1371,8 @@ func debugUpdateRing(_ image: CGImage) {
 }
 
 func debugCapture(kind: String, key: String, rawText: String, detail: [String: Any], image: CGImage? = nil) {
-    guard debugShouldCapture(seen: debugSeenKeys, count: debugShotsThisBattle, key: key, cap: debugMaxPerBattle) else { return }
-    debugSeenKeys.append(key)
+    guard debugShouldCapture(seen: debugSeenEntries, count: debugShotsThisBattle, key: key, cap: debugMaxPerBattle, now: Date()) else { return }
+    debugSeenEntries.append((key: key, at: Date()))
     debugShotsThisBattle += 1
     let seq = debugShotsThisBattle
     let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
@@ -1712,7 +1722,29 @@ func flushPendingDamage(force: Bool = false) {
 
 // プレートの差分をログ行に変換する
 func processPlates(_ hits: [String: SlotState]) {
-    if !logStarted { startBattleLog() }
+    if !logStarted {
+        // 選出画面を経ずにプレートから対戦が始まった場合は、開始処理を
+        // 取りこぼしている (対戦開始時に画面がキーボード等で覆われていた、
+        // アプリが裏画面だった等。2026-11-21 のユーザー報告)。相手の先発は
+        // プレートで確定している種族なので、ヘッダーの |poke| に載せて
+        // から開始し、復旧した事実をターミナルとデバッグ情報に残す
+        let recovered = !previewTeamWritten
+        if recovered {
+            for name in ["oppA", "oppB"] {
+                if let s = hits[name], !oppTeamSeen.contains(s.speciesEn) {
+                    oppTeamSeen.append(s.speciesEn)
+                }
+            }
+        }
+        startBattleLog()
+        if recovered {
+            let leads = ["oppA", "oppB"].compactMap { hits[$0]?.speciesEn }
+            print("[log] 対戦開始を取りこぼしたため、プレートから開始状態を復旧しました (相手先発: \(leads.joined(separator: ", ")))")
+            fflush(stdout)
+            debugCapture(kind: "late_start", key: "late_start", rawText: "",
+                         detail: ["oppLeads": leads, "note": "preview not captured (screen covered or backgrounded)"])
+        }
+    }
     // 保留中のランク変化行: 交代行が来なくても 30 秒経ったら出す
     flushHeldBoostsTimeout()
     // 遅延中のひんし行: 文が来なくても 1.5 秒経ったら出す
@@ -4708,7 +4740,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1313"
+let readerBuild = "20261121_1334"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
