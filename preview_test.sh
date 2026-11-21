@@ -29,9 +29,9 @@ if not resp.get("ok"):
     print("同定を実行できませんでした:", resp.get("error", "不明なエラー"))
     sys.exit(1)
 
-# 保存された JSON を特定する (file は .json / .jpg / 拡張子なしの
-# いずれでも受けられるようにする)
-base = resp.get("file") or ""
+# 保存された JSON を特定する (file / jpg / json のいずれの返し方
+# でも、.json / .jpg / 拡張子なしのいずれでも受けられるようにする)
+base = resp.get("file") or resp.get("json") or resp.get("jpg") or ""
 stem = base
 for ext in (".json", ".jpg"):
     if stem.endswith(ext):
