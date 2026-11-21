@@ -442,6 +442,94 @@ func writeState() {
     if json == lastWritten { return }
     lastWritten = json
     try? json.write(to: outURL, atomically: true, encoding: .utf8)
+    noteStateWrite(shape: "battle", json: json, eventsCount: battleEvents.count)
+}
+
+// MARK: - state.json スナップショット (証拠保全)
+// battle_20261122_051707 の切り分けで、対戦中の state.json の実物が
+// 残っておらず、UI がどの書き出しを読んだか断定できなかった。
+// 形の切り替わり点の書き出しだけを試合ごとに蓄積し、次回以降の
+// 切り分けに使う (serve.py が推論過程ログと同じ扱いで同梱する)
+var stateSnapRecords: [[String: Any]] = []  // 対戦中 (未確定) の試合分
+var stateSnapLeadIn: [[String: Any]] = []   // 試合の合間 (開始前・勝敗確定後) の分。次の試合の開始時に引き継ぐ
+var stateSnapKey = ""                       // stateSnapRecords の書き出し先の試合キー
+var stateSnapLastShape = ""                 // 直前の書き出しの形 ("battle" / "preview" / "reset")
+var stateSnapLastEvents = -1                // 直前の書き出しが載せた events の件数
+var stateSnapFirstBattlePending = true      // その試合の最初の対戦形をまだ記録していない
+
+// events の JSON 断片列をオブジェクト列として返す (選出形の書き出しに
+// 試合 ID と events を併記するために使う)
+func battleEventsObjects() -> [Any] {
+    battleEvents.compactMap { frag in
+        guard let d = frag.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: d)
+    }
+}
+
+// state.json の書き出しのたびに呼び、残すべき切り替わり点であれば
+// その内容をスナップショットとして蓄積する。残すのは (a) 選出形・
+// リセット形の書き出し、(b) それに続く最初の対戦形、(c) events の
+// 件数が前回より減った書き出し、(d) その試合の最初の対戦形
+func noteStateWrite(shape: String, json: String, eventsCount: Int) {
+    var take = shape != "battle"
+    if shape == "battle" && !stateSnapLastShape.isEmpty && stateSnapLastShape != "battle" { take = true }
+    if shape == "battle" && stateSnapFirstBattlePending { take = true }
+    if stateSnapLastEvents >= 0 && eventsCount < stateSnapLastEvents { take = true }
+    stateSnapLastShape = shape
+    stateSnapLastEvents = eventsCount
+    if shape == "battle" { stateSnapFirstBattlePending = false }
+    if !take { return }
+    let f = ISO8601DateFormatter()
+    f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    f.formatOptions = [.withInternetDateTime]
+    var rec: [String: Any] = ["at": f.string(from: Date()), "shape": shape]
+    if let d = json.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: d) {
+        rec["state"] = obj
+    } else {
+        rec["state"] = json
+    }
+    if battleArchiveId.isEmpty || winLogged {
+        stateSnapLeadIn.append(rec)
+    } else {
+        stateSnapRecords.append(rec)
+        flushStateSnapshots()
+    }
+}
+
+// 蓄積したスナップショットを logs/battle_<試合キー>_states.json へ
+// 書き出す (その試合の蓄積全件を毎回上書きする)
+func flushStateSnapshots() {
+    let key = battleArchiveId
+    if key.isEmpty { return }
+    if stateSnapKey != key {
+        stateSnapKey = key
+        // reader 再起動で対戦中の試合を引き継いだ場合は、既存の
+        // 蓄積を読み込んでから続ける
+        if stateSnapRecords.isEmpty {
+            let url = scriptDir.appendingPathComponent("logs/battle_\(key)_states.json")
+            if let data = try? Data(contentsOf: url),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let arr = obj["snapshots"] as? [[String: Any]] {
+                stateSnapRecords = arr
+            }
+        }
+    }
+    if stateSnapRecords.isEmpty { return }
+    let payload: [String: Any] = ["version": 1, "battle": key, "snapshots": stateSnapRecords]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else { return }
+    let dir = scriptDir.appendingPathComponent("logs")
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
+    try? data.write(to: dir.appendingPathComponent("battle_\(key)_states.json"))
+}
+
+// 新しい試合の開始時に呼ぶ: 合間に蓄積した選出形の記録をその試合の
+// 冒頭の記録として引き継ぎ、最初の対戦形の記録を再武装する
+func adoptStateSnapshotsForBattle() {
+    stateSnapRecords = stateSnapLeadIn
+    stateSnapLeadIn = []
+    stateSnapKey = ""
+    stateSnapFirstBattlePending = true
+    flushStateSnapshots()
 }
 
 // MARK: - バトルログ (Showdown プロトコル形式)
@@ -1896,6 +1984,7 @@ func startBattleLog() {
     }
     resetLogState()
     battleArchiveId = battleStamp()
+    adoptStateSnapshotsForBattle()
     battleArchived = false
     lastArchiveSnapshotCount = -1
     battleLog = []
@@ -6980,10 +7069,21 @@ func runOnce(image: CGImage) {
                 if !previewTeamWritten { obj["oppReset"] = true }
                 obj["oppPreview"] = true
                 obj["oppTeam"] = previewBestTeam.map { $0 as Any? ?? NSNull() }
+                // 対戦中に割り込んだ書き出しでは、現在の試合 ID と
+                // events の蓄積全件を併せる。対戦中に観測されうる
+                // state.json が常に完全なイベント列を持つようにする
+                // ための手当てで、同定や oppReset の意味付け自体には
+                // 触れない (battle_20261122_051707 の切り分けを受けて)
+                let snapInBattle = logStarted && !winLogged && !battleArchiveId.isEmpty
+                if snapInBattle {
+                    obj["battle"] = battleArchiveId
+                    obj["events"] = battleEventsObjects()
+                }
                 if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
                    let json = String(data: data, encoding: .utf8), json != lastWritten {
                     lastWritten = json
                     try? json.write(to: outURL, atomically: true, encoding: .utf8)
+                    noteStateWrite(shape: "preview", json: json, eventsCount: snapInBattle ? battleEvents.count : 0)
                 }
                 previewTeamWritten = true
                 notePreStartEvent("preview_identified")
@@ -7007,10 +7107,22 @@ func runOnce(image: CGImage) {
                     oppUnconfirmed = []
                     resetLogState()
                     if hadState {
-                        let json = "{\"mine\": [], \"opps\": [], \"oppTeam\": [], \"oppReset\": true, \"field\": {}}"
+                        // 対戦中のリセット書き出しでも、試合 ID と
+                        // events の蓄積全件を併せる (選出形の書き出し
+                        // と同じ手当て)
+                        let snapInBattle = logStarted && !winLogged && !battleArchiveId.isEmpty
+                        var json = "{\"mine\": [], \"opps\": [], \"oppTeam\": [], \"oppReset\": true, \"field\": {}}"
+                        if snapInBattle {
+                            let obj: [String: Any] = ["mine": [Any](), "opps": [Any](), "oppTeam": [Any](), "oppReset": true, "field": [String: Any](), "battle": battleArchiveId, "events": battleEventsObjects()]
+                            if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+                               let s = String(data: data, encoding: .utf8) {
+                                json = s
+                            }
+                        }
                         if json != lastWritten {
                             lastWritten = json
                             try? json.write(to: outURL, atomically: true, encoding: .utf8)
+                            noteStateWrite(shape: "reset", json: json, eventsCount: snapInBattle ? battleEvents.count : 0)
                         }
 
                     }
@@ -7254,7 +7366,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0603"
+let readerBuild = "20261122_0611"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
