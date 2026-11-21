@@ -536,7 +536,7 @@ var lastDamageAt = Date.distantPast
 var lastPendingLabel = ""                         // 確定待ちダメージの枠 (急所はダメージ行より先に表示される)
 var pendingSwitchSpecies: [String: String] = [:]  // プレート名 -> 確定待ちの交代先種族
 var slotLastHitAt: [String: Date] = [:]           // 枠ごとの最終プレートヒット時刻 (plate_stale 監視用)
-var plateStaleOtherHits: [String: Int] = [:]      // その枠が無ヒットの間に他枠がヒットしたフレーム数
+var plateStaleOtherHits: [String: Int] = [:]      // その枠が無ヒットの間に相方枠がヒットしたフレーム数
 var pendingSwitchCount: [String: Int] = [:]       // 同じ種族が連続で見えた回数
 var actionSeq = 0                                  // |move| / |turn| の通し番号 (行動の区切り)
 var lastDamageSeq: [String: Int] = [:]             // プレート名 -> ダメージ行を出した行動番号
@@ -5169,18 +5169,20 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         if pool.count == 1 && !expanded {
             // タイプで 1 種に定まる枠でも、照合スコアが悪ければ確定に
             // しない (誤ったアイコン読みで別種族が一意に定まる事故の
-            // 防止)。スコアが良ければ確定として扱う
+            // 防止)。スコアが良ければ確定として扱う。スコアが悪くても
+            // 全種族展開では上書きしない (小プール保護: 単独プールは
+            // タイプ+性別の消去法の答えとして残す)
             if ranked[0].1 <= pvSoftGateScore {
                 decisive = true
-            } else {
-                let all = rankedAll(f, gender)
-                if let top = all.first, top.1 < ranked[0].1 - pvExpandMargin {
-                    ranked = all; expanded = true
-                }
             }
-        } else if ranked[0].1 > pvSoftGateScore {
+        } else if ranked[0].1 > pvSoftGateScore && pool.count > 2 {
             // 関門の緩和: 候補内の照合が全体的に悪い場合は候補を広げる。
-            // 広げた先の最良が元の最良より明確に良い場合だけ採用する
+            // 広げた先の最良が元の最良より明確に良い場合だけ採用する。
+            // ただしプールが 2 件以下の枠は広げない: 消去法の答えを
+            // 無関係な種族がスコアだけで上書きする事故が続いたため
+            // (実例: 2026-11-21 battle_20261121_161334 枠1 Sneasler が
+            // プール1位から Alcremie に、枠4 Basculegion が単独プール
+            // から Pincurchin に、それぞれ展開で上書きされた)
             let all = rankedAll(f, gender)
             if let top = all.first, top.1 < ranked[0].1 - pvExpandMargin {
                 ranked = all; expanded = true
@@ -5698,6 +5700,27 @@ func runOnce(image: CGImage) {
                         previewLocked[i] = pick
                     }
                 }
+                // マージ時のタイプ拒否: ロック・暫定 1 位の種族が、
+                // 最新の試行で読み取れたタイプと 1 つも重ならない場合、
+                // その種族は最新の読みとは両立しないため、ロックを
+                // 外し暫定 1 位の選出からも外す (最新の試行自身の pick
+                // は対象にしない)。初期試行の誤りがロックで固定され、
+                // 後の正しい読みで覆せない事故の防止 (実例: 2026-11-21
+                // battle_20261121_161334 枠6、Psychic の Espathra が
+                // 最終試行の Grass 読みを押し切った)
+                var vetoed: [Set<String>] = Array(repeating: [], count: r.team.count)
+                for i in r.team.indices {
+                    let lt = r.slots[i].types
+                    guard !lt.isEmpty else { continue }
+                    for sp in previewVotes[i].keys where sp != r.team[i] {
+                        if Set(pvSpeciesTypes[sp] ?? []).isDisjoint(with: Set(lt)) {
+                            vetoed[i].insert(sp)
+                        }
+                    }
+                    if let locked = previewLocked[i], vetoed[i].contains(locked) {
+                        previewLocked[i] = nil
+                    }
+                }
                 for i in r.team.indices {
                     if let locked = previewLocked[i] {
                         previewBestTeam[i] = locked
@@ -5705,7 +5728,7 @@ func runOnce(image: CGImage) {
                         // 暫定 1 位: 票数が多い順、同数なら最良スコアが
                         // 小さい順、それも同点なら種族名順 (フレーム間で
                         // 表示が揺れないよう決定的に選ぶ)
-                        let leader = previewVotes[i].keys.sorted { a, b in
+                        let leader = previewVotes[i].keys.filter { !vetoed[i].contains($0) }.sorted { a, b in
                             let ca = previewVotes[i][a, default: 0], cb = previewVotes[i][b, default: 0]
                             if ca != cb { return ca > cb }
                             let sa = previewVoteScore[i][a] ?? 9, sb = previewVoteScore[i][b] ?? 9
@@ -5851,32 +5874,47 @@ func runOnce(image: CGImage) {
     if logStarted && !winLogged {
         let now = Date()
         let hitSlots = Set(hits.keys)
+        let partnerOf = ["mineA": "mineB", "mineB": "mineA", "oppA": "oppB", "oppB": "oppA"]
         for (slot, info) in lastSlots
         where !info.speciesEn.isEmpty && faintedSlots[slot] == nil {
             if hitSlots.contains(slot) {
                 slotLastHitAt[slot] = now
                 plateStaleOtherHits[slot] = 0
             } else if let last = slotLastHitAt[slot] {
-                if hitSlots.contains(where: { $0 != slot }) {
+                // 他枠ヒットは、同じ側の相方枠のヒットだけを数える。
+                // 相手側のプレートだけが見える場面 (メガシンカ演出等で
+                // 自軍プレートが画面に出ていない) では相方もヒット
+                // しないため、その間の無ヒットは証拠にならない
+                if let partner = partnerOf[slot], hitSlots.contains(partner) {
                     plateStaleOtherHits[slot, default: 0] += 1
                 }
-                if now.timeIntervalSince(last) >= 75,
-                   (plateStaleOtherHits[slot] ?? 0) >= 8 {
+                if now.timeIntervalSince(last) >= 60,
+                   (plateStaleOtherHits[slot] ?? 0) >= 4 {
                     var regionTexts: [String] = []
                     if let p = plates.first(where: { $0.name == slot }) {
                         regionTexts = ocrBoxes(image, x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1).map { $0.text }
                     }
-                    debugCapture(kind: "plate_stale", key: "plate_stale:\(slot)", rawText: "",
-                                 detail: ["slot": slot, "species": info.speciesEn,
-                                          "secondsSinceHit": Int(now.timeIntervalSince(last)),
-                                          "otherHitFrames": plateStaleOtherHits[slot] ?? 0,
-                                          "pendingSpecies": pendingSwitchSpecies[slot] ?? "",
-                                          "pendingCount": pendingSwitchCount[slot] ?? 0,
-                                          "regionTexts": regionTexts,
-                                          "readerBuild": readerBuild],
-                                 image: image)
-                    slotLastHitAt[slot] = now
-                    plateStaleOtherHits[slot] = 0
+                    // 可視性ゲート: 固定領域からテキストが何も返らない
+                    // 場合はプレート自体が画面に出ていない場面なので
+                    // 記録しない (実例: 2026-11-21 battle_20261121_161334
+                    // ターン1、メガシンカ演出中に regionTexts が空の
+                    // まま誤発火した)。プレートが見えているのに読めて
+                    // いない場合だけを証拠にする。キーは枠+種族で、
+                    // 占有種族が変われば再武装する (同試合の誤発火が
+                    // 後続の本物の stale を塞いだ実例も同試合)
+                    if !regionTexts.isEmpty {
+                        debugCapture(kind: "plate_stale", key: "plate_stale:\(slot):\(info.speciesEn)", rawText: "",
+                                     detail: ["slot": slot, "species": info.speciesEn,
+                                              "secondsSinceHit": Int(now.timeIntervalSince(last)),
+                                              "partnerHitFrames": plateStaleOtherHits[slot] ?? 0,
+                                              "pendingSpecies": pendingSwitchSpecies[slot] ?? "",
+                                              "pendingCount": pendingSwitchCount[slot] ?? 0,
+                                              "regionTexts": regionTexts,
+                                              "readerBuild": readerBuild],
+                                     image: image)
+                        slotLastHitAt[slot] = now
+                        plateStaleOtherHits[slot] = 0
+                    }
                 }
             } else {
                 slotLastHitAt[slot] = now
@@ -5980,7 +6018,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1653"
+let readerBuild = "20261121_1658"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
