@@ -1255,11 +1255,24 @@ function playerBar(side) {
 }
 /* ---------- チームプリセット (サイドごとの構成の保存/切替/削除) ---------- */
 const PRESET_STORE_KEY = 'champions-calc-presets-v1';
+// プリセットは自分側・相手側で同一の 1 本のリストとして扱う (相互に
+// 書き換え可能)。保存形式は従来どおり mine/opps の両キーに同じ内容を
+// 入れる (共有先の presets.json の形式もそのまま)。読み込み・保存の
+// たびに名前で union して両キーを一致させる
+function unifyPresetLists(s) {
+  const seen = new Set(); const out = [];
+  for (const e of [...(s.mine || []), ...(s.opps || [])]) {
+    if (e && e.name && !seen.has(e.name)) { seen.add(e.name); out.push(e); }
+  }
+  s.mine = out; s.opps = out;
+  return s;
+}
 function loadPresetStore() {
-  try { const s = JSON.parse(localStorage.getItem(PRESET_STORE_KEY) || 'null'); if (s && Array.isArray(s.mine) && Array.isArray(s.opps)) return s; } catch (e) { /* ignore */ }
+  try { const s = JSON.parse(localStorage.getItem(PRESET_STORE_KEY) || 'null'); if (s && Array.isArray(s.mine) && Array.isArray(s.opps)) return unifyPresetLists(s); } catch (e) { /* ignore */ }
   return { mine: [], opps: [] };
 }
 function savePresetStore(s, fromRemote) {
+  unifyPresetLists(s);
   if (!fromRemote) s.updatedAt = new Date().toISOString();
   try { localStorage.setItem(PRESET_STORE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
   if (!fromRemote) schedulePresetPush();
