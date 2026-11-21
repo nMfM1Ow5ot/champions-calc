@@ -249,11 +249,12 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 <div class="wrap">
   <div class="topbar">
     <h1>チャンピオンズ ダメージ計算</h1>
-    <div class="cam">チーム画面を取り込む
+    <div class="cam" id="camBox">チーム画面を取り込む
       <button data-capture="ability">能力画面を撮影</button>
       <button data-capture="status">ステータス画面を撮影</button><span id="capStatusText"></span>
       <span id="camstat"></span>
     </div>
+    <script>(function(){var h=location.hostname;if(h&&h!=='localhost'&&h!=='127.0.0.1'){var c=document.getElementById('camBox');if(c)c.style.display='none';}})();</script>
     <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="false" title="ライトモードに切り替え">☀️ ライト</button>
   </div>
   <script>(function(){var btn=document.getElementById('themeToggle');if(!btn)return;function render(){var light=document.documentElement.getAttribute('data-theme')==='light';btn.textContent=light?'🌙 ダーク':'☀️ ライト';btn.setAttribute('aria-pressed',light?'true':'false');btn.title=light?'ダークモードに切り替え':'ライトモードに切り替え';}btn.addEventListener('click',function(){var next=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem('champions-calc-theme',next);}catch(e){}render();});render();})();</script>
