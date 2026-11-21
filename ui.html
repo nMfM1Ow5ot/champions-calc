@@ -234,15 +234,6 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 .fieldcalc .fcontrol{flex:1; min-width:0}
 .fieldcalc .fchips{flex:1; display:flex; flex-wrap:wrap; gap:.2rem}
 
-.lognote{max-width:44.8rem; margin:1rem auto 0; width:100%; background:var(--panel); border-radius:.5rem; box-shadow:var(--dd-shadow); padding:.8rem 1rem}
-.lognote-head{font-family:'Work Sans',sans-serif; font-weight:700; font-size:1.05rem}
-.lognote-head span{font-weight:500; color:var(--dim); font-size:.9rem}
-.lognote-desc{font-size:.85rem; color:var(--dim); line-height:1.6; margin:.5rem 0}
-.lognote textarea{width:100%; min-height:4.5rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem}
-.lognote button{font:inherit; font-size:.95rem; background:var(--panel); color:var(--ink); border:none; border-radius:.5rem; padding:.45rem .9rem; cursor:pointer; box-shadow:var(--dd-shadow); margin-top:.5rem}
-.lognote button:hover{background:rgba(33,150,243,.15)}
-.lognote .ok{color:var(--green)} .lognote .ng{color:var(--red)}
-:root[data-theme="light"] .lognote textarea{background:rgba(0,0,0,.05)}
 .jsonbox{margin-top:1.4rem}
 .jsonbox summary{font-family:'Work Sans',sans-serif; font-size:1rem; color:var(--dim); cursor:pointer}
 .jsonbox textarea{width:100%; min-height:6rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem; margin-top:.6rem}
@@ -262,7 +253,6 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
     <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="false" title="ライトモードに切り替え">☀️ ライト</button>
   </div>
   <script>(function(){var btn=document.getElementById('themeToggle');if(!btn)return;function render(){var light=document.documentElement.getAttribute('data-theme')==='light';btn.textContent=light?'🌙 ダーク':'☀️ ライト';btn.setAttribute('aria-pressed',light?'true':'false');btn.title=light?'ダークモードに切り替え':'ライトモードに切り替え';}btn.addEventListener('click',function(){var next=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem('champions-calc-theme',next);}catch(e){}render();});render();})();</script>
-  <section id="logNotePanel"></section>
   <section id="playerMine"></section>
   <section id="fieldbar" class="fieldcalc"></section>
   <section id="playerOpp"></section>
@@ -448,55 +438,6 @@ async function captureTeam(tab) {
     say('撮影成功： ' + (j.message || '取り込みました'), 'ok');
   } catch (e) {
     say('撮影失敗： リーダーに接続できません（run_reader.sh を起動してください）', 'ng');
-  }
-}
-// 試合ログの備考欄: 試合が終わると serve.py がその試合のログ送信を
-// 保留し、ここに備考欄が出る。送信ボタンを押すと備考 (空欄でも可) が
-// serve.py の POST /log-note に渡り、備考ファイルと一緒にログが
-// 送信される。備考はログ分析チャットにそのまま届く。
-// 入力中のテキストが定期更新で消えないよう、送信待ちの試合の組が
-// 変わったときだけ描き直す。
-let logNoteRenderedKeys = '';
-async function refreshLogNotes() {
-  const host = $('logNotePanel');
-  if (!host) return;
-  let list = [];
-  try {
-    const r = await fetch('./log-pending', { cache: 'no-store' });
-    if (!r.ok) return; // 古い serve.py などエンドポイントが無い環境では何もしない
-    const j = await r.json();
-    list = Array.isArray(j.pending) ? j.pending : [];
-  } catch (e) { return; }
-  const keys = list.map(p => p.key).join(',');
-  if (keys === logNoteRenderedKeys) return;
-  logNoteRenderedKeys = keys;
-  host.innerHTML = list.map(p => {
-    const when = p.key.length >= 15 ? `${p.key.slice(4, 6)}/${p.key.slice(6, 8)} ${p.key.slice(9, 11)}:${p.key.slice(11, 13)}` : p.key;
-    const kind = p.kind === 'final' ? '勝敗確定' : '中断';
-    const vs = p.opponent ? ` vs ${esc(p.opponent)}` : '';
-    return `<div class="lognote"><div class="lognote-head">試合ログの備考 <span>${esc(when)}の試合${esc(vs)}（${kind}）</span></div>`
-      + '<p class="lognote-desc">この試合のログは、備考を入力して送信ボタンを押すまで送信されません。気になった場面や直してほしい点、分析への指示を書いてください。空欄のまま送信もできます。備考はログと一緒にログ分析チャットへ届き、内容に応じて champions_calc 全般の修正の手がかりになります。</p>'
-      + `<textarea id="lognote-text-${esc(p.key)}" placeholder="備考（任意）"></textarea>`
-      + `<div><button type="button" data-log-note-submit="${esc(p.key)}">備考と一緒にログを送信</button> <span id="lognote-status-${esc(p.key)}"></span></div></div>`;
-  }).join('');
-}
-async function submitLogNote(key) {
-  const ta = document.getElementById('lognote-text-' + key);
-  const st = document.getElementById('lognote-status-' + key);
-  const say = (msg, cls) => { if (st) { st.textContent = msg; st.className = cls || ''; } };
-  say('送信しています…', '');
-  try {
-    const r = await fetch('./log-note', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, note: ta ? ta.value : '' }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) { say('送信失敗： ' + (j.error || 'serve.py を確認してください'), 'ng'); return; }
-    say('備考を受け付けました。ログを送信します（届くまで最大で約1分ほどかかります）', 'ok');
-    logNoteRenderedKeys = '__submitted__'; // 次回の定期確認で欄を消す
-    setTimeout(refreshLogNotes, 1200);
-  } catch (e) {
-    say('送信失敗： serve.py に接続できません', 'ng');
   }
 }
 let CHAMP = null; // data/champions_dex.json (チャンピオンズ実装済みリスト)
@@ -1365,8 +1306,6 @@ document.addEventListener('click', e => {
   if (icon) { const [side, i] = icon.dataset.icon.split(':'); state.sel[side] = +i; calcAll(); return; }
   const cap = t.closest('[data-capture]');
   if (cap) { captureTeam(cap.dataset.capture); return; }
-  const ln = t.closest('[data-log-note-submit]');
-  if (ln) { submitLogNote(ln.dataset.logNoteSubmit); return; }
   const act = t.closest('[data-act]');
   if (act) {
     const [side, what] = act.dataset.act.split(':');
@@ -2025,8 +1964,6 @@ async function poll() {
   // (選出画面・試合開始直後の反映を速くするため)
   poll();
   setInterval(poll, 200);
-  refreshLogNotes();
-  setInterval(refreshLogNotes, 3000);
   // データファイル群は並列に読み込む (逐次読みだと全て揃うまで時間がかかるため)
   await Promise.all([
     (async () => { try {
