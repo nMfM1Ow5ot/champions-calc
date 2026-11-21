@@ -1079,7 +1079,7 @@ function statusBadgeHTML(spec) {
 
 
 function dispStat(spec, key, raw, sideKey) {
-  if (key === 'hp') return [raw.hp, ''];
+  if (key === 'hp') return [spec.dynamax ? raw.hp * 2 : raw.hp, ''];
   let v = raw[key];
   const b = spec.boosts[key] || 0;
   if (b > 0) v = Math.floor(v * (2 + b) / 2); else if (b < 0) v = Math.floor(v * 2 / (2 - b));
@@ -1217,7 +1217,7 @@ function pokeInfo(side) {
   return `<div class="pokeinfo">
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
-      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><span class="terawrap"><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${spec.terastallized ? ddHTML(`tera:${side}`) : ''}</span></div>
+      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><span class="terawrap"><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${spec.terastallized ? ddHTML(`tera:${side}`) : ''}<button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button></span></div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
         <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
@@ -1790,6 +1790,13 @@ document.addEventListener('click', e => {
     calcAll();
     return;
   }
+  const dx = t.closest('[data-dynamax]');
+  if (dx) {
+    const spec = DS(dx.dataset.dynamax);
+    spec.dynamax = !spec.dynamax;
+    calcAll();
+    return;
+  }
   const zb = t.closest('[data-zmove]');
   if (zb) {
     const [zsd, zmi] = zb.dataset.zmove.split(':');
@@ -1934,6 +1941,7 @@ function applyRevealedPreserving(spec, rev) {
   fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status; fresh.moveSpec = spec.moveSpec;
   fresh.teraType = spec.teraType; fresh.terastallized = spec.terastallized;
   fresh.moveZ = spec.moveZ;
+  fresh.dynamax = spec.dynamax;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
