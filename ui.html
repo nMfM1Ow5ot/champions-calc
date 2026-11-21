@@ -112,6 +112,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .rack{display:flex; gap:.2rem; flex-wrap:wrap; justify-content:flex-end}
 .picon{position:relative; width:3.8rem; height:3.8rem; border-radius:50%; border:2px solid transparent; background:none; cursor:pointer; padding:0}
 .picon img{width:3.2rem; height:3.2rem; object-fit:contain; opacity:.45}
+.picon .pitem{position:absolute; right:-.15rem; bottom:-.15rem; width:1.5rem; height:1.5rem; object-fit:contain; opacity:1; pointer-events:none; z-index:2}
 .picon.active{background:rgba(33,150,243,.24)}
 .picon.active img{opacity:1}
 .picon:hover{border-color:rgba(255,255,255,.16)}
@@ -937,12 +938,33 @@ function spriteURL(speciesEn) { return `https://play.pokemonshowdown.com/sprites
 function spriteImg(en, baseEn, cls) {
   return `<img class="${cls}" src="${spriteURL(en)}" data-spr="0" data-sid="${spriteId(en)}" data-base="${spriteId(baseEn || en)}" alt="">`;
 }
+// 持ち物アイコン (Calcdex のようにポケモンアイコンの右下に重ねる)。
+// PokeAPI のアイテム画像を主にし、無ければ Showdown の itemicons、
+// それも無ければ非表示にする (読み込み失敗時の段階切替は下の error 処理)
+function itemSpriteSlug(en) { return String(en || '').toLowerCase().replace(/['’.]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+function itemIconHTML(spec) {
+  if (!spec || !spec.item || spec.itemLost) return '';
+  const slug = itemSpriteSlug(spec.item);
+  if (!slug) return '';
+  return `<img class="pitem" data-ispr="0" data-islug="${slug}" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${slug}.png" alt="">`;
+}
 // 画像フォールバック: gen5 スプライトに無い種族 (一部の新メガ等) は、読み込み
 // 失敗のたびに (1) ani GIF → (2) ベース種族の gen5 PNG の順に切り替え、
 // それも無ければ壊れた画像アイコンを出さず非表示にする (data-spr が段階)
 document.addEventListener('error', e => {
   const img = e.target;
-  if (!img || img.tagName !== 'IMG' || img.dataset.spr === undefined) return;
+  if (!img || img.tagName !== 'IMG') return;
+  if (img.dataset.ispr !== undefined) {
+    if (img.dataset.ispr === '0') {
+      img.dataset.ispr = '1';
+      img.src = `https://play.pokemonshowdown.com/sprites/itemicons/${img.dataset.islug}.png`;
+    } else {
+      img.dataset.ispr = '2';
+      img.style.visibility = 'hidden';
+    }
+    return;
+  }
+  if (img.dataset.spr === undefined) return;
   if (img.dataset.spr === '0') {
     img.dataset.spr = '1';
     img.src = `https://play.pokemonshowdown.com/sprites/ani/${img.dataset.sid}.gif`;
@@ -1268,7 +1290,7 @@ function playerBar(side) {
   const rack = specs.map((spec, i) => {
     const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
     const eff = effSpecies(spec);
-    return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', eff))}">${spriteImg(eff, gen.species.get(idOf(eff))?.baseSpecies || eff, '')}</button>`;
+    return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', eff))}">${spriteImg(eff, gen.species.get(idOf(eff))?.baseSpecies || eff, '')}${itemIconHTML(spec)}</button>`;
   }).join('');
   return `<div class="playerbar">
     <div class="playerinfo">
