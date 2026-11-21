@@ -1104,7 +1104,13 @@ function movesBox(side, res) {
     }
     const foe = DS(side === 'mine' ? 'opps' : 'mine');
     const mvName = spec.moves[mi];
-    const copyText = (r && !r.status && !r.immune && mvName) ? `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: ${dmg} ${ko}` : '';
+    // コピー内容は Showdown 公式計算機と同じ詳細説明文 (desc) を使う。
+    // 無効のときは desc が無いので短い形式でコピーできるようにする
+    let copyText = '';
+    if (r && !r.status && mvName) {
+      if (!r.immune && r.desc) copyText = r.desc;
+      else if (r.immune) copyText = `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: IMMUNE`;
+    }
     // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す
     let sub = '';
     const cr = lastCalc && lastCalc.candRanges ? lastCalc.candRanges[side][mi] : null;
@@ -1112,7 +1118,7 @@ function movesBox(side, res) {
       sub = `<span class="candsub" title="相手の型候補（事後確率 ${Math.round((lastCalc.candRanges.acc || 0) * 100)}% 分）を通じたダメージ範囲">候補 ${fmtPct(cr.lo)}–${fmtPct(cr.hi)}%</span>`;
     }
     return `${ddHTML(`move:${side}:${mi}`)}
-      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}"` : ''}>${dmg}${sub}</button>
+      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}" title="クリックで計算結果をコピー"` : ''}>${dmg}${sub}</button>
       <span class="ko"${koStyle}>${ko}</span>`;
   }).join('');
   return `<div class="movesbox"><div class="movesgrid">${head}${rows}</div></div>`;
