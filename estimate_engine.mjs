@@ -285,8 +285,12 @@ const BAYES_REV_KEEP = 0.05; // 判明情報と矛盾する候補の減衰率
 // 耐久配分の仮定 (ユーザーの指示): まず HP 振りのみを仮定し、HP に振り切って
 // いないのに防御・特防へ振っている型は事前確率を強く割り引く。HP 全振りでも
 // ダメージ結果と整合しない場合にだけ、尤度を通じてそちらが持ち上がる。
-// 完全な排除はしない (HP を振らない耐久型も実在し、強い証拠では覆るため)
+// 完全な排除はしない (HP を振らない耐久型も実在し、強い証拠では覆るため)。
+// さらに、ダメージ証拠が HP優先候補の全てと矛盾し割り引き対象候補でのみ
+// 説明できる場合は、仮定を撤廃して割り引きを解除する (bayesApply 内)。
+// 使用率型に耐久寄りの型が無い種族向けに、最大耐久の合成候補も追加する
 const HP_FIRST_FACTOR = 0.1;
+const hpFirstCand = c => (c.sp.hp || 0) >= 32 || (!(c.sp.def > 0) && !(c.sp.spd > 0));
 function bayesReset() { bayes = { bySpecies: {}, skipped: 0 }; try { moveStatsCache = {}; } catch (e) { /* モジュール初期化中の呼び出しでは宣言前になるため無視する */ } }
 /* ===== 技構成からの型予測 (型推定エンジンチャンネル 32274233 の構想に基づく実装) =====
    判明した技を、技構成全体の証拠として扱うための拡張。
@@ -570,13 +574,29 @@ function bayesBuildCandidates(species) {
     const profMoves = poolInfo.map(x => ({ en: x.en, s: (x.rate + 2) * (x.cat === '物理' ? phys : x.cat === '特殊' ? spec : statAff) }))
       .sort((a, b) => b.s - a.s).slice(0, 4).map(x => x.en);
     return { nature: combo.n.en, sp, item: item.en, ability: ability.en, megaAbility, megaSpecies: u.megaSpecies || undefined,
-      moves: profMoves, movePool, moveExact: false, values, valuesMega, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul * (((sp.def > 0 || sp.spd > 0) && (sp.hp || 0) < 32) ? HP_FIRST_FACTOR : 1) };
+      moves: profMoves, movePool, moveExact: false, values, valuesMega, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul * (hpFirstCand({ sp }) ? 1 : HP_FIRST_FACTOR) };
   };
   const raw = [];
   for (const c of combos.slice(0, 20)) raw.push(mk(c, topItem, topAbility, 1));
   for (const c of combos.slice(0, 4)) for (const it of items.slice(1, 3)) raw.push(mk(c, it, topAbility, 1));
   for (const c of combos.slice(0, 3)) for (const ab of abilities.slice(1, 2)) raw.push(mk(c, topItem, ab, 1));
   for (const c of combos.slice(0, 2)) raw.push(mk(c, { en: '', rate: 0 }, topAbility, 0.15));
+  // 最大耐久の合成候補: 使用率型に防御・特防寄りの型が無い種族でも、HP 全振り
+  // でも説明できない硬さを推定できるよう、HP32+防御32 / HP32+特防32 の型を
+  // 各1件追加する (性格はその種族の使用率性格から防御・特防が上がるものを
+  // 優先し、無ければ最上位の性格。重さは最上位パターンの半分)
+  {
+    const baseW = (patterns[0].rate + 0.5);
+    const defNat = natures.find(n => (NATURE_MOD[n.en] || [])[0] === 'def') || natures[0];
+    const spdNat = natures.find(n => (NATURE_MOD[n.en] || [])[0] === 'spd') || natures[0];
+    const synth = (nat, sp) => {
+      const c = mk({ p: { sp, rate: patterns[0].rate }, n: nat, w: baseW * (nat.rate + 0.5) }, topItem, topAbility, 0.5);
+      c.bulkSynth = true;
+      return c;
+    };
+    raw.push(synth(defNat, { hp: 32, atk: 0, def: 32, spa: 0, spd: 0, spe: 0 }));
+    raw.push(synth(spdNat, { hp: 32, atk: 0, def: 0, spa: 0, spd: 32, spe: 0 }));
+  }
   const seen = new Set(), out = [];
   for (const c of raw) {
     const key = c.nature + '|' + JSON.stringify(c.sp) + '|' + c.item + '|' + c.ability;
@@ -625,7 +645,21 @@ function bayesCandSpec(base, c) {
 }
 // 尤度の適用。counts は「16 ロール中いくつ両立したか」相当 (0..16)。
 // 全候補が 0 のイベントは未モデル要素ありとみなして更新をスキップする
-function bayesApply(ent, counts) {
+function bayesApply(ent, counts, bulk) {
+  // HP優先の仮定の撤廃 (ダメージ証拠のみ): HP優先候補の全てと矛盾し、
+  // 割り引き対象候補でのみ説明できる観測が得られたら、割り引きを解除する。
+  // 蓄積済みの尤度は保持したまま、対象候補の確率を割り引き前の比率へ戻す
+  if (bulk && !ent.hpLifted && counts.some(n => n > 0)) {
+    let firstHit = false, penHit = false;
+    ent.cands.forEach((c, i) => { if (counts[i] > 0) { if (hpFirstCand(c)) firstHit = true; else penHit = true; } });
+    if (!firstHit && penHit) {
+      ent.hpLifted = true;
+      let t = 0;
+      for (const c of ent.cands) { if (!hpFirstCand(c)) c.post /= HP_FIRST_FACTOR; t += c.post; }
+      if (t > 0) for (const c of ent.cands) c.post /= t;
+      dirty = true;
+    }
+  }
   if (!counts.some(n => n > 0)) { bayes.skipped++; return; }
   let tot = 0;
   ent.cands.forEach((c, i) => { c.post *= Math.max(counts[i] / 16, BAYES_FLOOR); tot += c.post; });
@@ -651,7 +685,7 @@ function processDamageBayes(ev, ctx) {
       const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts);
       return rolls.filter(r => r === ev.amt).length;
     });
-    bayesApply(ent, counts);
+    bayesApply(ent, counts, true);
   } else {
     // 自分の攻撃: 相手の HP% 減少 (切り捨て/四捨五入の両対応) と両立するロールの割合
     if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
@@ -667,7 +701,7 @@ function processDamageBayes(ev, ctx) {
       for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
       return n;
     });
-    bayesApply(ent, counts);
+    bayesApply(ent, counts, true);
   }
 }
 function processMoveBayes(ev, io) {
