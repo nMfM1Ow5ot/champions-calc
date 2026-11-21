@@ -16,7 +16,7 @@
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
   "data/names_ja.json": "bc7618b7b96ac709a92cc29f9cb02ae0a92cc9a79dd43aa61606f97bd1ca654d",
   "data/pokedb_parsed.json": "bba36692be2b33ff42edeb7c62c8d0cd9b9c3cf2c123a7c95e49bec3b7c3fe63",
-  "data/preview_features.json": "d6543e408469f8bb5ce933201aa736f5bfdf331238814d08dc8e8ff14a258b28",
+  "data/preview_features.json": "cbe32c7324d5bb1358d878c582e6371a7a8cd04a544cb321c2b85ba9ee320c94",
   "data/regulation.json": "8111f5ff4ce0c7b0592a6af77e3c1a2ca0b340c71d930f1ba97e3eb94a83c290",
   "data/species_abilities.json": "2082e1195bfe24a5d6747d99e0bd291419e12d7a0aa7d6eebaaaba993e910547",
   "data/species_moves.json": "03c0f240de9d9a66cefc65c9e1ea155ccf120c9b4f91d6e46296ca29b6b0d181",
@@ -32,7 +32,7 @@
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "preview_test.sh": "a56b144b8f93f80da61c7c5e00e495c7de0b0b9fdd8a1f07659a572fe47af4f1",
-  "reader.swift": "10e06cda60edf775a2a1dff0da4e3dd4603187c1d2d797a6304c386280702933",
+  "reader.swift": "382087d1c56450a3a9e33fe08d14f7686503250490f30a711e2d5059ff3d6e23",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "afae5879322ae4d49633d5b05caf4e4978568e341e18f2ddbb7b0500cedc74ad",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
@@ -43,5 +43,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_2059"
+ "rev": "20261121_2101"
 }
