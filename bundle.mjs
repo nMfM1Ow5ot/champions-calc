@@ -28005,7 +28005,7 @@ function createEstimator(deps) {
     if (!ent || !ent.used) return null;
     const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
     const map = sorted[0];
-    const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, sp: { ...map.sp } } };
+    const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
     {
       const mN = /* @__PURE__ */ new Map(), mI = /* @__PURE__ */ new Map();
       for (const c of ent.cands) {
