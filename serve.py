@@ -277,14 +277,53 @@ _upload_lock = threading.Lock()
 _note_prompt_waiting = False
 _note_prompt_current_key = None
 # このプロセスの起動時刻。自動の備考プロンプトは、起動後に終了した
-# 試合 (最新のファイルが起動時刻より新しい試合) だけを対象にする。
-# 起動時点で既に終わっていた未送信分 (手動で処理済みの残りなど) を
+# 自動処理 (プロンプト・送信) の対象は、このプロセスの起動後に
+# 始まった (または起動時点で進行中だった) 試合だけにする。起動
+# 時点で既に終わっていた未送信分 (手動で処理済みの残りなど) を
 # 起動のたびに聞き直さないため (実例: 2026-11-21
 # battle_20261121_150535)。手動の --note では従来どおり全件を聞く。
-# serve.py の自己再起動 (exec) ではプロセスが置き換わるため起動
-# 時刻も更新されるが、その場合も対戦中の試合のログは再起動後に
-# 書かれるため対象から漏れない
+# 判定はファイルの保存時刻では行わない。salvage の再保存や UI の
+# 再送でファイル時刻が新しくなると、起動前に終わった試合が対象に
+# 化けるため (実例: 2026-11-22 battle_20261122_071457 の二重送信)。
+# 試合キー先頭の開始時刻 (JST) とプロセス起動時刻の比較、および
+# 起動時点で進行中だった試合の控えで判定する
 _PROCESS_STARTED_AT = time.time()
+
+
+def _key_started_at(gate_key):
+    """試合キー先頭の開始時刻 (JST) を epoch 秒で返す。"""
+    try:
+        dt = datetime.strptime(gate_key[:15], "%Y%m%d_%H%M%S")
+        return dt.replace(tzinfo=JST).timestamp()
+    except Exception:
+        return None
+
+
+_STARTUP_BATTLE_KEY_UNSET = object()
+_STARTUP_BATTLE_KEY_CACHE = _STARTUP_BATTLE_KEY_UNSET
+
+
+def _startup_battle_key():
+    """起動時点で進行中だった試合のゲートキー (無ければ None)。
+
+    serve.py が対戦中に再起動された場合、その試合はキー先頭の開始
+    時刻だけでは「起動前に始まった試合」になり対象から漏れるため、
+    起動直後の state.json の控えで補う。初回の判定時にだけ読み、
+    以後は控えを使う (対戦終了後にログが保存されても覆らない)。"""
+    global _STARTUP_BATTLE_KEY_CACHE
+    if _STARTUP_BATTLE_KEY_CACHE is not _STARTUP_BATTLE_KEY_UNSET:
+        return _STARTUP_BATTLE_KEY_CACHE
+    key = None
+    try:
+        if _battle_in_progress():
+            with open(STATE_JSON_PATH, encoding="utf-8") as f:
+                battle = json.load(f).get("battle")
+            if battle and _BATTLE_KEY_RE.match(str(battle)):
+                key = _gate_key(str(battle))
+    except Exception:
+        key = None
+    _STARTUP_BATTLE_KEY_CACHE = key
+    return key
 
 # 自己再起動 (os.execv) の引き継ぎ: 再起動の時点で備考待ちだった
 # 試合 (このプロセスの対象範囲内のもの) のゲートキーを、環境変数
@@ -298,12 +337,22 @@ _CARRIED_NOTE_KEYS = {k for k in
                       if k}
 
 
-def _in_session_scope(gate_key, mtime):
+def _in_session_scope(gate_key):
     """自動処理 (プロンプト・送信) の対象範囲内かどうか。
 
-    起動後に終わった試合が原則で、自己再起動で引き継がれた試合も
-    対象に含める。"""
-    return mtime >= _PROCESS_STARTED_AT or gate_key in _CARRIED_NOTE_KEYS
+    次のいずれかなら対象内: (1) 自己再起動で引き継がれた試合、
+    (2) 起動時点で進行中だった試合、(3) 起動後に始まった試合
+    (キー先頭の開始時刻がプロセス起動時刻以後)。ファイルの保存
+    時刻は一切見ない (salvage の再保存や UI の再送で、起動前に
+    終わった試合が対象に化けるのを防ぐため)。"""
+    if not gate_key:
+        return False
+    if gate_key in _CARRIED_NOTE_KEYS:
+        return True
+    if gate_key == _startup_battle_key():
+        return True
+    started = _key_started_at(gate_key)
+    return started is not None and started >= _PROCESS_STARTED_AT
 
 
 def _note_blocking():
@@ -314,7 +363,7 @@ def _note_blocking():
     if _note_prompt_waiting:
         return True
     try:
-        return any(_in_session_scope(p["key"], p.get("mtime", 0))
+        return any(_in_session_scope(p["key"])
                    for p in list_pending_log_notes())
     except Exception:
         return False
@@ -324,7 +373,7 @@ def _set_note_carry():
     """再起動の直前に、対象範囲内の備考待ちを引き継ぎ用に控える。"""
     try:
         keys = sorted({p["key"] for p in list_pending_log_notes()
-                       if _in_session_scope(p["key"], p.get("mtime", 0))})
+                       if _in_session_scope(p["key"])})
     except Exception:
         keys = []
     if keys:
@@ -587,19 +636,8 @@ def _save_inference_log(body):
     # 起動前に終わった試合の推論過程ログが、UI の再送で起動時に
     # 届くことがある。保存はするが、起動時に過去分の処理が走って
     # いるように見える表示は出さない (2026-11-21 のユーザー指示)。
-    # 判定はその試合のログの時刻で行う (対戦中の試合にはまだ
-    # ログが無いため、通常どおり表示される)
-    ended_before_start = False
-    try:
-        gk = _gate_key(battle)
-        log_times = []
-        for n in os.listdir(LOG_DIR):
-            k = _battle_key(n)
-            if k is not None and _gate_key(k) == gk and n.endswith(".log"):
-                log_times.append(os.path.getmtime(os.path.join(LOG_DIR, n)))
-        ended_before_start = bool(log_times) and max(log_times) < _PROCESS_STARTED_AT
-    except OSError:
-        ended_before_start = False
+    # 判定は対象範囲の判定 (試合の開始時刻基準) で行う
+    ended_before_start = not _in_session_scope(_gate_key(battle))
     if not ended_before_start:
         _announce_receipt(("inference", battle), "推論過程ログ",
                           name, len(data["entries"]))
@@ -633,18 +671,9 @@ def _save_calc_log(body):
         f.write(body)
     # 推論過程ログと同じく、起動前に終わった試合分は保存だけして
     # 受け取り表示を出さない (起動時に過去分の処理が走っている
-    # ように見せないため)
-    ended_before_start = False
-    try:
-        gk = _gate_key(battle)
-        log_times = []
-        for n in os.listdir(LOG_DIR):
-            k = _battle_key(n)
-            if k is not None and _gate_key(k) == gk and n.endswith(".log"):
-                log_times.append(os.path.getmtime(os.path.join(LOG_DIR, n)))
-        ended_before_start = bool(log_times) and max(log_times) < _PROCESS_STARTED_AT
-    except OSError:
-        ended_before_start = False
+    # ように見せないため)。判定は対象範囲の判定 (試合の開始時刻
+    # 基準) で行う
+    ended_before_start = not _in_session_scope(_gate_key(battle))
     if not ended_before_start:
         _announce_receipt(("calclog", battle), "ダメ計ログ",
                           name, len(data["entries"]))
@@ -770,6 +799,76 @@ def _load_upload_state():
     return {}
 
 
+# 送信済みの試合の永続記録。ファイル単位の送信済み記録
+# (uploaded.json) と目録 (logs_enc/index.json) は、内容が変化した
+# ファイルを「未送信」と判定するため、送信後に UI から再送された
+# ダメ計ログ (蓄積が増えた版) のような変化分が二重送信される
+# (実例: 2026-11-22 battle_20261122_071457)。試合単位で「配送が
+# 完了した」ことを記録し、その試合のファイルは再到着・salvage の
+# 再保存・再起動があっても自動・手動を問わず二度と送らない
+def _sent_battles_path():
+    # LOG_DIR から都度導く (テストが LOG_DIR を差し替えた場合に、
+    # 実物の記録へ書き込まないようにするため)
+    return os.path.join(LOG_DIR, "sent_battles.json")
+
+
+def _load_sent_battles():
+    try:
+        data = json.loads(open(_sent_battles_path()).read())
+        if isinstance(data, list):
+            return {k for k in data if isinstance(k, str)}
+    except Exception:
+        pass
+    return set()
+
+
+def _save_sent_battles(keys):
+    try:
+        with open(_sent_battles_path(), "w") as f:
+            json.dump(sorted(keys), f)
+    except OSError:
+        pass
+
+
+def _update_sent_battles(state, names, known):
+    """送信済みとして記録すべき試合を sent_battles.json へ反映する。
+
+    確定ログ (final) がリポジトリの目録に載っている試合は配送が
+    完了しているため、その時点で記録する (この記録が無い時代に
+    送られた試合も、目録を見てここで取り込む)。確定ログの無い
+    試合 (中断のみ) は、このサイクルの終了時点で未送信ファイルが
+    残っていない場合に記録する。"""
+    sent = _load_sent_battles()
+    by_key = {}
+    for n in names:
+        key = _battle_key(n)
+        if key is not None:
+            by_key.setdefault(_gate_key(key), []).append(n)
+    changed = False
+    for gk, gnames in by_key.items():
+        if gk in sent:
+            continue
+        has_final = any("_final" in n and n.endswith(".log")
+                        for n in gnames)
+        if has_final:
+            final_known = any(
+                "_final" in n and n.endswith(".log")
+                and known.get(n) is not None
+                and (known.get(n) == state.get(n)
+                     or known.get(n) == _file_hash(
+                         os.path.join(LOG_DIR, n)))
+                for n in gnames)
+            if final_known:
+                sent.add(gk)
+                changed = True
+        elif all(state.get(n) == _file_hash(os.path.join(LOG_DIR, n))
+                 for n in gnames):
+            sent.add(gk)
+            changed = True
+    if changed:
+        _save_sent_battles(sent)
+
+
 def _file_hash(path):
     try:
         return hashlib.sha256(open(path, "rb").read()).hexdigest()
@@ -797,8 +896,12 @@ def list_pending_log_notes():
         # 一式は元の試合 ID、救済されたログは _salvage 付きの ID で
         # 保存されるため、束ねないと一式が備考待ちにならない)
         groups.setdefault(_gate_key(key), []).append(name)
+    sent_battles = _load_sent_battles()
     pending = []
     for key, names in sorted(groups.items()):
+        if key in sent_battles:
+            # 送信済みの試合は閉じたものとして扱い、備考待ちにしない
+            continue
         if _note_exists(key):
             continue
         if any(_note_exists(_battle_key(n) or "") for n in names):
@@ -953,32 +1056,6 @@ def upload_logs_once(session_only=False):
         _upload_lock.release()
 
 
-def _battle_group_mtimes(names):
-    """試合キー (salvage 束ね済み) ごとの代表時刻を返す。
-
-    代表時刻は、その試合のログ (.log) の最新時刻とする。推論過程
-    ログのように、対戦の終了後に遅れて届くファイルがあっても、
-    試合が「起動前に終わったものかどうか」の判定は変わらない
-    (2026-11-21 のユーザー報告: 起動時に UI から再送された推論
-    過程ログの時刻で、起動前の試合が送信対象に化けた)。ログの
-    無い一式は、全ファイルの最新時刻で代用する。"""
-    log_mtimes = {}
-    all_mtimes = {}
-    for n in names:
-        key = _battle_key(n)
-        if key is None:
-            continue
-        try:
-            mt = os.path.getmtime(os.path.join(LOG_DIR, n))
-        except OSError:
-            continue
-        gk = _gate_key(key)
-        all_mtimes[gk] = max(all_mtimes.get(gk, 0.0), mt)
-        if n.endswith(".log"):
-            log_mtimes[gk] = max(log_mtimes.get(gk, 0.0), mt)
-    return {gk: log_mtimes.get(gk, mt) for gk, mt in all_mtimes.items()}
-
-
 def _upload_logs_once_locked(session_only=False):
     global _log_notice_shown, _log_last_error, _log_prune_done_date
     if not os.path.isdir(LOG_DIR):
@@ -994,15 +1071,21 @@ def _upload_logs_once_locked(session_only=False):
     if not names:
         return
     state = _load_upload_state()
-    group_mtimes = _battle_group_mtimes(names) if session_only else {}
+    sent_battles = _load_sent_battles()
+    if sent_battles:
+        # 送信済みの試合は、ファイルの再到着や salvage の再保存が
+        # あっても自動・手動を問わず二度と送らない
+        names = [n for n in names
+                 if _battle_key(n) is None
+                 or _gate_key(_battle_key(n)) not in sent_battles]
+        if not names:
+            return
     pending_all = []
     for n in names:
         if session_only:
             key = _battle_key(n)
             if (key is not None
-                    and not _in_session_scope(
-                        _gate_key(key),
-                        group_mtimes.get(_gate_key(key), 0.0))):
+                    and not _in_session_scope(_gate_key(key))):
                 # 起動前から残っている試合は自動送信の対象外 (滞留分は
                 # Mac 側にそのまま残し、手動の --note 経路でだけ扱う)
                 continue
@@ -1118,6 +1201,7 @@ def _upload_logs_once_locked(session_only=False):
                       flush=True)
             else:
                 print(f"[log] 試合ログを送信しました: {n}", flush=True)
+        _update_sent_battles(state, names, known)
         if prune_due or changed_index:
             if _prune_debug_entries(index, token):
                 changed_index = True
@@ -1151,15 +1235,12 @@ def _report_upload_completion(state, session_only=False):
         names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
     except OSError:
         return
-    group_mtimes = _battle_group_mtimes(names) if session_only else {}
     held = set()
     other = 0
     for n in names:
         key = _battle_key(n)
         if (session_only and key is not None
-                and not _in_session_scope(
-                    _gate_key(key),
-                    group_mtimes.get(_gate_key(key), 0.0))):
+                and not _in_session_scope(_gate_key(key))):
             continue
         try:
             data = open(os.path.join(LOG_DIR, n), "rb").read()
@@ -1400,7 +1481,7 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True, session_only=False):
     global _note_prompt_current_key
     count = 0
     for p in list_pending_log_notes():
-        if session_only and not _in_session_scope(p["key"], p.get("mtime", 0)):
+        if session_only and not _in_session_scope(p["key"]):
             # 自動プロンプトでは、このプロセスの起動前に終わっていた
             # 試合は扱わない (2026-11-21 のユーザー指示: 起動時に
             # 過去分の備考解消が始まらないようにする。滞留分は Mac
@@ -1697,7 +1778,7 @@ if __name__ == "__main__":
             print(f"[log] 再起動から引き継いだ備考待ちの試合が {len(_carried)} 件あります。"
                   "この起動でも続けて処理します", flush=True)
         _backlog = [p for p in _pending_startup
-                    if not _in_session_scope(p["key"], p.get("mtime", 0))]
+                    if not _in_session_scope(p["key"])]
         if _backlog:
             print(f"[log] 起動前から残っている備考待ちの試合が {len(_backlog)} 件あります。"
                   "この起動では処理しません (手動で送る場合は別のターミナルで "
