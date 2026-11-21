@@ -3354,8 +3354,6 @@ function applyState(j) {
       if (state.field[k] !== inc) { state.field[k] = inc; changed = true; }
     }
   }
-  syncBayesRevealed();
-  syncTeamContext();
   if (Array.isArray(j.events)) {
     if (j.events.length < estimator.getSeen()) resetInference();
     for (let i = estimator.getSeen(); i < j.events.length; i++) {
@@ -3371,6 +3369,11 @@ function applyState(j) {
     syncEstDirty();
     if (infDirty) { infDirty = false; changed = true; }
   }
+  // 判明情報の反映はイベント処理の後に行う。先に反映すると、同じ書き出しで
+  // 届いた判明情報のスナップショットが前回分のターンで刻印されてしまう
+  // (battle_20261122_054802: ムーンフォースの moveSeen が T3 刻印・実際は T4)
+  syncBayesRevealed();
+  syncTeamContext();
   drainInferenceLog();
   const estSigBefore = state.opps.map(s => s ? JSON.stringify([s.estStat || null, s.estSp || null, s.estMarginal || null]) : '');
   for (const spec of state.opps) if (spec) attachEstimate(spec);
