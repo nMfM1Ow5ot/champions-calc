@@ -527,6 +527,8 @@ var lastDamageLabel = ""                          // 直近にダメージを受
 var lastDamageAt = Date.distantPast
 var lastPendingLabel = ""                         // 確定待ちダメージの枠 (急所はダメージ行より先に表示される)
 var pendingSwitchSpecies: [String: String] = [:]  // プレート名 -> 確定待ちの交代先種族
+var slotLastHitAt: [String: Date] = [:]           // 枠ごとの最終プレートヒット時刻 (plate_stale 監視用)
+var plateStaleOtherHits: [String: Int] = [:]      // その枠が無ヒットの間に他枠がヒットしたフレーム数
 var pendingSwitchCount: [String: Int] = [:]       // 同じ種族が連続で見えた回数
 var actionSeq = 0                                  // |move| / |turn| の通し番号 (行動の区切り)
 var lastDamageSeq: [String: Int] = [:]             // プレート名 -> ダメージ行を出した行動番号
@@ -1280,6 +1282,8 @@ func resetLogState() {
     // (次の試合が選出を経ない開始でも、前の画面が付かないように)
     previewLastImage = nil
     previewLastImageAt = nil
+    slotLastHitAt = [:]
+    plateStaleOtherHits = [:]
     monStates = [:]
     revealedMoves = [:]
     revealedItems = [:]
@@ -4337,6 +4341,18 @@ var previewEvidenceAt: Date? = nil
 var previewLastImage: CGImage? = nil
 var previewLastImageAt: Date? = nil
 var previewIdWritten = false                    // この試合で preview_id を書き出したか
+// マッチング画面の表示用 (ユーザーがターミナルで状態を把握するため。
+// 表示専用で、ログ構築には一切影響しない)
+var matchingActive = false
+var matchingSince: Date? = nil
+var matchingLastPrintAt: Date? = nil
+// 見せ合い後に一瞬映る相手のランク/レートの読み取り結果。記録側
+// (UI以外チャットの管轄) がトレーナー名と一緒に state.json /
+// 対戦ログへ記録するための受け渡し変数 (同チャットとの合意形式:
+// 読めなければ "" のまま。初期化は記録側が resetLogState で行う)
+var oppRating = ""
+var oppRank = ""
+var oppRankRecorded = false   // この対戦で opp_rank の証拠を記録済みか
 // タイプ関門の緩和 (第1段 (b)): タイプで絞った候補内の最良スコアが
 // この値より悪い場合は、アイコンの読み違いとみなして全種族へ候補を
 // 広げて再照合する。閾値は tests/preview_eval.py --calibrate の測定で
@@ -5167,6 +5183,93 @@ func pvExtractTrainers(_ boxes: [OcrBox]) {
         if b.cx > 0.70 { trainerOpp = t }
     }
 }
+// マッチング画面 (対戦相手の検索中) の検出。文言はシリーズ標準の
+// 表記を候補にしている (実機の文言と異なる場合は候補へ追加する)
+let matchingPhrases = ["対戦相手を探しています", "対戦相手をさがしています",
+                       "対戦相手を探して", "相手を探しています",
+                       "マッチング中", "マッチングしています"]
+func detectMatching(image: CGImage) -> Bool {
+    let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
+    return boxes.contains { b in matchingPhrases.contains { b.text.contains($0) } }
+}
+
+// マッチング状態のターミナル表示 (開始時に 1 回、継続中は 15 秒ごと)。
+// 見せ合い画面に移ったらマッチング成立として表示を終える
+func updateMatchingDisplay(image: CGImage) {
+    if previewLastFrame {
+        if matchingActive {
+            matchingActive = false
+            matchingSince = nil
+            print("[matching] 対戦相手が見つかりました")
+            fflush(stdout)
+        }
+        return
+    }
+    if detectMatching(image: image) {
+        let now = Date()
+        if !matchingActive {
+            matchingActive = true
+            matchingSince = now
+            matchingLastPrintAt = now
+            print("[matching] マッチング中… (対戦相手を探しています)")
+            fflush(stdout)
+        } else if let lp = matchingLastPrintAt, now.timeIntervalSince(lp) >= 15 {
+            matchingLastPrintAt = now
+            let sec = Int(now.timeIntervalSince(matchingSince ?? now))
+            print("[matching] マッチング中… (\(sec) 秒経過)")
+            fflush(stdout)
+        }
+    } else if matchingActive {
+        matchingActive = false
+        matchingSince = nil
+        print("[matching] マッチング画面を離れました")
+        fflush(stdout)
+    }
+}
+
+// 見せ合い後に一瞬映る相手のランク/レート表示の読み取り。ランク名は
+// 6 級の正式名称で照合し、両トレーナー分が映る場合は相手側 (右半分)
+// を優先する。レートは「レート」を含む表記を優先し、無ければランク
+// 表示と同じ行の 3〜4 桁数値を拾う (タイマー表記は対象外)
+let rankNameList = ["チャンピオン級", "マスターボール級", "ハイパーボール級",
+                    "スーパーボール級", "モンスターボール級", "ビギナー級"]
+func scanOpponentRank(image: CGImage) {
+    let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
+    var rankHit: (name: String, box: OcrBox)? = nil
+    for b in boxes {
+        guard let r = rankNameList.first(where: { b.text.contains($0) }) else { continue }
+        if rankHit == nil || (b.cx > 0.5 && rankHit!.box.cx <= 0.5) { rankHit = (r, b) }
+    }
+    guard let hit = rankHit else { return }
+    var rate: Int? = nil
+    for b in boxes where b.text.contains("レート") {
+        let digits = b.text.filter { $0.isNumber }
+        if let v = Int(digits), (100...9999).contains(v) { rate = v; break }
+    }
+    if rate == nil {
+        for b in boxes {
+            let t = b.text.trimmingCharacters(in: .whitespaces)
+            guard t.count >= 3, t.count <= 4, t.allSatisfy({ $0.isNumber }),
+                  abs(b.cy - hit.box.cy) <= 0.07, abs(b.cx - hit.box.cx) <= 0.35,
+                  let v = Int(t), (500...3999).contains(v) else { continue }
+            rate = v
+            break
+        }
+    }
+    oppRank = hit.name
+    oppRating = rate.map { String($0) } ?? ""
+    let rateSuffix = rate.map { " (レート \($0))" } ?? ""
+    print("[rank] 相手のランクを読み取りました: \(hit.name)\(rateSuffix)")
+    fflush(stdout)
+    if !oppRankRecorded {
+        oppRankRecorded = true
+        debugCapture(kind: "opp_rank", key: "opp_rank", rawText: "",
+                     detail: ["rank": hit.name, "rate": rate ?? -1,
+                              "trainer": trainerOpp, "readerBuild": readerBuild],
+                     image: image)
+    }
+}
+
 func detectPreview(image: CGImage) -> Bool {
     // .fast は実機で Vision 内部がクラッシュしたため使わない (build 1013 で
     // 導入、1023 の縮小対策でも直らず、.accurate に戻した)。経緯は ocrBoxes 参照
@@ -5269,6 +5372,10 @@ func runOnce(image: CGImage) {
         if !wasPreviewFrame {
             // 新しい見せ合い画面の出現: preview_id の書き出しを再武装する
             previewIdWritten = false
+            // 前の対戦のランク/レート読み取りも引き継がない
+            oppRank = ""
+            oppRating = ""
+            oppRankRecorded = false
             // 前の見せ合いから 1.5 秒以上画面が消えていたら、別の選出
             // セッションとみなして同定をやり直す。従来のリセット条件
             // (対戦終了 / 対戦中 / 最終目撃から 10 秒超) では、相手の
@@ -5408,6 +5515,14 @@ func runOnce(image: CGImage) {
         // 特定できなかった)。証拠は次の同定で上書きされ、書き出し側も
         // 保持から 10 分以内に限っているため、残しても実害は小さい
     }
+    // マッチング画面の表示 (対戦中は対象外。表示専用でログには影響しない)
+    if !inBattle { updateMatchingDisplay(image: image) }
+    // 見せ合い後の相手ランク/レート: 選出が確定してから対戦開始までの
+    // 短い窓だけを監視する (表示は一瞬しか出ないため)
+    if previewHandled, !inBattle, oppRank.isEmpty,
+       Date().timeIntervalSince(lastPreviewSeenAt) < 30 {
+        scanOpponentRank(image: image)
+    }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
     if parseLogScreen(image: image) {
         inBattle = true
@@ -5458,6 +5573,48 @@ func runOnce(image: CGImage) {
     emptyBattleFrames = 0
     inBattle = true
     processPlates(hits)
+    // plate_stale 監視: 確定済みの枠だけ長くヒットが無い場合、その時点の
+    // フレームと、その枠の固定領域の生 OCR を証拠として残す。他の枠が
+    // 読めている (= プレートが見えるフレームが来ている) のに特定の枠
+    // だけ読めない状態を、名前側か HP 側かまで切り分けるため (実例:
+    // 2026-11-21 battle_20261121_150535 で mineB の交代が 2 ターン分
+    // 取りこぼされたが、コマンドフェーズのフレームが残らず原因を
+    // 特定できなかった)。ひんしの枠は対象外 (交代待ちで当然読めない)
+    if logStarted && !winLogged {
+        let now = Date()
+        let hitSlots = Set(hits.keys)
+        for (slot, info) in lastSlots
+        where !info.speciesEn.isEmpty && faintedSlots[slot] == nil {
+            if hitSlots.contains(slot) {
+                slotLastHitAt[slot] = now
+                plateStaleOtherHits[slot] = 0
+            } else if let last = slotLastHitAt[slot] {
+                if hitSlots.contains(where: { $0 != slot }) {
+                    plateStaleOtherHits[slot, default: 0] += 1
+                }
+                if now.timeIntervalSince(last) >= 75,
+                   (plateStaleOtherHits[slot] ?? 0) >= 8 {
+                    var regionTexts: [String] = []
+                    if let p = plates.first(where: { $0.name == slot }) {
+                        regionTexts = ocrBoxes(image, x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1).map { $0.text }
+                    }
+                    debugCapture(kind: "plate_stale", key: "plate_stale:\(slot)", rawText: "",
+                                 detail: ["slot": slot, "species": info.speciesEn,
+                                          "secondsSinceHit": Int(now.timeIntervalSince(last)),
+                                          "otherHitFrames": plateStaleOtherHits[slot] ?? 0,
+                                          "pendingSpecies": pendingSwitchSpecies[slot] ?? "",
+                                          "pendingCount": pendingSwitchCount[slot] ?? 0,
+                                          "regionTexts": regionTexts,
+                                          "readerBuild": readerBuild],
+                                 image: image)
+                    slotLastHitAt[slot] = now
+                    plateStaleOtherHits[slot] = 0
+                }
+            } else {
+                slotLastHitAt[slot] = now
+            }
+        }
+    }
     // 見せ合い同定の証拠の書き出し: 保持しておいた見せ合いフレームと
     // 枠ごとの同定情報を、この試合のデバッグ同梱として 1 回だけ残す。
     // 試合開始 (プレート出現) の時点で書き出すため、試合 ID との対応が
@@ -5555,7 +5712,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1547"
+let readerBuild = "20261121_1550"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
