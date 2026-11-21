@@ -1970,6 +1970,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         lastDamageAt = Date()
         var line = "|-damage|\(slot): \(speciesEn)|\(hpText)"
         var fromCode: String? = nil
+        var selfClassified = false   // 自分の技の反動として分類できたら、推定用イベントも出す
         if let pf = pendingStatusFrom[key], Date().timeIntervalSince(pf.at) < 5 {
             fromCode = pf.code
             pendingStatusFrom[key] = nil
@@ -2003,14 +2004,19 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                                      speciesEn: speciesEn, itemJa: "いのちのたま")
                     }
                     fromCode = "item: Life Orb"
+                    selfClassified = true
                 } else if recoilMoves.contains(lastMoveName) {
                     fromCode = "move: \(lastMoveName)"
+                    selfClassified = true
                 }
             }
         }
         if let fromCode { line += "|[from] \(fromCode)" }
         emitLog(line)
         recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, hpText: hpText)
+        if selfClassified {
+            recordRecoilEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
+        }
         // オボンのみの発動条件 (HP 半分以下) を跨ぐ低下は、持ち物が
         // 未判明なら発動の監視を始める (解消はこの関数の冒頭で行う)
         if effFrom > 50, toPct <= 50, toPct > 0 {
@@ -2161,11 +2167,50 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
     ev += ",\"atkMega\":\"\(jsonEscape(monStates[atkKey]?.megaSpecies ?? ""))\",\"defMega\":\"\(jsonEscape(monStates[key]?.megaSpecies ?? ""))\""
     ev += ",\"atkAlive\":\(aliveOnField(atkSide == "p1" ? "mine" : "opp", atkSide)),\"defAlive\":\(aliveOnField(defSide == "p1" ? "mine" : "opp", defSide))"
     ev += ",\"atkHp\":\(monStates[atkKey]?.hpPercent ?? 100),\"defHp\":\(fromPct)"
-    if defSide == "p1", let pe = prevExact, let ce = exact, pe[0] > ce[0] {
+    // 実数差 (amt) は、基準側と現在側で最大 HP が一致する場合だけ使う。
+    // 交代行の HP 表記は確定前に % 形式 (100/100) で出ることがあり、
+    // その基準 [100, 100] と実数表記 [37, 177] を引くと、実在しない
+    // 被ダメ量 (63) がイベントに載る (実例: 2026-11-21
+    // battle_20261121_233243、ウッドハンマーの被ダメとして推定側へ
+    // 渡り、攻撃側の自己ダメージと誤認された)
+    if defSide == "p1", let pe = prevExact, let ce = exact, pe[1] == ce[1], pe[0] > ce[0] {
         ev += ",\"amt\":\(pe[0] - ce[0]),\"max\":\(ce[1])"
     } else {
         ev += ",\"pct\":\(fromPct - toPct)"
     }
+    ev += "}"
+    battleEvents.append(ev)
+}
+
+// 自分自身への反動ダメージのイベント (推定エンジンとの契約:
+// atk と def が同一ラベルの dmg イベント。相手側で低下が 8〜11% の
+// ものが いのちのたま の反動として取り込まれる。技の反動も同じ形で
+// 出すが、割合が一定しないため推定側では取り込まれない)
+func recordRecoilEvent(slot: String, key: String, speciesEn: String, fromPct: Int, toPct: Int) {
+    guard battleEvents.count < 600 else { return }
+    let label = "\(slot): \(speciesEn)"
+    func boostsJson(_ k: String) -> String {
+        guard let b = monStates[k]?.boosts, !b.isEmpty else { return "{}" }
+        let inner = ["atk", "def", "spa", "spd", "spe"].compactMap { kk -> String? in
+            guard let v = b[kk], v != 0 else { return nil }
+            return "\"\(kk)\": \(v)"
+        }
+        return "{\(inner.joined(separator: ", "))}"
+    }
+    let sidePrefix = key.hasPrefix("p1") ? "mine" : "opp"
+    let side = key.hasPrefix("p1") ? "p1" : "p2"
+    var alive = 0
+    for (slotName, s) in lastSlots where slotName.hasPrefix(sidePrefix) {
+        if (monStates["\(side):\(s.speciesEn)"]?.hpPercent ?? s.hpPercent) > 0 { alive += 1 }
+    }
+    var ev = "{\"k\":\"dmg\",\"turn\":\(currentTurn),\"atk\":\"\(jsonEscape(label))\",\"def\":\"\(jsonEscape(label))\",\"move\":\"\(jsonEscape(lastMoveName))\",\"crit\":false"
+    ev += ",\"w\":\"\(logFieldWeather)\",\"t\":\"\(logFieldTerrain)\""
+    ev += ",\"atkB\":\(boostsJson(key)),\"defB\":\(boostsJson(key))"
+    ev += ",\"atkS\":\"\(jsonEscape(monStates[key]?.status ?? ""))\",\"defS\":\"\(jsonEscape(monStates[key]?.status ?? ""))\""
+    ev += ",\"atkMega\":\"\(jsonEscape(monStates[key]?.megaSpecies ?? ""))\",\"defMega\":\"\(jsonEscape(monStates[key]?.megaSpecies ?? ""))\""
+    ev += ",\"atkAlive\":\(alive),\"defAlive\":\(alive)"
+    ev += ",\"atkHp\":\(monStates[key]?.hpPercent ?? toPct),\"defHp\":\(fromPct)"
+    ev += ",\"pct\":\(fromPct - toPct)"
     ev += "}"
     battleEvents.append(ev)
 }
@@ -6677,7 +6722,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0020"
+let readerBuild = "20261122_0025"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
