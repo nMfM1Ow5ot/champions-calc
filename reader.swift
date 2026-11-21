@@ -345,7 +345,7 @@ func jsonEscape(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: 
 // 追加・変更するときは必ずここを更新すること (ハーネスが、実際に生成
 // した state.json のキーと突き合わせて検証する。aurora/veil のような
 // キー名の食い違いを機械で検出するため)
-let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "hazards", "oppReset", "oppPreview"]
+let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "hazards", "oppReset", "oppPreview", "battle"]
 let stateMonKeys: Set<String> = ["species", "curHPPercent", "status", "unburden", "itemLost", "mega", "megaSpecies", "boosts", "revealed"]
 let stateBoostKeys: [String] = ["atk", "def", "spa", "spd", "spe", "acc", "eva"]  // boosts は常時この7能力をそろえて出す
 let stateRevealedKeys: Set<String> = ["moves", "item", "ability"]
@@ -426,8 +426,12 @@ func writeState() {
     }
     let hzJson = hzParts.isEmpty ? "" : ", \"hazards\": {\(hzParts.joined(separator: ", "))}"
     let trainer = trainerOpp.isEmpty ? "" : ", \"oppTrainer\": \"\(jsonEscape(trainerOpp))\""
+    // 試合 ID (開始時刻ベース)。UI 側が「イベント列が縮んだ」推測ではなく
+    // この値の変化で新しい対戦の開始を確実に検知できるようにするための
+    // 材料 (前の対戦の自動コンディションが次の対戦に残る事故の対策)
+    let battleJson = battleArchiveId.isEmpty ? "" : ", \"battle\": \"\(battleArchiveId)\""
     let eventsJson = ", \"events\": [\(battleEvents.joined(separator: ", "))]"
-    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
+    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(battleJson)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
     if json == lastWritten { return }
     lastWritten = json
     try? json.write(to: outURL, atomically: true, encoding: .utf8)
@@ -556,6 +560,8 @@ var emittedSwitchKeys: Set<String> = []            // |switch| を出した "sid
 var pendingUnburden: Set<String> = []              // 交代行が出る前にシード消費を検知した種族 (かるわざ発動を交代行の後に出す)
 var unburdenActive: Set<String> = []               // かるわざ発動中 (state.json の unburden フラグ用。交代で解除)
 var itemLostActive: Set<String> = []               // 持ち物を消費・喪失した種族 (state.json の itemLost フラグ用。対戦中は交代しても解除されない)
+var subActive: Set<String> = []                    // 身代わりが出ている種族 ("side:Species"。出現文の二重出力防止)
+var boostTouchedStats: Set<String> = []            // この対戦でランク変化を記録した "side:Species|stat" (地形シード遡及補完の二重適用防止)
 var heldBoostLines: [String: [(stat: String, delta: Int, at: Date)]] = [:]  // 交代行より先に届いたランク変化の保留 (枠は出す時点で付け直す)
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
@@ -972,6 +978,7 @@ func applyEvent(_ line: String) {
             let key = "\(ss.side):\(ss.speciesEn)"
             if monStates[key] == nil { monStates[key] = MonState() }
             monStates[key]?.hpPercent = 0
+            subActive.remove(key)
         }
     } else if line.hasPrefix("|switch|") || line.hasPrefix("|drag|") {
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
@@ -981,6 +988,7 @@ func applyEvent(_ line: String) {
                 let pk = "\(ss.side):\(prev)"
                 monStates[pk]?.boosts = [:]
                 unburdenActive.remove(pk)
+                subActive.remove(pk)
             }
             eventSlotSpecies[ss.slot] = ss.speciesEn
             let key = "\(ss.side):\(ss.speciesEn)"
@@ -1007,6 +1015,13 @@ func applyEvent(_ line: String) {
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         if f.count >= 4, let ss = parseSlotSpecies(f[2]), ss.side == "p2" {
             revealedItems[ss.speciesEn] = itemJa2En.first { $0.value == f[3] }?.key ?? f[3]
+        }
+    } else if line.hasPrefix("|-start|") || line.hasPrefix("|-end|") {
+        // 身代わりの有無を追跡する (出現文の再読で開始行を二重に出さないため)
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4, let ss = parseSlotSpecies(f[2]), f[3] == "Substitute" {
+            let key = "\(ss.side):\(ss.speciesEn)"
+            if line.hasPrefix("|-start|") { subActive.insert(key) } else { subActive.remove(key) }
         }
     } else if line.hasPrefix("|move|") {
         // 相手の技は判明情報として記録する (行は英語名のため和名に戻す)
@@ -2140,6 +2155,37 @@ func setTerrain(_ ui: String) {
     fieldTerrainSetAt = Date()
     emitLog("|-fieldstart|move: \(ui) Terrain")  // 状態への反映は applyEvent が行う
     attributeFieldAbilities()
+    retroSeedCheck(terrain: ui)
+}
+
+// フィールドが張られた瞬間、その地形に対応するシードを持つ場のポケモンは
+// ゲーム内で即座にシードを消費している。地形の開始を取りこぼして後から
+// 検出した場合、通常の消費検知 (対応する能力の +1 が地形判明下で起きること)
+// が働かないため、ここで遡って消費を記録する。持ち物が判明していない
+// 個体には推測で記録しない
+// (実例: 2026-11-21 vs Woxofyl 戦、サイコフィールドの開始を取りこぼし、
+//  オオニューラのサイコシード消費と かるわざ が最後まで反映されなかった)
+func retroSeedCheck(terrain: String) {
+    let seedFor: [String: (item: String, stat: String)] = ["Psychic": ("サイコシード", "spd"), "Misty": ("ミストシード", "spd"), "Electric": ("エレキシード", "def"), "Grassy": ("グラスシード", "def")]
+    guard let sd = seedFor[terrain] else { return }
+    for (plateName, s) in lastSlots {
+        let side = plateName.hasPrefix("mine") ? "p1" : "p2"
+        let key = "\(side):\(s.speciesEn)"
+        if itemLostActive.contains(key) { continue }
+        if monStates[key] == nil { monStates[key] = MonState() }
+        if (monStates[key]?.hpPercent ?? 100) <= 0 { continue }
+        let knownItem = side == "p1" ? (teamEntries[s.speciesEn]?["item"] as? String) : revealedItems[s.speciesEn]
+        guard knownItem == sd.item else { continue }
+        let slot = slotId(plateName)
+        // シードの上昇分も取りこぼしている場合だけ補う。その能力に既に
+        // 記録済みの変化がある場合は、内訳を分解できないため重ねない
+        // (上昇だけはサルベージ経由で入れる。直後に本物の上昇文が届いた
+        //  場合は経路をまたぐ二重適用防止が 25 秒間はじく)
+        if !boostTouchedStats.contains("\(key)|\(sd.stat)") {
+            applyBoost(key: key, slot: slot, speciesEn: s.speciesEn, stat: sd.stat, delta: 1, viaSalvage: true)
+        }
+        noteItemLost(slot: slot, side: side, speciesEn: s.speciesEn)
+    }
 }
 
 // 天候・フィールドが張られた直後に場に出たポケモンが、その天候・フィールドを
@@ -2429,6 +2475,7 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
     let cur = monStates[key]?.boosts[stat] ?? 0
     let nv = max(-6, min(6, cur + delta))
     if nv == cur { return }
+    boostTouchedStats.insert("\(key)|\(stat)")
     if stat == "atk" && delta < 0 { recentAtkDrops[key] = (Date(), actionSeq) }
     let line = delta > 0 ? "|-boost|\(slot): \(speciesEn)|\(stat)|\(delta)" : "|-unboost|\(slot): \(speciesEn)|\(stat)|\(-delta)"
     // 状態への適用は発生時点で applyEvent が行う。行の表示は交代行の後まで
@@ -3665,6 +3712,31 @@ func translateBattleMessage(_ text: String) -> Bool {
             noteItemLost(slot: slot, side: side, speciesEn: sp.en)
         }
     }
+    // ふうせんが割れた (持ち物の判明と喪失を同時に記録する。割れた文には
+    // 従来の判明分岐の手がかり (食べた/発動/なくなった) が無いため漏れていた。
+    // 実例: 2026-11-21 vs Woxofyl 戦、ブリジュラスの文が日本語のまま漏れた)
+    if t.contains("ふうせん") && (t.contains("割れた") || t.contains("われた")) {
+        emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "ふうせん")
+        noteItemLost(slot: slot, side: side, speciesEn: sp.en)
+        return true
+    }
+    // 身代わりの出現 (技行と消費 HP の行は別経路で出るため、ここでは
+    // 開始行だけを出す。既に出ている場合は再読として消費だけする。
+    // 実例: 2026-11-21 vs Woxofyl 戦、ゲンガーの出現文が日本語のまま漏れた)
+    if t.contains("身代わり") && (t.contains("現れた") || t.contains("あらわれた")) {
+        if !subActive.contains(key) { emitLog("|-start|\(slot): \(sp.en)|Substitute") }
+        return true
+    }
+    // 身代わりが攻撃を受けた (身代わりへの被弾では本人の HP が動かないため
+    // プレート側では行が出ず、この文が唯一の記録になる。
+    // 実例: 2026-11-21 vs Woxofyl 戦、ゲンガーの身代わりへのシャドーボール)
+    if t.contains("身代わり") && (t.contains("攻撃を受けた") || t.contains("攻撃をうけた")) {
+        let pk = slot + "|subhit"
+        if let at = lastSingleActAt[pk], Date().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[pk] = Date()
+        emitLog("|-activate|\(slot): \(sp.en)|move: Substitute")
+        return true
+    }
     // 回復の告知文: 回復そのものはプレート側で |-heal| を出すため消費のみ
     // (グラッシーフィールド等の回復文が OCR 崩れで漏れた実例: 2026-11-20
     // 「オオニューラのかいふく琳力が回復した！」。持ち物の判明はこの前段の
@@ -4740,7 +4812,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1334"
+let readerBuild = "20261121_1341"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
