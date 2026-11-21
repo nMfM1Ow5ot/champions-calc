@@ -118,10 +118,10 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .picon.fnt img{opacity:.3; filter:grayscale(1)}
 
 /* ---------- PokeInfo ---------- */
-.pokeinfo{display:flex; gap:1.2rem; margin-top:.8rem}
+.pokeinfo{display:flex; flex-wrap:wrap; gap:1.2rem; margin-top:.8rem}
 .piconbox{width:4rem; height:4rem; flex:none}
 .piconbox img{width:4rem; height:4rem; object-fit:contain}
-.infomain{flex:1; min-width:0}
+.infomain{flex:999 1 26rem; min-width:0}
 .firstline{display:flex; align-items:center; gap:.8rem}
 .speciesname{font-size:1.3rem; font-weight:700; color:#fff; white-space:nowrap}
 .level{font-size:.8rem; color:var(--dim)}
@@ -146,7 +146,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .stpop button:hover{background:rgba(255,255,255,.15)}
 
 /* ---------- preset box ---------- */
-.presetbox{width:21rem; flex:none}
+.presetbox{flex:1 1 21rem; min-width:0}
 .presethead{display:flex; align-items:center; gap:.35rem; margin-bottom:.4rem; flex-wrap:wrap}
 .presethead .part{display:contents}
 .presethead .tgl{flex:1 1 4.6rem; min-width:0; white-space:nowrap; text-align:center; font-size:.56rem; letter-spacing:0; padding:.3rem .2rem}
@@ -270,7 +270,7 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 .jsonbox textarea{width:100%; min-height:6rem; background:rgba(255,255,255,.05); color:var(--ink); border:none; border-radius:.5rem; box-shadow:var(--dd-shadow); font:inherit; font-size:.9rem; padding:.6rem; margin-top:.6rem}
 .note{font-size:.85rem; color:var(--faint); line-height:1.6; margin-top:1rem}
 @media (max-width:640px){ .tables{flex-direction:column; align-items:stretch} .metarow{flex-direction:column} .presetbox{min-width:0; width:auto} .presethead{flex-wrap:wrap} }
-@media (max-width:1200px){ .pokeinfo{flex-wrap:wrap} .presetbox{width:100%; flex:none} .firstline{flex-wrap:wrap; row-gap:.4rem} }
+@media (max-width:1200px){ .firstline{flex-wrap:wrap; row-gap:.4rem} }
 
 /* ---------- 端末別レイアウト (data-layout は head のスクリプトが ?layout= か画面幅で決める) ---------- */
 /* PC レイアウト: 描画方法は端末別ページ追加前のまま (head のスクリプトが
@@ -298,8 +298,7 @@ html[data-layout="sp"] .playerinfo{min-width:0}
 html[data-layout="sp"] .rack{justify-content:flex-start}
 html[data-layout="sp"] .picon{width:4.2rem; height:4.2rem}
 html[data-layout="sp"] .picon img{width:3.6rem; height:3.6rem}
-html[data-layout="sp"] .pokeinfo{flex-wrap:wrap}
-html[data-layout="sp"] .presetbox{width:100%; flex:none}
+html[data-layout="sp"] .pokeinfo{gap:.8rem}
 html[data-layout="sp"] .firstline, html[data-layout="sp"] .secondline{flex-wrap:wrap}
 html[data-layout="sp"] .hpbar{width:7rem}
 html[data-layout="sp"] .tables{flex-direction:column; align-items:stretch; gap:1rem; margin-top:1rem}
@@ -1084,7 +1083,7 @@ function statusBadgeHTML(spec) {
 
 
 function dispStat(spec, key, raw, sideKey) {
-  if (key === 'hp') return [spec.dynamax ? raw.hp * 2 : raw.hp, ''];
+  if (key === 'hp') return [spec.dynamax ? raw.hp * 2 : raw.hp, spec.dynamax ? 'green' : ''];
   let v = raw[key];
   const b = spec.boosts[key] || 0;
   if (b > 0) v = Math.floor(v * (2 + b) / 2); else if (b < 0) v = Math.floor(v * 2 / (2 - b));
