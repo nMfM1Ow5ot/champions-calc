@@ -193,6 +193,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .presetedit{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .35rem; font:inherit}
 .presetedit:hover{color:var(--ink)}
 .preseticons{display:flex; gap:.12rem; flex:none; align-items:center}
+.vgcteamlist{max-height:15rem; overflow-y:auto}
 
 .preseticon{width:1.7rem; height:1.7rem; object-fit:contain; image-rendering:pixelated}
 .presetdel{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .45rem; font:inherit}
@@ -616,7 +617,7 @@ function confirmNewBattle() {
 // さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
 const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
-const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, statusPop: null, presetDraft: { save: {}, rename: '', token: '' }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
+const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, statusPop: null, presetDraft: { save: {}, rename: '', token: '', search: {} }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
 
 function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
 let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
@@ -759,6 +760,8 @@ let POKEDB_PARSED = null; // data/pokedb_parsed.json (pokedb の使用率分布�
 let META_SETS = null;      // data/meta_sets.json (上位勢の実在型コーパス。ベイズ推定の候補へ統合する)
 let META_SETS_LOADED = false; // meta_sets の読み込み成否が確定したか (ファイルが無い場合も確定扱い)
 let VGC_SETS = null;       // data/vgcpastes_sets.json (VGCPastes 収集型。SET プルダウンから選択可能にする)
+let VGC_TEAMS = null;      // data/vgc_pastes.json (VGCPastes 収集チーム。プリセット欄の一覧用に遅延読み込み)
+let vgcTeamsLoading = false;
 let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
 let USAGE_SEASON = '';
 // 使用率型の解決: フォルム名 (イルカマン(ヒーロー)等) には使用率データが
@@ -843,10 +846,9 @@ function vgcBuildsFor(spec) {
   for (const k of keys) for (const b of VGC_SETS.species[k]) out.push({ key: k, build: b });
   return out;
 }
-// 収集型をパネルへ一括反映する。sp が null の型は現在の SP を維持する
-function applyVgcBuild(side, entry, kindValue) {
-  if (!entry || !entry.build) return;
-  const keep = DS(side);
+// 収集型 (vgcpastes_sets の型 / vgc_pastes のチームメンバー) からパネル用
+// spec を作る。sp が null の場合は keep の SP を維持する (keep が無ければ 0)
+function vgcBuildSpec(entry, keep) {
   const { key, build } = entry;
   const sd = gen.species.get(idOf(key));
   const base = (sd && sd.baseSpecies) || key;
@@ -854,7 +856,7 @@ function applyVgcBuild(side, entry, kindValue) {
   const b = {
     species: base, ability: build.ability || '', item: build.item || '',
     nature: build.nature || 'Hardy',
-    sp: build.sp ? { ...build.sp } : { ...(keep.sp || {}) },
+    sp: build.sp ? { ...build.sp } : { ...((keep && keep.sp) || {}) },
     moves: [...(build.moves || [])],
   };
   if (megaKey) {
@@ -866,7 +868,13 @@ function applyVgcBuild(side, entry, kindValue) {
     if (mabs.includes(b.ability)) { b.megaAbility = b.ability; b.ability = baseList[0] || ''; }
     else { b.megaAbility = mabs[0] || null; if (baseList.length && !baseList.includes(b.ability)) b.ability = baseList[0]; }
   }
-  const ns = specFromPresetBuild(b);
+  return specFromPresetBuild(b);
+}
+// 収集型をパネルへ一括反映する。sp が null の型は現在の SP を維持する
+function applyVgcBuild(side, entry, kindValue) {
+  if (!entry || !entry.build) return;
+  const keep = DS(side);
+  const ns = vgcBuildSpec(entry, keep);
   ns.kind = kindValue;
   if (side === 'mine') {
     delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
@@ -876,6 +884,46 @@ function applyVgcBuild(side, entry, kindValue) {
   }
   ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
   state[side][state.sel[side]] = ns;
+}
+// VGCPastes のチームデータ (約4MB) はプリセット欄を開いた時に遅延読み込みする
+function ensureVgcTeams() {
+  if (VGC_TEAMS || vgcTeamsLoading) return;
+  vgcTeamsLoading = true;
+  fetch('./data/vgc_pastes.json').then(r => r.json()).then(d => { if (d && Array.isArray(d.teams)) VGC_TEAMS = d; }).catch(() => { /* optional */ }).finally(() => { vgcTeamsLoading = false; if (ui.presetPop) renderAll(); });
+}
+// 収集チームをそのサイドへ丸ごと読み込む
+function applyVgcTeam(side, teamId) {
+  if (!VGC_TEAMS) return;
+  const t = VGC_TEAMS.teams.find(x => x.teamId === teamId);
+  if (!t || !Array.isArray(t.members) || !t.members.length) return;
+  const specs = t.members.slice(0, 6).map(m => {
+    const forme = m.forme || m.species;
+    const ns = vgcBuildSpec({ key: forme, build: { ability: m.ability || '', item: m.item || '', nature: m.nature || 'Hardy', sp: m.sps || null, moves: [...(m.moves || [])], megaSpecies: forme !== m.species ? forme : undefined } }, null);
+    ns.kind = 'custom';
+    return ns;
+  });
+  state[side] = specs;
+  state.sel[side] = 0;
+  state.active[side] = [0, Math.min(1, specs.length - 1)];
+  if (side === 'opps') { state.oppTeam = specs.map(s => s.species); resetInference(); syncTeamContext(); }
+  ui.presetPop = null; ui.presetRename = null;
+  applySetterAbility(specs[0]);
+  calcAll();
+}
+// プリセット欄の VGCPastes 専用一覧 (共有表示の行を区切りとして、その下に置く)
+function vgcTeamRowsHTML(side, q) {
+  if (!VGC_TEAMS) return vgcTeamsLoading ? '<div class="presetempty">VGCPastes のチームを読み込み中です</div>' : '';
+  const reg = currentRegulation();
+  if (VGC_TEAMS.regulation && reg && VGC_TEAMS.regulation !== reg) return '';
+  const teams = VGC_TEAMS.teams.filter(t => !q || String(t.description || '').toLowerCase().includes(q));
+  if (!teams.length) return '<div class="presetempty">VGCPastes: 該当するチームはありません</div>';
+  const MAX = 100;
+  const rows = teams.slice(0, MAX).map(t => {
+    const p = { slots: (t.members || []).map(m => ({ species: m.species, mega: !!(m.forme && m.forme !== m.species && m.forme.includes('-Mega')), megaSpecies: m.forme || '' })) };
+    return `<div class="presetrow"><button class="presetname" data-vgcteam="${side}:${esc(t.teamId)}" title="このチームを読み込む">${presetIconsHTML(p)}<span class="presetnametext">${esc(t.description || t.teamId)}</span></button></div>`;
+  }).join('');
+  const more = teams.length > MAX ? `<div class="presetempty">他 ${teams.length - MAX} 件あります (検索で絞り込めます)</div>` : '';
+  return `<div class="vgcteamlist">${rows}</div>${more}`;
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
 function applyRevealed(spec, rev) {
@@ -1540,8 +1588,10 @@ function presetIconsHTML(p) {
 }
 function presetPopHTML(side) {
   const list = loadPresetStore()[side];
-  const vis = list.map((p, i) => ({ p, i })).filter(({ p }) => presetVisible(p));
-  const hidden = list.length - vis.length;
+  const q = (ui.presetDraft.search[side] || '').trim().toLowerCase();
+  const visReg = list.map((p, i) => ({ p, i })).filter(({ p }) => presetVisible(p));
+  const hidden = list.length - visReg.length;
+  const vis = visReg.filter(({ p }) => !q || String(p.name).toLowerCase().includes(q));
   const renaming = ui.presetRename && ui.presetRename.side === side ? ui.presetRename.idx : -1;
   const rows = vis.map(({ p, i }) => {
     if (i === renaming) {
@@ -1552,9 +1602,11 @@ function presetPopHTML(side) {
   const draft = ui.presetDraft.save[side];
   return `<span class="presetpop">
     <div class="presetsave"><input type="text" class="presetnamein" data-presetname="${side}" placeholder="プリセット名" value="${esc(draft != null ? draft : `プリセット ${list.length + 1}`)}"><button class="tgl" data-presetsave="${side}">保存</button></div>
-    ${rows || '<div class="presetempty">保存されたプリセットはありません</div>'}
+    <div class="presetsave"><input type="text" class="presetnamein" data-presetsearch="${side}" placeholder="プリセット・チームを検索" value="${esc(ui.presetDraft.search[side] || '')}"></div>
+    ${rows || (q ? '<div class="presetempty">該当するプリセットはありません</div>' : '<div class="presetempty">保存されたプリセットはありません</div>')}
     ${hidden ? `<div class="presetempty">他のレギュレーションのプリセットが ${hidden} 件あります</div>` : ''}
     ${presetSyncHTML()}
+    ${vgcTeamRowsHTML(side, q)}
   </span>`;
 }
 function presetBox(side) {
@@ -1995,10 +2047,11 @@ function renderAll() {
   // プリセット名の入力中は、再描画でフォーカスと入力位置が失われないよう退避する
   const ae = document.activeElement;
   let presetFocus = null;
-  if (ae && ae.matches && (ae.matches('[data-presetname]') || ae.matches('[data-presetrename]'))) {
+  if (ae && ae.matches && (ae.matches('[data-presetname]') || ae.matches('[data-presetrename]') || ae.matches('[data-presetsearch]'))) {
     let sel = null;
     try { sel = ae.selectionStart; } catch (e) { /* noop */ }
-    presetFocus = { rename: !!ae.matches('[data-presetrename]'), side: ae.dataset.presetname || ae.dataset.presetrename, sel };
+    const attr = ae.matches('[data-presetrename]') ? 'presetrename' : (ae.matches('[data-presetsearch]') ? 'presetsearch' : 'presetname');
+    presetFocus = { attr, side: ae.dataset[attr], sel };
   }
   if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) {
     try { document.activeElement.blur(); } catch (e) { /* noop */ }
@@ -2009,7 +2062,7 @@ function renderAll() {
   document.getElementById('fieldbar').innerHTML = renderField();
   document.getElementById('playerOpp').innerHTML = renderPanel('opps');
   if (presetFocus && ui.presetPop === presetFocus.side) {
-    const inp = document.querySelector(presetFocus.rename ? `[data-presetrename="${presetFocus.side}"]` : `[data-presetname="${presetFocus.side}"]`);
+    const inp = document.querySelector(`[data-${presetFocus.attr}="${presetFocus.side}"]`);
     if (inp) {
       inp.focus();
       if (presetFocus.sel != null) { try { inp.setSelectionRange(presetFocus.sel, presetFocus.sel); } catch (e) { /* noop */ } }
@@ -2035,7 +2088,9 @@ document.addEventListener('input', e => {
   const rn = t.closest('[data-presetrename]');
   if (rn) { ui.presetDraft.rename = t.value; return; }
   const tk = t.closest('[data-presettoken]');
-  if (tk) { ui.presetDraft.token = t.value; }
+  if (tk) { ui.presetDraft.token = t.value; return; }
+  const pq = t.closest('[data-presetsearch]');
+  if (pq) { ui.presetDraft.search[pq.dataset.presetsearch] = t.value; renderAll(); }
 });
 // 第2段: 選択中マッチアップについて、相手の事後上位候補を通じたダメージ幅。
 // 集計の実処理は推定エンジン側 (estimate_engine.mjs の candRanges)
@@ -2281,7 +2336,9 @@ document.addEventListener('click', e => {
   const fo = t.closest('[data-forme]');
   if (fo) { const side = fo.dataset.forme; ui.formePop = ui.formePop === side ? null : side; renderAll(); return; }
   const pb = t.closest('[data-presetbtn]');
-  if (pb) { const side = pb.dataset.presetbtn; ui.presetPop = ui.presetPop === side ? null : side; if (!ui.presetPop) ui.presetRename = null; renderAll(); return; }
+  if (pb) { const side = pb.dataset.presetbtn; ui.presetPop = ui.presetPop === side ? null : side; if (!ui.presetPop) ui.presetRename = null; if (ui.presetPop) ensureVgcTeams(); renderAll(); return; }
+  const vt = t.closest('[data-vgcteam]');
+  if (vt) { const [side, teamId] = vt.dataset.vgcteam.split(':'); applyVgcTeam(side, teamId); return; }
   const psv = t.closest('[data-presetsave]');
   if (psv) { const side = psv.dataset.presetsave; const inp = document.querySelector(`[data-presetname="${side}"]`); savePreset(side, ui.presetDraft.save[side] != null ? ui.presetDraft.save[side] : (inp ? inp.value : '')); delete ui.presetDraft.save[side]; renderAll(); return; }
   const ptk = t.closest('[data-presettokensave]');
