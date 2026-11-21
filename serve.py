@@ -271,6 +271,14 @@ def _is_upload_target(name):
         # ないため備考ゲートの対象外とし、そのまま送る。受信側では
         # preview_test_ 始まりが「見せ合いテストの到着」の目印になる
         return True
+    if name.startswith("debug_ui_") and name.endswith(".json"):
+        # UI の「デバッグ送信」ボタンで送られたスナップショット
+        # (POST /debug_report で保存)。試合に紐づかないため備考
+        # ゲートの対象外とし、そのまま送る。配送先はログ分析では
+        # なくダメージ計算チャット (受信側は debug_ui_ 始まりを目印
+        # に監視する)。自チームの型情報を含むため、暗号化は他の
+        # ファイルと同じ経路 (全送信物が暗号化される) で行われる
+        return True
     if not name.startswith("battle_"):
         return False
     if name.endswith(".log"):
@@ -655,6 +663,9 @@ def _upload_logs_once_locked():
             if n.startswith("preview_test_"):
                 print(f"[log] 見せ合いテストの結果を送信しました: {n}",
                       flush=True)
+            elif n.startswith("debug_ui_"):
+                print(f"[log] UIデバッグ情報を送信しました: {n}",
+                      flush=True)
             else:
                 print(f"[log] 試合ログを送信しました: {n}", flush=True)
         if prune_due or changed_index:
@@ -733,6 +744,54 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
+
+    def do_POST(self):
+        # UI の「デバッグ送信」ボタンの受け口。スナップショット JSON
+        # を logs/debug_ui_<日時>.json に保存し、通常のアップロード
+        # サイクル (備考ゲート対象外) で暗号化して送る。UI は 2xx
+        # 以外を送信失敗として表示するため、失敗時は必ず非 2xx を返す
+        if self.path.split("?", 1)[0] != "/debug_report":
+            self.send_error(404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            self.send_error(400)
+            return
+        if length > 5 * 1024 * 1024:
+            self.send_error(413)
+            return
+        body = self.rfile.read(length)
+        try:
+            json.loads(body)
+        except Exception:
+            self.send_error(400)
+            return
+        try:
+            os.makedirs(LOG_DIR, exist_ok=True)
+            stamp = datetime.now(JST).strftime("%Y%m%d_%H%M%S")
+            name = f"debug_ui_{stamp}.json"
+            path = os.path.join(LOG_DIR, name)
+            suffix = 1
+            while os.path.exists(path):
+                suffix += 1
+                name = f"debug_ui_{stamp}_{suffix}.json"
+                path = os.path.join(LOG_DIR, name)
+            with open(path, "wb") as f:
+                f.write(body)
+        except Exception as e:
+            _record_crash("debug_report_save", e)
+            self.send_error(500)
+            return
+        print(f"[log] UIデバッグ情報を受け取りました: {name}", flush=True)
+        payload = json.dumps({"ok": True, "file": name}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
 
 # ---- 備考のターミナル入力 ----
