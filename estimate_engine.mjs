@@ -30,6 +30,10 @@ export function createEstimator(deps) {
   let bayes = null, lastSpeCtx = null;
   let pendingOpts = null; // processDamageInf が計算した場の条件を processDamageBayes が使う
   let teamContextSpecies = null; // 相手チームの種族一覧 (UI が setTeamContext で渡す)
+  // 推論過程ログ (検証用): 更新のたびにスナップショットをキューへ積み、
+  // UI が takeInferenceLog() でまとめて受け取る。読み取りのみで推論には影響しない
+  let infLog = [], infLogSeq = 0, infLogTurn = null;
+  let logTrigger = null; // bayesApply の呼び出し側が証拠の要約を渡すための一時変数
 
 const INF_BLACKLIST = new Set(['Foul Play', 'Gyro Ball', 'Electro Ball', 'Endeavor', 'Final Gambit', 'Seismic Toss', 'Night Shade', 'Dragon Rage', 'Sonic Boom', 'Super Fang', "Nature's Madness", 'Fissure', 'Horn Drill', 'Guillotine', 'Sheer Cold', 'Counter', 'Mirror Coat', 'Metal Burst', 'Comeuppance', 'Pain Split']);
 
@@ -49,23 +53,53 @@ function infSideConds(ev) {
     defSide: { isReflect: active(ds.reflect, 5), isLightScreen: active(ds.light, 5), isAuroraVeil: active(ds.veil, 5) },
   };
 }
+// 推論過程ログの1レコードを組み立ててキューへ積む。失敗しても推論は止めない
+function logSnapshot(species, turn, trigger) {
+  try {
+    const ent = bayes && bayes.bySpecies ? bayes.bySpecies[species] : null;
+    let map = null, cover90 = null, cands = null, used = null, hpLifted = false;
+    if (ent && ent.cands) {
+      const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
+      const top = sorted[0];
+      map = { nature: top.nature, sp: { ...top.sp }, item: top.item, ability: top.ability, p: +top.post.toFixed(6) };
+      let acc = 0, n = 0;
+      for (const c of sorted) { acc += c.post; n++; if (acc >= 0.9) break; }
+      cover90 = { n, mass: +acc.toFixed(6) };
+      cands = sorted.map(c => ({ nature: c.nature, sp: { ...c.sp }, item: c.item, ability: c.ability, p: +c.post.toFixed(6),
+        src: c.moveExact ? 'corpus' : c.generic ? 'generic' : (c.bulkSynth || c.shapeSynth) ? 'synth' : 'pokedb' }));
+      used = ent.used;
+      hpLifted = !!ent.hpLifted;
+    }
+    const ie = inference.bySpecies[species];
+    const inf = ie ? { used: ie.used, dropped: ie.dropped,
+      pairs: { atk: ie.pairs.atk ? ie.pairs.atk.size : null, spa: ie.pairs.spa ? ie.pairs.spa.size : null,
+        def: ie.pairs.def ? ie.pairs.def.size : null, spd: ie.pairs.spd ? ie.pairs.spd.size : null,
+        spe: ie.pairs.spe ? ie.pairs.spe.size : null },
+      hpSps: ie.hpSps ? ie.hpSps.size : null } : null;
+    infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, cover90, cands, inf });
+    if (infLog.length > 2000) infLog.splice(0, infLog.length - 2000);
+  } catch (e) { /* ログ生成の失敗で推論を止めない */ }
+}
+function takeInferenceLog() { const out = infLog; infLog = []; return out; }
 // 候補集合への交差適用 (空になるイベントは矛盾として捨てる)
 function infIntersect(species, statKey, feasible, hpSps) {
   const e = infEntry(species);
-  if (!feasible || !feasible.size) { e.dropped++; return; }
+  if (!feasible || !feasible.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false }); return; }
   const next = e.pairs[statKey] ? new Set([...e.pairs[statKey]].filter(x => feasible.has(x))) : feasible;
-  if (!next.size) { e.dropped++; return; }
+  if (!next.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false }); return; }
   let nh = null;
   if (hpSps) {
     nh = e.hpSps ? new Set([...e.hpSps].filter(x => hpSps.has(x))) : hpSps;
-    if (!nh.size) { e.dropped++; return; }
+    if (!nh.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false }); return; }
   }
   e.pairs[statKey] = next;
   if (hpSps) e.hpSps = nh;
   e.used++;
   dirty = true;
+  logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: true });
 }
 function processDamageInf(ev, ctx) {
+  if (typeof ev.turn === 'number') infLogTurn = ev.turn;
   pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
   const md = moveData(ev.move);
   if (!md || md.category === 'Status' || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
@@ -154,6 +188,7 @@ function moveBracket(md, ability) {
   return { prio, last };
 }
 function processMoveInf(ev, io) {
+  if (typeof ev.turn === 'number') infLogTurn = ev.turn;
   const intents = [];
   const side = labelSide(ev.label);
   if (ev.move === 'Tailwind') { infCtx.tailwindTurn[side] = ev.turn; intents.push({ t: 'side', side, key: 'tailwind', turn: ev.turn }); }
@@ -234,6 +269,7 @@ function processMoveInf(ev, io) {
    ためペアリングから除外する */
 const AB_ORDER_EXEMPT = new Set(['Unnerve', 'As One (Glastrier)', 'As One (Spectrier)', 'Neutralizing Gas']);
 function infProcessAbility(ev, io) {
+  if (typeof ev.turn === 'number') infLogTurn = ev.turn;
   if (typeof ev.batch !== 'number') return;
   if (AB_ORDER_EXEMPT.has(ev.ability)) return;
   const list = infCtx.abBatches[ev.batch] || (infCtx.abBatches[ev.batch] = []);
@@ -436,6 +472,7 @@ function bayesMoveUpdate(ent, species, moves) {
   if (tot > 0) for (const c of ent.cands) c.post /= tot;
   ent.used++;
   dirty = true;
+  logSnapshot(species, infLogTurn, { kind: 'moveSeen', added, removed, applied: true });
 }
 // meta_sets の名前は英語表記が正本だが、和名で来ても解決できるよう両対応にする
 function metaNameEn(kind, name) {
@@ -733,7 +770,8 @@ function bayesEntry(species) {
     const cands = bayesBuildCandidates(species);
     if (!cands || !cands.length) { bayes.bySpecies[species] = null; return null; }
     applyTeamItemBoost(cands, species);
-    bayes.bySpecies[species] = { cands, used: 0, revKey: '' };
+    bayes.bySpecies[species] = { species, cands, used: 0, revKey: '' };
+    logSnapshot(species, infLogTurn, { kind: 'entry' });
   }
   return bayes.bySpecies[species];
 }
@@ -746,6 +784,8 @@ function bayesCandSpec(base, c) {
 // 尤度の適用。counts は「16 ロール中いくつ両立したか」相当 (0..16)。
 // 全候補が 0 のイベントは未モデル要素ありとみなして更新をスキップする
 function bayesApply(ent, counts, bulk) {
+  const lt = logTrigger; logTrigger = null;
+  const liftedBefore = !!ent.hpLifted;
   // HP優先の仮定の撤廃 (ダメージ証拠のみ): HP優先候補の全てと矛盾し、
   // 割り引き対象候補でのみ説明できる観測が得られたら、割り引きを解除する。
   // 蓄積済みの尤度は保持したまま、対象候補の確率を割り引き前の比率へ戻す
@@ -760,13 +800,14 @@ function bayesApply(ent, counts, bulk) {
       dirty = true;
     }
   }
-  if (!counts.some(n => n > 0)) { bayes.skipped++; return; }
+  if (!counts.some(n => n > 0)) { bayes.skipped++; if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: false }); return; }
   let tot = 0;
   ent.cands.forEach((c, i) => { c.post *= Math.max(counts[i] / 16, BAYES_FLOOR); tot += c.post; });
-  if (!(tot > 0)) return;
+  if (!(tot > 0)) { if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: false }); return; }
   for (const c of ent.cands) c.post /= tot;
   ent.used++;
   dirty = true;
+  if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: true, lifted: !!ent.hpLifted && !liftedBefore });
 }
 function processDamageBayes(ev, ctx) {
   const opts = pendingOpts;
@@ -785,6 +826,7 @@ function processDamageBayes(ev, ctx) {
       const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts);
       return rolls.filter(r => r === ev.amt).length;
     });
+    logTrigger = { turn: ev.turn, trig: { kind: 'damage', move: md.name, by: 'opp', amt: ev.amt, crit: !!ev.crit } };
     bayesApply(ent, counts, true);
   } else {
     // 自分の攻撃: 相手の HP% 減少 (切り捨て/四捨五入の両対応) と両立するロールの割合
@@ -801,6 +843,7 @@ function processDamageBayes(ev, ctx) {
       for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
       return n;
     });
+    logTrigger = { turn: ev.turn, trig: { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit } };
     bayesApply(ent, counts, true);
   }
 }
@@ -829,6 +872,7 @@ function processMoveBayes(ev, io) {
     const ok = ctx.trick ? (ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff) : (ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff);
     return ok ? 16 : 0;
   });
+  logTrigger = { turn: ev.turn, trig: { kind: 'moveOrder', move: ctx.oppMd ? ctx.oppMd.name : null, firstIsOpp: !!ctx.firstIsOpp } };
   bayesApply(ent, counts);
 }
 // 判明情報 (持ち物・特性) と矛盾する候補の減衰。同じ判明内容では再適用しない。
@@ -864,6 +908,7 @@ function applyRevealed(list) {
       if (tot > 0) for (const c of ent.cands) c.post /= tot;
       dirty = true;
     }
+    logSnapshot(species, infLogTurn, { kind: 'revealed', item, ability, applied: changed });
   }
 }
 
@@ -1008,6 +1053,7 @@ function candRanges(args) {
     infLastMove = null;
     dirty = false;
     pendingOpts = null;
+    infLog = []; infLogSeq = 0; infLogTurn = null; logTrigger = null;
     bayesReset();
     lastSpeCtx = null;
   }
@@ -1027,6 +1073,7 @@ function candRanges(args) {
     setTeamContext,
     setMoveV2(v) { BAYES_MOVE_V2 = v; },
     takeDirty() { const d = dirty; dirty = false; return d; },
+    takeInferenceLog,
     getSeen() { return inference.seen; },
     setSeen(n) { inference.seen = n; },
     _debug() { return { bayes, inference }; },
