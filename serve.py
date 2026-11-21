@@ -260,6 +260,22 @@ def _gh_delete_file(path, token, message, sha):
     return _gh_request("DELETE", path, token, {"message": message, "sha": sha})
 
 
+# 見せ合いテストの送信セッション。通常起動 (start_all.sh) の
+# serve.py は、logs/ に残った過去の見せ合いテスト結果を送らない
+# (通常起動でテスト結果が送信されると、テストが起動したように
+# 見えるため)。preview_test.sh が起動した serve.py は環境変数で、
+# 起動済みの serve.py は POST /preview_test_session で、それぞれ
+# 明示的に有効化したときだけ送る。有効化はプロセスの生存期間のみ
+# (自動再起動で環境変数は引き継がれる。エンドポイントで有効化した
+# 場合は preview_test.sh が撮影のたびに送り直す)
+_preview_test_session = (
+    os.environ.get("CHAMPIONS_PREVIEW_TEST_SESSION") == "1")
+
+
+def _preview_test_upload_allowed():
+    return _preview_test_session
+
+
 def _is_upload_target(name):
     if name == _CRASH_LOG_NAME:
         # クラッシュジャーナルは試合に紐づかないため備考ゲートの
@@ -269,8 +285,10 @@ def _is_upload_target(name):
             name.endswith(".jpg") or name.endswith(".json")):
         # 見せ合いテストの成果物 (撮影画像と検出結果)。試合に紐づか
         # ないため備考ゲートの対象外とし、そのまま送る。受信側では
-        # preview_test_ 始まりが「見せ合いテストの到着」の目印になる
-        return True
+        # preview_test_ 始まりが「見せ合いテストの到着」の目印になる。
+        # ただし送信は見せ合いテストのセッションで有効化された
+        # ときだけ (上記 _preview_test_session を参照)
+        return _preview_test_upload_allowed()
     if name.startswith("debug_ui_") and name.endswith(".json"):
         # UI の「デバッグ送信」ボタンで送られたスナップショット
         # (POST /debug_report で保存)。試合に紐づかないため備考
@@ -746,11 +764,25 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/preview_test_session":
+            # 見せ合いテストの送信をこのプロセスの生存期間だけ有効化
+            # する (preview_test.sh が撮影前に送る)。通常起動の
+            # serve.py が過去のテスト結果を送らないための明示スイッチ
+            global _preview_test_session
+            _preview_test_session = True
+            payload = json.dumps({"ok": True}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         # UI の「デバッグ送信」ボタンの受け口。スナップショット JSON
         # を logs/debug_ui_<日時>.json に保存し、通常のアップロード
         # サイクル (備考ゲート対象外) で暗号化して送る。UI は 2xx
         # 以外を送信失敗として表示するため、失敗時は必ず非 2xx を返す
-        if self.path.split("?", 1)[0] != "/debug_report":
+        if path != "/debug_report":
             self.send_error(404)
             return
         try:
