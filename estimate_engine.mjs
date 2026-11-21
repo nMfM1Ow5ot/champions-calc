@@ -15,12 +15,14 @@ export function createEstimator(deps) {
   const effSpecies = deps.effSpecies;
   // 材料データ (UI 側のグローバルと同名で受ける。候補生成のたびに最新化する)
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
+  let VGC_SETS = null; // data/vgc_pastes.json (VGCPastes の実在型。meta_sets と同じ形式で候補コーパスへ統合する。未提供なら従来動作)
   function syncData() {
     const d = deps.getData() || {};
     POKEDB_PARSED = d.POKEDB_PARSED ?? null;
     USAGE_SETS = d.USAGE_SETS ?? null;
     META_SETS = d.META_SETS ?? null;
     META_SETS_LOADED = !!d.META_SETS_LOADED;
+    VGC_SETS = d.VGC_SETS ?? null;
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
@@ -523,11 +525,14 @@ function metaFormeFullName(entry) {
 // メガ型の特性はメガ側の特性なので megaAbility に入れ、ベース特性は使用率
 // 1位の特性 (fallback.topAbility) を仮置きする (pokedb 候補と同じ扱い)
 function bayesCorpusCandidates(species, table, fallback) {
-  if (!META_SETS || !Array.isArray(META_SETS.sets)) return [];
+  const corpora = [];
+  if (META_SETS && Array.isArray(META_SETS.sets)) corpora.push(...META_SETS.sets);
+  if (VGC_SETS && Array.isArray(VGC_SETS.sets)) corpora.push(...VGC_SETS.sets);
+  if (!corpora.length) return [];
   const sd = gen.species.get(idOf(species));
   const base = (sd && sd.baseSpecies) || species;
   const out = [];
-  for (const e of META_SETS.sets) {
+  for (const e of corpora) {
     if (!e || !e.species) continue;
     const full = metaFormeFullName(e);
     const isMega = full.includes('-Mega');
