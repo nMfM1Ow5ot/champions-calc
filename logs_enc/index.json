@@ -124,6 +124,61 @@
    "name": "battle_20261121_140542_salvage_note.txt",
    "sha256": "2b5f779b8e0e879044f6391c2752cc3a2b54a75964c4cb9c0338ceec9da8a41e",
    "uploaded_at": "2026-11-21T14:12:17.506174+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug01.jpg",
+   "sha256": "c57fa526d55a968e5988d18a288ea033a1116325b8772d837139af277a6d3251",
+   "uploaded_at": "2026-11-21T14:16:59.319329+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug01.json",
+   "sha256": "8a8b5e55287eb16d894ad3e30d8e1d0e2d41396ecf98be8a4330feccabd8c181",
+   "uploaded_at": "2026-11-21T14:17:00.983788+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug02.jpg",
+   "sha256": "4ea13df9de67953affd5fd6476ec868ecebaec0f69ce28700a9409cb39947493",
+   "uploaded_at": "2026-11-21T14:17:03.726722+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug02.json",
+   "sha256": "981cdea57f323af6c0c510ec80ca6b3908872a3af09112b6f55f931ad99559ea",
+   "uploaded_at": "2026-11-21T14:17:05.442862+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug03.jpg",
+   "sha256": "85278347f3c5da2b8b5987e7e31739c1a7544785c8da05fe93a2ede42faf7b52",
+   "uploaded_at": "2026-11-21T14:17:08.068382+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug03.json",
+   "sha256": "418dea9fa298b802173023b77016acb8472a73248f6743acbadaa95ef8e32248",
+   "uploaded_at": "2026-11-21T14:17:09.855440+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug04.jpg",
+   "sha256": "470b1aed991d705ff61ca9bd961c7b37cdc138e65837d5ebeb3121617ce706bc",
+   "uploaded_at": "2026-11-21T14:17:12.609941+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_debug04.json",
+   "sha256": "9e72bd133a84bf067f0d6b1205ed4cc37936524958cd9a8558850ea2b7337a2e",
+   "uploaded_at": "2026-11-21T14:17:14.543511+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_final.log",
+   "sha256": "32bcbf8fc46ca45abd3f7595256f71921ab0c9b6ea17cebe550037b160c1f395",
+   "uploaded_at": "2026-11-21T14:17:16.408910+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_final_protocol.log",
+   "sha256": "2597b824c4b2bdee615efef1a16aae1287320e5ec70e723002156ff6c9d3310d",
+   "uploaded_at": "2026-11-21T14:17:18.259491+09:00"
+  },
+  {
+   "name": "battle_20261121_140658_note.txt",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "uploaded_at": "2026-11-21T14:17:20.112708+09:00"
   }
  ]
 }
