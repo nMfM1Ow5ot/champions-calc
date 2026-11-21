@@ -276,6 +276,8 @@ var firstSlotConfirmedAt: Date? = nil   // この試合で最初にプレート�
 var lastWritten = ""
 // 相手の6体コレクション: 対戦中にプレートで読み取れた相手種族を登場順に蓄積する (見せ合い画面には名前テキストが無いため)
 var oppTeamSeen: [String] = []
+var headerOppTeam: [String] = []          // ログ開始時にヘッダーへ書いた相手6体 (開始時点の控え)
+var headerMismatchFired: Set<String> = []  // header_mismatch を記録済みの種族
 // 選出同定で入ったが、対戦中にまだ実物が観測されていない種族。
 // 選出の推定 (仮置きはもちろん、タイプで「確定」した枠もアイコン誤読なら
 // ありうる) はプレートの名前テキストより弱い証拠なので、未確認の間は
@@ -456,6 +458,8 @@ var currentTurn = 0
 var movesSinceTurnLine: Set<String> = []
 var roundEventSeen = false
 var suppressNextDetectorTurn = false
+// 最後のターン行以降に交代で入った枠 (ターン行ガードの条件 (c) 用)
+var enteredThisSegment: Set<String> = []
 // 場にいない種族の文が既定枠へ帰属された回数 (側+種族ごと)。
 // 繰り返しのデフォルト帰属をデバッグ記録するための数え
 var defaultAttribCount: [String: Int] = [:]
@@ -1113,11 +1117,25 @@ func emitLog(_ line: String, applyNow: Bool) {
     //     1 ラウンドの技は最大 4 件のため、最後のターン行以降に既に
     //     技を使った枠の技 (または 5 件目の技) が来たら、それは次の
     //     ラウンドの最初の出来事なので、先に次のターン行を出す
+    // (c) 交代で入ったポケモンは、入ったラウンドには技を使えない。
+    //     最後のターン行以降に交代で入った枠の最初の技で、かつその
+    //     区間に既に他の技が記録されている場合は、次のラウンドの
+    //     技なので先にターン行を出す (実例: 2026-11-21
+    //     battle_20261121_153443、ひんし交代で入ったガブリアスの
+    //     最初の技に |turn|4 が先行しなかった)。区間の最初の技では
+    //     発火しない (交代の確定がターン行より遅れただけの場合に
+    //     誤発火しないため)
     // 発火した場合は、判定側の次の発火を 1 回抑止して二重に出さない
     if logStarted && !winLogged {
         if line.hasPrefix("|turn|") {
             movesSinceTurnLine = []
             roundEventSeen = false
+            enteredThisSegment = []
+        } else if line.hasPrefix("|switch|") {
+            let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            if f.count >= 3 {
+                enteredThisSegment.insert(f[2].split(separator: ":").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? "")
+            }
         } else if isRoundEventLine(line) {
             let mover: String? = line.hasPrefix("|move|")
                 ? line.split(separator: "|", omittingEmptySubsequences: false).map(String.init).dropFirst(2).first?.trimmingCharacters(in: .whitespaces)
@@ -1125,6 +1143,9 @@ func emitLog(_ line: String, applyNow: Bool) {
             var guardN: Int? = nil
             if currentTurn == 0 && !roundEventSeen { guardN = 1 }
             else if let mover, movesSinceTurnLine.contains(mover) || movesSinceTurnLine.count >= 4 { guardN = currentTurn + 1 }
+            else if let mover, currentTurn >= 1, !movesSinceTurnLine.isEmpty,
+                    !movesSinceTurnLine.contains(mover),
+                    enteredThisSegment.contains(mover.split(separator: ":").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? "") { guardN = currentTurn + 1 }
             if let n = guardN {
                 print("[reader] ターン行ガードが発火しました: |turn|\(n) を先に出します (きっかけ: \(line))")
                 fflush(stdout)
@@ -1308,7 +1329,10 @@ func resetLogState() {
     movesSinceTurnLine = []
     roundEventSeen = false
     suppressNextDetectorTurn = false
+    enteredThisSegment = []
     defaultAttribCount = [:]
+    headerOppTeam = []
+    headerMismatchFired = []
     // 相手のランク/レート (画像認識側が oppRank / oppRating に入れる):
     // 見せ合いが直近 (60 秒以内) に目撃されていれば、この対戦の開始
     // 前に読み取られた値として保持する (同定が失敗して開始処理が
@@ -1516,7 +1540,7 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     f.timeZone = TimeZone(identifier: "Asia/Tokyo")
     f.formatOptions = [.withInternetDateTime]
     var ev: [String: Any] = ["battle": id, "seq": seq, "kind": kind, "at": f.string(from: Date()),
-                             "turn": currentTurn, "rawText": rawText,
+                             "turn": currentTurn, "rawText": rawText, "readerBuild": readerBuild,
                              "state": debugStateExcerpt(), "detail": detail]
     if let imageFile { ev["image"] = imageFile }
     if let data = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
@@ -1608,6 +1632,9 @@ func startBattleLog() {
     emitLog("|gametype|doubles")
     for sp in teamOrder { emitLog("|poke|p1|\(sp)") }
     for sp in oppTeamSeen { emitLog("|poke|p2|\(sp)") }
+    // ヘッダーに書いた6体を開始時点のまま控える (oppTeamSeen は対戦中
+    // に判明した種族で増えていくため、食い違いの照合にはこちらを使う)
+    headerOppTeam = oppTeamSeen
     emitLog("|start")
     logStarted = true
 }
@@ -1951,6 +1978,28 @@ func flushPendingDamage(force: Bool = false) {
 }
 
 // プレートの差分をログ行に変換する
+// ヘッダー (開始時に書いた相手6体) とプレートで確定した相手種族の
+// 照合。ヘッダーが6体そろっているのに、確定した種族が (フォルム
+// 違いを除いて) ヘッダーに無い場合は、見せ合い同定が実チームと
+// 食い違っていた硬い証拠として記録する (ヘッダー自体は書き換え
+// ない)。種族ごとに試合中1回まで
+func checkHeaderMismatch(slot: String, speciesEn: String) {
+    guard headerOppTeam.count == 6 else { return }
+    guard !headerMismatchFired.contains(speciesEn) else { return }
+    let entry = speciesDict.first(where: { $0.en == speciesEn })
+    let inHeader = headerOppTeam.contains { h in
+        h == speciesEn || (entry != nil && formeGroup(entry!).contains { $0.en == h })
+    }
+    guard !inHeader else { return }
+    headerMismatchFired.insert(speciesEn)
+    print("[reader] ヘッダーと異なる相手種族がプレートで確定しました: \(speciesEn) (ヘッダー: \(headerOppTeam.joined(separator: ", ")))")
+    fflush(stdout)
+    debugCapture(kind: "header_mismatch", key: "header_mismatch:\(speciesEn)", rawText: "",
+                 detail: ["species": speciesEn, "header": headerOppTeam,
+                          "slot": slot, "turn": currentTurn,
+                          "readerBuild": readerBuild])
+}
+
 func processPlates(_ hits: [String: SlotState]) {
     // 開始処理を行う条件: (a) まだ開始していない、または (b) 勝敗確定後に
     // 前試合と異なる種族のプレートが現れた (= 次試合の開始証拠なので、
@@ -2068,6 +2117,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
                     emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
                     recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
+                    if side == "p2" { checkHeaderMismatch(slot: slot, speciesEn: s.speciesEn) }
                     // 交代で入った直後の HP 減少は、設置物ダメージとして
                     // 帰属させる (Showdown の [from] 表記)
                     if effPct < prevPct && !adoptFull {
@@ -2084,6 +2134,22 @@ func processPlates(_ hits: [String: SlotState]) {
                     if effPct == 0 { deferFaint(slot: slot, speciesEn: s.speciesEn) }
                     lastSlots[plate.name] = adoptFull
                         ? SlotState(speciesEn: s.speciesEn, hpPercent: 100, hpCur: s.hpMax, hpMax: s.hpMax) : s
+                } else {
+                    // 交代要員選択中のガードで、確定済みの交代が破棄された
+                    // ことを証拠として残す (破棄自体は従来どおり)。
+                    // 2026-11-21 battle_20261121_150535 では mineB の交代が
+                    // 数ターン確定せず、ガードが確定試行を消費した可能性を
+                    // 否定できなかったが、記録が無く切り分けられなかった
+                    print("[reader] 交代の確定が交代要員選択中のため破棄されました: \(plate.name) -> \(s.speciesEn)")
+                    fflush(stdout)
+                    debugCapture(kind: "switch_guard_drop",
+                                 key: "switch_guard_drop:\(plate.name):\(s.speciesEn)",
+                                 rawText: "",
+                                 detail: ["slot": slot, "species": s.speciesEn,
+                                          "occupant": prev?.speciesEn ?? "",
+                                          "fainted": faintedSlots.filter { $0.key.hasPrefix(side) }.map { "\($0.key):\($0.value)" }.joined(separator: ","),
+                                          "turn": currentTurn,
+                                          "readerBuild": readerBuild])
                 }
             }
         } else {
@@ -5775,7 +5841,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1603"
+let readerBuild = "20261121_1619"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
