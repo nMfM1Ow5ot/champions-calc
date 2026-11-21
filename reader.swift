@@ -1338,7 +1338,7 @@ func archiveCurrentBattle(final: Bool) {
 
 // MARK: - デバッグ用スクリーンショット (2026-11-20、ユーザーの指示)
 // 翻訳に落ちて |-message| になった平文の初出時と、リーダーが内部の矛盾を
-// 検出した箇所で、直近フレームのメッセージ表示欄 (下部 34%) の切り抜きを
+// 検出した箇所で、直近フレームの画面全体を
 // JPEG で logs/ に保存し、イベントごとの JSON を添える。serve.py が試合
 // ログと同じ暗号化の便で logs_enc/ へ送り、ログ分析側がログ2点と突き合わ
 // せる。ファイル名は battle_<試合ID>_debugNN.jpg/.json で、ログファイルと
@@ -1346,7 +1346,7 @@ func archiveCurrentBattle(final: Bool) {
 // 箇所の繰り返しは 1 件にまとめる (類似文の集約は再読対策として直近
 // 30 秒のみ)。Mac ローカルの保持は 14 日。
 let debugMaxPerBattle = 10
-let debugRingSize = 12
+let debugRingSize = 4   // 参照されるのは最新フレームだけのため、全画面で保持してもメモリを抑える
 let debugRetentionDays = 14
 var debugShotsThisBattle = 0
 var debugSeenEntries: [(key: String, at: Date)] = []
@@ -1374,33 +1374,22 @@ func debugStateExcerpt() -> [String: Any] {
     return ["turn": currentTurn, "weather": logFieldWeather, "terrain": logFieldTerrain, "slots": slots]
 }
 
-// メッセージ表示欄 (画面下部 0.66..1.0) の切り抜き。
-// 以前は CGContext へ反転描画して切り出していたが、実機で保存された
-// 切り抜きは画面上部の帯が上下反転したものになっており、メッセージ欄が
-// 一切写っていなかった (実例: 2026-11-21 battle_20261121_132153 の
-// debug01/02。ブリジュラスのプレートが上下逆さまに写っていただけで、
-// 分析の証拠にならなかった。反転描画の癖は makePixelBuffer でも
-// 2026-11-20 に判明している)。CGImage の cropping は画像座標
-// (左上原点) で切り出すため、こちらに置き換える
-func cropMessageStrip(_ image: CGImage) -> CGImage? {
-    let w = image.width, h = image.height
-    guard w > 0, h > 0 else { return nil }
-    let cropY = Int(Double(h) * 0.66)
-    let cropH = h - cropY
-    guard cropH > 0 else { return nil }
-    return image.cropping(to: CGRect(x: 0, y: cropY, width: w, height: cropH))
-}
+// デバッグ画像は画面全体を保存する (2026-11-21、ユーザーの指示)。
+// 以前はメッセージ表示欄 (画面下部) の切り抜きだったが、切り抜きの
+// 座標・向きの不具合が続いたこと (実例: 2026-11-21
+// battle_20261121_132153 の debug01/02 は画面上部の帯が上下反転した
+// 画像で、メッセージ欄が一切写っていなかった) と、全体があれば
+// プレートやフィールドの状態まで裏付けに使えるため、全画面に統一した
 
-// 直近フレームのメッセージ欄をリングバッファに保持する (内部矛盾の検出は
+// 直近フレームをリングバッファに保持する (内部矛盾の検出は
 // メッセージ処理と別の経路で起きるため、その時点の画面を後から使えるように)
 func debugUpdateRing(_ image: CGImage) {
     guard logStarted else { return }
-    guard let crop = cropMessageStrip(image) else { return }
-    debugFrameRing.append((at: Date(), img: crop))
+    debugFrameRing.append((at: Date(), img: image))
     if debugFrameRing.count > debugRingSize { debugFrameRing.removeFirst(debugFrameRing.count - debugRingSize) }
 }
 
-func debugCapture(kind: String, key: String, rawText: String, detail: [String: Any], image: CGImage? = nil, fullFrame: Bool = false) {
+func debugCapture(kind: String, key: String, rawText: String, detail: [String: Any], image: CGImage? = nil) {
     guard debugShouldCapture(seen: debugSeenEntries, count: debugShotsThisBattle, key: key, cap: debugMaxPerBattle, now: Date()) else { return }
     debugSeenEntries.append((key: key, at: Date()))
     debugShotsThisBattle += 1
@@ -1409,10 +1398,12 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     let base = String(format: "battle_%@_debug%02d", id, seq)
     try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
     var shot: CGImage? = nil
-    if let image { shot = fullFrame ? image : cropMessageStrip(image) }
+    if let image { shot = image }
     if shot == nil { shot = debugFrameRing.last?.img }
     var imageFile: String? = nil
-    if let shot, let data = NSBitmapImageRep(cgImage: shot).representation(using: .jpeg, properties: [:]) {
+    // 画像は画面全体。解像度は証拠の読み取りに必要なため落とさず、
+    // 配信経路 (暗号化して GitHub 経由) のサイズは JPEG 品質で抑える
+    if let shot, let data = NSBitmapImageRep(cgImage: shot).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) {
         let url = logsDirURL.appendingPathComponent(base + ".jpg")
         if (try? data.write(to: url)) != nil { imageFile = base + ".jpg" }
     }
@@ -1428,6 +1419,27 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     }
     print("[debug] デバッグ情報を保存しました: logs/\(base) (\(kind))")
     fflush(stdout)
+}
+
+// ターン判定の証拠を残す (2026-11-21、ログ分析チャットからの指示)。
+// ターン番号のずれ (ターン行の欠落や遅れ) は序盤に集中して起きており、
+// 対象は序盤のターン (1〜3) と、生フレーム連続のフォールバック経路で
+// 確定したターンに絞る (1 試合 10 件のデバッグ上限を圧迫しないため)。
+// 経路は plates_settled (プレート確定による即時) / raw_frames
+// (フォールバック) / log_screen (ゲーム内ログ画面経由) のいずれか
+func recordTurnEvidence(turn: Int, path: String, image: CGImage, extra: [String: Any] = [:]) {
+    guard turn <= 3 || path == "raw_frames" else { return }
+    var slots: [String: Any] = [:]
+    for name in ["mineA", "mineB", "oppA", "oppB"] {
+        if let s = lastSlots[name] {
+            slots[name] = ["species": s.speciesEn, "hp": s.hpPercent] as [String: Any]
+        } else {
+            slots[name] = ["species": "", "hp": -1] as [String: Any]
+        }
+    }
+    var detail: [String: Any] = ["turn": turn, "path": path, "slots": slots, "readerBuild": readerBuild]
+    for (k, v) in extra { detail[k] = v }
+    debugCapture(kind: "turn_decided", key: "turn_decided:\(turn):\(path)", rawText: "", detail: detail, image: image)
 }
 
 // 起動時: 保持期間 (14 日) を過ぎたローカルのデバッグ情報を掃除する
@@ -2831,6 +2843,7 @@ func parseLogScreen(image: CGImage) -> Bool {
     if tn > currentTurn {
         currentTurn = tn
         emitLog("|turn|\(tn)")
+        recordTurnEvidence(turn: tn, path: "log_screen", image: image, extra: ["chips": chipHits.count])
     }
     let buf = makeFullBuffer(image)
     let chipIdx = Set(chipHits.map { $0.index })
@@ -5103,7 +5116,7 @@ func runOnce(image: CGImage) {
         debugCapture(kind: "preview_id", key: "preview_id", rawText: "",
                      detail: ["team": previewEvidenceTeam.map { $0 ?? "" },
                               "slots": slotDetails, "readerBuild": readerBuild],
-                     image: evImage, fullFrame: true)
+                     image: evImage)
     }
     // プレート未確定の記録: 相方の枠は確定しているのに片方の枠だけが、
     // 最初の枠確定から 25 秒以上たっても一度も確定しない場合はプレート
@@ -5125,7 +5138,7 @@ func runOnce(image: CGImage) {
                          detail: ["missingSlots": missing,
                                   "confirmedSlots": lastSlots.keys.sorted(),
                                   "note": "slot never confirmed 25s after first slot confirmation"],
-                         image: image, fullFrame: true)
+                         image: image)
         }
     }
     // 全プレートが見える = コマンド選択フェーズ。その開始をターンの区切りにする
@@ -5152,6 +5165,10 @@ func runOnce(image: CGImage) {
         for sd in ["p1", "p2"] { if let spEn = pendingMegaSpecies[sd] { synthesizeMegaIfPending(side: sd, speciesEn: spEn) } }
         currentTurn += 1
         emitLog("|turn|\(currentTurn)")
+        recordTurnEvidence(turn: currentTurn,
+                           path: (expectedPlates >= 4 && allSettled) ? "plates_settled" : "raw_frames",
+                           image: image,
+                           extra: ["expectedPlates": expectedPlates, "presentHits": presentHits.count, "turnRawFrames": turnRawFrames])
     }
     watchBattleMessage(image: image, platesVisible: true)
     updateOppTeam()
@@ -5165,7 +5182,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1432"
+let readerBuild = "20261121_1435"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
