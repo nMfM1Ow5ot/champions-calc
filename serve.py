@@ -51,15 +51,39 @@ def self_hash():
 START_HASH = self_hash()
 
 
+_restart_note_defer_since = None
+
+
 def maybe_restart_self():
     # 同期で serve.py 自身が差し替わっていたら、新しいコードで起動し直す。
     # 起動時点のハッシュと比べるので、差し替えがなければ何も起きない。
     # exec で同じプロセスを置き換えるため、start_all.sh 側の管理
     # (バックグラウンド起動・終了時の trap) はそのまま効く。
+    # ただし備考プロンプトの回答待ち・対象範囲内の備考待ちがある間は
+    # 再起動しない。対戦終了直後のプロンプトへ再起動が割り込むと、
+    # 入力の機会自体が失われる (実例: 2026-11-22
+    # battle_20261122_071457)。備考待ちはプロンプトの制限時間
+    # (30 秒) で解消するのが通常で、万一解消しない場合も 120 秒で
+    # 引き継ぎ付きで再起動する (引き継ぎ先でも備考は聞ける)
+    global _restart_note_defer_since
     current = self_hash()
-    if current is not None and START_HASH is not None and current != START_HASH:
-        print("[sync] serve.py が更新されたため、サーバを自動で再起動します", flush=True)
-        os.execv(sys.executable, [sys.executable, SELF_PATH] + sys.argv[1:])
+    if current is None or START_HASH is None or current == START_HASH:
+        _restart_note_defer_since = None
+        return
+    if _note_blocking():
+        now = time.monotonic()
+        if _restart_note_defer_since is None:
+            _restart_note_defer_since = now
+            if not _note_prompt_waiting:
+                # プロンプト表示中にこの表示を出すと割り込み出力に
+                # なって入力を無効化するため、表示中は出さない
+                print("[sync] 備考の入力待ちがあるため、serve.py の再起動を保留します", flush=True)
+        if now - _restart_note_defer_since < 120:
+            return
+    _restart_note_defer_since = None
+    _set_note_carry()
+    print("[sync] serve.py が更新されたため、サーバを自動で再起動します", flush=True)
+    os.execv(sys.executable, [sys.executable, SELF_PATH] + sys.argv[1:])
 
 
 def sync_loop():
@@ -93,7 +117,15 @@ def sync_loop():
             # まま反映される。serve.py 自身の再起動も同期に付随する
             # ため一緒に保留する。試合ログの送信は UI ファイルに
             # 触れないため、対戦中も従来どおり回す
-            if _battle_in_progress():
+            if _note_prompt_waiting:
+                # 備考プロンプトの回答待ち中は、同期の反映とそれに
+                # 伴う表示を一切出さない。同期側の表示がプロンプトへ
+                # 割り込むと入力が無効化される (実例: 2026-11-22
+                # battle_20261122_071457、対戦終了直後の再開表示が
+                # プロンプトへ割り込んだ)。プロンプトは制限時間で
+                # 解消するため、保留は最大でもその間だけ
+                pass
+            elif _battle_in_progress():
                 if not sync_deferred:
                     sync_deferred = True
                     print("[sync] 対戦中のため、同期の反映を対戦終了まで保留します", flush=True)
@@ -171,6 +203,52 @@ _note_prompt_current_key = None
 # 時刻も更新されるが、その場合も対戦中の試合のログは再起動後に
 # 書かれるため対象から漏れない
 _PROCESS_STARTED_AT = time.time()
+
+# 自己再起動 (os.execv) の引き継ぎ: 再起動の時点で備考待ちだった
+# 試合 (このプロセスの対象範囲内のもの) のゲートキーを、環境変数
+# CHAMPIONS_NOTE_CARRY で次のプロセスへ渡す。再起動後のプロセスでは
+# 起動時刻より前に終わった試合でも、引き継がれた試合だけは自動処理
+# の対象に残す。対戦終了直後に備考プロンプトが出ている最中へ、同期
+# の再開に伴う自己再起動が割り込み、その試合の備考の機会自体が
+# 失われた件への対策 (実例: 2026-11-22 battle_20261122_071457)
+_CARRIED_NOTE_KEYS = {k for k in
+                      os.environ.get("CHAMPIONS_NOTE_CARRY", "").split(",")
+                      if k}
+
+
+def _in_session_scope(gate_key, mtime):
+    """自動処理 (プロンプト・送信) の対象範囲内かどうか。
+
+    起動後に終わった試合が原則で、自己再起動で引き継がれた試合も
+    対象に含める。"""
+    return mtime >= _PROCESS_STARTED_AT or gate_key in _CARRIED_NOTE_KEYS
+
+
+def _note_blocking():
+    """備考まわりで同期の反映や再起動を止めるべき状態か。
+
+    プロンプトの回答待ち中か、このプロセスの対象範囲内に備考待ちの
+    試合がある間は True。"""
+    if _note_prompt_waiting:
+        return True
+    try:
+        return any(_in_session_scope(p["key"], p.get("mtime", 0))
+                   for p in list_pending_log_notes())
+    except Exception:
+        return False
+
+
+def _set_note_carry():
+    """再起動の直前に、対象範囲内の備考待ちを引き継ぎ用に控える。"""
+    try:
+        keys = sorted({p["key"] for p in list_pending_log_notes()
+                       if _in_session_scope(p["key"], p.get("mtime", 0))})
+    except Exception:
+        keys = []
+    if keys:
+        os.environ["CHAMPIONS_NOTE_CARRY"] = ",".join(keys)
+    else:
+        os.environ.pop("CHAMPIONS_NOTE_CARRY", None)
 
 # ---- 異常記録 (クラッシュジャーナル) ----
 # 備考プロンプトのスレッドや serve.py 本体が異常終了した際の証拠を、
@@ -840,7 +918,9 @@ def _upload_logs_once_locked(session_only=False):
         if session_only:
             key = _battle_key(n)
             if (key is not None
-                    and group_mtimes.get(_gate_key(key), 0.0) < _PROCESS_STARTED_AT):
+                    and not _in_session_scope(
+                        _gate_key(key),
+                        group_mtimes.get(_gate_key(key), 0.0))):
                 # 起動前から残っている試合は自動送信の対象外 (滞留分は
                 # Mac 側にそのまま残し、手動の --note 経路でだけ扱う)
                 continue
@@ -995,7 +1075,9 @@ def _report_upload_completion(state, session_only=False):
     for n in names:
         key = _battle_key(n)
         if (session_only and key is not None
-                and group_mtimes.get(_gate_key(key), 0.0) < _PROCESS_STARTED_AT):
+                and not _in_session_scope(
+                    _gate_key(key),
+                    group_mtimes.get(_gate_key(key), 0.0))):
             continue
         try:
             data = open(os.path.join(LOG_DIR, n), "rb").read()
@@ -1236,7 +1318,7 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True, session_only=False):
     global _note_prompt_current_key
     count = 0
     for p in list_pending_log_notes():
-        if session_only and p.get("mtime", 0) < _PROCESS_STARTED_AT:
+        if session_only and not _in_session_scope(p["key"], p.get("mtime", 0)):
             # 自動プロンプトでは、このプロセスの起動前に終わっていた
             # 試合は扱わない (2026-11-21 のユーザー指示: 起動時に
             # 過去分の備考解消が始まらないようにする。滞留分は Mac
@@ -1526,8 +1608,14 @@ if __name__ == "__main__":
     # 起動前から残っている備考待ち (滞留分) は、この起動では処理
     # しない。その旨だけを 1 行知らせる (2026-11-21 のユーザー指示)
     try:
-        _backlog = [p for p in list_pending_log_notes()
-                    if p.get("mtime", 0) < _PROCESS_STARTED_AT]
+        _pending_startup = list_pending_log_notes()
+        _carried = [p for p in _pending_startup
+                    if p["key"] in _CARRIED_NOTE_KEYS]
+        if _carried:
+            print(f"[log] 再起動から引き継いだ備考待ちの試合が {len(_carried)} 件あります。"
+                  "この起動でも続けて処理します", flush=True)
+        _backlog = [p for p in _pending_startup
+                    if not _in_session_scope(p["key"], p.get("mtime", 0))]
         if _backlog:
             print(f"[log] 起動前から残っている備考待ちの試合が {len(_backlog)} 件あります。"
                   "この起動では処理しません (手動で送る場合は別のターミナルで "
