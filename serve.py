@@ -80,14 +80,32 @@ def sync_loop():
         print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
     upload_logs_once(session_only=True)
     cycles = 0
+    sync_deferred = False
     while True:
         time.sleep(5)
         try:
-            run_sync(False)
-            try:
-                maybe_restart_self()
-            except Exception:
-                print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
+            # 対戦中は同期の反映を保留する: 対戦中に UI ファイルが
+            # 差し替わると、開いている計算画面のセッションが再読み
+            # 込み等で初期化され、推論の記録が止まる事故があった
+            # (2026-11-22 battle_20261122_054802、推論ログの記録が
+            # 別チャットの push の時刻で停止した)。同期は周期処理
+            # なので、対戦が終わるまで回さなければ次の周期でその
+            # まま反映される。serve.py 自身の再起動も同期に付随する
+            # ため一緒に保留する。試合ログの送信は UI ファイルに
+            # 触れないため、対戦中も従来どおり回す
+            if _battle_in_progress():
+                if not sync_deferred:
+                    sync_deferred = True
+                    print("[sync] 対戦中のため、同期の反映を対戦終了まで保留します", flush=True)
+            else:
+                if sync_deferred:
+                    sync_deferred = False
+                    print("[sync] 対戦が終了したため、同期を再開します", flush=True)
+                run_sync(False)
+                try:
+                    maybe_restart_self()
+                except Exception:
+                    print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
             cycles += 1
             if cycles % 6 == 0:   # 試合ログの送信チェックは約 30 秒ごと
                 upload_logs_once(session_only=True)
