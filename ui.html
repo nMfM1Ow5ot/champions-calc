@@ -1015,13 +1015,21 @@ function abilitiesOf(spec) {
   if (!spec.mega && spec.ability && !vals.includes(spec.ability)) vals.push(spec.ability);
   return [...new Set(vals)];
 }
+let dexSpeciesSet = null;
 function formesOf(en) {
   const sd = gen.species.get(idOf(en));
   if (!sd) return [en];
   const base = sd.baseSpecies || en;
   const bsd = gen.species.get(idOf(base));
   const others = (bsd && bsd.otherFormes) || sd.otherFormes || [];
-  return [base, ...others.filter(f => f !== base)];
+  let formes = [base, ...others.filter(f => f !== base)];
+  // calc 内部の合成エントリ (Aegislash-Both 等) は実装ユニバース
+  // (champions_dex) に含まれないため、フォルム候補から外す
+  if (CHAMP && CHAMP.species) {
+    if (!dexSpeciesSet) dexSpeciesSet = new Set(CHAMP.species);
+    formes = formes.filter(f => f === en || dexSpeciesSet.has(f));
+  }
+  return formes;
 }
 function megaFormesOf(en) { return formesOf(en).filter(f => f.includes('-Mega')); }
 function stoneForForme(forme) {
@@ -2000,7 +2008,7 @@ function formePopHTML(side) {
   if (formes.length < 2) return '';
   const base = formes[0];
   const opts = formes.map(f => {
-    const label = f === base ? 'BASE' : f.replace(base + '-', '').toUpperCase();
+    const label = biLabel((NAMES.species || {})[idOf(f)] || '', f);
     return `<button class="formeopt ${f === eff ? 'sel' : ''}" data-formepick="${side}:${f}">${spriteImg(f, base, '')}<span>${esc(label)}</span></button>`;
   }).join('');
   return `<span class="formepop">${opts}</span>`;
