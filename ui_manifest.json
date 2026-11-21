@@ -34,7 +34,7 @@
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
   "reader.swift": "62273927b28ddd45aaa1ddfc709d7b26ffc6e16a94aa750bc35b68968df41964",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
-  "serve.py": "bdbd753b21ff7ad2ba646714ee06ab9fbe6c94da53c67e490db5fcc6871cf4a8",
+  "serve.py": "eb78b70119cda457a1b2b149b425085aae5c68a695eb2f638d9232129ec61f82",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
   "tests/bayes_equiv_golden.json": "cea9d9dcf7b828e6795ee412b09f239379436528ac81151c332c7e25a6a8ab1b",
@@ -43,5 +43,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_2346"
+ "rev": "20261121_2349"
 }
