@@ -2342,7 +2342,7 @@ document.addEventListener('click', e => {
   const fo = t.closest('[data-forme]');
   if (fo) { const side = fo.dataset.forme; ui.formePop = ui.formePop === side ? null : side; renderAll(); return; }
   const pb = t.closest('[data-presetbtn]');
-  if (pb) { const side = pb.dataset.presetbtn; ui.presetPop = ui.presetPop === side ? null : side; if (!ui.presetPop) ui.presetRename = null; if (ui.presetPop) ensureVgcTeams(); renderAll(); return; }
+  if (pb) { const side = pb.dataset.presetbtn; ui.presetPop = ui.presetPop === side ? null : side; if (!ui.presetPop) ui.presetRename = null; if (ui.presetPop) ensureVgcTeams(); renderAll(); if (ui.presetPop) { const si = document.querySelector(`[data-presetsearch="${side}"]`); if (si) { si.focus(); try { si.setSelectionRange(si.value.length, si.value.length); } catch {} } } return; }
   const vt = t.closest('[data-vgcteam]');
   if (vt) { const [side, teamId] = vt.dataset.vgcteam.split(':'); applyVgcTeam(side, teamId); return; }
   const psv = t.closest('[data-presetsave]');
