@@ -82,7 +82,7 @@ function logSnapshot(species, turn, trigger) {
         def: ie.pairs.def ? ie.pairs.def.size : null, spd: ie.pairs.spd ? ie.pairs.spd.size : null,
         spe: ie.pairs.spe ? ie.pairs.spe.size : null },
       hpSps: ie.hpSps ? ie.hpSps.size : null } : null;
-    infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, marg, cover90, cands, inf });
+    infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, speFlag: (ent && ent.speFlag) || null, map, marg, cover90, cands, inf });
     if (infLog.length > 2000) infLog.splice(0, infLog.length - 2000);
   } catch (e) { /* ログ生成の失敗で推論を止めない */ }
 }
@@ -192,6 +192,7 @@ function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, te
   const b = boosts?.spe || 0;
   v = b >= 0 ? Math.floor(v * (2 + b) / 2) : Math.floor(v * 2 / (2 - b));
   if (item === 'Choice Scarf') v = Math.floor(v * 1.5);
+  if (item === 'Iron Ball') v = Math.floor(v / 2);
   if (ability && WEATHER_SPE[ability] === weather) v *= 2;
   if (ability === 'Surge Surfer' && terrain === 'Electric') v *= 2;
   if (unburden) v *= 2;
@@ -958,16 +959,25 @@ function processMoveBayes(ev, io) {
       if (cBr.last) return !ctx.firstIsOpp;
       if (cBr.prio !== ctx.myPrio) return (cBr.prio > ctx.myPrio) === ctx.firstIsOpp;
     }
-    if (c.item === 'Quick Claw' || c.item === 'Custap Berry') return null; // 発動が確率的で順序が素早さで決まらない
-    if (c.item === 'Lagging Tail' || c.item === 'Full Incense') return !ctx.firstIsOpp; // 枠内で最後尾が確定
-    const eff = infEffSpe(speVal, panel ? panel.boosts : {}, panel && panel.itemLost ? '' : c.item,
+    // 素早さ仮説フラグが立っている間は、候補の持ち物ではなくフラグの
+    // 持ち物を仮定して判定する (下記の bayesHardSpe 後の処理を参照)
+    const itemForSpe = panel && panel.itemLost ? '' : (ent.speFlag || c.item);
+    if (itemForSpe === 'Quick Claw' || itemForSpe === 'Custap Berry') return null; // 発動が確率的で順序が素早さで決まらない
+    if (itemForSpe === 'Lagging Tail' || itemForSpe === 'Full Incense') return !ctx.firstIsOpp; // 枠内で最後尾が確定
+    const eff = infEffSpe(speVal, panel ? panel.boosts : {}, itemForSpe,
       panel ? panel.status : '', ctx.twP2, cAb, io.field.weather, io.field.terrain, !!(panel && panel.unburden));
     if (eff === ctx.myEff) return null; // 同速は乱数で決まるため残す
     return ctx.trick ? (ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff) : (ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff);
   });
   const res = bayesHardSpe(ent, verdicts);
+  // 種族値と候補の持ち物では説明できない素早さ関係が判明した場合
+  // (全候補が観測と矛盾) は、持ち物の仮説フラグを仮で立てる: 通常状況
+  // なら こだわりスカーフ、トリックルーム下なら くろいてっきゅう
+  // (ユーザーの指示)。以後の行動順の判定はこの持ち物を仮定して行い、
+  // 持ち物が判明したらフラグは下ろす
+  if (!res.applied && !ent.speFlag) ent.speFlag = ctx.trick ? 'Iron Ball' : 'Choice Scarf';
   logSnapshot(ctx.species, ev.turn, { kind: 'moveOrder', move: ctx.oppMd ? ctx.oppMd.name : null, firstIsOpp: !!ctx.firstIsOpp,
-    applied: res.applied, excluded: res.excluded, ...(res.applied ? {} : { inconsistent: true }) });
+    applied: res.applied, excluded: res.excluded, ...(res.applied ? {} : { inconsistent: true }), speFlag: ent.speFlag || null });
 }
 // 判明情報 (持ち物・特性) と矛盾する候補の減衰。同じ判明内容では再適用しない。
 // 判明技は bayesMoveUpdate が差分で適用する (技構成からの型予測)。
@@ -1012,6 +1022,7 @@ function applyRevealed(list) {
     for (const c of ent.cands) { if (matchItem(c) && matchAbility(c)) survivorMass += c.post; else if (c.post > 0) excluded++; }
     const hardMode = (itemHard || ability !== null) && survivorMass > 0;
     let applied = false;
+    if (hardMode && itemHard) ent.speFlag = null; // 持ち物が判明したら素早さ仮説フラグは下ろす
     if (hardMode) {
       if (excluded > 0) {
         for (const c of ent.cands) if (!(matchItem(c) && matchAbility(c))) c.post = 0;
@@ -1057,7 +1068,7 @@ function bayesView(spec) {
   if (!ent || !ent.used) return null;
   const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
   const map = sorted[0];
-  const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
+  const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, speFlag: ent.speFlag || null, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
   // 周辺分布の首位 (性格・持ち物): MAP は結合分布の最大であり、分布が
   // 拡散している局面では周辺の首位と食い違う。UI が表示で併記できるよう
   // 両方を渡す (採用する型そのものは従来どおり MAP)
