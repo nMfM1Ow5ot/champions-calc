@@ -78,7 +78,7 @@ def sync_loop():
         maybe_restart_self()
     except Exception:
         print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
-    upload_logs_once()
+    upload_logs_once(session_only=True)
     cycles = 0
     while True:
         time.sleep(5)
@@ -90,7 +90,7 @@ def sync_loop():
                 print("[sync] serve.py の自動再起動に失敗しました。次回同期時に再試行します", flush=True)
             cycles += 1
             if cycles % 6 == 0:   # 試合ログの送信チェックは約 30 秒ごと
-                upload_logs_once()
+                upload_logs_once(session_only=True)
         except Exception as e:
             _record_crash("sync_loop", e)
             time.sleep(2)
@@ -610,17 +610,36 @@ def _prune_debug_entries(index, token, limit=10):
     return removed
 
 
-def upload_logs_once():
-    # 備考の送信ボタンからも呼ばれるため、二重送信を防ぐ
+def upload_logs_once(session_only=False):
+    # 備考の送信ボタンからも呼ばれるため、二重送信を防ぐ。
+    # session_only=True (自動送信) では、このプロセスの起動前から
+    # 残っている試合 (滞留分) を扱わない (2026-11-21 のユーザー指示:
+    # 起動時に過去分の備考解消や送信が始まらないようにする)
     if not _upload_lock.acquire(blocking=False):
         return
     try:
-        _upload_logs_once_locked()
+        _upload_logs_once_locked(session_only)
     finally:
         _upload_lock.release()
 
 
-def _upload_logs_once_locked():
+def _battle_group_mtimes(names):
+    """試合キー (salvage 束ね済み) ごとの最新ファイル時刻を返す。"""
+    mtimes = {}
+    for n in names:
+        key = _battle_key(n)
+        if key is None:
+            continue
+        try:
+            mt = os.path.getmtime(os.path.join(LOG_DIR, n))
+        except OSError:
+            continue
+        gk = _gate_key(key)
+        mtimes[gk] = max(mtimes.get(gk, 0.0), mt)
+    return mtimes
+
+
+def _upload_logs_once_locked(session_only=False):
     global _log_notice_shown, _log_last_error, _log_prune_done_date
     if not os.path.isdir(LOG_DIR):
         return
@@ -635,8 +654,16 @@ def _upload_logs_once_locked():
     if not names:
         return
     state = _load_upload_state()
+    group_mtimes = _battle_group_mtimes(names) if session_only else {}
     pending_all = []
     for n in names:
+        if session_only:
+            key = _battle_key(n)
+            if (key is not None
+                    and group_mtimes.get(_gate_key(key), 0.0) < _PROCESS_STARTED_AT):
+                # 起動前から残っている試合は自動送信の対象外 (滞留分は
+                # Mac 側にそのまま残し、手動の --note 経路でだけ扱う)
+                continue
         try:
             data = open(os.path.join(LOG_DIR, n), "rb").read()
         except OSError:
@@ -736,7 +763,7 @@ def _upload_logs_once_locked():
             json.dump(state, f)
         _log_last_error = ""
         if sent_battle:
-            _report_upload_completion(state)
+            _report_upload_completion(state, session_only)
     except Exception as e:
         msg = f"[log] 試合ログの送信に失敗しました (次回再試行します): {e}"
         if msg != _log_last_error:
@@ -744,26 +771,32 @@ def _upload_logs_once_locked():
             _log_last_error = msg
 
 
-def _report_upload_completion(state):
+def _report_upload_completion(state, session_only=False):
     # 送信完了の表示 (2026-11-21 のユーザー指示)。このサイクルで試合の
     # ファイルを実際に送信した後にだけ呼ばれる。残っている未送信
     # ファイルを数え、全部送れていれば完了を表示し、備考待ちだけが
     # 残っていればその旨を表示する (「全部終わった」と誤解させない)。
-    # 備考待ち以外の未送信が残っている場合は何も出さない
+    # 備考待ち以外の未送信が残っている場合は何も出さない。
+    # 自動送信 (session_only) では、起動前から残っている試合 (滞留分)
+    # は数えない (自動処理の対象外のため、入力待ちとは表示しない)
     try:
         names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
     except OSError:
         return
+    group_mtimes = _battle_group_mtimes(names) if session_only else {}
     held = set()
     other = 0
     for n in names:
+        key = _battle_key(n)
+        if (session_only and key is not None
+                and group_mtimes.get(_gate_key(key), 0.0) < _PROCESS_STARTED_AT):
+            continue
         try:
             data = open(os.path.join(LOG_DIR, n), "rb").read()
         except OSError:
             continue
         if state.get(n) == hashlib.sha256(data).hexdigest():
             continue
-        key = _battle_key(n)
         if (key is not None and not n.endswith("_note.txt")
                 and not _note_exists_any(key) and _note_gate_applies(key)):
             held.add(_gate_key(key))
@@ -910,18 +943,10 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True, session_only=False):
     for p in list_pending_log_notes():
         if session_only and p.get("mtime", 0) < _PROCESS_STARTED_AT:
             # 自動プロンプトでは、このプロセスの起動前に終わっていた
-            # 試合は聞かない (起動のたびに古い未送信分を聞き直す
-            # のを防ぐ。手動の --note では従来どおり聞く)。
-            # ただし、聞かないままでは備考待ちが永遠に解消されず、
-            # 送信完了表示の「備考の入力待ちが N 件あります」にも
-            # 残り続ける (serve.py は自身の同期のたびに再起動する
-            # ため、再起動前に終わった未備考の試合は通常の経路では
-            # 二度と聞かれない)。プロンプトは出さず、空欄の備考で
-            # 送信に進めることで待ちを解消する
-            print(f"[log] 起動前から備考待ちだった試合のため、"
-                  f"空欄の備考で送信します (battle_{p['key']})", flush=True)
-            if save_log_note(p["key"], ""):
-                count += 1
+            # 試合は扱わない (2026-11-21 のユーザー指示: 起動時に
+            # 過去分の備考解消が始まらないようにする。滞留分は Mac
+            # 側にそのまま残り、手動の --note でのみ扱う。手動経路
+            # (session_only=False) では従来どおり聞く)
             continue
         vs = f" vs {p['opponent']}" if p.get("opponent") else ""
         kind = "勝敗確定" if p.get("kind") == "final" else "中断"
@@ -936,7 +961,7 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True, session_only=False):
         if save_log_note(p["key"], note or ""):
             count += 1
     if count and do_upload:
-        upload_logs_once()
+        upload_logs_once(session_only=session_only)
     return count
 
 
@@ -1203,6 +1228,17 @@ if __name__ == "__main__":
         # 備考を付けて送るだけの手動コマンド (サーバは起動しない)
         raise SystemExit(cli_send_notes())
     check_log_token()
+    # 起動前から残っている備考待ち (滞留分) は、この起動では処理
+    # しない。その旨だけを 1 行知らせる (2026-11-21 のユーザー指示)
+    try:
+        _backlog = [p for p in list_pending_log_notes()
+                    if p.get("mtime", 0) < _PROCESS_STARTED_AT]
+        if _backlog:
+            print(f"[log] 起動前から残っている備考待ちの試合が {len(_backlog)} 件あります。"
+                  "この起動では処理しません (手動で送る場合は別のターミナルで "
+                  "python3 serve.py --note を実行してください)", flush=True)
+    except Exception:
+        pass
     threading.Thread(target=sync_loop, daemon=True).start()
     # バックグラウンドで動くプロセスがターミナル読み取りで止まらない
     # ようにする (start_all.sh では serve.py は裏で動くため、ジョブ制御の
