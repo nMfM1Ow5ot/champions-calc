@@ -377,6 +377,39 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
   </div>
   <p class="note">相手の型は <span id="regname">レギュレーションM-C</span> の使用率データ（pokedb）から最も使われている型を初期値にしています。判明した情報（技・持ち物・特性）があれば reader が自動で、なければ手動で訂正でき、判明した技だけが青くハイライトされます（特性・持ち物も同様）。相手の型に判明情報が1つでもあれば、SET の表示は相手トレーナー名になります。フレンドガードは、その側のもう1体が特性フレンドガードを持つ想定で、受けるダメージが0.75倍になります。レイアウトと操作系は Showdex（Calcdex）の再現です（1体 vs 1体表示、アイコンで表示するポケモンを切替）。</p>
 </div>
+<script>
+// 初期化ウォッチドッグ: 一定時間たっても計算パネルが描画されない場合、
+// ファイルの不整合 (配信直後の版ずれ等) や通信の問題の可能性があるため、
+// キャッシュを避けた再読み込みを案内する。モジュール本体が読み込めない
+// 場合でも動作するよう、モジュールとは独立した通常スクリプトで置く
+(function () {
+  var shown = false;
+  var n = 0;
+  var t = setInterval(function () {
+    n++;
+    if (document.querySelector('.playerbar')) {
+      var b = document.getElementById('loadwatch');
+      if (b) b.remove();
+      clearInterval(t);
+      return;
+    }
+    if (n >= 8 && !shown) {
+      shown = true;
+      var d = document.createElement('div');
+      d.id = 'loadwatch';
+      d.style.cssText = 'margin:1rem; padding:.8rem 1rem; border:1px solid #c0392b; border-radius:.5rem; color:#c0392b; font-size:.95rem;';
+      d.innerHTML = '読み込みが完了しませんでした。ファイルの不整合や通信の問題の可能性があります。 <button type="button" id="loadwatchBtn" style="font-size:.95rem">再読み込み</button>';
+      document.body.appendChild(d);
+      document.getElementById('loadwatchBtn').addEventListener('click', function () {
+        var u = new URL(location.href);
+        u.searchParams.set('v', String(Date.now()));
+        location.replace(u.toString());
+      });
+    }
+    if (n >= 30) clearInterval(t);
+  }, 2000);
+})();
+</script>
 <script type="module">
 import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData, createEstimator, labelSide, labelSpecies, exclusiveZMove, zMoveNameOf, Z_STATUS, Z_EXCLUSIVE_FX, setSpecPatchData, specPatchVersions, activeSpecPatch, applySpecPatch } from './bundle.mjs';
 
@@ -3021,8 +3054,7 @@ document.getElementById('specSel')?.addEventListener('change', e => {
       let saved = '';
       try { saved = localStorage.getItem('champions-calc-specpatch') || ''; } catch (e) { /* ignore */ }
       if (saved) applySpecPatch(saved);
-      renderSpecSel();
-    } catch (e) { /* spec patches optional (無い場合は現行仕様のみ) */ } })(),
+    } catch (e) { /* spec patches optional (無い場合は現行仕様のみ) */ } finally { renderSpecSel(); } })(),
   ]);
   // dropdown option lists
   // 種族は実装範囲に絞らない (レギュレーション変更で他種族が解禁されても
