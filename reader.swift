@@ -1553,6 +1553,17 @@ func salvageLeftoverLogs() {
        let mtime = attrs[.modificationDate] as? Date {
         stamp = battleStamp(for: mtime)
     }
+    // 元の試合 ID が残留 state.json から復元できれば、そちらを優先する。
+    // デバッグ一式 (preview_id を含む) は元の試合 ID で保存されている
+    // ため、更新日時のスタンプで救済すると serve.py 側で同じ試合として
+    // 束ねられず、一式が備考ゲートに残り続けて届かなくなる
+    if let raw = try? String(contentsOf: outURL, encoding: .utf8),
+       let data = raw.data(using: .utf8),
+       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       let bid = obj["battle"] as? String,
+       bid.count == 15, bid.allSatisfy({ $0.isNumber || $0 == "_" }) {
+        stamp = bid
+    }
     let disp = (try? String(contentsOf: battleLogURL, encoding: .utf8)) ?? ""
     let dispLines = disp.isEmpty ? [] : disp.split(separator: "\n").map(String.init)
     archiveBattleLogs(final: lines.contains(where: { $0.hasPrefix("|win|") }),
@@ -5544,7 +5555,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1539"
+let readerBuild = "20261121_1547"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
