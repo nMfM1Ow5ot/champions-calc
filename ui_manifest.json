@@ -14,7 +14,7 @@
   "data/log_names.json": "b979b3f151b5a08c81f9c001ff6fbf01a2d22d39b72d78f66b06600411a4971f",
   "data/meta_sets.json": "b54373e03e837cab2bdde7d1095b994591d8fd71c72c9a6c7e70959882da2245",
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
-  "data/names_ja.json": "89c931b66136a0da37b704dd5b6972d951f3c27a0a06580e902b79c9a66f7a36",
+  "data/names_ja.json": "bc7618b7b96ac709a92cc29f9cb02ae0a92cc9a79dd43aa61606f97bd1ca654d",
   "data/pokedb_parsed.json": "bba36692be2b33ff42edeb7c62c8d0cd9b9c3cf2c123a7c95e49bec3b7c3fe63",
   "data/preview_features.json": "d6543e408469f8bb5ce933201aa736f5bfdf331238814d08dc8e8ff14a258b28",
   "data/regulation.json": "8111f5ff4ce0c7b0592a6af77e3c1a2ca0b340c71d930f1ba97e3eb94a83c290",
@@ -43,5 +43,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_2021"
+ "rev": "20261121_2026"
 }
