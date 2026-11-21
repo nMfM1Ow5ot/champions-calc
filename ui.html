@@ -1674,7 +1674,7 @@ document.addEventListener('mousedown', e => {
   if (ctl) {
     const id = ctl.dataset.ddctl;
     if (openDDId === id) { /* already open: keep open (input focus) */ const inp = ctl.querySelector('.sdd-input'); if (inp && e.target !== inp) { e.preventDefault(); inp.focus(); } }
-    else openDD(id);
+    else { e.preventDefault(); openDD(id); }
     return;
   }
   if (!e.target.closest('.sdd')) closeDD();
