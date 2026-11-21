@@ -4,10 +4,10 @@
   "audit_items_ja.mjs": "b536fff2ca001daed9e79d2c8859484339f41e32c702bade0d5c62dd39136b4a",
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
   "build_species_gender.py": "36e4d0d6f2cf2125b3e7d575660c25afc9ffaaf7fac45a51738cca99106adaa3",
-  "bundle.mjs": "abf4a811f9856f927727556b0ebade754d902e9458149c2a022c3b638d0cf415",
+  "bundle.mjs": "2c709bb62faeeb3af3f464138cf4838a73c0466b4a4c828e40d41e8f14198d5e",
   "check/apple_stubs.swift": "b54bf022428e2a6a30a35b206a14e01f276a20866d04376928109e4bcd6da175",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
-  "core.mjs": "f563f5f15fd19431c408dd1b9429862b93c25d5528da1a9ca10df815dd6e013b",
+  "core.mjs": "318f22f57c8db1807f8e633903a2d6a53466bf6a1488ef7809dc5d96a1ad0f24",
   "data/base_stats.json": "06a94fa5775d9431412b286abcb7423794f6da3bbd1c10021e3d0cca2ca96aca",
   "data/champions_dex.json": "6a4a33e77e084027f47868eb312422650e9f221cbc1f6a6a0ecc22b89ae6a121",
   "data/items_ja.json": "cdc3d092615355c1674135c1a6b483c7f4965cb50da440d63b332e92e6dd9a0c",
@@ -44,5 +44,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_0058"
+ "rev": "20261122_0102"
 }
