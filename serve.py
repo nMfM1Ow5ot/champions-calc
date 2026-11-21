@@ -911,7 +911,17 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True, session_only=False):
         if session_only and p.get("mtime", 0) < _PROCESS_STARTED_AT:
             # 自動プロンプトでは、このプロセスの起動前に終わっていた
             # 試合は聞かない (起動のたびに古い未送信分を聞き直す
-            # のを防ぐ。手動の --note では従来どおり聞く)
+            # のを防ぐ。手動の --note では従来どおり聞く)。
+            # ただし、聞かないままでは備考待ちが永遠に解消されず、
+            # 送信完了表示の「備考の入力待ちが N 件あります」にも
+            # 残り続ける (serve.py は自身の同期のたびに再起動する
+            # ため、再起動前に終わった未備考の試合は通常の経路では
+            # 二度と聞かれない)。プロンプトは出さず、空欄の備考で
+            # 送信に進めることで待ちを解消する
+            print(f"[log] 起動前から備考待ちだった試合のため、"
+                  f"空欄の備考で送信します (battle_{p['key']})", flush=True)
+            if save_log_note(p["key"], ""):
+                count += 1
             continue
         vs = f" vs {p['opponent']}" if p.get("opponent") else ""
         kind = "勝敗確定" if p.get("kind") == "final" else "中断"
