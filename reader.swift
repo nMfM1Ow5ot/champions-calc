@@ -618,6 +618,9 @@ var boostTouchedStats: Set<String> = []            // この対戦でランク�
 var heldBoostLines: [String: [(stat: String, delta: Int, at: Date)]] = [:]  // 交代行より先に届いたランク変化の保留 (枠は出す時点で付け直す)
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
+var protectMoveTurn: [String: Int] = [:]         // 枠 -> まもるを使ったターン (activate 行の照合用)
+var effectBySeq: [Int: [String: String]] = [:]    // 行動番号 -> ラベル -> 相性種別 (同じ技での相性の付け替え判定)
+var damagedBySeq: [Int: Set<String>] = [:]       // 行動番号 -> 被ダメしたラベルの集合 (同上)
 var lastFallbackAt = Date.distantPast
 
 var moveJa2En: [String: String] = [:]
@@ -1092,6 +1095,12 @@ func applyEvent(_ line: String) {
         }
     } else if line.hasPrefix("|move|") {
         lastMoveEmitSeq = actionSeq
+        // まもるの使用ターンを控える (activate 行の同ターン照合用)
+        let mf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if mf.count >= 4 && mf[3] == "Protect" {
+            let pslot = mf[2].split(separator: ":").first.map(String.init) ?? ""
+            if !pslot.isEmpty { protectMoveTurn[pslot] = currentTurn }
+        }
         // 相手の技は判明情報として記録する (行は英語名のため和名に戻す)
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         if f.count >= 4, let ss = parseSlotSpecies(f[2]), ss.side == "p2" {
@@ -2017,6 +2026,10 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         if selfClassified {
             recordRecoilEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
         }
+        // 相性行の付け替え判定用に、この行動で被ダメした対象を控える
+        damagedBySeq[actionSeq, default: []].insert("\(slot): \(speciesEn)")
+        for old in damagedBySeq.keys where old < actionSeq - 1 { damagedBySeq[old] = nil }
+        for old in effectBySeq.keys where old < actionSeq - 1 { effectBySeq[old] = nil }
         // オボンのみの発動条件 (HP 半分以下) を跨ぐ低下は、持ち物が
         // 未判明なら発動の監視を始める (解消はこの関数の冒頭で行う)
         if effFrom > 50, toPct <= 50, toPct > 0 {
@@ -2391,16 +2404,22 @@ func processPlates(_ hits: [String: SlotState]) {
                         if battleHazards[side]?["Stealth Rock"] != nil { pendingStatusFrom[key] = ("Stealth Rock", Date()) }
                         else if battleHazards[side]?["Spikes"] != nil { pendingStatusFrom[key] = ("Spikes", Date()) }
                     }
-                    // 初登場の種族は、交代行自体が入場時点の HP を示す。
-                    // 確定前に受けた技のダメージまで交代行の直後に被ダメ行
-                    // として重ねると、同じ値への「重複したダメージ」に
-                    // 読める (実例: 2026-11-21 battle_20261121_230402、
-                    // イエッサン♀の交代行 72/177 の直後に同値の被ダメ行)。
-                    // 設置物ダメージ ([from] 付きで意味を持つ) は従来どおり
-                    // 出し、再登場時の差分行も従来どおり出す
-                    if effPct != prevPct && !(firstEntry && pendingStatusFrom[key] == nil) {
+                    // 初登場でも、入場時点で既に受けていたダメージは
+                    // 被ダメ行として 1 回だけ出す。出さないと、ダメージが
+                    // 交代行の HP に畳み込まれ、被ダメの記録と推定用
+                    // イベントが丸ごと消える (実例: 2026-11-21
+                    // battle_20261121_234913、交代で入ったガブリアスへの
+                    // ねっぷうが入場時点で 19% 減・ダメージ行なし)。
+                    // 以前は「交代行と同値の重複」とみなして初登場では
+                    // 出さなかったが、その判定が実ダメージの喪失を招いた。
+                    // 他の経路から同値の行が重なることは、同値ガード
+                    // (firstEntryPlateHP) が防ぐため、ここでの 1 本を
+                    // 正規の記録とする (ガードはこの呼び出しの間だけ外す)
+                    if effPct != prevPct {
+                        if firstEntry { firstEntryPlateHP[plate.name] = nil }
                         _ = emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
                                            fromPct: prevPct, toPct: effPct, hpText: effText, force: true)
+                        if firstEntry { firstEntryPlateHP[plate.name] = effText }
                     }
                     faintedSlots.removeValue(forKey: slot)
                     // 0% で登場した (交代直後に技を受けて倒れた等) 場合は
@@ -2582,6 +2601,15 @@ func slotFor(side: String, speciesEn: String) -> String {
 func checkStatusText(text: String, side: String, speciesEn: String, slot: String) {
     let key = "\(side):\(speciesEn)"
     if monStates[key] == nil { monStates[key] = MonState() }
+    // 起床: 「<対象>は 目を覚ました！」(目 が 自 に崩れた形も、覚ました
+    // 自体が特徴的なため拾う。実例: 2026-11-21 battle_20261121_234913
+    // 「ガブリアスは自を覚ました！」が未翻訳で残った)
+    if text.contains("覚ました") {
+        if monStates[key]?.status == "slp" {
+            emitLog("|-curestatus|\(slot): \(speciesEn)|slp")
+        }
+        return
+    }
     if text.contains("なおった") || text.contains("なおつた") {
         if let cur = monStates[key]?.status, !cur.isEmpty {
             emitLog("|-curestatus|\(slot): \(speciesEn)|\(cur)")  // 状態への反映は applyEvent が行う
@@ -4608,7 +4636,23 @@ func translateBattleMessage(_ text: String) -> Bool {
             let ekey = "\(slot)|\(kind)"
             if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
             lastEffectAt[ekey] = Date()
-            emitLog("|-\(kind)|\(slot): \(sp.en)")
+            var effLabel = "\(slot): \(sp.en)"
+            // 同じ技の解決中に、同じ対象へ別の相性の行が来たら、それは
+            // 同じ技で被ダメして相性行がまだ無い別の対象の分とみなして
+            // 付け替える (1 つの技が同じ対象に resisted と
+            // supereffective の両方になることはない。実例: 2026-11-21
+            // battle_20261121_234913、ねっぷうの相性 2 行が両方とも
+            // フシギバナに付き、ガブリアスの分が消えた)。付け替え先が
+            // 無い矛盾した行は出さない
+            if let prevKind = effectBySeq[actionSeq]?[effLabel], prevKind != kind {
+                if let other = (damagedBySeq[actionSeq] ?? []).first(where: { $0 != effLabel && effectBySeq[actionSeq]?[$0] == nil }) {
+                    effLabel = other
+                } else {
+                    return true
+                }
+            }
+            effectBySeq[actionSeq, default: [:]][effLabel] = kind
+            emitLog("|-\(kind)|\(effLabel)")
             return true
         }
     }
@@ -4743,18 +4787,25 @@ func translateBattleMessage(_ text: String) -> Bool {
         }
     }
     // まもる成功: 「<対象>は 攻撃から 身を守った！」(守つた の OCR 崩れも拾う)
+    // activate 行は、同じターンにその枠の まもる の技行がある場合だけ
+    // 出す。技行なしの activate は、過去ターンの確認文の再読 (ログ画面
+    // 等) が作る偽の記録になる (実例: 2026-11-21
+    // battle_20261121_234913 ターン2、技行のない Protect の activate)
     if t.contains("身を守った") || t.contains("身を守つた") || t.contains("守りの入った")
         || (t.contains("体勢") && t.contains("守り") && t.contains("入った")) {
         let pk = slot + "|protect"
         if let at = lastSingleActAt[pk], Date().timeIntervalSince(at) < 6 { return true }
         lastSingleActAt[pk] = Date()
-        emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
+        if protectMoveTurn[slot] == currentTurn {
+            emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
+        }
         return true
     }
     // 状態異常で動けない (行動失敗。実例: 2026-11-20 の対戦で
     // 「イエツサンは 体がしびれて 動けない！」が日本語のまま漏れた)
     let cantCode = (t.contains("しびれて") && t.contains("動けない")) ? "par"
         : (t.contains("凍って") && t.contains("動けない")) ? "frz"
+        : (t.contains("ひるんで") && t.contains("だせない")) ? "flinch"
         : (t.contains("眠っている") || t.contains("ねむっている")) ? "slp" : ""
     if !cantCode.isEmpty {
         let cantKey = slot + "|cant"
@@ -4926,6 +4977,23 @@ func translateBattleMessage(_ text: String) -> Bool {
         // さらに文法上の主語だけに絞る (boostSubjects): 文中に紛れた
         // 無関係な種族名への重複付与を防ぐ
         let subjects = boostSubjects(in: t)
+        // ランク変化の側の決定: 文中の側マーカー (相手の/味方の) を
+        // 最優先し、両側の場に同種族がいる場合は直前の技の使用者と
+        // 一致する側を優先する (自分の技による自己変化は使用者に付く。
+        // 実例: 2026-11-21 battle_20261121_234913、げんしのちからの
+        // 全能力上昇が、両軍にいるリザードンのうち対象ではなく
+        // 使用者ではない自軍側へ付いた)
+        func resolvedBoostSide(_ e: SpeciesEntry) -> String {
+            let inOpp = lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en
+            let inMine = lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en || teamEntries[e.en] != nil
+            if (t.contains("相手の") || t.contains("あいての")) && inOpp { return "p2" }
+            if t.contains("味方の") && inMine { return "p1" }
+            if inOpp && inMine && lastMoveLabel.hasSuffix(": \(e.en)")
+                && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
+                return lastMoveLabel.hasPrefix("p2") ? "p2" : "p1"
+            }
+            return inOpp && !inMine ? "p2" : "p1"
+        }
         // いかくの帰属はランク変化の行より先に [特性] 行を出すため、適用前に行う
         if (t.contains("さがった") || t.contains("下がった") || t.contains("さがつた") || t.contains("下がつた")) && (t.contains("攻撃") || t.contains("こうげき") || t.contains("コウゲキ")) && !t.contains("ぐーんと") {
             var targetSides = Set<String>()
@@ -4942,21 +5010,28 @@ func translateBattleMessage(_ text: String) -> Bool {
         }
         if subjects.count >= 2 {
             for e in subjects {
-                let inOpp = lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en
-                let inMine = lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en || teamEntries[e.en] != nil
-                let sSide = inOpp && !inMine ? "p2" : "p1"
+                let sSide = resolvedBoostSide(e)
                 checkBoostText(text: t, side: sSide, speciesEn: e.en, slot: slotFor(side: sSide, speciesEn: e.en))
             }
         } else if subjects.count == 1, subjects[0].en != sp.en {
             // 文法上の主語が、照合で先に掴んだ種族 (混入した名前等) と
             // 食い違う場合は、主語の方へ適用する
             let e = subjects[0]
-            let inOpp = lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en
-            let inMine = lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en || teamEntries[e.en] != nil
-            let sSide = inOpp && !inMine ? "p2" : "p1"
+            let sSide = resolvedBoostSide(e)
             checkBoostText(text: t, side: sSide, speciesEn: e.en, slot: slotFor(side: sSide, speciesEn: e.en))
         } else {
-            checkBoostText(text: t, side: side, speciesEn: sp.en, slot: slot)
+            // 通常経路はアンカーの側を使う。ただし両側の場に同種族が
+            // いて、直前の技の使用者がその種族の場合は、使用者の側を
+            // 優先する (自己変化の帰属。アンカーは側マーカーが落ちた
+            // 文では自軍に寄るため)
+            var sSide = side
+            let inOppF = lastSlots["oppA"]?.speciesEn == sp.en || lastSlots["oppB"]?.speciesEn == sp.en
+            let inMineF = lastSlots["mineA"]?.speciesEn == sp.en || lastSlots["mineB"]?.speciesEn == sp.en
+            if inOppF && inMineF && lastMoveLabel.hasSuffix(": \(sp.en)")
+                && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
+                sSide = lastMoveLabel.hasPrefix("p2") ? "p2" : "p1"
+            }
+            checkBoostText(text: t, side: sSide, speciesEn: sp.en, slot: slotFor(side: sSide, speciesEn: sp.en))
         }
         // 適用した変化の行が保留中でも、この文は消費済みとして扱う
         if battleLog.count > before || heldBoostLines.values.contains(where: { !$0.isEmpty }) { return true }
@@ -6722,7 +6797,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0025"
+let readerBuild = "20261122_0038"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
