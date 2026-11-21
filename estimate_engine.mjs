@@ -466,6 +466,20 @@ function bayesCorpusCandidates(species, table, fallback) {
     }
     const hpRow = table.hp.find(r => r.sp === sp.hp);
     values.hp = hpRow ? hpRow.value : null;
+    // メガ後の実数値も併せて持つ (相手がメガ進化している間は、推定表示と
+    // 行動順の判定をメガ後の種族値で評価するため。HP はメガ前後で不変)
+    let valuesMega;
+    const megaName = isMega ? full : fallback.megaSpecies;
+    if (megaName) {
+      const mt = statTable(megaName);
+      if (mt) {
+        valuesMega = { hp: values.hp };
+        for (const k of ['atk', 'def', 'spa', 'spd', 'spe']) {
+          const row = mt[k].find(r => r.nature === nature && r.sp === sp[k]);
+          valuesMega[k] = row ? row.value : null;
+        }
+      }
+    }
     const ability = metaNameEn('ability', e.ability);
     out.push({
       nature, sp,
@@ -475,7 +489,7 @@ function bayesCorpusCandidates(species, table, fallback) {
       megaSpecies: isMega ? full : fallback.megaSpecies,
       moves: (e.moves || []).map(mv => metaNameEn('move', mv)).filter(Boolean),
       moveExact: true,
-      values, post: 0, corpus: true, _w: Math.max(e.weight || 0, 0.01),
+      values, valuesMega, post: 0, corpus: true, _w: Math.max(e.weight || 0, 0.01),
     });
   }
   const tot = out.reduce((s, c) => s + c._w, 0) || 1;
@@ -513,6 +527,7 @@ function bayesBuildCandidates(species) {
   const combos = [];
   for (const p of patterns) for (const n of natures) combos.push({ p, n, w: (p.rate + 0.5) * (n.rate + 0.5) });
   combos.sort((a, b) => b.w - a.w);
+  const mtable = u.megaSpecies ? statTable(u.megaSpecies) : null;
   const mk = (combo, item, ability, wMul) => {
     const sp = {};
     for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) sp[k] = combo.p.sp[k] || 0;
@@ -523,6 +538,15 @@ function bayesBuildCandidates(species) {
     }
     const hpRow = table.hp.find(r => r.sp === sp.hp);
     values.hp = hpRow ? hpRow.value : null;
+    // メガ後の実数値も併せて持つ (コーパス候補と同じ理由。HP は不変)
+    let valuesMega;
+    if (mtable) {
+      valuesMega = { hp: values.hp };
+      for (const k of ['atk', 'def', 'spa', 'spd', 'spe']) {
+        const row = mtable[k].find(r => r.nature === combo.n.en && r.sp === sp[k]);
+        valuesMega[k] = row ? row.value : null;
+      }
+    }
     // 技プロファイル: この候補 (性格×持ち物) が持っていそうな4技を予測する。
     // 性格の攻撃側補正と持ち物 (こだわり系は変化技をほぼ持たない等) で技カテゴリに
     // 傾斜を付け、使用率順のプールから上位4技を選ぶ。判明技の証拠はこの
@@ -541,7 +565,7 @@ function bayesBuildCandidates(species) {
     const profMoves = poolInfo.map(x => ({ en: x.en, s: (x.rate + 2) * (x.cat === '物理' ? phys : x.cat === '特殊' ? spec : statAff) }))
       .sort((a, b) => b.s - a.s).slice(0, 4).map(x => x.en);
     return { nature: combo.n.en, sp, item: item.en, ability: ability.en, megaAbility, megaSpecies: u.megaSpecies || undefined,
-      moves: profMoves, movePool, moveExact: false, values, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul };
+      moves: profMoves, movePool, moveExact: false, values, valuesMega, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul };
   };
   const raw = [];
   for (const c of combos.slice(0, 20)) raw.push(mk(c, topItem, topAbility, 1));
@@ -648,7 +672,9 @@ function processMoveBayes(ev, io) {
   if (!ent) return;
   const panel = io.opp[ctx.species] || null;
   const counts = ent.cands.map(c => {
-    if (c.values.spe == null) return 0;
+    // メガ進化している相手の行動順は、メガ後のすばやさで判定する
+    const speVal = (panel && panel.mega && c.valuesMega) ? c.valuesMega.spe : c.values.spe;
+    if (speVal == null) return 0;
     // 候補の特性で優先度枠がずれる場合、その候補については順序は素早さ
     // ではなく枠で決まる (枠が上の候補は先行が確定、下なら先行はあり得ない)
     if (ctx.oppMd) {
@@ -658,7 +684,7 @@ function processMoveBayes(ev, io) {
       if (cBr.last) return ctx.firstIsOpp ? 0 : 16;
       if (cBr.prio !== ctx.myPrio) return (cBr.prio > ctx.myPrio) === ctx.firstIsOpp ? 16 : 0;
     }
-    const eff = infEffSpe(c.values.spe, panel ? panel.boosts : {}, panel && panel.itemLost ? '' : c.item,
+    const eff = infEffSpe(speVal, panel ? panel.boosts : {}, panel && panel.itemLost ? '' : c.item,
       panel ? panel.status : '', ctx.twP2, c.ability, io.field.weather, io.field.terrain, !!(panel && panel.unburden));
     if (eff === ctx.myEff) return 8; // 同速の可能性は中間
     const ok = ctx.trick ? (ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff) : (ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff);
@@ -745,15 +771,17 @@ function bayesView(spec) {
       if (acc >= 0.95) { hi = c.sp[k] || 0; break; }
     }
     view.sp[k] = [lo ?? (bySp[0].sp[k] || 0), hi ?? (bySp[bySp.length - 1].sp[k] || 0)];
-    const byVal = ent.cands.filter(c => c.values[k] != null).sort((a, b) => a.values[k] - b.values[k]);
+    // メガ進化している相手は、候補のメガ後の実数値でレンジを作る
+    const valOf = c => (spec.mega && c.valuesMega) ? c.valuesMega[k] : c.values[k];
+    const byVal = ent.cands.filter(c => valOf(c) != null).sort((a, b) => valOf(a) - valOf(b));
     if (byVal.length) {
       acc = 0; let vlo = null, vhi = null;
       for (const c of byVal) {
-        if (vlo === null && acc >= 0.05) vlo = c.values[k];
+        if (vlo === null && acc >= 0.05) vlo = valOf(c);
         acc += c.post;
-        if (acc >= 0.95) { vhi = c.values[k]; break; }
+        if (acc >= 0.95) { vhi = valOf(c); break; }
       }
-      view.stat[k] = [vlo ?? byVal[0].values[k], vhi ?? byVal[byVal.length - 1].values[k]];
+      view.stat[k] = [vlo ?? valOf(byVal[0]), vhi ?? valOf(byVal[byVal.length - 1])];
     }
   }
   const nProb = {};
