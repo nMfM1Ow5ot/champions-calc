@@ -853,9 +853,12 @@ function vgcBuildSpec(entry, keep) {
   const { key, build } = entry;
   const sd = gen.species.get(idOf(key));
   const base = (sd && sd.baseSpecies) || key;
-  const megaKey = build.megaSpecies || (key !== base ? key : null);
+  // メガ扱いにするのはメガフォルムの時だけ (イエッサン♀・ロトムの
+  // フォルム・ギルガルド等、ベースと名前が違うだけのフォルムを
+  // メガシンカ扱いしない)。非メガのフォルムはそのフォルム自体が種族になる
+  const megaKey = build.megaSpecies || (key.includes('-Mega') ? key : null);
   const b = {
-    species: base, ability: build.ability || '', item: build.item || '',
+    species: megaKey ? base : key, ability: build.ability || '', item: build.item || '',
     nature: build.nature || 'Hardy',
     sp: build.sp ? { ...build.sp } : { ...((keep && keep.sp) || {}) },
     moves: [...(build.moves || [])],
@@ -899,7 +902,7 @@ function applyVgcTeam(side, teamId) {
   if (!t || !Array.isArray(t.members) || !t.members.length) return;
   const specs = t.members.slice(0, 6).map(m => {
     const forme = m.forme || m.species;
-    const ns = vgcBuildSpec({ key: forme, build: { ability: m.ability || '', item: m.item || '', nature: m.nature || 'Hardy', sp: m.sps || null, moves: [...(m.moves || [])], megaSpecies: forme !== m.species ? forme : undefined } }, null);
+    const ns = vgcBuildSpec({ key: forme, build: { ability: m.ability || '', item: m.item || '', nature: m.nature || 'Hardy', sp: m.sps || null, moves: [...(m.moves || [])], megaSpecies: forme !== m.species && forme.includes('-Mega') ? forme : undefined } }, null);
     ns.kind = 'custom';
     return ns;
   });
