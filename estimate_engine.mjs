@@ -57,7 +57,7 @@ function infSideConds(ev) {
 function logSnapshot(species, turn, trigger) {
   try {
     const ent = bayes && bayes.bySpecies ? bayes.bySpecies[species] : null;
-    let map = null, cover90 = null, cands = null, used = null, hpLifted = false;
+    let map = null, cover90 = null, cands = null, used = null, hpLifted = false, marg = null;
     if (ent && ent.cands) {
       const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
       const top = sorted[0];
@@ -66,7 +66,13 @@ function logSnapshot(species, turn, trigger) {
       for (const c of sorted) { acc += c.post; n++; if (acc >= 0.9) break; }
       cover90 = { n, mass: +acc.toFixed(6) };
       cands = sorted.map(c => ({ nature: c.nature, sp: { ...c.sp }, item: c.item, ability: c.ability, p: +c.post.toFixed(6),
-        src: c.moveExact ? 'corpus' : c.generic ? 'generic' : (c.bulkSynth || c.shapeSynth) ? 'synth' : 'pokedb' }));
+        src: c.moveExact ? 'corpus' : c.generic ? 'generic' : (c.bulkSynth || c.shapeSynth || c.itemSynth) ? 'synth' : 'pokedb' }));
+      // 周辺分布 (マージナル) の首位: MAP (結合分布の最大) と分布全体の
+      // 首位が食い違う場面を、ログ側が再計算なしで検出できるようにする
+      const mN = new Map(), mI = new Map();
+      for (const c of ent.cands) { mN.set(c.nature, (mN.get(c.nature) || 0) + c.post); mI.set(c.item, (mI.get(c.item) || 0) + c.post); }
+      const topOf = m => { let bv = null, bp = -1; for (const [v, p] of m) if (p > bp) { bp = p; bv = v; } return { v: bv, p: +bp.toFixed(6) }; };
+      marg = { nature: topOf(mN), item: topOf(mI) };
       used = ent.used;
       hpLifted = !!ent.hpLifted;
     }
@@ -76,13 +82,17 @@ function logSnapshot(species, turn, trigger) {
         def: ie.pairs.def ? ie.pairs.def.size : null, spd: ie.pairs.spd ? ie.pairs.spd.size : null,
         spe: ie.pairs.spe ? ie.pairs.spe.size : null },
       hpSps: ie.hpSps ? ie.hpSps.size : null } : null;
-    infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, cover90, cands, inf });
+    infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, marg, cover90, cands, inf });
     if (infLog.length > 2000) infLog.splice(0, infLog.length - 2000);
   } catch (e) { /* ログ生成の失敗で推論を止めない */ }
 }
 function takeInferenceLog() { const out = infLog; infLog = []; return out; }
 // 候補集合への交差適用 (空になるイベントは矛盾として捨てる)
 function infIntersect(species, statKey, feasible, hpSps) {
+  // 推論ログの時系列で entry より先に inf が記録され、その時点の候補状態が
+  // 空になる不整合を防ぐため、未生成なら候補を先に用意する (生成は entry
+  // スナップショットとして記録される)。失敗しても交差処理は続ける
+  if (bayes && bayes.bySpecies[species] === undefined) { try { bayesEntry(species); } catch (err) { /* ログ都合で推論を止めない */ } }
   const e = infEntry(species);
   if (!feasible || !feasible.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false }); return; }
   const next = e.pairs[statKey] ? new Set([...e.pairs[statKey]].filter(x => feasible.has(x))) : feasible;
@@ -103,6 +113,9 @@ function processDamageInf(ev, ctx) {
   pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
   const md = moveData(ev.move);
   if (!md || md.category === 'Status' || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
+  // 自分自身へのダメージ (反動など) は攻撃として扱わない (ベイズ側は
+  // processRecoilBayes が持ち物推論の証拠として取り込む)
+  if (ev.atk && ev.atk === ev.def) return;
   const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
   const oppIsAtk = labelSide(ev.atk) === 'p2';
   let target = md.target;
@@ -219,7 +232,11 @@ function processMoveInf(ev, io) {
   const mySpecies = firstIsOpp ? labelSpecies(ev.label) : prev.species;
   const mySpec = io.my[mySpecies];
   const oppSpec = io.opp[oppSpecies] || null;
-  const table = statTable(oppSpecies);
+  // 行動順の比較は実際に動いている形態の実数値で行う。メガ進化している側は
+  // メガ後の種族表を使う (相手候補側は valuesMega で判定済みだが、自分側の
+  // 基準値と比較表が素の形態のままだと、メガで速くなる相手の観測が全候補と
+  // 矛盾して証拠が丸ごと捨てられる。battle_20261121_233243 の seq25 が実例)
+  const table = statTable(effSpecies(oppSpec));
   if (!mySpec || !oppSpec || !table) return intents;
   // 行動順が素早さで決まらないケースを除外する。特性で優先度が変わる技
   // (いたずらごころ)、枠内で最後尾になる特性 (あとだし)、順序を乱す持ち物
@@ -239,7 +256,7 @@ function processMoveInf(ev, io) {
     if (oppBr.last || oppBr.prio !== myBr.prio) return intents;
     if (oppSpec.ability === 'Gale Wings' && oppMd.type === 'Flying') return intents;
   }
-  const myTable = statTable(mySpecies);
+  const myTable = statTable(effSpecies(mySpec));
   const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
   if (!myRow) return intents;
   const tw = s => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
@@ -305,16 +322,18 @@ function applyAbilityOrderEvidence(oppSpecies, mySpecies, firstIsOpp, turn, io) 
     if (ok) feasible.add(row.nature + '|' + row.sp);
   }
   infIntersect(oppSpecies, 'spe', feasible, null);
-  // ベイズエンジン: 技の行動順と同じ尤度 (一致 16 / 同速 8 / 矛盾 0→下限)
+  // ベイズエンジン: 発動順も素早さの決定的な観測なので、技の行動順と
+  // 同じくハード制約として適用する (同速は乱数のため残す)
   const ent = bayesEntry(oppSpecies);
   if (ent) {
-    const counts = ent.cands.map(c => {
-      if (c.values.spe == null) return 0;
-      if (c.values.spe === myRaw) return 8;
-      const ok = trick ? (firstIsOpp ? c.values.spe < myRaw : c.values.spe > myRaw) : (firstIsOpp ? c.values.spe > myRaw : c.values.spe < myRaw);
-      return ok ? 16 : 0;
+    const verdicts = ent.cands.map(c => {
+      if (c.values.spe == null) return null;
+      if (c.values.spe === myRaw) return null;
+      return trick ? (firstIsOpp ? c.values.spe < myRaw : c.values.spe > myRaw) : (firstIsOpp ? c.values.spe > myRaw : c.values.spe < myRaw);
     });
-    bayesApply(ent, counts);
+    const res = bayesHardSpe(ent, verdicts);
+    logSnapshot(oppSpecies, turn, { kind: 'abilityOrder', firstIsOpp: !!firstIsOpp,
+      applied: res.applied, excluded: res.excluded, ...(res.applied ? {} : { inconsistent: true }) });
   }
 }
 const NATURE_JA2EN = { 'がんばりや': 'Hardy', 'さみしがり': 'Lonely', 'ゆうかん': 'Brave', 'いじっぱり': 'Adamant', 'やんちゃ': 'Naughty', 'ずぶとい': 'Bold', 'すなお': 'Docile', 'のんき': 'Relaxed', 'わんぱく': 'Impish', 'のんてんき': 'Lax', 'おくびょう': 'Timid', 'せっかち': 'Hasty', 'まじめ': 'Serious', 'ようき': 'Jolly', 'むじゃき': 'Naive', 'ひかえめ': 'Modest', 'おっとり': 'Mild', 'れいせい': 'Quiet', 'てれや': 'Bashful', 'うっかりや': 'Rash', 'おだやか': 'Calm', 'おとなしい': 'Gentle', 'なまいき': 'Sassy', 'しんちょう': 'Careful', 'きまぐれ': 'Quirky' };
@@ -607,6 +626,7 @@ function bayesBuildCandidates(species) {
   const patterns = (pd.patterns || []).slice(0, 5).map(p => ({ sp: p.sp || {}, rate: p.rate || 0 }));
   const natures = (pd.natures || []).map(n => ({ en: NATURE_JA2EN[n.name], rate: n.rate || 0 })).filter(n => n.en).slice(0, 5);
   const items = (pd.items || []).map(i => ({ en: (NAMES._itemJa2en || {})[i.name], rate: i.rate || 0 })).filter(i => i.en).slice(0, 4);
+  const itemsAll = (pd.items || []).map(i => ({ en: (NAMES._itemJa2en || {})[i.name], rate: i.rate || 0 })).filter(i => i.en).slice(0, 10);
   const abilities = (pd.abilities || []).map(a => ({ en: (NAMES._abilityJa2en || {})[a.name], rate: a.rate || 0 })).filter(a => a.en).slice(0, 3);
   const poolInfo = (pd.moves || []).map(mv => ({ en: (NAMES._moveJa2en || {})[mv.ja], rate: mv.rate || 0, cat: mv.cat || '' })).filter(x => x.en).slice(0, 10);
   const movePool = poolInfo.map(x => x.en).slice(0, 8);
@@ -709,6 +729,23 @@ function bayesBuildCandidates(species) {
   }
   const tot = out.reduce((s, c) => s + c._w, 0) || 1;
   for (const c of out) { c.post = c._w / tot; delete c._w; }
+  // 持ち物カバレッジ: バリアント展開は使用率上位3件までしか届かないため、
+  // それ以下の持ち物 (例: Farigiraf の いのちのたま = 9位 1.2%) は候補が
+  // 1件も存在せず、判明しても反映先が無い構造になっていた。使用率1%以上の
+  // 持ち物は、最上位の型との組合せで最低1件を保証する (重さは mk の
+  // 使用率按分に合成候補と同じ 0.5 を掛けたもの)
+  {
+    const present = new Set(out.map(c => c.item));
+    let added = false;
+    for (const it of itemsAll) {
+      if (it.rate < 1 || present.has(it.en)) continue;
+      const c = mk(combos[0], it, topAbility, 0.5);
+      c.itemSynth = true;
+      c.post = c._w / tot; delete c._w;
+      out.push(c); present.add(it.en); added = true;
+    }
+    if (added) { const t2 = out.reduce((s, c) => s + c.post, 0) || 1; for (const c of out) c.post /= t2; }
+  }
   // 上位勢コーパス (meta_sets) の実在型を候補へ統合する: 事前確率は
   // コーパス側 6 割 (weight 按分) / pokedb 合成候補側 4 割 (従来の使用率積)。
   // pokedb 候補と同一の型がコーパスにある場合は、その質量をコーパス候補へ
@@ -809,7 +846,47 @@ function bayesApply(ent, counts, bulk) {
   dirty = true;
   if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: true, lifted: !!ent.hpLifted && !liftedBefore });
 }
+// 反動による持ち物推論: いのちのたまの反動は最大HPのちょうど1/10 で、
+// 表示は 10% 前後になる。技自身の反動 (与えたダメージに比例して割合が
+// 一定しない) と区別できるこの形の自己ダメージだけを、持ち物の弱い
+// 判明証拠として取り込む (反動が無いことは証拠にしない: 読み取り漏れの
+// 可能性があるため)。減衰率は判明情報 (0.05) より緩やかな 0.1
+const RECOIL_KEEP = 0.1;
+function processRecoilBayes(ev) {
+  if (typeof ev.turn === 'number') infLogTurn = ev.turn;
+  if (typeof ev.pct !== 'number' || ev.pct < 8 || ev.pct > 11) return;
+  const species = labelSpecies(ev.atk);
+  const ent = bayesEntry(species);
+  if (!ent) return;
+  let tot = 0;
+  for (const c of ent.cands) { if (c.item !== 'Life Orb') c.post *= RECOIL_KEEP; tot += c.post; }
+  if (!(tot > 0)) return;
+  for (const c of ent.cands) c.post /= tot;
+  ent.used++;
+  dirty = true;
+  logSnapshot(species, ev.turn, { kind: 'recoil', pct: ev.pct, applied: true });
+}
+// 行動順のハード制約 (ユーザーの原則): 素早さ順は、同速の場合の乱数を
+// 除けば乱数の絡まない絶対的な指標であり、観測された順序と矛盾する候補は
+// 弱い尤度で割り引くのではなく確率0で除外する。verdicts は候補ごとの
+// 判定 (true=残す / false=除外 / null=判定不能のため残す。同速・はやての
+// つばさ・確率発動の順序変更持ち物など)。全候補が矛盾する場合は、観測側
+// の未モデル要素 (読み取り誤り等) が疑われるため分布を壊さず適用を見送る
+function bayesHardSpe(ent, verdicts) {
+  let survivorMass = 0, excluded = 0;
+  ent.cands.forEach((c, i) => { if (verdicts[i] === false) { if (c.post > 0) excluded++; } else survivorMass += c.post; });
+  if (!(survivorMass > 0)) return { applied: false, excluded: 0 };
+  if (excluded) {
+    ent.cands.forEach((c, i) => { if (verdicts[i] === false) c.post = 0; });
+    for (const c of ent.cands) c.post /= survivorMass;
+  }
+  ent.used++;
+  dirty = true;
+  return { applied: true, excluded };
+}
 function processDamageBayes(ev, ctx) {
+  // 自分自身へのダメージは攻撃として処理せず、反動の経路へ回す
+  if (ev.atk && ev.atk === ev.def) { if (labelSide(ev.atk) === 'p2') processRecoilBayes(ev); return; }
   const opts = pendingOpts;
   if (!opts) return; // 旧エンジンが対象外にした技 (変化・固定ダメ等) は同じく対象外
   const md = moveData(ev.move);
@@ -853,27 +930,35 @@ function processMoveBayes(ev, io) {
   const ent = bayesEntry(ctx.species);
   if (!ent) return;
   const panel = io.opp[ctx.species] || null;
-  const counts = ent.cands.map(c => {
+  // 行動順はハード制約として適用する (bayesHardSpe)。候補ごとの判定:
+  // 優先度枠で順序が決まる候補は枠で判定し、確率発動の順序変更持ち物
+  // (せんせいのツメ / イバンのみ) を持つ候補は順序から素早さを断定
+  // できないため残す。同速ちょうどの候補も乱数で決まるため残す
+  const verdicts = ent.cands.map(c => {
     // メガ進化している相手の行動順は、メガ後のすばやさで判定する
     const speVal = (panel && panel.mega && c.valuesMega) ? c.valuesMega.spe : c.values.spe;
-    if (speVal == null) return 0;
+    if (speVal == null) return null;
+    // 実効素早さの補正 (天候で倍化する特性など) も、実際に発動している
+    // メガ後の特性で判定する
+    const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
     // 候補の特性で優先度枠がずれる場合、その候補については順序は素早さ
     // ではなく枠で決まる (枠が上の候補は先行が確定、下なら先行はあり得ない)
     if (ctx.oppMd) {
-      const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
-      if (cAb === 'Gale Wings' && ctx.oppMd.type === 'Flying') return 16; // HP 条件で確定しないため中立
+      if (cAb === 'Gale Wings' && ctx.oppMd.type === 'Flying') return null; // HP 条件で確定しないため残す
       const cBr = moveBracket(ctx.oppMd, cAb);
-      if (cBr.last) return ctx.firstIsOpp ? 0 : 16;
-      if (cBr.prio !== ctx.myPrio) return (cBr.prio > ctx.myPrio) === ctx.firstIsOpp ? 16 : 0;
+      if (cBr.last) return !ctx.firstIsOpp;
+      if (cBr.prio !== ctx.myPrio) return (cBr.prio > ctx.myPrio) === ctx.firstIsOpp;
     }
+    if (c.item === 'Quick Claw' || c.item === 'Custap Berry') return null; // 発動が確率的で順序が素早さで決まらない
+    if (c.item === 'Lagging Tail' || c.item === 'Full Incense') return !ctx.firstIsOpp; // 枠内で最後尾が確定
     const eff = infEffSpe(speVal, panel ? panel.boosts : {}, panel && panel.itemLost ? '' : c.item,
-      panel ? panel.status : '', ctx.twP2, c.ability, io.field.weather, io.field.terrain, !!(panel && panel.unburden));
-    if (eff === ctx.myEff) return 8; // 同速の可能性は中間
-    const ok = ctx.trick ? (ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff) : (ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff);
-    return ok ? 16 : 0;
+      panel ? panel.status : '', ctx.twP2, cAb, io.field.weather, io.field.terrain, !!(panel && panel.unburden));
+    if (eff === ctx.myEff) return null; // 同速は乱数で決まるため残す
+    return ctx.trick ? (ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff) : (ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff);
   });
-  logTrigger = { turn: ev.turn, trig: { kind: 'moveOrder', move: ctx.oppMd ? ctx.oppMd.name : null, firstIsOpp: !!ctx.firstIsOpp } };
-  bayesApply(ent, counts);
+  const res = bayesHardSpe(ent, verdicts);
+  logSnapshot(ctx.species, ev.turn, { kind: 'moveOrder', move: ctx.oppMd ? ctx.oppMd.name : null, firstIsOpp: !!ctx.firstIsOpp,
+    applied: res.applied, excluded: res.excluded, ...(res.applied ? {} : { inconsistent: true }) });
 }
 // 判明情報 (持ち物・特性) と矛盾する候補の減衰。同じ判明内容では再適用しない。
 // 判明技は bayesMoveUpdate が差分で適用する (技構成からの型予測)。
@@ -931,6 +1016,15 @@ function bayesView(spec) {
   const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
   const map = sorted[0];
   const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, sp: { ...map.sp } } };
+  // 周辺分布の首位 (性格・持ち物): MAP は結合分布の最大であり、分布が
+  // 拡散している局面では周辺の首位と食い違う。UI が表示で併記できるよう
+  // 両方を渡す (採用する型そのものは従来どおり MAP)
+  {
+    const mN = new Map(), mI = new Map();
+    for (const c of ent.cands) { mN.set(c.nature, (mN.get(c.nature) || 0) + c.post); mI.set(c.item, (mI.get(c.item) || 0) + c.post); }
+    const topOf = m => { let bv = null, bp = -1; for (const [v, p] of m) if (p > bp) { bp = p; bv = v; } return { value: bv, mass: bp }; };
+    view.marginals = { nature: topOf(mN), item: topOf(mI) };
+  }
   // 未判明技の予測: 事後確率で重み付けした候補の技構成から、まだ判明していない
   // 技が含まれている確率を集計する (型予測と同じ事後分布の逆向きの出力)。
   // pokedb 候補の技は予測プロファイルなので、確定技構成より少し割り引く
