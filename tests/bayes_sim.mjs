@@ -12,6 +12,8 @@
 //                      ため除外) の事前分布から抽選する (既定)
 //   --pool corpus    : 真値を meta_sets の実在型とする (SP は公開情報が無い
 //                      ため 0 扱い。bayes_eval と同じ前提)
+//   --pool mine      : 真値を自分の登録チーム (my_team.json の6体、そのままの
+//                      型) とする。ユーザーが登録した型への推定精度の計測用
 //   --perturb        : 真値の SP を確率 p で少しずらす (候補集合に無い型の再現)
 //   --opp-atk        : 相手の反撃 (実数ダメージ) も観測に含めるか (1=有効)
 //
@@ -34,6 +36,7 @@ const TURNS = Math.max(1, parseInt(opt('turns', '10'), 10) || 10);
 const POOL = opt('pool', 'candidate');
 const PERTURB = Math.min(1, Math.max(0, parseFloat(opt('perturb', '0.3')) || 0));
 const OPP_ATK = opt('opp-atk', '1') !== '0';
+const SPEED = opt('speed', '1') !== '0'; // 行動順 (素早さ) の証拠も生成するか
 const ARCHETYPE = opt('archetype', ''); // 指定時はそのアーキタイプの真値だけを抽選する (弱点クラスの重点収集用)
 const OUT = opt('out', path.join(ROOT, 'tests', 'sim_results', `sim_seed${SEED}_${POOL}.json`));
 
@@ -79,7 +82,7 @@ globalThis.fetch = async (u) => {
   return { ok: false, status: 404, text: async () => '', json: async () => { throw new Error('404'); } };
 };
 const hook = `\n;globalThis.__T = { bayesEntry, bayesReset, bayesApply, bayesCandSpec, bayesView,
-  applyState, get state() { return state; },
+  applyState, get state() { return state; }, get estimator() { return estimator; },
   getMeta: () => META_SETS,
   dataReady: () => !!(POKEDB_PARSED && USAGE_SETS && META_SETS_LOADED) };\n`;
 const tmp = ROOT + '/.bayes_sim_module.mjs';
@@ -101,6 +104,13 @@ const archetype = sp => {
 try {
   const bundle = await import(url.pathToFileURL(ROOT + '/bundle.mjs').href);
   const { damageRolls, withCurHP, statTable } = bundle;
+  const gen9 = bundle.Generations.get(9);
+  const movePrio = mv => { try { return gen9.moves.get(mv)?.priority || 0; } catch { return 0; } };
+  const speValue = spec => {
+    const table = statTable(spec.species); if (!table) return null;
+    const row = table.spe.find(r => r.nature === spec.nature && r.sp === (spec.sp?.spe || 0));
+    return row ? row.value : null;
+  };
   await import(url.pathToFileURL(tmp).href);
   const T = globalThis.__T;
   const deadline = Date.now() + 30000;
@@ -148,6 +158,13 @@ try {
     return out;
   };
   function makeTruth(battleIdx) {
+    if (POOL === 'mine') {
+      const spec = T.state.mine[battleIdx % T.state.mine.length];
+      const sp = {}; for (const k of STATS) sp[k] = spec.sp?.[k] || 0;
+      let out = { species: spec.species, nature: spec.nature, sp, item: spec.item || '', ability: spec.ability || '', moves: spec.moves || [], corpusTruth: false, perturbed: false };
+      if (rnd() < PERTURB) { out = { ...out, sp: perturbSp(sp), perturbed: true }; }
+      return out;
+    }
     if (POOL === 'corpus') {
       const s = corpusSets[rndInt(corpusSets.length)];
       const sp = {}; for (const k of STATS) sp[k] = (s.sps && s.sps[k]) || 0;
@@ -180,6 +197,10 @@ try {
     const truth = makeTruth(battleIdx);
     if (!truth) return null;
     T.bayesReset();
+    // 登録型プールでは、真値の所属チーム (自分の登録チーム) が相手チームとして
+    // 分かっている状況を再現する (エンジンがチーム文脈を使う場合の計測用。
+    // 未対応のエンジンでは無視される)
+    if (POOL === 'mine' && T.estimator?.setTeamContext) T.estimator.setTeamContext(T.state.mine.map(x => x.species));
     const ent = T.bayesEntry(truth.species);
     if (!ent || !ent.cands.length) return null;
     const tVals = truthValues(truth.species, truth);
@@ -193,6 +214,7 @@ try {
       if (turn > 0) {
         // 自分の攻撃 (% 観測)
         const atk = attackers[rndInt(attackers.length)];
+        let myPair = null;
         for (let tries = 0; tries < 3; tries++) {
           const mv = atk.moves[rndInt(atk.moves.length)];
           const { rolls } = damageRolls(withCurHP(atk.spec), withCurHP(truthSpec), mv, {});
@@ -206,9 +228,10 @@ try {
             return n;
           });
           T.bayesApply(ent, counts, true);
+          myPair = { spec: atk.spec, move: mv };
           break;
         }
-        // 相手の反撃 (実数観測)
+        // 相手の反撃 (実数観測) + 行動順 (素早さ) の証拠
         if (OPP_ATK && truth.moves.length && rnd() < 0.5) {
           for (let tries = 0; tries < 3; tries++) {
             const mv = truth.moves[rndInt(truth.moves.length)];
@@ -217,6 +240,27 @@ try {
             const amt = rolls[rndInt(16)];
             const counts = ent.cands.map(c => damageRolls(withCurHP(T.bayesCandSpec(base, c)), withCurHP(myDefender), mv, {}).rolls.filter(r => r === amt).length);
             T.bayesApply(ent, counts, true);
+            // 行動順: 両者が同じターンに攻撃技を使った場合のみ。優先度が
+            // 異なれば順序は素早さで決まらないため証拠にしない。本番の
+            // processMoveBayes と同じ数え方 (一致 16 / 同速候補は中立 8 /
+            // 不一致 0)。こだわりスカーフのみ実効値へ反映する
+            if (SPEED && myPair) {
+              const eff = (v, item) => item === 'Choice Scarf' ? Math.floor(v * 1.5) : v;
+              const mySpe = speValue(myPair.spec), tSpe = tVals.spe;
+              if (mySpe != null && tSpe != null && movePrio(myPair.move) === movePrio(mv)) {
+                const myEff = eff(mySpe, myPair.spec.item), tEff = eff(tSpe, truth.item);
+                if (tEff !== myEff) {
+                  const firstIsOpp = tEff > myEff;
+                  const scounts = ent.cands.map(c => {
+                    const cs = eff(c.values.spe, c.item);
+                    if (cs == null) return 0;
+                    if (cs === myEff) return 8;
+                    return (firstIsOpp ? cs > myEff : cs < myEff) ? 16 : 0;
+                  });
+                  T.bayesApply(ent, scounts);
+                }
+              }
+            }
             break;
           }
         }
@@ -291,7 +335,7 @@ try {
     delete a.firstTurns; delete a.finalDist;
   }
 
-  const result = { config: { seed: SEED, battles: battles.length, turns: TURNS, pool: POOL, perturb: PERTURB, oppAtk: OPP_ATK, archetype: ARCHETYPE || null }, perTurn: agg, archetypes: archAgg, battles };
+  const result = { config: { seed: SEED, battles: battles.length, turns: TURNS, pool: POOL, perturb: PERTURB, oppAtk: OPP_ATK, speed: SPEED, archetype: ARCHETYPE || null }, perTurn: agg, archetypes: archAgg, battles };
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify(result, null, 1));
 
