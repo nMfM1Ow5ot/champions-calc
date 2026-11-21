@@ -133,12 +133,13 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .typechip{font-size:.8rem; font-weight:700; color:#fff; border-radius:.4rem; padding:.15rem .5rem; text-shadow:0 0 2px rgba(0,0,0,.45); white-space:nowrap}
 .typechip.tera{box-shadow:0 0 0 2px #fff inset, 0 0 6px rgba(255,255,255,.55)}
 :root[data-theme="light"] .typechip.tera{box-shadow:0 0 0 2px rgba(0,0,0,.75) inset, 0 0 0 1px rgba(0,0,0,.45)}
-.terarow{display:flex; align-items:center; column-gap:.35rem; margin-top:.35rem}
+.terarow{display:flex; flex-wrap:wrap; align-items:center; column-gap:.35rem; row-gap:.35rem; margin-top:.35rem}
 .terarow>*{margin:0}
+.terarow .tgl{white-space:nowrap; flex:none}
 .terarow .tgl.on{box-shadow:inset 0 0 0 1px rgba(33,150,243,.95)}
 .terarow .sdd-control{box-shadow:none}
 .terarow .sdd{width:10.5rem; flex:none}
-.terarow .sdd.teraoff{visibility:hidden; pointer-events:none}
+.terarow .sdd.teraoff{visibility:hidden; pointer-events:none; flex:0 1 10.5rem; min-width:0}
 .terarow .tgl[data-tera]{width:6rem; flex:none; text-align:center}
 .secondline{display:flex; align-items:center; gap:.8rem; margin-top:.5rem}
 .hpbar{width:10rem; height:.4rem; border-radius:1.5rem; background:rgba(255,255,255,.15); overflow:hidden; flex:none}
