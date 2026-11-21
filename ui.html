@@ -570,6 +570,21 @@ function setFieldManual(k, v) {
   state.field[k] = v;
   fieldHold[k] = { value: v, base: fieldSeen[k] };
 }
+// 天候/フィールドを発生させる特性: そのポケモンが新しく選択されたら、
+// 対応する天候/フィールドで上書きする (手動編集と同じ保持の扱い)
+const SETTER_FIELD = {
+  'Drought': ['weather', 'Sun'], 'Orichalcum Pulse': ['weather', 'Sun'], 'Desolate Land': ['weather', 'Harsh Sunshine'],
+  'Drizzle': ['weather', 'Rain'], 'Primordial Sea': ['weather', 'Heavy Rain'],
+  'Sand Stream': ['weather', 'Sand'], 'Snow Warning': ['weather', 'Snow'], 'Delta Stream': ['weather', 'Strong Winds'],
+  'Electric Surge': ['terrain', 'Electric'], 'Hadron Engine': ['terrain', 'Electric'],
+  'Grassy Surge': ['terrain', 'Grassy'], 'Misty Surge': ['terrain', 'Misty'], 'Psychic Surge': ['terrain', 'Psychic'],
+};
+function applySetterAbility(spec) {
+  if (!spec) return;
+  const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
+  const s = SETTER_FIELD[ab];
+  if (s && state.field[s[0]] !== s[1]) setFieldManual(s[0], s[1]);
+}
 let lastCalc = null;
 // ひんし (HP0) になったポケモンは、対戦中に state.json の誤読で HP が戻らないようロックする (種族名)
 const faintLock = { mine: new Set(), opps: new Set() };
@@ -1199,6 +1214,11 @@ function dispStat(spec, key, raw, sideKey) {
   const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
   let modChain = 4096;
   const pushMod = m => { modChain = Math.floor((modChain * m + 2048) / 4096); };
+  // 天候による実数値補正: ゆきでは こおりタイプの防御、すなあらしでは
+  // いわタイプの特防が 1.5 倍になる (ゲーム内でもダメージ計算に効いている)
+  const effTypes = spec.terastallized && spec.teraType ? [spec.teraType] : ((gen.species.get(idOf(effSpecies(spec))) || {}).types || []);
+  if (key === 'def' && state.field.weather === 'Snow' && effTypes.includes('Ice')) pushMod(6144);
+  if (key === 'spd' && state.field.weather === 'Sand' && effTypes.includes('Rock')) pushMod(6144);
   if (key === 'atk' && (ab === 'Huge Power' || ab === 'Pure Power')) pushMod(8192);
   else if (key === 'atk' && ab === 'Gorilla Tactics') pushMod(6144);
   if (key === 'def' && ab === 'Fur Coat') pushMod(8192);
@@ -1356,6 +1376,7 @@ function applyPreset(side, idx) {
   }
   ui.presetPop = null;
   ui.presetRename = null;
+  applySetterAbility(specs[0]);
   calcAll();
 }
 function presetIconsHTML(p) {
@@ -1470,6 +1491,7 @@ function pokeInfo(side) {
         ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
         state.opps[state.sel.opps] = ns;
         state.oppTeam[state.sel.opps] = v;
+        applySetterAbility(ns);
         calcAll();
       },
     });
@@ -1481,7 +1503,9 @@ function pokeInfo(side) {
       onPick: v => {
         if (!v || v === spec.species) return;
         // 種族を変えたら HP・ランク・状態も含めてすべて初期化する
-        state.mine[state.sel.mine] = ownSpeciesSpec(v);
+        const ns = ownSpeciesSpec(v);
+        state.mine[state.sel.mine] = ns;
+        applySetterAbility(ns);
         calcAll();
       },
     });
@@ -1793,12 +1817,12 @@ function sideChips(which) {
 function renderField() {
   regDD('weather', {
     options: [{ v: '', l: 'なし' }, { v: 'Sun', l: 'はれ (Sun)' }, { v: 'Rain', l: 'あめ (Rain)' }, { v: 'Sand', l: 'すなあらし (Sand)' }, { v: 'Snow', l: 'ゆき (Snow)' }, { v: 'Harsh Sunshine', l: 'つよいひざし (Harsh Sunshine)' }, { v: 'Heavy Rain', l: 'つよいあめ (Heavy Rain)' }, { v: 'Strong Winds', l: 'らんきりゅう (Strong Winds)' }],
-    value: state.field.weather || '',
+    value: state.field.weather || '', clearable: true,
     onPick: v => { setFieldManual('weather', v); calcAll(); },
   });
   regDD('terrain', {
     options: [{ v: '', l: 'なし' }, { v: 'Electric', l: 'エレキフィールド (Electric)' }, { v: 'Grassy', l: 'グラスフィールド (Grassy)' }, { v: 'Psychic', l: 'サイコフィールド (Psychic)' }, { v: 'Misty', l: 'ミストフィールド (Misty)' }],
-    value: state.field.terrain || '',
+    value: state.field.terrain || '', clearable: true,
     onPick: v => { setFieldManual('terrain', v); calcAll(); },
   });
   return `
@@ -2019,7 +2043,7 @@ document.addEventListener('mousedown', e => {
 document.addEventListener('click', e => {
   const t = e.target;
   const icon = t.closest('[data-icon]');
-  if (icon) { const [side, i] = icon.dataset.icon.split(':'); state.sel[side] = +i; calcAll(); return; }
+  if (icon) { const [side, i] = icon.dataset.icon.split(':'); state.sel[side] = +i; applySetterAbility(state[side][+i]); calcAll(); return; }
   const cap = t.closest('[data-capture]');
   if (cap) { captureTeam(cap.dataset.capture); return; }
   const act = t.closest('[data-act]');
@@ -2136,6 +2160,7 @@ document.addEventListener('click', e => {
         if (stone) spec.item = stone;
       }
     }
+    applySetterAbility(spec);
     calcAll();
     return;
   }
