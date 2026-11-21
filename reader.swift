@@ -886,6 +886,12 @@ func renderLogLine(_ line: String) -> [String] {
             }
             return [f[2] == "p2" ? "(The pointed stones disappeared from around the opposing team!)" : "(The pointed stones disappeared from around your team!)"]
         }
+        if f[3].contains("Toxic Spikes") {
+            if f[1] == "-sidestart" {
+                return [f[2] == "p2" ? "(Poison spikes were scattered on the ground around the opposing team!)" : "(Poison spikes were scattered on the ground around your team!)"]
+            }
+            return [f[2] == "p2" ? "(The poison spikes disappeared from the ground around the opposing team!)" : "(The poison spikes disappeared from the ground around your team!)"]
+        }
         if f[3].contains("Spikes") {
             if f[1] == "-sidestart" {
                 return [f[2] == "p2" ? "(Spikes were scattered on the ground around the opposing team!)" : "(Spikes were scattered on the ground around your team!)"]
@@ -2716,6 +2722,23 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
             emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Intimidate")  // 判明登録は applyEvent が行う
         }
     }
+    // どくびしの吸収: 接地した どくタイプが場に出ると、その側の
+    // どくびしは消える (実際の仕様)。タイプと特性プールから確定的に
+    // 言える範囲でのみ導出し、ふゆう候補が未判明の種族・ふゆう判明・
+    // ふうせん判明の場合は行わない (告知文の経路に任せる)
+    if battleHazards[side]?["Toxic Spikes"] != nil,
+       let types = pvSpeciesTypes[speciesEn], types.contains("Poison"), !types.contains("Flying") {
+        let pool = speciesAbilityMap[speciesEn] ?? []
+        var grounded = !pool.contains("Levitate")
+        if !grounded {
+            let abilityJa = side == "p1" ? (teamEntries[speciesEn]?["ability"] as? String) : revealedAbilities[speciesEn]
+            if let abilityJa, abilityJa != "ふゆう" { grounded = true }
+        }
+        let itemJa = side == "p1" ? (teamEntries[speciesEn]?["item"] as? String) : revealedItems[speciesEn]
+        if grounded && itemJa != "ふうせん" {
+            emitHazard(side, "Toxic Spikes", start: false)
+        }
+    }
     // この種族宛てに保留していたランク変化行を、交代行の後に出す
     flushHeldBoosts(forKey: key, slot: slot)
     // 交代前にシード消費を検知していた場合、かるわざ の発動をここで出す
@@ -2785,6 +2808,7 @@ func applyMoveField(_ mvJa: String, side: String) {
     // 設置物 (Showdown のサイドコンディションとして扱う)
     case "ステルスロック": emitHazard(foe, "Stealth Rock", start: true)
     case "まきびし": emitHazard(foe, "Spikes", start: true)
+    case "どくびし": emitHazard(foe, "Toxic Spikes", start: true)
     case "がんせきアックス":
         // 追加効果の設置は当たった場合のみ。確定は emitLog 側の
         // ダメージ行フックと設置文の救済に任せ、ここでは保留だけ置く
@@ -3476,9 +3500,9 @@ func salvageField(in t: String, fromLogScreen: Bool = false) -> Bool {
     let scSide = (t.contains("相手") || t.contains("あいて")) ? "p2" : "p1"
     // 設置物の告知。技の検出を取りこぼした場合の受け皿で、開始/終了が
     // 曖昧な文は出さずに消費だけする (本文を |-message| に残さない)
-    if t.contains("とがった岩") || t.contains("まきびし") {
-        let hz = t.contains("とがった岩") ? "Stealth Rock" : "Spikes"
-        let start = t.contains("漂") || t.contains("浮か") || t.contains("散らば")
+    if t.contains("とがった岩") || t.contains("まきびし") || t.contains("どくびし") {
+        let hz = t.contains("とがった岩") ? "Stealth Rock" : (t.contains("どくびし") ? "Toxic Spikes" : "Spikes")
+        let start = t.contains("漂") || t.contains("浮か") || t.contains("散らば") || t.contains("ばらまか")
         let end = t.contains("消え") || t.contains("なくな")
         if start != end {
             let k = "\(scSide):\(hz):\(start ? "start" : "end")"
@@ -4160,6 +4184,14 @@ func translateBattleMessage(_ text: String) -> Bool {
         if !lastMoveLabel.isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 8 {
             emitLog("|-miss|\(lastMoveLabel)|\(slot): \(sp.en)")
         }
+        return true
+    }
+    // どくびしの吸収: 「<種族>は どくびしを 吸収した！」。接地した
+    // どくタイプが場に出た際の告知で、その側の どくびしが消える。
+    // 交代記録からの導出 (recordSwitchIn) が主経路で、こちらは
+    // 文面が取れた場合の経路 (二重に出ても sideend は冪等)
+    if t.contains("どくびし") && t.contains("吸収") {
+        emitHazard(side, "Toxic Spikes", start: false)
         return true
     }
     // ワイドガードで守られた: 「<対象>は ワイドガードで 守られた！」
@@ -6192,7 +6224,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_2235"
+let readerBuild = "20261121_2246"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
