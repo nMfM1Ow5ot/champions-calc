@@ -1052,9 +1052,11 @@ function ddHTML(id) {
       <span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span>
     </div></div>`;
 }
+// ひらがな→カタカナに寄せて、かなの種別を区別せず検索できるようにする
+const kanaFold = s => String(s).replace(/[ぁ-ゞ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
 function ddListHTML(d, query, focusIdx) {
-  const q = z2h(query || '').toLowerCase();
-  const list = d.options.filter(o => !q || z2h(o.l).toLowerCase().includes(q) || String(o.v).toLowerCase().includes(q));
+  const q = kanaFold(z2h(query || '')).toLowerCase();
+  const list = d.options.filter(o => !q || kanaFold(z2h(o.l)).toLowerCase().includes(q) || kanaFold(String(o.v)).toLowerCase().includes(q));
   if (!list.length) return { html: '<div class="sdd-empty">該当なし</div>', list };
   const html = list.map((o, i) => `<div class="sdd-opt${o.v === d.value ? ' selected' : ''}${i === focusIdx ? ' focused' : ''}" data-ddopt="${esc(o.v)}" data-ddidx="${i}">${esc(o.l)}${o.extra || ''}</div>`).join('');
   return { html, list };
