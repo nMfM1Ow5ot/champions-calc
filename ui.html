@@ -302,6 +302,7 @@ const faintLock = { mine: new Set(), opps: new Set() };
 // または「events 列のリスタート (長さが縮む)」のどちらか
 let battleResetPending = false;
 let lastEventCount = 0;
+let lastBattleKey = null;
 function confirmNewBattle() {
   battleResetPending = false;
   faintLock.mine.clear();
@@ -1800,6 +1801,20 @@ function commitEstStat(side, k, raw) {
 function applyState(j) {
   if (!j || typeof j !== 'object') return;
   let changed = false;
+  // 試合 ID (state.json の battle) が変わったら、新しい対戦の開始が確定する。
+  // events 列の縮小だけに頼ると検知を外し、前の対戦のおいかぜ等が持ち越される
+  // ことがある (battle_20261121_132153 の件) ため、ID の変化でも確定させ、
+  // サイドコンディションと推定イベントを初期化する (HP 反映より前に行う)
+  const bkey = (typeof j.battle === 'string' && j.battle) ? j.battle : null;
+  if (bkey) {
+    if (lastBattleKey && bkey !== lastBattleKey) {
+      confirmNewBattle();
+      resetInference();
+      lastEventCount = 0;
+      changed = true;
+    }
+    lastBattleKey = bkey;
+  }
   // events 列が縮んだ = 新しい対戦のイベント列が始まった合図。保留中の
   // リセットをここで確定し、ひんしロックを解除する (HP 反映より前に行う)。
   // inference.seen は oppReset の resetInference で 0 に戻ってしまうため、
