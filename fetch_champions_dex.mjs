@@ -16,10 +16,24 @@ const slugSet = new Set([...pokeHtml.matchAll(/pokedex-champions\/([a-z0-9-]+)\/
 let usage = { sets: {} };
 try { usage = JSON.parse(readFileSync(new URL('./data/usage_sets.json', import.meta.url), 'utf8')); } catch (e) { /* 使用率なしでも続行 */ }
 const usageSpecies = new Set(Object.values(usage.sets || {}).map(s => s.species).filter(Boolean));
+// Aegislash-Both は @smogon/calc 内部の合成エントリ (両フォルムの高い能力を併せた計算用) で、
+// 実在するフォルムではないため収録しない。
+const EXCLUDE_SPECIES = new Set(['Aegislash-Both']);
 const species = [];
 for (const sp of gen.species) {
+  if (EXCLUDE_SPECIES.has(sp.name)) continue;
   const base = sp.baseSpecies || sp.name;
-  if (slugSet.has(norm(base)) || usageSpecies.has(sp.name)) species.push(sp.name);
+  let slugHit = slugSet.has(norm(base));
+  if (!slugHit) {
+    // baseSpecies が兄弟フォルムを指す種族 (Aegislash-Shield の baseSpecies は Aegislash-Blade) は
+    // スラッグ 'aegislash' と一致せず落ちるため、名前を '-' で切り詰めた候補でも照合する。
+    let n = sp.name;
+    while (n.includes('-')) {
+      n = n.slice(0, n.lastIndexOf('-'));
+      if (slugSet.has(norm(n))) { slugHit = true; break; }
+    }
+  }
+  if (slugHit || usageSpecies.has(sp.name)) species.push(sp.name);
 }
 
 // --- アイテム (チャンピオンズのアイテムページに載る itemdex スラッグ) ---
