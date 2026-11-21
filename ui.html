@@ -2228,13 +2228,17 @@ async function poll() {
     } catch (e) { /* species moves optional (初期技の補完用) */ } })(),
   ]);
   // dropdown option lists
-  const seen = new Set();
   // 種族は実装範囲に絞らない (レギュレーション変更で他種族が解禁されても
-  // そのまま選べるように、全ポケモンを候補にする)。技・持ち物は現行
-  // レギュレーションのスコープ分のみ (effScopeSet)
-  SPECIES_OPTIONS = Object.entries(NAMES._ja2en || {})
-    .filter(([, en]) => { if (seen.has(en)) return false; seen.add(en); return true; })
-    .map(([jaName, en]) => ({ v: en, l: biLabel(jaName, en) }))
+  // そのまま選べるように、全ポケモンを候補にする)。候補の正本は champions_dex
+  // の species (全種族・フォルム) で、データ push の前後で表示が欠けないよう
+  // 名前索引にある種族との和集合にする。技・持ち物は現行レギュレーションの
+  // スコープ分のみ (effScopeSet)
+  const en2ja = {};
+  for (const e of (NAMES._indexSpecies || [])) if (!(e.en in en2ja)) en2ja[e.en] = e.ja;
+  const speciesEns = new Set(Object.values(NAMES._ja2en || {}));
+  if (CHAMP && CHAMP.species) for (const en of CHAMP.species) speciesEns.add(en);
+  SPECIES_OPTIONS = [...speciesEns]
+    .map(en => ({ v: en, l: biLabel(en2ja[en] || (NAMES.species || {})[idOf(en)] || '', en) }))
     .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
   const moveScope = effScopeSet(CHAMP && CHAMP.moves, REG && REG.moves);
   const itemScope = effScopeSet(CHAMP && CHAMP.items, REG && REG.items);
