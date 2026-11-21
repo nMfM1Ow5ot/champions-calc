@@ -293,6 +293,15 @@ const state = {
   sel: { mine: 0, opps: 0 },
   active: { mine: [0, 1], opps: [0, 1] },
 };
+// 天候/フィールドの手動編集の保持: 編集した項目は、実盤面の値 (state.json の
+// field) が編集時点の値から実際に変わるまで、届いた値で上書きしない。
+// fieldSeen は直近に届いた実値、fieldHold は項目ごとの {value, base}
+const fieldSeen = { weather: undefined, terrain: undefined };
+const fieldHold = { weather: null, terrain: null };
+function setFieldManual(k, v) {
+  state.field[k] = v;
+  fieldHold[k] = { value: v, base: fieldSeen[k] };
+}
 let lastCalc = null;
 // ひんし (HP0) になったポケモンは、対戦中に state.json の誤読で HP が戻らないようロックする (種族名)
 const faintLock = { mine: new Set(), opps: new Set() };
@@ -1150,12 +1159,12 @@ function renderField() {
   regDD('weather', {
     options: [{ v: '', l: 'なし' }, { v: 'Sun', l: 'はれ' }, { v: 'Rain', l: 'あめ' }, { v: 'Sand', l: 'すなあらし' }, { v: 'Snow', l: 'ゆき' }, { v: 'Harsh Sunshine', l: 'つよいひざし' }, { v: 'Heavy Rain', l: 'つよいあめ' }, { v: 'Strong Winds', l: 'らんきりゅう' }],
     value: state.field.weather || '',
-    onPick: v => { state.field.weather = v; calcAll(); },
+    onPick: v => { setFieldManual('weather', v); calcAll(); },
   });
   regDD('terrain', {
     options: [{ v: '', l: 'なし' }, { v: 'Electric', l: 'エレキフィールド' }, { v: 'Grassy', l: 'グラスフィールド' }, { v: 'Psychic', l: 'サイコフィールド' }, { v: 'Misty', l: 'ミストフィールド' }],
     value: state.field.terrain || '',
-    onPick: v => { state.field.terrain = v; calcAll(); },
+    onPick: v => { setFieldManual('terrain', v); calcAll(); },
   });
   return `
     <div class="frow"><div class="flabel">天候</div><div class="fcontrol">${ddHTML('weather')}</div></div>
@@ -1580,6 +1589,9 @@ let autoSideTurn;
 function resetInference() {
   estimator.reset();
   infDirty = false;
+  // 新しい対戦では天候/フィールドの手動編集の保持も解除する
+  fieldHold.weather = null;
+  fieldHold.terrain = null;
   // 対戦イベントから自動反映したサイドコンディション (おいかぜ・壁・てだすけ) の
   // セットされたターン。新しい対戦では場の状態ごとリセットする
   autoSideTurn = { mine: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 }, opp: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 } };
@@ -1952,7 +1964,20 @@ function applyState(j) {
       changed = true;
     }
   }
-  if (j.field && typeof j.field === 'object') { Object.assign(state.field, j.field); changed = true; }
+  if (j.field && typeof j.field === 'object') {
+    for (const k of ['weather', 'terrain']) {
+      if (!(k in j.field)) continue;
+      const inc = j.field[k];
+      fieldSeen[k] = inc;
+      const hold = fieldHold[k];
+      if (hold) {
+        if (hold.base === undefined) { hold.base = inc; continue; }
+        if (inc === hold.base) continue; // 実盤面は編集時点のまま → 編集値を維持
+        fieldHold[k] = null; // 実盤面が実際に変わった → 保持を解除して実値を優先
+      }
+      if (state.field[k] !== inc) { state.field[k] = inc; changed = true; }
+    }
+  }
   syncBayesRevealed();
   if (Array.isArray(j.events)) {
     if (j.events.length < estimator.getSeen()) resetInference();
