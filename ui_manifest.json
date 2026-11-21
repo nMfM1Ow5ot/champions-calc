@@ -36,9 +36,9 @@
   "serve.py": "afae5879322ae4d49633d5b05caf4e4978568e341e18f2ddbb7b0500cedc74ad",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
-  "ui.html": "601908acae94ecdcdbb28f43752c6aad55f9920295abcde0e50bdde0932da694",
+  "ui.html": "58a6fc905709f1ca16fa6a26ea832557650b675b8ffeccb005b239c06f675dfb",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_1832"
+ "rev": "20261121_1833"
 }
