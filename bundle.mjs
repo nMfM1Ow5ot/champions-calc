@@ -26532,6 +26532,8 @@ function moveData(name) {
     multihit: m.multihit || null,
     fixedDamage: m.fixedDamage || null,
     basePower: m.basePower,
+    isZ: !!m.isZ,
+    isMax: !!m.isMax,
     spec: moveSpecInfo(name)
   };
 }
@@ -27617,7 +27619,7 @@ function createEstimator(deps) {
   };
 }
 
-// .bundle_entry_tmp.mjs
+// bundle_entry.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
