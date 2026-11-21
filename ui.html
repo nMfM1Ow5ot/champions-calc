@@ -526,6 +526,7 @@ const faintLock = { mine: new Set(), opps: new Set() };
 let battleResetPending = false;
 let lastEventCount = 0;
 let lastBattleKey = null;
+let inferLog = [];
 function confirmNewBattle() {
   battleResetPending = false;
   faintLock.mine.clear();
@@ -2057,6 +2058,7 @@ let infDirty = false;
 let autoSideTurn;
 function resetInference() {
   estimator.reset();
+  inferLog = [];
   infDirty = false;
   // 新しい対戦では天候/フィールドの手動編集の保持も解除する
   fieldHold.weather = null;
@@ -2150,6 +2152,16 @@ function estCtx() {
   return { my, opp, field: { weather: state.field.weather, terrain: state.field.terrain } };
 }
 function syncEstDirty() { if (estimator.takeDirty()) infDirty = true; }
+// 推論過程ログ: エンジンが推論更新のたびに積んだスナップショットを
+// applyState の処理後に受け取り、この対戦分として蓄積する (形式はエンジン定義)
+function drainInferenceLog() {
+  if (!estimator || typeof estimator.takeInferenceLog !== 'function') return;
+  let recs = null;
+  try { recs = estimator.takeInferenceLog(); } catch (e) { return; }
+  if (!recs || !recs.length) return;
+  const at = new Date().toISOString();
+  for (const r of recs) inferLog.push({ at, battle: lastBattleKey, ...r });
+}
 // エンジンが返した場への副作用の意図を、UI 側の状態へ適用する
 function applyEstIntent(it) {
   if (it.t === 'side') setAutoSide(it.side, it.key, it.turn);
@@ -2483,6 +2495,7 @@ function applyState(j) {
     syncEstDirty();
     if (infDirty) { infDirty = false; changed = true; }
   }
+  drainInferenceLog();
   for (const spec of state.opps) if (spec) attachEstimate(spec);
   if (changed) calcAll();
 }
@@ -2527,6 +2540,7 @@ function debugSnapshot() {
     uiFlags: ui,
     calc: lastCalc,
     estimator: (() => { try { return estimator._debug(); } catch (e) { return null; } })(),
+    inferenceLog: inferLog,
     rendered: {
       tables: (document.querySelector('.tables') || {}).innerText || '',
       midbar: (document.querySelector('.midbar') || {}).innerText || '',
