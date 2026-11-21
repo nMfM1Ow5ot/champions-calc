@@ -1114,8 +1114,8 @@ func emitLog(_ line: String, applyNow: Bool) {
             if let n = guardN {
                 print("[reader] ターン行ガードが発火しました: |turn|\(n) を先に出します (きっかけ: \(line))")
                 fflush(stdout)
-                debugCapture(kind: "turn_guard", key: "turn_guard|\(n)", rawText: "",
-                             detail: ["turn": n, "trigger": line])
+                debugCapture(kind: "turn_guard", key: "turn_guard:\(n)", rawText: "",
+                             detail: ["turn": n, "line": line, "readerBuild": readerBuild])
                 suppressNextDetectorTurn = true
                 emitLog("|turn|\(n)")   // この呼び出しで追跡状態はリセットされる
             }
@@ -5330,7 +5330,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1444"
+let readerBuild = "20261121_1446"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
