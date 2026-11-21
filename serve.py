@@ -142,6 +142,15 @@ _log_hold_notice_keys = set()
 _upload_lock = threading.Lock()
 _note_prompt_waiting = False
 _note_prompt_current_key = None
+# このプロセスの起動時刻。自動の備考プロンプトは、起動後に終了した
+# 試合 (最新のファイルが起動時刻より新しい試合) だけを対象にする。
+# 起動時点で既に終わっていた未送信分 (手動で処理済みの残りなど) を
+# 起動のたびに聞き直さないため (実例: 2026-11-21
+# battle_20261121_150535)。手動の --note では従来どおり全件を聞く。
+# serve.py の自己再起動 (exec) ではプロセスが置き換わるため起動
+# 時刻も更新されるが、その場合も対戦中の試合のログは再起動後に
+# 書かれるため対象から漏れない
+_PROCESS_STARTED_AT = time.time()
 
 # ---- 異常記録 (クラッシュジャーナル) ----
 # 備考プロンプトのスレッドや serve.py 本体が異常終了した際の証拠を、
@@ -457,6 +466,7 @@ def list_pending_log_notes():
         pending.append({
             "key": key, "kind": kind, "opponent": opponent,
             "files": sorted(names),
+            "mtime": mtime,
             "saved_at": datetime.fromtimestamp(mtime, JST).isoformat()
             if mtime else "",
         })
@@ -672,7 +682,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 # 送信待ちの試合を 1 件ずつ聞いて備考を保存する。入力は 1 行で、
 # 空欄で Enter を押せば備考なしで送信される。EOF (入力が閉じている)
 # の場合は例外で呼び出し側に知らせる。
-def prompt_for_pending_notes(input_fn=None, do_upload=True):
+def prompt_for_pending_notes(input_fn=None, do_upload=True, session_only=False):
     if input_fn is None:
         # 既定も _prompt_input を使う (タイプアヘッド破棄などの保護を
         # --note の手動経路でも効かせるため)
@@ -680,6 +690,11 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True):
     global _note_prompt_current_key
     count = 0
     for p in list_pending_log_notes():
+        if session_only and p.get("mtime", 0) < _PROCESS_STARTED_AT:
+            # 自動プロンプトでは、このプロセスの起動前に終わっていた
+            # 試合は聞かない (起動のたびに古い未送信分を聞き直す
+            # のを防ぐ。手動の --note では従来どおり聞く)
+            continue
         vs = f" vs {p['opponent']}" if p.get("opponent") else ""
         kind = "勝敗確定" if p.get("kind") == "final" else "中断"
         print(f"[log] 試合ログが保存されました (battle_{p['key']}{vs}、{kind})。"
@@ -797,7 +812,7 @@ def _note_prompt_loop(in_stream=None, out_stream=None):
             # 対戦中はプロンプトを出さない (進行中の試合の salvage 等が
             # 備考待ちになっても、試合が終わってから聞く)
             if list_pending_log_notes() and not _battle_in_progress():
-                prompt_for_pending_notes(input_fn=_input_fn)
+                prompt_for_pending_notes(input_fn=_input_fn, session_only=True)
                 reopen_tries = 0
             else:
                 time.sleep(2)
