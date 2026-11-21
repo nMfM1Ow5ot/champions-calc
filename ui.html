@@ -2015,7 +2015,12 @@ function statsGrid(side, statArr) {
     if (!statArr) return '<div class="finalstat">—</div>';
     const est = side === 'opps' ? spec.estStat?.[k] : null;
     if (est) {
-      const txt = est[0] === est[1] ? String(est[0]) : `${est[1]}*`;
+      // 推定値も通常表示と同じ補正 (ランク・道具・特性・天候など) を通す。
+      // 推定の最大値を素の値として dispStat に渡し、補正後の実数値を表示する
+      const estRaw = {};
+      for (const [kk] of STATJ) estRaw[kk] = spec.estStat?.[kk] ? spec.estStat[kk][1] : (statArr ? statArr[kk] : 0);
+      const [bv] = dispStat(spec, k, estRaw, side === 'mine' ? 'mine' : 'opp');
+      const txt = est[0] === est[1] ? String(bv) : `${bv}*`;
       return `<input data-statest="${side}:${k}" class="finalstat estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}${movePredTitle(spec)}" value="${txt}">`;
     }
     const [v, cn] = dispStat(spec, k, statArr, side === 'mine' ? 'mine' : 'opp');
@@ -2945,15 +2950,18 @@ function commitEstStat(side, k, raw) {
   if (!rows || !rows.length) { calcAll(); return; }
   const cur = spec.sp[k] || 0;
   const pickClosestSp = list => list.reduce((a, b) => (Math.abs(b.sp - cur) < Math.abs(a.sp - cur) || (Math.abs(b.sp - cur) === Math.abs(a.sp - cur) && b.sp > a.sp) ? b : a));
+  // 入力値は表示どおり補正後 (ランク等) の実数値なので、照合も表示と同じ
+  // 補正を通した値で行う
+  const xform = v => dispStat(spec, k, { hp: v, [k]: v }, side === 'mine' ? 'mine' : 'opp')[0];
   let chosen = null, newNature = null;
-  const exactHere = rows.filter(r => r.value === target && r.nature === spec.nature);
+  const exactHere = rows.filter(r => xform(r.value) === target && r.nature === spec.nature);
   if (exactHere.length) chosen = pickClosestSp(exactHere);
   else {
-    const exactAny = rows.filter(r => r.value === target);
+    const exactAny = rows.filter(r => xform(r.value) === target);
     if (exactAny.length) { chosen = pickClosestSp(exactAny); newNature = chosen.nature; }
     else {
       const pool = rows.filter(r => r.nature === spec.nature);
-      chosen = pool.reduce((a, b) => (Math.abs(b.value - target) < Math.abs(a.value - target) || (Math.abs(b.value - target) === Math.abs(a.value - target) && b.sp > a.sp) ? b : a));
+      chosen = pool.reduce((a, b) => (Math.abs(xform(b.value) - target) < Math.abs(xform(a.value) - target) || (Math.abs(xform(b.value) - target) === Math.abs(xform(a.value) - target) && b.sp > a.sp) ? b : a));
     }
   }
   if (newNature && newNature !== spec.nature) { spec.nature = newNature; markCorrected(spec, '性格'); }
