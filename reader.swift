@@ -3790,15 +3790,20 @@ func translateBattleMessage(_ text: String) -> Bool {
     }
     // 相性: 「(相手の) <対象>に 効果は いまひとつだ/バツグンだ/ないようだ」
     // (同じ文の再読で二重に出さないよう、枠+種別で 3 秒間抑止する)
-    if t.contains("効果は") {
-        // OCR 崩れ (バツグン -> バッグン) に耐えるよう、小さい ッ/っ を寄せた形でも判定する
-        let tk = t.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
-        // 「バツグン」が平仮名 (ばつぐん) で読まれた場合は正規化形でも判定する (検証 R1 #66)
-        let ntk = nt.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
-        // バツグン自体の濁点ゆれ (パツグン/バツクン等) は畳んだ形でも判定する (検証 R3)。
-        // 平仮名読み (ばつくん) は正規化形を畳んだものとも照合する (検証 vhard R9)
-        let ftk = foldDakuten(tk)
-        let kind = tk.contains("いまひとつ") ? "resisted" : (tk.contains("バツグン") || ntk.contains("バツグン") || ftk.contains("ハツクン") || foldDakuten(ntk).contains("ハツクン")) ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
+    // OCR 崩れ (バツグン -> バッグン) に耐えるよう、小さい ッ/っ を寄せた形でも判定する
+    let tk = t.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
+    // 「バツグン」が平仮名 (ばつぐん) で読まれた場合は正規化形でも判定する (検証 R1 #66)
+    let ntk = nt.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")
+    // バツグン自体の濁点ゆれ (パツグン/バツクン等) は畳んだ形でも判定する (検証 R3)。
+    // 平仮名読み (ばつくん) は正規化形を畳んだものとも照合する (検証 vhard R9)
+    let ftk = foldDakuten(tk)
+    let kind = tk.contains("いまひとつ") ? "resisted" : (tk.contains("バツグン") || ntk.contains("バツグン") || ftk.contains("ハツクン") || foldDakuten(ntk).contains("ハツクン")) ? "supereffective" : tk.contains("ないようだ") ? "immune" : ""
+    // 「効果は」が OCR で丸ごと脱落した文 (実例: 2026-11-21
+    // battle_20261121_144858「伹手ユキメノコにパツグンだ！」) でも、
+    // 末尾の相性語から種別が確定し、文が「だ」で終わる形なら同じ
+    // 分岐で消費する。バツグン/いまひとつ/ないようだ は対戦中の
+    // 告知ではこの文にしか現れないため、誤爆の心配は小さい
+    if t.contains("効果は") || (!kind.isEmpty && (t.hasSuffix("だ！") || t.hasSuffix("だ!") || t.hasSuffix("だ"))) {
         if !kind.isEmpty {
             let ekey = "\(slot)|\(kind)"
             if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
@@ -5188,6 +5193,7 @@ func runOnce(image: CGImage) {
                 previewEvidenceSlots = r.slots
                 previewEvidenceTeam = previewBestTeam
                 previewEvidenceAt = Date()
+                previewEvidenceSaved = false   // 新しい証拠は未書き出しとして扱う
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
                 if !logStarted || winLogged { startBattleLog() }
                 var obj: [String: Any] = [:]
@@ -5241,11 +5247,13 @@ func runOnce(image: CGImage) {
         previewVoteScore = []
         previewLocked = []
         previewTeamWritten = false
-        previewEvidenceImage = nil
-        previewEvidenceSlots = []
-        previewEvidenceTeam = []
-        previewEvidenceAt = nil
-        previewEvidenceSaved = false
+        // 同定の証拠 (previewEvidence*) はここでは消さない: 選出確定から
+        // 対戦開始 (プレート出現) までは読み込み・入場演出で 10 秒を
+        // 超えることが多く、このリセットで消すと試合開始時の書き出し
+        // (preview_id) がほぼ常に行われなくなっていた (実例:
+        // 2026-11-21 battle_20261121_144858、証拠が残らず誤認先を
+        // 特定できなかった)。証拠は次の同定で上書きされ、書き出し側も
+        // 保持から 10 分以内に限っているため、残しても実害は小さい
     }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
     if parseLogScreen(image: image) {
@@ -5387,7 +5395,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1504"
+let readerBuild = "20261121_1519"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
