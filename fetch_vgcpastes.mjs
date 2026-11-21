@@ -314,7 +314,7 @@ function rankBase(rank) {
 }
 function weightFor(dateStr, rank, today) {
   if (!dateStr) return rankBase(rank);
-  const days = Math.max(0, (today - new Date(dateStr + 'T00:00:00Z')) / 86400000);
+  const days = Math.max(0, Math.floor((today - new Date(dateStr + 'T00:00:00Z')) / 86400000));
   return Math.round(rankBase(rank) * Math.pow(0.5, days / 365) * 1000) / 1000;
 }
 
@@ -342,7 +342,13 @@ function main() {
     const missPath = CACHE + pid + '.missing';
     let text = null;
     if (existsSync(cachePath)) { text = readFileSync(cachePath, 'utf-8'); cachedCount++; }
-    else if (existsSync(missPath)) { missing++; continue; }
+    else if (existsSync(missPath)) {
+      // 取得失敗の記録が 7 日以上前のものは、一時的な失敗として
+      // 再取得を試す (恒常的な失敗はまた記録され、毎日は叩かない)
+      const marked = readFileSync(missPath, 'utf-8').trim();
+      const ageDays = (today - new Date(marked + 'T00:00:00Z')) / 86400000;
+      if (!(ageDays >= 7)) { missing++; continue; }
+    }
     else {
       if (NO_FETCH) { missing++; continue; }
       try {
@@ -454,7 +460,15 @@ function main() {
     const body = JSON.stringify(obj, null, 1) + '\n';
     if (existsSync(path)) {
       const old = JSON.parse(readFileSync(path, 'utf-8'));
-      const strip = o => { const c = { ...o }; delete c.updated; return JSON.stringify(c); };
+      // weight は日付減衰で毎日わずかに動くため、変更判定からは外す
+      // (実データが変わったときに書き直され、その際に再計算される。
+      // 取り込み側も date と rank から再計算できる)
+      const strip = o => {
+        const c = { ...o };
+        delete c.updated;
+        if (Array.isArray(c.sets)) c.sets = c.sets.map(s => ({ ...s, weight: 0 }));
+        return JSON.stringify(c);
+      };
       if (strip(old) === strip(obj)) return false;
     }
     writeFileSync(path, body);
