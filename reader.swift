@@ -1624,6 +1624,19 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         emitLog(line)
         recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, hpText: hpText)
     } else if toPct > effFrom {
+        // 1 回の回復が 55 ポイントを超えることはあり得ない (最大でも
+        // じこさいせい/ねがいの 50%)。ログ画面経路と同じ基準で、大きな
+        // 回復は誤読として却下し、デバッグ記録を残す (実例: 2026-11-21
+        // vs KAM 戦、ふんか演出中にプレートが一時的に満タンと読まれ、
+        // 42/177 から全回復の |-heal| が発生源なしで出た)
+        if toPct - effFrom > 55 {
+            debugCapture(kind: "hp_jump_rejected", key: "hp_jump|\(key)", rawText: "",
+                         detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "source": "plate"])
+            print("[reader] 大きな回復を誤読として却下しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+            fflush(stdout)
+            lastEmittedPct[plateName] = effFrom
+            return true
+        }
         // 回復の発生源 (オボンのみ/たべのこし/グラッシーフィールド) が
         // 推定できれば [from] を付け、持ち物なら判明としても記録する
         let src = healSource(plateName: plateName, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
@@ -3474,6 +3487,46 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 場所を入れ替えた はアリーバスイッチの結果文 (技そのものは |move| で記録済み)
         return true
     }
+    // はたきおとすの持ち物喪失と、おみとおしの持ち物判明: どちらの文も
+    // 主語は攻撃側・特性側で、持ち物の持ち主は文中に出るもう一方の種族
+    // のため、通常の種族固定では持ち主を特定できない。「<持ち主>の
+    // <持ち物>」の隣接した並びから持ち主と持ち物を切り出し、場の在席
+    // から持ち主の側と枠を決めて記録する (実例: 2026-11-21 vs KAM 戦、
+    // ハッサムのはたきおとすでイエッサン♀のゴツゴツメット喪失が、
+    // おみとおしでサーナイトナイトの判明が、どちらもルールが無く
+    // |-message| に落ちていた)
+    if t.contains("はたき落とした") || t.contains("見通し") {
+        if let itJa = findInDict(in: t, itemDict),
+           let owner = speciesDict.first(where: { !$0.ja.isEmpty && t.contains("\($0.ja)の\(itJa)") }) {
+            var anch = anchoredSpeciesForText(owner, text: t)
+            // 名前表記は雌雄・フォルムで同一のため、場にいるフォルムへ寄せる
+            if !lastSlots.values.contains(where: { $0.speciesEn == anch.en }),
+               let onField = formeGroup(anch).first(where: { e in lastSlots.values.contains { $0.speciesEn == e.en } }) {
+                anch = onField
+            }
+            let inMine = lastSlots["mineA"]?.speciesEn == anch.en || lastSlots["mineB"]?.speciesEn == anch.en
+            let inOpp = lastSlots["oppA"]?.speciesEn == anch.en || lastSlots["oppB"]?.speciesEn == anch.en
+            var ownerSide: String? = nil
+            if inMine != inOpp { ownerSide = inOpp ? "p2" : "p1" }
+            else if let subj = findSpeciesJa(in: t), subj.en != anch.en {
+                // 持ち主が場で定まらない場合は、主語 (攻撃側・特性側) の
+                // 反対側とみなす
+                let sInMine = lastSlots["mineA"]?.speciesEn == subj.en || lastSlots["mineB"]?.speciesEn == subj.en
+                let sInOpp = lastSlots["oppA"]?.speciesEn == subj.en || lastSlots["oppB"]?.speciesEn == subj.en
+                if sInMine != sInOpp { ownerSide = sInOpp ? "p1" : "p2" }
+                else if t.contains("相手の") || t.contains("あいての") { ownerSide = "p1" }
+            }
+            if let oside = ownerSide {
+                let oslot = slotFor(side: oside, speciesEn: anch.en)
+                if monStates["\(oside):\(anch.en)"] == nil { monStates["\(oside):\(anch.en)"] = MonState() }
+                emitItemOnce(slot: oslot, side: oside, speciesEn: anch.en, itemJa: itJa)
+                if t.contains("はたき落とした") {
+                    noteItemLost(slot: oslot, side: oside, speciesEn: anch.en)
+                }
+                return true
+            }
+        }
+    }
     var sp = findSpeciesJa(in: t)
     var looseMoveStart: Int? = nil
     if sp == nil, let l = findSpeciesJaLoose(in: t) {
@@ -5112,7 +5165,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1431"
+let readerBuild = "20261121_1432"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
