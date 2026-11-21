@@ -26814,6 +26814,7 @@ function createEstimator(deps) {
   const BAYES_FLOOR = 0.02;
   const BAYES_REV_KEEP = 0.05;
   const HP_FIRST_FACTOR = 0.1;
+  const hpFirstCand = (c) => (c.sp.hp || 0) >= 32 || !(c.sp.def > 0) && !(c.sp.spd > 0);
   function bayesReset() {
     bayes = { bySpecies: {}, skipped: 0 };
     try {
@@ -27124,7 +27125,7 @@ function createEstimator(deps) {
         values,
         valuesMega,
         post: 0,
-        _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul * ((sp.def > 0 || sp.spd > 0) && (sp.hp || 0) < 32 ? HP_FIRST_FACTOR : 1)
+        _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul * (hpFirstCand({ sp }) ? 1 : HP_FIRST_FACTOR)
       };
     };
     const raw = [];
@@ -27132,6 +27133,18 @@ function createEstimator(deps) {
     for (const c of combos.slice(0, 4)) for (const it of items.slice(1, 3)) raw.push(mk(c, it, topAbility, 1));
     for (const c of combos.slice(0, 3)) for (const ab of abilities.slice(1, 2)) raw.push(mk(c, topItem, ab, 1));
     for (const c of combos.slice(0, 2)) raw.push(mk(c, { en: "", rate: 0 }, topAbility, 0.15));
+    {
+      const baseW = patterns[0].rate + 0.5;
+      const defNat = natures.find((n) => (NATURE_MOD[n.en] || [])[0] === "def") || natures[0];
+      const spdNat = natures.find((n) => (NATURE_MOD[n.en] || [])[0] === "spd") || natures[0];
+      const synth = (nat, sp) => {
+        const c = mk({ p: { sp, rate: patterns[0].rate }, n: nat, w: baseW * (nat.rate + 0.5) }, topItem, topAbility, 0.5);
+        c.bulkSynth = true;
+        return c;
+      };
+      raw.push(synth(defNat, { hp: 32, atk: 0, def: 32, spa: 0, spd: 0, spe: 0 }));
+      raw.push(synth(spdNat, { hp: 32, atk: 0, def: 0, spa: 0, spd: 32, spe: 0 }));
+    }
     const seen = /* @__PURE__ */ new Set(), out = [];
     for (const c of raw) {
       const key = c.nature + "|" + JSON.stringify(c.sp) + "|" + c.item + "|" + c.ability;
@@ -27190,7 +27203,26 @@ function createEstimator(deps) {
       estNature: void 0
     };
   }
-  function bayesApply(ent, counts) {
+  function bayesApply(ent, counts, bulk) {
+    if (bulk && !ent.hpLifted && counts.some((n) => n > 0)) {
+      let firstHit = false, penHit = false;
+      ent.cands.forEach((c, i) => {
+        if (counts[i] > 0) {
+          if (hpFirstCand(c)) firstHit = true;
+          else penHit = true;
+        }
+      });
+      if (!firstHit && penHit) {
+        ent.hpLifted = true;
+        let t = 0;
+        for (const c of ent.cands) {
+          if (!hpFirstCand(c)) c.post /= HP_FIRST_FACTOR;
+          t += c.post;
+        }
+        if (t > 0) for (const c of ent.cands) c.post /= t;
+        dirty = true;
+      }
+    }
     if (!counts.some((n) => n > 0)) {
       bayes.skipped++;
       return;
@@ -27221,7 +27253,7 @@ function createEstimator(deps) {
         const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts);
         return rolls.filter((r) => r === ev.amt).length;
       });
-      bayesApply(ent, counts);
+      bayesApply(ent, counts, true);
     } else {
       if (typeof ev.pct !== "number" || ev.pct <= 0) return;
       const ent = bayesEntry(defSpecies);
@@ -27236,7 +27268,7 @@ function createEstimator(deps) {
         for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
         return n;
       });
-      bayesApply(ent, counts);
+      bayesApply(ent, counts, true);
     }
   }
   function processMoveBayes(ev, io) {
