@@ -20,7 +20,7 @@
   "data/regulation.json": "8111f5ff4ce0c7b0592a6af77e3c1a2ca0b340c71d930f1ba97e3eb94a83c290",
   "data/species_abilities.json": "2082e1195bfe24a5d6747d99e0bd291419e12d7a0aa7d6eebaaaba993e910547",
   "data/species_moves.json": "03c0f240de9d9a66cefc65c9e1ea155ccf120c9b4f91d6e46296ca29b6b0d181",
-  "data/species_types.json": "2e09c69afc9191ffd7a4977318e79738aa95dd9f3f02b7450f11094bf50a34dc",
+  "data/species_types.json": "ce11f9ae2d01f8a6061b473ed9260b61c95c1c3d58c40e5231cfde9df05623ec",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
   "data/usage_sets.json": "1cf58a3d1ff20870453c4f8dd926e02f888c3896fe20110c0a142784523f3bd4",
   "estimate_engine.mjs": "f01573f5da5834e7784f61f7ccb72625d274ac4236972f51fab42fe985e50daf",
@@ -32,7 +32,7 @@
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
-  "reader.swift": "a63467354f2b76a9ba21be13ea0d6344ef62facc0f59e7b5b66c17c99b8a5331",
+  "reader.swift": "4e31535bb3a86514b2449ac389fc8cba6acb1fd60afc0d8dc1b7c504849dcbc5",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "0bae2eb1e5135a15512f3c6b5704ea7a698e6728d091c9aed56fb25291ec688d",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
@@ -43,5 +43,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_2312"
+ "rev": "20261121_2311"
 }
