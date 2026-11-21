@@ -978,6 +978,292 @@
   ],
   "base": "Vivillon"
  },
+ "Abomasnow-Mega": {
+  "types": [
+   "Grass",
+   "Ice"
+  ],
+  "base": "Abomasnow"
+ },
+ "Absol-Mega": {
+  "types": [
+   "Dark"
+  ],
+  "base": "Absol"
+ },
+ "Aerodactyl-Mega": {
+  "types": [
+   "Rock",
+   "Flying"
+  ],
+  "base": "Aerodactyl"
+ },
+ "Aggron-Mega": {
+  "types": [
+   "Steel"
+  ],
+  "base": "Aggron"
+ },
+ "Alakazam-Mega": {
+  "types": [
+   "Psychic"
+  ],
+  "base": "Alakazam"
+ },
+ "Altaria-Mega": {
+  "types": [
+   "Dragon",
+   "Fairy"
+  ],
+  "base": "Altaria"
+ },
+ "Ampharos-Mega": {
+  "types": [
+   "Electric",
+   "Dragon"
+  ],
+  "base": "Ampharos"
+ },
+ "Audino-Mega": {
+  "types": [
+   "Normal",
+   "Fairy"
+  ],
+  "base": "Audino"
+ },
+ "Banette-Mega": {
+  "types": [
+   "Ghost"
+  ],
+  "base": "Banette"
+ },
+ "Beedrill-Mega": {
+  "types": [
+   "Bug",
+   "Poison"
+  ],
+  "base": "Beedrill"
+ },
+ "Blastoise-Mega": {
+  "types": [
+   "Water"
+  ],
+  "base": "Blastoise"
+ },
+ "Blaziken-Mega": {
+  "types": [
+   "Fire",
+   "Fighting"
+  ],
+  "base": "Blaziken"
+ },
+ "Camerupt-Mega": {
+  "types": [
+   "Fire",
+   "Ground"
+  ],
+  "base": "Camerupt"
+ },
+ "Charizard-Mega-X": {
+  "types": [
+   "Fire",
+   "Dragon"
+  ],
+  "base": "Charizard"
+ },
+ "Charizard-Mega-Y": {
+  "types": [
+   "Fire",
+   "Flying"
+  ],
+  "base": "Charizard"
+ },
+ "Gallade-Mega": {
+  "types": [
+   "Psychic",
+   "Fighting"
+  ],
+  "base": "Gallade"
+ },
+ "Garchomp-Mega": {
+  "types": [
+   "Dragon",
+   "Ground"
+  ],
+  "base": "Garchomp"
+ },
+ "Gardevoir-Mega": {
+  "types": [
+   "Psychic",
+   "Fairy"
+  ],
+  "base": "Gardevoir"
+ },
+ "Gengar-Mega": {
+  "types": [
+   "Ghost",
+   "Poison"
+  ],
+  "base": "Gengar"
+ },
+ "Glalie-Mega": {
+  "types": [
+   "Ice"
+  ],
+  "base": "Glalie"
+ },
+ "Gyarados-Mega": {
+  "types": [
+   "Water",
+   "Dark"
+  ],
+  "base": "Gyarados"
+ },
+ "Heracross-Mega": {
+  "types": [
+   "Bug",
+   "Fighting"
+  ],
+  "base": "Heracross"
+ },
+ "Houndoom-Mega": {
+  "types": [
+   "Dark",
+   "Fire"
+  ],
+  "base": "Houndoom"
+ },
+ "Kangaskhan-Mega": {
+  "types": [
+   "Normal"
+  ],
+  "base": "Kangaskhan"
+ },
+ "Lopunny-Mega": {
+  "types": [
+   "Normal",
+   "Fighting"
+  ],
+  "base": "Lopunny"
+ },
+ "Lucario-Mega": {
+  "types": [
+   "Fighting",
+   "Steel"
+  ],
+  "base": "Lucario"
+ },
+ "Manectric-Mega": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Manectric"
+ },
+ "Mawile-Mega": {
+  "types": [
+   "Steel",
+   "Fairy"
+  ],
+  "base": "Mawile"
+ },
+ "Medicham-Mega": {
+  "types": [
+   "Fighting",
+   "Psychic"
+  ],
+  "base": "Medicham"
+ },
+ "Metagross-Mega": {
+  "types": [
+   "Steel",
+   "Psychic"
+  ],
+  "base": "Metagross"
+ },
+ "Pidgeot-Mega": {
+  "types": [
+   "Normal",
+   "Flying"
+  ],
+  "base": "Pidgeot"
+ },
+ "Pinsir-Mega": {
+  "types": [
+   "Bug",
+   "Flying"
+  ],
+  "base": "Pinsir"
+ },
+ "Sableye-Mega": {
+  "types": [
+   "Dark",
+   "Ghost"
+  ],
+  "base": "Sableye"
+ },
+ "Salamence-Mega": {
+  "types": [
+   "Dragon",
+   "Flying"
+  ],
+  "base": "Salamence"
+ },
+ "Sceptile-Mega": {
+  "types": [
+   "Grass",
+   "Dragon"
+  ],
+  "base": "Sceptile"
+ },
+ "Scizor-Mega": {
+  "types": [
+   "Bug",
+   "Steel"
+  ],
+  "base": "Scizor"
+ },
+ "Sharpedo-Mega": {
+  "types": [
+   "Water",
+   "Dark"
+  ],
+  "base": "Sharpedo"
+ },
+ "Slowbro-Mega": {
+  "types": [
+   "Water",
+   "Psychic"
+  ],
+  "base": "Slowbro"
+ },
+ "Steelix-Mega": {
+  "types": [
+   "Steel",
+   "Ground"
+  ],
+  "base": "Steelix"
+ },
+ "Swampert-Mega": {
+  "types": [
+   "Water",
+   "Ground"
+  ],
+  "base": "Swampert"
+ },
+ "Tyranitar-Mega": {
+  "types": [
+   "Rock",
+   "Dark"
+  ],
+  "base": "Tyranitar"
+ },
+ "Venusaur-Mega": {
+  "types": [
+   "Grass",
+   "Poison"
+  ],
+  "base": "Venusaur"
+ },
  "Araquanid": {
   "types": [
    "Water",
@@ -1657,5 +1943,277 @@
    "Fairy",
    "Steel"
   ]
+ },
+ "Absol-Mega-Z": {
+  "types": [
+   "Dark",
+   "Ghost"
+  ],
+  "base": "Absol"
+ },
+ "Barbaracle-Mega": {
+  "types": [
+   "Rock",
+   "Fighting"
+  ],
+  "base": "Barbaracle"
+ },
+ "Baxcalibur-Mega": {
+  "types": [
+   "Dragon",
+   "Ice"
+  ],
+  "base": "Baxcalibur"
+ },
+ "Chandelure-Mega": {
+  "types": [
+   "Ghost",
+   "Fire"
+  ],
+  "base": "Chandelure"
+ },
+ "Chesnaught-Mega": {
+  "types": [
+   "Grass",
+   "Fighting"
+  ],
+  "base": "Chesnaught"
+ },
+ "Chimecho-Mega": {
+  "types": [
+   "Psychic",
+   "Steel"
+  ],
+  "base": "Chimecho"
+ },
+ "Clefable-Mega": {
+  "types": [
+   "Fairy",
+   "Flying"
+  ],
+  "base": "Clefable"
+ },
+ "Crabominable-Mega": {
+  "types": [
+   "Fighting",
+   "Ice"
+  ],
+  "base": "Crabominable"
+ },
+ "Delphox-Mega": {
+  "types": [
+   "Fire",
+   "Psychic"
+  ],
+  "base": "Delphox"
+ },
+ "Dragalge-Mega": {
+  "types": [
+   "Poison",
+   "Dragon"
+  ],
+  "base": "Dragalge"
+ },
+ "Dragonite-Mega": {
+  "types": [
+   "Dragon",
+   "Flying"
+  ],
+  "base": "Dragonite"
+ },
+ "Drampa-Mega": {
+  "types": [
+   "Normal",
+   "Dragon"
+  ],
+  "base": "Drampa"
+ },
+ "Eelektross-Mega": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Eelektross"
+ },
+ "Emboar-Mega": {
+  "types": [
+   "Fire",
+   "Fighting"
+  ],
+  "base": "Emboar"
+ },
+ "Excadrill-Mega": {
+  "types": [
+   "Ground",
+   "Steel"
+  ],
+  "base": "Excadrill"
+ },
+ "Falinks-Mega": {
+  "types": [
+   "Fighting"
+  ],
+  "base": "Falinks"
+ },
+ "Feraligatr-Mega": {
+  "types": [
+   "Water",
+   "Dragon"
+  ],
+  "base": "Feraligatr"
+ },
+ "Floette-Mega": {
+  "types": [
+   "Fairy"
+  ],
+  "base": "Floette"
+ },
+ "Froslass-Mega": {
+  "types": [
+   "Ice",
+   "Ghost"
+  ],
+  "base": "Froslass"
+ },
+ "Garchomp-Mega-Z": {
+  "types": [
+   "Dragon"
+  ],
+  "base": "Garchomp"
+ },
+ "Glimmora-Mega": {
+  "types": [
+   "Rock",
+   "Poison"
+  ],
+  "base": "Glimmora"
+ },
+ "Golisopod-Mega": {
+  "types": [
+   "Bug",
+   "Steel"
+  ],
+  "base": "Golisopod"
+ },
+ "Golurk-Mega": {
+  "types": [
+   "Ground",
+   "Ghost"
+  ],
+  "base": "Golurk"
+ },
+ "Greninja-Mega": {
+  "types": [
+   "Water",
+   "Dark"
+  ],
+  "base": "Greninja"
+ },
+ "Hawlucha-Mega": {
+  "types": [
+   "Fighting",
+   "Flying"
+  ],
+  "base": "Hawlucha"
+ },
+ "Lucario-Mega-Z": {
+  "types": [
+   "Fighting",
+   "Steel"
+  ],
+  "base": "Lucario"
+ },
+ "Malamar-Mega": {
+  "types": [
+   "Dark",
+   "Psychic"
+  ],
+  "base": "Malamar"
+ },
+ "Meganium-Mega": {
+  "types": [
+   "Grass",
+   "Fairy"
+  ],
+  "base": "Meganium"
+ },
+ "Meowstic-F-Mega": {
+  "types": [
+   "Psychic"
+  ],
+  "base": "Meowstic"
+ },
+ "Meowstic-M-Mega": {
+  "types": [
+   "Psychic"
+  ],
+  "base": "Meowstic"
+ },
+ "Pyroar-Mega": {
+  "types": [
+   "Fire",
+   "Normal"
+  ],
+  "base": "Pyroar"
+ },
+ "Raichu-Mega-X": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Raichu"
+ },
+ "Raichu-Mega-Y": {
+  "types": [
+   "Electric"
+  ],
+  "base": "Raichu"
+ },
+ "Scolipede-Mega": {
+  "types": [
+   "Bug",
+   "Poison"
+  ],
+  "base": "Scolipede"
+ },
+ "Scovillain-Mega": {
+  "types": [
+   "Grass",
+   "Fire"
+  ],
+  "base": "Scovillain"
+ },
+ "Scrafty-Mega": {
+  "types": [
+   "Dark",
+   "Fighting"
+  ],
+  "base": "Scrafty"
+ },
+ "Skarmory-Mega": {
+  "types": [
+   "Steel",
+   "Flying"
+  ],
+  "base": "Skarmory"
+ },
+ "Staraptor-Mega": {
+  "types": [
+   "Fighting",
+   "Flying"
+  ],
+  "base": "Staraptor"
+ },
+ "Starmie-Mega": {
+  "types": [
+   "Water",
+   "Psychic"
+  ],
+  "base": "Starmie"
+ },
+ "Victreebel-Mega": {
+  "types": [
+   "Grass",
+   "Poison"
+  ],
+  "base": "Victreebel"
  }
 }
