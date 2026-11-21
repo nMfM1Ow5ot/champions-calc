@@ -5591,14 +5591,42 @@ func pvExtractTrainers(_ boxes: [OcrBox]) {
         if b.cx > 0.70 { trainerOpp = t }
     }
 }
-// マッチング画面 (対戦相手の検索中) の検出。文言はシリーズ標準の
-// 表記を候補にしている (実機の文言と異なる場合は候補へ追加する)
-let matchingPhrases = ["対戦相手を探しています", "対戦相手をさがしています",
+// マッチング画面 (対戦相手の検索中) の検出。実機の文言は
+// 「マッチング待機中…」(2026-11-21 にユーザーが撮影した実画面で確認。
+// 紫色のダイアログ中央に黄色いアイコンと白文字、下に「キャンセル」
+// ボタン)。当初はシリーズ標準の推測文言だけだったため実戦で
+// 検出できていなかった。文言の OCR が崩れた場合に備え、ダイアログの
+// 紫色 + 「キャンセル」ボタンの併存でも検出する
+let matchingPhrases = ["マッチング待機中",
+                       "対戦相手を探しています", "対戦相手をさがしています",
                        "対戦相手を探して", "相手を探しています",
                        "マッチング中", "マッチングしています"]
+// マッチング待機ダイアログの紫色が画面中央に大きく広がっているか。
+// 実画面の実測: ダイアログ色は (92,88,202)〜(117,106,217) の縦グラデ
+func matchingDialogPresent(_ image: CGImage) -> Bool {
+    let buf = makeFullBuffer(image)
+    var hits = 0, total = 0
+    for fy in [0.38, 0.44, 0.50, 0.58] {
+        for fx in [0.20, 0.30, 0.40, 0.60, 0.70, 0.80] {
+            let x = Int(fx * Double(buf.w)), y = Int(fy * Double(buf.h))
+            let i = (y * buf.w + x) * 4
+            let r = Int(buf.data[i]), g = Int(buf.data[i + 1]), b = Int(buf.data[i + 2])
+            total += 1
+            if b > r && r > g && b >= 110 && r >= 70 { hits += 1 }
+        }
+    }
+    return total > 0 && hits * 4 >= total * 3   // 24 点中 18 点以上
+}
 func detectMatching(image: CGImage) -> Bool {
     let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
-    return boxes.contains { b in matchingPhrases.contains { b.text.contains($0) } }
+    if boxes.contains(where: { b in matchingPhrases.contains { b.text.contains($0) } }) {
+        return true
+    }
+    // 文言が読めなくても、紫ダイアログ + キャンセルボタンで検出する
+    if boxes.contains(where: { $0.text.contains("キャンセル") }) {
+        return matchingDialogPresent(image)
+    }
+    return false
 }
 
 // マッチング状態のターミナル表示 (開始時に 1 回、継続中は 15 秒ごと)。
@@ -6164,7 +6192,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_2101"
+let readerBuild = "20261121_2235"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
