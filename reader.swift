@@ -4814,6 +4814,8 @@ func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int,
     var groups: [(Int, Int)] = []
     var start: Int? = nil
     var last = 0
+    var rowCounts: [Int] = []
+    rowCounts.reserveCapacity(H)
     for y in 0..<H {
         var cnt = 0
         var x = xs
@@ -4821,6 +4823,7 @@ func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int,
             if isMaroon(x, y) { cnt += 1 }
             x += 2
         }
+        rowCounts.append(cnt)
         if cnt > (xe - xs) / 20 {
             if start == nil { start = y }
             last = y
@@ -4830,6 +4833,27 @@ func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int,
     }
     if let s = start { groups.append((s, last)) }
     var raw = groups.filter { $0.1 - $0.0 >= Int(0.05 * Double(H)) }
+    // 異常に背の高い帯は、隣り合うパネル同士がエフェクト等で
+    // つながったものとして、内部で最もエンジ色の少ない行で分割する
+    // (炎エフェクトが走査範囲に入ると、パネル間の隙間の行でも
+    // 閾値を超え、2 枚のパネルが 1 本の帯に融合することがある。
+    // 2026-11-21 preview_test_20261121_180739 で確認)
+    for _ in 0..<3 {
+        if raw.count < 2 { break }
+        let hs = raw.map { $0.1 - $0.0 + 1 }.sorted()
+        let med = hs[hs.count / 2]
+        guard let tall = raw.max(by: { ($0.1 - $0.0) < ($1.1 - $1.0) }),
+              Double(tall.1 - tall.0 + 1) > 1.6 * Double(med) else { break }
+        let lo = tall.0 + (tall.1 - tall.0) / 5
+        let hi = tall.1 - (tall.1 - tall.0) / 5
+        if hi <= lo { break }
+        var splitRow = lo
+        for y in lo...hi where rowCounts[y] < rowCounts[splitRow] { splitRow = y }
+        raw.removeAll { $0.0 == tall.0 && $0.1 == tall.1 }
+        raw.append((tall.0, splitRow))
+        raw.append((splitRow + 1, tall.1))
+        raw = raw.filter { $0.1 - $0.0 >= Int(0.05 * Double(H)) }.sorted { $0.0 < $1.0 }
+    }
     if raw.count > 6 {
         // 帯が 7 本以上ある場合は、高さが中央値に近い 6 本を残す
         // (トレーナー名の帯など、パネル以外の帯が混ざる場合)
@@ -6121,7 +6145,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1754"
+let readerBuild = "20261121_1822"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
