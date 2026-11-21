@@ -37,9 +37,9 @@
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
   "tests/bayes_sim.mjs": "fa8dfb5b4af4378cdd57dcb632bc0e55fd3230e146df07c0613bd9bf518ab0fd",
-  "ui.html": "e2166bcd2f48aecbace4390c43f69ae7d72bbb342dad4fbd85683e8e844996e7",
+  "ui.html": "09242900ef123ed86ea080e23ad130f70cf4e3d90bcc30a94949f6317c4ea653",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_1859"
+ "rev": "20261121_1917"
 }
