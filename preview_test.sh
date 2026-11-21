@@ -7,12 +7,20 @@
 # 撮影画像と検出結果は logs/ に preview_test_<日時>.jpg/.json として
 # 保存され、serve.py が自動で送信する (ログ分析側で精度を分析する)。
 # qキーで終了する。このスクリプトが起動した reader / serve.py は
-# 終了時に一緒に止める (元から動いていたものには触れない)。
+# 終了時に一緒に止める (元から動いていたものには触れない)。ただし
+# serve.py を起動した場合は、撮影分のアップロード完了 (serve.py が
+# ログに送信完了を出すまで) を待ってから止める。撮影直後に終了すると
+# 送信サイクル (約30秒ごと) の前に serve.py が落ちて、撮影分が
+# 未送信のまま残る事故があったため。
 cd "$(dirname "$0")"
 
 READER_LOG="preview_test_reader.log"
 SERVE_LOG="preview_test_serve.log"
 STARTED=()
+SERVE_STARTED=0
+CAPTURED=()
+CAPTURED_LOG_OFFSET=()
+UPLOAD_WAIT_SEC="${PREVIEW_TEST_UPLOAD_WAIT_SEC:-120}"
 
 # ポートが開いているか (接続できるか) だけを見る。/previewtest への
 # HTTP リクエストは撮影そのものを引き起こすため、起動確認には使わない
@@ -20,9 +28,42 @@ port_open() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
 }
 
+# 撮影分のアップロード完了を待つ。serve.py は送信したファイルごとに
+# 「見せ合いテストの結果を送信しました: <ファイル名>」をログへ出すため、
+# 撮影時点のログ末尾以降にその行が現れたかで完了を判定する
+wait_for_uploads() {
+  if [ "$SERVE_STARTED" -ne 1 ] || [ ${#CAPTURED[@]} -eq 0 ]; then
+    return 0
+  fi
+  local deadline=$((SECONDS + UPLOAD_WAIT_SEC)) announced=0
+  while [ $SECONDS -lt $deadline ]; do
+    local remaining=0 i stem off ext
+    for i in "${!CAPTURED[@]}"; do
+      stem="${CAPTURED[$i]}"
+      off="${CAPTURED_LOG_OFFSET[$i]}"
+      for ext in jpg json; do
+        if ! tail -c +$((off + 1)) "$SERVE_LOG" 2>/dev/null | grep -q "送信しました: ${stem}.${ext}"; then
+          remaining=$((remaining + 1))
+        fi
+      done
+    done
+    if [ "$remaining" -eq 0 ]; then
+      echo "見せ合いテストの送信が完了しました"
+      return 0
+    fi
+    if [ "$announced" -eq 0 ]; then
+      echo "見せ合いテストの送信完了を待っています (最大 ${UPLOAD_WAIT_SEC} 秒)…"
+      announced=1
+    fi
+    sleep 2
+  done
+  echo "送信完了を確認できませんでした。撮影ファイルは logs/ に残っており、次回 start_all.sh / preview_test.sh の起動時に送信されます"
+}
+
 # このスクリプトが起動したプロセスだけを止める。run_reader.sh 経由の
 #場合はその子 (swift 本体) も一緒に止める
 cleanup() {
+  wait_for_uploads
   for pid in "${STARTED[@]}"; do
     for child in $(pgrep -P "$pid" 2>/dev/null); do
       kill "$child" 2>/dev/null
@@ -54,6 +95,7 @@ if [ $need_serve -eq 1 ]; then
     python3 serve.py >> "$SERVE_LOG" 2>&1 &
   fi
   STARTED+=($!)
+  SERVE_STARTED=1
 fi
 
 if [ ${#STARTED[@]} -gt 0 ]; then
@@ -83,6 +125,13 @@ else
 fi
 
 do_capture() {
+  # 撮影時点の serve.py ログ末尾位置。アップロード完了の判定は
+  # この位置以降のログだけを見る (撮影前に末尾を押さえるのは、
+  # 撮影直後のサイクルで送られた場合に行を取りこぼさないため)
+  local log_offset=0
+  if [ -f "$SERVE_LOG" ]; then
+    log_offset=$(wc -c < "$SERVE_LOG")
+  fi
   RESP=$(curl -s --max-time 90 "http://localhost:8899/previewtest")
   RC=$?
   if [ $RC -ne 0 ] || [ -z "$RESP" ]; then
@@ -144,6 +193,27 @@ for line in lines:
 if stem:
     print(f"(保存: logs/{stem}.jpg, logs/{stem}.json — 自動で送信されます)")
 '
+
+  # 終了時にアップロード完了を待てるよう、撮影したファイル名と
+  # その時点の serve.py ログ末尾位置を記録しておく
+  local stem
+  stem=$(echo "$RESP" | python3 -c '
+import json, sys
+try:
+    resp = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+base = resp.get("file") or resp.get("json") or resp.get("jpg") or ""
+for ext in (".json", ".jpg"):
+    if base.endswith(ext):
+        base = base[: -len(ext)]
+if base:
+    print(base)
+' 2>/dev/null)
+  if [ -n "$stem" ]; then
+    CAPTURED+=("$stem")
+    CAPTURED_LOG_OFFSET+=($log_offset)
+  fi
 }
 
 while true; do
