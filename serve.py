@@ -14,6 +14,7 @@ import http.server
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -398,11 +399,18 @@ def _upload_logs_once_locked():
     held_keys = set()
     for n, data, h in pending_all:
         key = _battle_key(n)
-        if (key is not None and key in pending_log_keys
-                and not n.endswith("_note.txt") and not _note_exists(key)):
-            held_keys.add(key)
-        else:
-            pending.append((n, data, h))
+        if (key is not None and not n.endswith("_note.txt")
+                and not _note_exists(key)):
+            # 備考が入るまでは、その試合のファイルは種別を問わず保留する。
+            # デバッグ同梱は試合の途中で作られるため、ログが保存される前
+            # でも保留対象に含める (以前はログのある試合だけが保留され、
+            # 同梱だけが試合の途中で送信されてしまっていた。2026-11-21 の
+            # ユーザー指示で「ログ・デバッグ一式をまとめて送信」に変更)。
+            # 「入力待ち」の通知は、試合が終わってログがある試合だけに出す
+            if key in pending_log_keys:
+                held_keys.add(key)
+            continue
+        pending.append((n, data, h))
     for key in sorted(held_keys):
         if key not in _log_hold_notice_keys:
             _log_hold_notice_keys.add(key)
@@ -514,21 +522,68 @@ def prompt_for_pending_notes(input_fn=None, do_upload=True):
     return count
 
 
-def _note_prompt_loop():
-    # serve.py 本体がターミナルで動いている間、送信待ちの試合ができたら
-    # このターミナルで備考を聞く。標準入力がターミナルでない環境では
-    # 呼び出し側がこのスレッド自体を起動しない。EOF になったら静かに終える
-    # (以降の送信待ちは `python3 serve.py --note` で送れる)。
+def _open_prompt_io():
+    """備考プロンプト用の入出力ストリームを開く。
+
+    標準入力がターミナルならそれを使う。そうでなくても制御端末
+    (/dev/tty) が開けるならそちらを使う。以前は標準入力がターミナル
+    でないとプロンプト自体が出ず、入力も届かなかった (2026-11-21 の
+    battle_20261121_132153 の備考が送信できなかった件)。起動方法に
+    よらずプロンプトが無言で無効にならないよう、フォールバックと
+    起動時の状態表示を入れた。戻り値は (入力, 出力, 説明)。
+    """
+    try:
+        if sys.stdin is not None and sys.stdin.isatty():
+            return sys.stdin, sys.stdout, "標準入力のターミナル"
+    except Exception:
+        pass
+    try:
+        tty = open("/dev/tty", "r+")
+        return tty, tty, "/dev/tty"
+    except OSError:
+        return None, None, ""
+
+
+def _prompt_input(in_stream, out_stream, prompt):
+    """プロンプトを確実に表示 (flush) してから 1 行読む。"""
+    out_stream.write(prompt)
+    out_stream.flush()
+    line = in_stream.readline()
+    if line == "":
+        raise EOFError("note prompt input closed")
+    return line.rstrip("\n").rstrip("\r")
+
+
+def _note_prompt_loop(in_stream=None, out_stream=None):
+    # serve.py 本体が動いている間、送信待ちの試合ができたらターミナルで
+    # 備考を聞く。EOF (入力が閉じられた) になってもスレッドを終わらせず、
+    # ターミナルを開き直して復帰を試みる。それでも開けない場合だけ、
+    # 案内を出して終える (以降の送信待ちは `python3 serve.py --note`
+    # で送れる)。
+    if in_stream is None:
+        in_stream, out_stream, _ = _open_prompt_io()
+    if in_stream is None:
+        return
+    reopen_tries = 0
     while True:
         try:
             if list_pending_log_notes():
-                prompt_for_pending_notes()
+                prompt_for_pending_notes(
+                    input_fn=lambda p: _prompt_input(in_stream, out_stream, p))
+                reopen_tries = 0
             else:
                 time.sleep(2)
         except (EOFError, OSError):
-            print("[log] 備考の入力プロンプトを終了します。"
-                  "送信待ちのログは python3 serve.py --note で送れます", flush=True)
-            return
+            reopen_tries += 1
+            if reopen_tries > 3:
+                print("[log] 備考の入力プロンプトを終了します。"
+                      "送信待ちのログは python3 serve.py --note で送れます", flush=True)
+                return
+            print("[log] 備考の入力が閉じられたため、ターミナルを開き直します", flush=True)
+            time.sleep(5)
+            new_in, new_out, _ = _open_prompt_io()
+            if new_in is not None:
+                in_stream, out_stream = new_in, new_out
         except Exception:
             time.sleep(2)
 
@@ -570,11 +625,26 @@ if __name__ == "__main__":
         raise SystemExit(cli_send_notes())
     check_log_token()
     threading.Thread(target=sync_loop, daemon=True).start()
-    if sys.stdin is not None and sys.stdin.isatty():
-        # ターミナルで動いている場合だけ、備考の入力プロンプトを出す。
-        # start_all.sh では serve.py は裏で動くが、標準入力は同じ
-        # ターミナルに繋がっている (リーダーは標準入力を読まない)
-        threading.Thread(target=_note_prompt_loop, daemon=True).start()
+    # バックグラウンドで動くプロセスがターミナル読み取りで止まらない
+    # ようにする (start_all.sh では serve.py は裏で動くため、ジョブ制御の
+    # あるシェルから起動されると SIGTTIN で停止しうる)
+    for _sig_name in ("SIGTTIN", "SIGTTOU"):
+        _sig = getattr(signal, _sig_name, None)
+        if _sig is not None:
+            try:
+                signal.signal(_sig, signal.SIG_IGN)
+            except (ValueError, OSError):
+                pass
+    # 備考の入力プロンプト。有効かどうかを必ず表示する (無言で無効に
+    # なっていたのが 2026-11-21 の送信失敗の一因)
+    _pin, _pout, _plabel = _open_prompt_io()
+    if _pin is not None:
+        print(f"[log] 備考プロンプト: 有効 ({_plabel}で入力できます)", flush=True)
+        threading.Thread(target=_note_prompt_loop, args=(_pin, _pout), daemon=True).start()
+    else:
+        print("[log] 備考プロンプト: 無効 (ターミナル入力がありません)。"
+              "送信待ちのログは別のターミナルで python3 serve.py --note を実行して送ってください",
+              flush=True)
     handler = functools.partial(QuietHandler, directory=".")
     try:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 8765), handler)
