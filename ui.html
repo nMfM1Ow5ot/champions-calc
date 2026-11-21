@@ -1707,6 +1707,17 @@ function expireAutoSide(turn) {
   }
 }
 resetInference();
+// 相手チーム (判明している6体) を推定エンジンのチーム文脈へ渡す。
+// エンジン側の setTeamContext は対戦リセットでは消えないため、チームが
+// 変わったときだけ渡し直す (候補は種族ごとの初回構築時にしか作られないので、
+// イベント再生より前に呼ぶこと)。未判明・空なら null で補正なしになる
+let lastTeamContextKey = null;
+function syncTeamContext() {
+  const key = state.oppTeam.join('\n');
+  if (key === lastTeamContextKey) return;
+  lastTeamContextKey = key;
+  estimator.setTeamContext(state.oppTeam.length ? [...state.oppTeam] : null);
+}
 // 推定レンジ表示のはみ出し防止: 基準フォントで budget 文字分まで、超えたら比例縮小
 function rangeFont(txt, base, budget) {
   const l = String(txt).length;
@@ -2001,6 +2012,7 @@ function applyState(j) {
         changed = true;
       }
     }
+    syncTeamContext();
   }
   if (Array.isArray(j.opps)) {
     const idxs = [];
@@ -2062,6 +2074,7 @@ function applyState(j) {
     }
   }
   syncBayesRevealed();
+  syncTeamContext();
   if (Array.isArray(j.events)) {
     if (j.events.length < estimator.getSeen()) resetInference();
     for (let i = estimator.getSeen(); i < j.events.length; i++) {
