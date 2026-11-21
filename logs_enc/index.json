@@ -89,6 +89,16 @@
    "name": "battle_20261121_132153_debug01.json",
    "sha256": "c067d67625df3857afd16510824b04fa4580a84dbdb6e9d0f90cb705b18c6593",
    "uploaded_at": "2026-11-21T13:23:27.958502+09:00"
+  },
+  {
+   "name": "battle_20261121_132153_debug02.jpg",
+   "sha256": "61dd3d421877bb476a782e1dfbb6df2cc954633191811abcf294dbc72c4f454a",
+   "uploaded_at": "2026-11-21T13:24:03.695391+09:00"
+  },
+  {
+   "name": "battle_20261121_132153_debug02.json",
+   "sha256": "eff6732626768d692afa621d4e0a29a4b175d06ff14445048ced91b0f14f1d72",
+   "uploaded_at": "2026-11-21T13:24:05.433964+09:00"
   }
  ]
 }
