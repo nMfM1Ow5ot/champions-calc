@@ -798,7 +798,7 @@ function ownSpeciesSpec(speciesEn, kind) {
   delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
   delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual; delete ns.estMarginal;
   delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
-  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seeded; delete ns.hand;
+  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seeded; delete ns.hand; delete ns.octolock;
   return ns;
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
@@ -1501,7 +1501,7 @@ function pokeInfo(side) {
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
       <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span></div>
-      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}<button class="tgl${spec.hand ? ' on' : ''}" data-hand="${side}" title="てだすけ (このポケモンの技の威力が1.5倍)">てだすけ</button><button class="tgl${spec.seeded ? ' on' : ''}" data-seeded="${side}" title="やどりぎのタネを植えられている (ターン終了時に最大HPの1/8を吸収される。KO% の計算にも反映されます)">やどりぎのタネ</button><button class="tgl${spec.aquaring ? ' on' : ''}" data-aquaring="${side}" title="アクアリング (ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます)">アクアリング</button><button class="tgl${spec.ingrain ? ' on' : ''}" data-ingrain="${side}" title="ねをはる (ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます)">ねをはる</button></div>
+      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}<button class="tgl${spec.hand ? ' on' : ''}" data-hand="${side}" title="てだすけ (このポケモンの技の威力が1.5倍)">てだすけ</button><button class="tgl${spec.seeded ? ' on' : ''}" data-seeded="${side}" title="やどりぎのタネを植えられている (ターン終了時に最大HPの1/8を吸収される。KO% の計算にも反映されます)">やどりぎのタネ</button><button class="tgl${spec.aquaring ? ' on' : ''}" data-aquaring="${side}" title="アクアリング (ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます)">アクアリング</button><button class="tgl${spec.ingrain ? ' on' : ''}" data-ingrain="${side}" title="ねをはる (ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます)">ねをはる</button><button class="tgl${spec.octolock ? ' on' : ''}" data-octolock="${side}" title="たこがため (ターン終了ごとに防御・特防が1段階ずつ下がる。KO% の計算にも反映されます)">たこがため</button></div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
         <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
@@ -2163,6 +2163,13 @@ document.addEventListener('click', e => {
     calcAll();
     return;
   }
+  const oc = t.closest('[data-octolock]');
+  if (oc) {
+    const spec = DS(oc.dataset.octolock);
+    spec.octolock = !spec.octolock;
+    calcAll();
+    return;
+  }
   const aq = t.closest('[data-aquaring]');
   if (aq) {
     const spec = DS(aq.dataset.aquaring);
@@ -2340,6 +2347,7 @@ function applyRevealedPreserving(spec, rev) {
   fresh.aquaring = spec.aquaring;
   fresh.seeded = spec.seeded;
   fresh.hand = spec.hand;
+  fresh.octolock = spec.octolock;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
