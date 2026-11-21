@@ -3520,6 +3520,39 @@ func translateBattleMessage(_ text: String) -> Bool {
     else if t.contains("味方の") || t.contains("じぶんの") { side = "p1" }
     else { side = inOpp && !inMine ? "p2" : "p1" }
     if inMine != inOpp { side = inOpp ? "p2" : "p1" }
+    // 救済登録: 種族が確実に解決できた (緩い照合ではない) のに、その側の
+    // 場にいない場合、その側の空き枠がちょうど 1 つだけなら、その枠へ
+    // 繰り出しとして登録してから帰属させる。プレート未確定 (遮蔽・OCR
+    // 失敗) でも、文という強い証拠から場の構成を復元し、後続の文が
+    // 既定枠 (a 枠) へ誤帰属されるのを防ぐ (実例: 2026-11-21
+    // battle_20261121_132153、イエッサン♀のプレートが全試合未確定で、
+    // 文がすべて p1a のオオニューラに帰属した)。自軍はチーム登録、
+    // 相手は選出同定の範囲と矛盾する場合は登録しない (範囲が未取得の
+    // 場合は矛盾とみなさない)。フォルム違いは登録済みフォルムに寄せる
+    if looseMoveStart == nil {
+        let onSide = side == "p1" ? inMine : inOpp
+        if !onSide {
+            let allowed: Set<String> = side == "p1" ? Set(teamEntries.keys) : Set(oppTeamSeen)
+            var candidate: SpeciesEntry? = nil
+            if allowed.isEmpty || allowed.contains(sp.en) { candidate = sp }
+            else if let sib = formeGroup(sp).first(where: { allowed.contains($0.en) }) { candidate = sib }
+            if let cand = candidate {
+                let names = side == "p1" ? ["mineA", "mineB"] : ["oppA", "oppB"]
+                let empty = names.filter { lastSlots[$0] == nil }
+                if empty.count == 1 {
+                    let plateName = empty[0]
+                    let rslot = slotId(plateName)
+                    lastSlots[plateName] = SlotState(speciesEn: cand.en, hpPercent: 100)
+                    if side == "p2" { updateOppTeam() }
+                    emitLog("|switch|\(rslot): \(cand.en)|\(cand.en)|100/100")
+                    recordSwitchIn(side: side, slot: rslot, speciesEn: cand.en)
+                    print("[log] 文から場を復元しました: \(rslot) に \(cand.en) を繰り出しとして登録 (プレート未確定の救済)")
+                    fflush(stdout)
+                    sp = cand
+                }
+            }
+        }
+    }
     let slot = slotFor(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
@@ -5034,7 +5067,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1421"
+let readerBuild = "20261121_1426"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
