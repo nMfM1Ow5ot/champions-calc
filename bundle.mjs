@@ -27903,6 +27903,8 @@ function createEstimator(deps) {
       const sc = sideFor(atkKey, defKey);
       (moves || []).forEach((mv, mi) => {
         if (!mv || !defHp) return;
+        const md = moveData(mv);
+        if (md && (md.isZ || md.isMax)) return;
         const { rolls } = damageRolls(
           withCurHP(atkSpec),
           withCurHP(defSpec),
@@ -27971,7 +27973,7 @@ function createEstimator(deps) {
   };
 }
 
-// bundle_entry.mjs
+// .bundle_entry_tmp.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
