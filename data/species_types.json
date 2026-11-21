@@ -50,6 +50,26 @@
    "Ghost"
   ]
  },
+ "Aegislash-Blade": {
+  "gender": [
+   "M",
+   "F"
+  ],
+  "types": [
+   "Steel",
+   "Ghost"
+  ]
+ },
+ "Aegislash-Shield": {
+  "gender": [
+   "M",
+   "F"
+  ],
+  "types": [
+   "Steel",
+   "Ghost"
+  ]
+ },
  "Aerodactyl": {
   "gender": [
    "M",
