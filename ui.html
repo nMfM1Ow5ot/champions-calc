@@ -194,6 +194,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .presetedit:hover{color:var(--ink)}
 .preseticons{display:flex; gap:.12rem; flex:none; align-items:center}
 .vgcteamlist{max-height:15rem; overflow-y:auto}
+.vgcdivider{margin-top:.35rem; padding-top:.35rem; border-top:1px solid rgba(127,127,127,.35); color:var(--muted); font-size:.85em}
 
 .preseticon{width:1.7rem; height:1.7rem; object-fit:contain; image-rendering:pixelated}
 .presetdel{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .45rem; font:inherit}
@@ -910,20 +911,22 @@ function applyVgcTeam(side, teamId) {
   applySetterAbility(specs[0]);
   calcAll();
 }
-// プリセット欄の VGCPastes 専用一覧 (共有表示の行を区切りとして、その下に置く)
+// プリセット欄の VGCPastes 専用一覧 (共有表示の行の下に置く)。
+// 先頭の「from VGCPastes」の区切り行は、検索で候補が絞られた時も残す
 function vgcTeamRowsHTML(side, q) {
-  if (!VGC_TEAMS) return vgcTeamsLoading ? '<div class="presetempty">VGCPastes のチームを読み込み中です</div>' : '';
   const reg = currentRegulation();
-  if (VGC_TEAMS.regulation && reg && VGC_TEAMS.regulation !== reg) return '';
+  if (VGC_TEAMS && VGC_TEAMS.regulation && reg && VGC_TEAMS.regulation !== reg) return '';
+  const divider = '<div class="vgcdivider">from VGCPastes</div>';
+  if (!VGC_TEAMS) return divider + (vgcTeamsLoading ? '<div class="presetempty">VGCPastes のチームを読み込み中です</div>' : '');
   const teams = VGC_TEAMS.teams.filter(t => !q || String(t.description || '').toLowerCase().includes(q));
-  if (!teams.length) return '<div class="presetempty">VGCPastes: 該当するチームはありません</div>';
+  if (!teams.length) return divider + '<div class="presetempty">VGCPastes: 該当するチームはありません</div>';
   const MAX = 100;
   const rows = teams.slice(0, MAX).map(t => {
     const p = { slots: (t.members || []).map(m => ({ species: m.species, mega: !!(m.forme && m.forme !== m.species && m.forme.includes('-Mega')), megaSpecies: m.forme || '' })) };
     return `<div class="presetrow"><button class="presetname" data-vgcteam="${side}:${esc(t.teamId)}" title="このチームを読み込む">${presetIconsHTML(p)}<span class="presetnametext">${esc(t.description || t.teamId)}</span></button></div>`;
   }).join('');
   const more = teams.length > MAX ? `<div class="presetempty">他 ${teams.length - MAX} 件あります (検索で絞り込めます)</div>` : '';
-  return `<div class="vgcteamlist">${rows}</div>${more}`;
+  return divider + `<div class="vgcteamlist">${rows}</div>${more}`;
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
 function applyRevealed(spec, rev) {
