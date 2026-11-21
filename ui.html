@@ -589,7 +589,11 @@ function setFieldManual(k, v) {
   fieldHold[k] = { value: v, base: fieldSeen[k] };
 }
 // 天候/フィールドを発生させる特性: そのポケモンが新しく選択されたら、
-// 対応する天候/フィールドで上書きする (手動編集と同じ保持の扱い)
+// 対応する天候/フィールドで上書きする。手動編集と違い「保持」はしない
+// (対戦中にパネルを切り替えただけで実盤面と違う天候が固定されてしまう
+// ため。battle_20261122_070237: 対戦中にコータスのパネル選択で Sun が
+// 保持され、実盤面の Snow に戻らなくなった)。保持しなければ、次の
+// state.json の実値で即座に戻る
 const SETTER_FIELD = {
   'Drought': ['weather', 'Sun'], 'Orichalcum Pulse': ['weather', 'Sun'], 'Desolate Land': ['weather', 'Harsh Sunshine'],
   'Drizzle': ['weather', 'Rain'], 'Primordial Sea': ['weather', 'Heavy Rain'],
@@ -601,7 +605,7 @@ function applySetterAbility(spec) {
   if (!spec) return;
   const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
   const s = SETTER_FIELD[ab];
-  if (s && state.field[s[0]] !== s[1]) setFieldManual(s[0], s[1]);
+  if (s && state.field[s[0]] !== s[1]) state.field[s[0]] = s[1];
 }
 let lastCalc = null;
 // ひんし (HP0) になったポケモンは、対戦中に state.json の誤読で HP が戻らないようロックする (種族名)
@@ -2944,14 +2948,15 @@ function calcPanelSnap(spec) {
 }
 // 表示された計算結果 (両方向の各技のダメージ幅と KO 表記)
 function calcOutSnap(side) {
-  const res = lastCalc && lastCalc[side] && lastCalc[side][0];
+  const res = lastCalc && (side === 'mine' ? lastCalc.results : lastCalc.oppResults);
+  const r0 = res && res[0];
   const spec = DS(side);
-  if (!res || !res.moveResults || !spec) return [];
+  if (!r0 || !r0.moveResults || !spec) return [];
   const rows = [];
   for (let mi = 0; mi < 4; mi++) {
     const mv = spec.moves && spec.moves[mi];
     if (!mv) continue;
-    const mr = res.moveResults[mi];
+    const mr = r0.moveResults[mi];
     const r = mr && mr.vs ? mr.vs[0] : null;
     if (!r) { rows.push({ move: mv }); continue; }
     if (r.status) { rows.push({ move: mv, status: true }); continue; }
@@ -3056,13 +3061,28 @@ function bayesProcessDamage(ev) {
 }
 function infProcessAbility(ev) { estimator.processAbility(ev, estCtx()); }
 function syncBayesRevealed() {
-  const list = [];
+  // 同一種族が複数いる場合は1件に統合してから渡す。エンジンのエントリは
+  // 種族単位のため、別々のパネル状態を二重に渡すと技集合の追加と削除が
+  // 交互に記録され、推定が振動する (battle_20261122_070237: Milotic が
+  // ヘッダーに2体いた試合で moveSeen 58件・revealed 20件に氾濫した)
+  const bySpecies = new Map();
   for (let pi = 0; pi < state.oppTeam.length; pi++) {
     const spec = state.opps[pi];
     if (!spec) continue;
-    list.push({ species: state.oppTeam[pi], knownMoves: spec.knownMoves || [], itemLost: !!spec.itemLost, item: spec.item || '', ability: spec.ability, corrected: spec.corrected || [], mega: !!spec.mega });
+    const sp = state.oppTeam[pi];
+    const prev = bySpecies.get(sp);
+    if (!prev) {
+      bySpecies.set(sp, { species: sp, knownMoves: [...(spec.knownMoves || [])], itemLost: !!spec.itemLost, item: spec.item || '', ability: spec.ability, corrected: [...(spec.corrected || [])], mega: !!spec.mega });
+      continue;
+    }
+    for (const m of spec.knownMoves || []) if (!prev.knownMoves.includes(m)) prev.knownMoves.push(m);
+    for (const c of spec.corrected || []) if (!prev.corrected.includes(c)) prev.corrected.push(c);
+    if ((spec.corrected || []).includes('持ち物')) { prev.item = spec.item || ''; prev.itemLost = !!spec.itemLost; }
+    if ((spec.corrected || []).includes('特性')) prev.ability = spec.ability;
+    prev.itemLost = prev.itemLost || !!spec.itemLost;
+    prev.mega = prev.mega || !!spec.mega;
   }
-  estimator.applyRevealed(list);
+  estimator.applyRevealed([...bySpecies.values()]);
 }
 function bayesEntry(species) { return estimator.entry(species); }
 function bayesReset() { estimator.resetBayes(); }
