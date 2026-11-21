@@ -81,6 +81,7 @@ if(l==='pc'){var vp=document.querySelector('meta[name="viewport"]');if(vp)vp.rem
 html{font-size:clamp(9px, min(1.35vh, 1.15vw), 13px)}
 @media (max-width: 1560px){ html{font-size:13px} .movesbox{flex:1.55} .statswrap{flex:1} }
 @media (max-width: 900px){ html{font-size:12px} }
+html{scrollbar-gutter:stable}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:'Fira Code','Hiragino Kaku Gothic ProN','Noto Sans JP',monospace;
   min-height:100vh; display:flex; flex-direction:column}
@@ -127,8 +128,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .typesfield{display:flex; gap:.3rem}
 .typechip{font-size:.8rem; font-weight:700; color:#fff; border-radius:.4rem; padding:.15rem .5rem; text-shadow:0 0 2px rgba(0,0,0,.45); white-space:nowrap}
 .typechip.tera{box-shadow:0 0 0 2px #fff inset, 0 0 6px rgba(255,255,255,.55)}
-.terawrap{display:inline-flex; align-items:center; gap:.35rem}
-.terawrap .sdd{min-width:9.5rem}
+.terarow{display:flex; align-items:center; gap:.35rem; margin-top:.35rem}
+.terarow .sdd{min-width:9.5rem}
+.terarow .tgl[data-tera]{width:6rem; flex:none; text-align:center}
 .secondline{display:flex; align-items:center; gap:.8rem; margin-top:.5rem}
 .hpbar{width:10rem; height:.4rem; border-radius:1.5rem; background:rgba(255,255,255,.15); overflow:hidden; flex:none}
 .hpbar i{display:block; height:100%; background:var(--blue); border-radius:1.5rem}
@@ -183,9 +185,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .sdd-control:hover{background:rgba(33,150,243,.05); box-shadow:var(--dd-shadow-hover)}
 .sdd.open .sdd-control{background:rgba(255,255,255,.1)}
 .sdd.highlight .sdd-control{background:rgba(33,150,243,.15); box-shadow:var(--dd-shadow-hover)}
-.sdd-value{flex:1; min-width:0; font-size:1rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:.3rem 0}
+.sdd-value{flex:1; min-width:0; font-size:1rem; line-height:1.3; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:.3rem 0}
 .sdd-value.ph{color:rgba(255,255,255,.3)}
-.sdd-input{flex:1; min-width:0; background:none; border:none; outline:none; color:#fff; font:inherit; font-size:1rem; padding:.3rem 0}
+.sdd-input{flex:1; min-width:0; background:none; border:none; outline:none; color:#fff; font:inherit; font-size:1rem; line-height:1.3; padding:.3rem 0}
 .sdd-input::placeholder{color:rgba(255,255,255,.3)}
 .sdd-clear,.sdd-chev{flex:none; font-size:1rem; line-height:1; color:rgba(255,255,255,.3); padding:0 .2rem; cursor:pointer; transition:color .15s, transform .15s}
 .sdd-clear:hover,.sdd-chev:hover{color:rgba(33,150,243,.95)}
@@ -204,12 +206,14 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .sdd.bare .sdd-control{background:none; box-shadow:none; padding:0}
 .sdd.bare .sdd-control:hover{background:none; box-shadow:none}
 .sdd.bare .sdd-value{font-size:1.3rem; font-weight:700; padding:.1rem 0}
-.sdd.bare .sdd-input{font-size:1.3rem; font-weight:700}
+.sdd.bare .sdd-input{font-size:1.3rem; font-weight:700; padding:.1rem 0}
 .sdd.bare{flex:none}
 /* ---------- tables (PokeMoves + PokeStats) ---------- */
 .tables{display:flex; gap:1.2rem; margin-top:1.6rem; align-items:center}
 .movesbox{flex:2; min-width:0; background:rgba(18,18,18,.8); border-radius:1.2rem; box-shadow:var(--shadow); padding:.8rem 1.2rem 1.2rem}
 .movesgrid{display:grid; grid-template-columns:minmax(15rem,1.5fr) minmax(0,1.25fr) minmax(0,1fr); column-gap:1rem; row-gap:.3rem; align-items:center}
+.mvcell{display:flex; align-items:center; gap:.35rem; min-width:0}
+.mvcell .sdd{flex:1; min-width:0}
 .mspecwrap{display:inline-flex; align-items:center; gap:.18rem; flex:none; margin-left:.35rem; margin-right:.55rem}
 .mspeclab{font-size:.68rem; color:var(--label); white-space:nowrap}
 .mspecsel{font:inherit; font-size:.72rem; line-height:1; padding:.18rem .15rem; background:rgba(255,255,255,.08); color:var(--ink); border:1px solid rgba(255,255,255,.18); border-radius:999px; cursor:pointer}
@@ -1218,7 +1222,8 @@ function pokeInfo(side) {
   return `<div class="pokeinfo">
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
-      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><span class="terawrap"><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${spec.terastallized ? ddHTML(`tera:${side}`) : ''}<button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button></span></div>
+      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button></div>
+      <div class="terarow"><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${spec.terastallized ? ddHTML(`tera:${side}`) : ''}</div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
         <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
@@ -1366,6 +1371,10 @@ function movesBox(side, res) {
     <div class="mvhead mid">ダメージ <button class="tgl${ui.crit[side] ? ' on' : ''}" data-crit="${side}">CRIT</button></div>
     <div class="mvhead mid">KO %</div>`;
   const rows = [0, 1, 2, 3].map(mi => {
+    const zi = zInfoFor(spec, spec.moves[mi]);
+    const zon = !!(spec.moveZ && spec.moveZ[mi]);
+    const zja = zi && zi.name ? (NAMES.moves[idOf(zi.name)] || zi.name) : '';
+    const zBtn = zi ? `<button class="tgl${zon ? ' on' : ''}" data-zmove="${side}:${mi}" title="${esc(zi.name ? 'Zワザ: ' + zja + ' (' + zi.name + ')' : 'Zワザ')}">Z</button>${zon && zi.fx ? `<span class="zfx">${esc(zi.fx)}</span>` : ''}` : '';
     regDD(`move:${side}:${mi}`, {
       options: moveOptionsFor(spec), value: spec.moves[mi] || '', clearable: true, placeholder: '（技なし）',
       extra: (() => {
@@ -1377,13 +1386,6 @@ function movesBox(side, res) {
         }
         const ms = moveSpecOf(mv0);
         if (ms && !(spec.moveZ && spec.moveZ[mi])) out += mspecHTML(side, mi, ms, spec);
-        const zi = zInfoFor(spec, mv0);
-        if (zi) {
-          const zon = !!(spec.moveZ && spec.moveZ[mi]);
-          const zja = zi.name ? (NAMES.moves[idOf(zi.name)] || zi.name) : '';
-          out += `<button class="tgl${zon ? ' on' : ''}" data-zmove="${side}:${mi}" title="${esc(zi.name ? 'Zワザ: ' + zja + ' (' + zi.name + ')' : 'Zワザ')}">Z</button>`;
-          if (zon && zi.fx) out += `<span class="zfx">${esc(zi.fx)}</span>`;
-        }
         return out;
       })(),
       highlight: side === 'opps' && !!spec.moves[mi] && (spec.knownMoves || []).includes(spec.moves[mi]),
@@ -1417,7 +1419,7 @@ function movesBox(side, res) {
     if (r && cr && !r.status && !r.immune && !r.error && (cr.lo < r.minPct - 0.05 || cr.hi > r.maxPct + 0.05)) {
       sub = `<span class="candsub" title="相手の型候補（事後確率 ${Math.round((lastCalc.candRanges.acc || 0) * 100)}% 分）を通じたダメージ範囲">候補 ${fmtPct(cr.lo)}–${fmtPct(cr.hi)}%</span>`;
     }
-    return `${ddHTML(`move:${side}:${mi}`)}
+    return `<div class="mvcell">${ddHTML(`move:${side}:${mi}`)}${zBtn}</div>
       <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}" title="クリックで計算結果をコピー"` : ''}>${dmg}${sub}</button>
       <span class="ko"${koStyle}>${ko}</span>`;
   }).join('');
