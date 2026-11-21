@@ -57,6 +57,8 @@
 :root[data-theme="light"] .movesbox{background:rgba(255,255,255,.92)}
 :root[data-theme="light"] .spreadtgl{border-color:rgba(0,0,0,.18)}
 :root[data-theme="light"] .mspecsel{background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.18)}
+:root[data-theme="light"] .natp{color:#e03131}
+:root[data-theme="light"] .natm{color:#1971c2}
 :root[data-theme="light"] .dmgbtn:hover{background:rgba(0,0,0,.06)}
 :root[data-theme="light"] .evfield:hover{background:rgba(0,0,0,.05)}
 :root[data-theme="light"] .evfield:focus-within{background:rgba(0,0,0,.08)}
@@ -173,6 +175,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .sdd-menu{position:absolute; top:calc(100% + 2px); left:0; width:100%; min-width:14rem; background:rgba(0,0,0,.975); border-radius:.5rem; box-shadow:var(--dd-shadow); z-index:40; overflow:hidden}
 .sdd-list{max-height:30rem; overflow-y:auto; padding:.2rem 0}
 .sdd-opt{padding:.2rem .3rem; font-size:1rem; color:#fff; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.natp{color:#ff8787}.natm{color:#74c0fc}
 .sdd-opt:hover{background:rgba(255,255,255,.15)}
 .sdd-opt.focused{background:rgba(33,150,243,.25)}
 .sdd-opt.focused:hover{background:rgba(33,150,243,.5)}
@@ -281,6 +284,42 @@ const NATURES = ['Hardy','Lonely','Brave','Adamant','Naughty','Bold','Docile','R
 const NAT_JA = {Hardy:'がんばりや',Lonely:'さみしがり',Brave:'ゆうかん',Adamant:'いじっぱり',Naughty:'やんちゃ',Bold:'ずぶとい',Docile:'すなお',Relaxed:'のんき',Impish:'わんぱく',Lax:'のうてんき',Timid:'おくびょう',Hasty:'せっかち',Serious:'まじめ',Jolly:'ようき',Naive:'むじゃき',Modest:'ひかえめ',Mild:'おっとり',Quiet:'れいせい',Bashful:'てれや',Rash:'うっかりや',Calm:'おだやか',Gentle:'おとなしい',Sassy:'なまいき',Careful:'しんちょう',Quirky:'きまぐれ'};
 const NAT_UPDOWN = {Lonely:['atk','def'],Brave:['atk','spe'],Adamant:['atk','spa'],Naughty:['atk','spd'],Bold:['def','atk'],Relaxed:['def','spe'],Impish:['def','spa'],Lax:['def','spd'],Timid:['spe','atk'],Hasty:['spe','def'],Jolly:['spe','spa'],Naive:['spe','spd'],Modest:['spa','atk'],Mild:['spa','def'],Quiet:['spa','spe'],Rash:['spa','spd'],Calm:['spd','atk'],Gentle:['spd','def'],Sassy:['spd','spe'],Careful:['spd','spa']};
 const itemLabel = en => en ? ((typeof NAMES !== 'undefined' && NAMES._itemEn2ja && NAMES._itemEn2ja[en]) || en) : 'なし';
+const NAT_JA2EN = Object.fromEntries(Object.entries(NAT_JA).map(([en, jaName]) => [jaName, en]));
+const NAT_STAT_JA = { atk: 'こうげき', def: 'ぼうぎょ', spa: 'とくこう', spd: 'とくぼう', spe: 'すばやさ' };
+// 性格の上昇・下降を色付きで示す断片 (プルダウン一覧のラベル右横に付ける)
+function natureExtraHTML(n) {
+  const ud = NAT_UPDOWN[n];
+  if (!ud) return '';
+  return ` <span class="natp">+${NAT_STAT_JA[ud[0]]}</span> <span class="natm">-${NAT_STAT_JA[ud[1]]}</span>`;
+}
+// 種族の pokedb 使用率分布 (USAGE_SETS の code 経由)。フォルムは基本フォルムへ寄せる
+function pokedbParsedFor(speciesEn) {
+  if (!POKEDB_PARSED || !USAGE_SETS) return null;
+  const sets = USAGE_SETS.sets || USAGE_SETS;
+  let u = sets[idOf(speciesEn)];
+  if (!u) { const base = gen.species.get(idOf(speciesEn))?.baseSpecies; if (base && base !== speciesEn) u = sets[idOf(base)]; }
+  return u && u.code ? (POKEDB_PARSED[u.code] || null) : null;
+}
+let _globalNatureRates = null;
+function globalNatureRates() {
+  if (_globalNatureRates) return _globalNatureRates;
+  const agg = {};
+  if (POKEDB_PARSED) for (const e of Object.values(POKEDB_PARSED)) for (const n of (e.natures || [])) { const en = NAT_JA2EN[n.name]; if (en) agg[en] = (agg[en] || 0) + (n.rate || 0); }
+  _globalNatureRates = agg;
+  return agg;
+}
+// 性格プルダウンの選択肢: その種族の使用率の降順 (分布が無い種族は全種族の合算順)
+function natureOptionsFor(spec) {
+  let rates = null;
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  if (pd && Array.isArray(pd.natures) && pd.natures.length) {
+    rates = {};
+    for (const e of pd.natures) { const en = NAT_JA2EN[e.name]; if (en) rates[en] = e.rate || 0; }
+  }
+  if (!rates || !Object.keys(rates).length) rates = globalNatureRates();
+  return [...NATURES].sort((a, b) => (rates[b] || 0) - (rates[a] || 0))
+    .map(n => ({ v: n, l: biLabel(NAT_JA[n] || n, n), extra: natureExtraHTML(n) }));
+}
 
 let NAMES = { species: {}, moves: {}, abilities: {} };
 const idOf = en => String(en).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -805,7 +844,7 @@ function ddListHTML(d, query, focusIdx) {
   const q = z2h(query || '').toLowerCase();
   const list = d.options.filter(o => !q || z2h(o.l).toLowerCase().includes(q) || String(o.v).toLowerCase().includes(q));
   if (!list.length) return { html: '<div class="sdd-empty">該当なし</div>', list };
-  const html = list.map((o, i) => `<div class="sdd-opt${o.v === d.value ? ' selected' : ''}${i === focusIdx ? ' focused' : ''}" data-ddopt="${esc(o.v)}" data-ddidx="${i}">${esc(o.l)}</div>`).join('');
+  const html = list.map((o, i) => `<div class="sdd-opt${o.v === d.value ? ' selected' : ''}${i === focusIdx ? ' focused' : ''}" data-ddopt="${esc(o.v)}" data-ddidx="${i}">${esc(o.l)}${o.extra || ''}</div>`).join('');
   return { html, list };
 }
 function openDD(id) {
@@ -940,7 +979,7 @@ function presetBox(side) {
   } else {
     regDD('preset:opps', {
       options: [
-        { v: 'usage', l: '使用率トップ型（pokedb）' },
+        { v: 'usage', l: '使用率トップ型 (pokedb)' },
         { v: 'attacker', l: '火力特化型' },
         { v: 'bulky', l: '耐久型' },
         { v: 'none', l: '素の種族値' },
@@ -1036,7 +1075,7 @@ function metaRow(side) {
     onPick: v => { if (spec.mega && spec.megaAbility) spec.megaAbility = v; else spec.ability = v; if (side === 'opps') markCorrected(spec, '特性'); calcAll(); },
   });
   regDD(`nature:${side}`, {
-    options: NATURES.map(n => ({ v: n, l: biLabel(NAT_JA[n] || n, n) })),
+    options: natureOptionsFor(spec),
     value: spec.nature, highlight: corr('性格'),
     onPick: v => { spec.nature = v; if (side === 'opps') { markCorrected(spec, '性格'); (spec.estManual ||= {}).nature = true; } calcAll(); },
   });
