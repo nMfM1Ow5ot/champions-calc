@@ -1352,12 +1352,27 @@ function resolveAbility(name) {
   const a = gen.abilities.get(idOf(t));
   return a ? a.name : null;
 }
+// Showdown 書き出しの先頭行から種族を解決する。末尾の性別表記 (M)/(F)
+// と、ニックネーム形式「ニックネーム (種族名)」に対応する。性別で
+// フォルムが分かれる種族 (イダイトウ・イエッサン等) は、(F) なら
+// -F フォルムを優先し、無ければ通常フォルムで解決する
+function resolveSpeciesHead(raw) {
+  let t = String(raw || '').trim();
+  let gender = null;
+  const gm = t.match(/\s*\(([MF])\)\s*$/i);
+  if (gm) { gender = gm[1].toUpperCase(); t = t.slice(0, gm.index).trim(); }
+  const nm = t.match(/\(([^()]+)\)\s*$/);
+  if (nm && !resolveSpecies(t)) t = nm[1].trim();
+  if (gender === 'F') return resolveSpecies(t + '-F') || resolveSpecies(t);
+  if (gender === 'M') return resolveSpecies(t) || resolveSpecies(t + '-M');
+  return resolveSpecies(t);
+}
 function parseSet(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l !== '');
   if (!lines.length) return null;
   const out = { moves: [], sp: {} };
   const head = lines[0].split('@');
-  out.species = resolveSpecies(head[0]);
+  out.species = resolveSpeciesHead(head[0]);
   if (!out.species) return null;
   if (head[1]) out.item = head[1].trim();
   const statMap = { HP: 'hp', Atk: 'atk', Def: 'def', SpA: 'spa', SpD: 'spd', Spe: 'spe' };
