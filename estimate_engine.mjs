@@ -29,6 +29,7 @@ export function createEstimator(deps) {
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
   let pendingOpts = null; // processDamageInf が計算した場の条件を processDamageBayes が使う
+  let teamContextSpecies = null; // 相手チームの種族一覧 (UI が setTeamContext で渡す)
 
 const INF_BLACKLIST = new Set(['Foul Play', 'Gyro Ball', 'Electro Ball', 'Endeavor', 'Final Gambit', 'Seismic Toss', 'Night Shade', 'Dragon Rage', 'Sonic Boom', 'Super Fang', "Nature's Madness", 'Fissure', 'Horn Drill', 'Guillotine', 'Sheer Cold', 'Counter', 'Mirror Coat', 'Metal Burst', 'Comeuppance', 'Pain Split']);
 
@@ -597,6 +598,25 @@ function bayesBuildCandidates(species) {
     raw.push(synth(defNat, { hp: 32, atk: 0, def: 32, spa: 0, spd: 0, spe: 0 }));
     raw.push(synth(spdNat, { hp: 32, atk: 0, def: 0, spa: 0, spd: 32, spe: 0 }));
   }
+  // 形状テンプレートの合成候補: 使用率パターンが「速いアタッカー」と
+  // 「サポート型」に偏る種族では、遅いアタッカー型 (HP+攻撃全振り) や
+  // 混合耐久型が候補に存在せず、実在する手作り型を推定できない
+  // (模擬テストで最寄り候補まで SP 距離 50 の事例を確認)。代表的な形状を
+  // 各1件追加し、証拠による選択に委ねる (重さは最大耐久合成と同じ半分)
+  {
+    const baseW = (patterns[0].rate + 0.5);
+    const atkNat = natures.find(n => (NATURE_MOD[n.en] || [])[0] === 'atk') || natures[0];
+    const spaNat = natures.find(n => (NATURE_MOD[n.en] || [])[0] === 'spa') || natures[0];
+    const mixNat = natures.find(n => (NATURE_MOD[n.en] || [])[0] === 'def') || natures.find(n => (NATURE_MOD[n.en] || [])[0] === 'spd') || natures[0];
+    const synth = (nat, sp) => {
+      const c = mk({ p: { sp, rate: patterns[0].rate }, n: nat, w: baseW * (nat.rate + 0.5) }, topItem, topAbility, 0.5);
+      c.shapeSynth = true;
+      return c;
+    };
+    raw.push(synth(atkNat, { hp: 32, atk: 32, def: 0, spa: 0, spd: 0, spe: 2 }));
+    raw.push(synth(spaNat, { hp: 32, atk: 0, def: 0, spa: 32, spd: 0, spe: 2 }));
+    raw.push(synth(mixNat, { hp: 32, atk: 0, def: 16, spa: 0, spd: 16, spe: 2 }));
+  }
   const seen = new Set(), out = [];
   for (const c of raw) {
     const key = c.nature + '|' + JSON.stringify(c.sp) + '|' + c.item + '|' + c.ability;
@@ -625,6 +645,38 @@ function bayesBuildCandidates(species) {
   merged.sort((a, b) => b.post - a.post);
   return merged.slice(0, 96);
 }
+// チーム文脈による持ち物の事前補正: 味方に地形を展開する特性の種族が
+// いる場合、対応するシード持ちはその地形で発動して特性と連動する前提の
+// 型であることが多い (例: サイコフィールド展開役 + サイコシード)。
+// ダメージ証拠ではシードと無効果の持ち物を区別できないため、事前分布で
+// 補正する。UI が対戦開始前に相手チームを渡した場合のみ働く
+const TEAM_SEED_BOOST = 3;
+const TERRAIN_SEED_BY_ABILITY = { 'Psychic Surge': 'Psychic Seed', 'Grassy Surge': 'Grassy Seed', 'Electric Surge': 'Electric Seed', 'Misty Surge': 'Misty Seed' };
+function applyTeamItemBoost(cands, selfSpecies) {
+  if (!teamContextSpecies || !teamContextSpecies.length || !POKEDB_PARSED || !USAGE_SETS) return;
+  const seeds = new Set();
+  for (const sp2 of teamContextSpecies) {
+    if (sp2 === selfSpecies) continue;
+    let u2 = USAGE_SETS[idOf(sp2)];
+    if (!u2) {
+      const base = gen.species.get(idOf(sp2))?.baseSpecies;
+      if (base && base !== sp2) u2 = USAGE_SETS[idOf(base)];
+    }
+    const pd2 = u2 && u2.code ? POKEDB_PARSED[u2.code] : null;
+    if (!pd2) continue;
+    for (const a of pd2.abilities || []) {
+      const seed = TERRAIN_SEED_BY_ABILITY[(NAMES._abilityJa2en || {})[a.name]];
+      if (seed) seeds.add(seed);
+    }
+  }
+  if (!seeds.size) return;
+  let hit = false, tot = 0;
+  for (const c of cands) { if (seeds.has(c.item)) { c.post *= TEAM_SEED_BOOST; hit = true; } tot += c.post; }
+  if (hit && tot > 0) for (const c of cands) c.post /= tot;
+}
+function setTeamContext(list) {
+  teamContextSpecies = Array.isArray(list) && list.length ? [...list] : null;
+}
 function bayesEntry(species) {
   syncData();
   if (!bayes) return null;
@@ -633,6 +685,7 @@ function bayesEntry(species) {
     if (!POKEDB_PARSED || !USAGE_SETS || !META_SETS_LOADED) return null;
     const cands = bayesBuildCandidates(species);
     if (!cands || !cands.length) { bayes.bySpecies[species] = null; return null; }
+    applyTeamItemBoost(cands, species);
     bayes.bySpecies[species] = { cands, used: 0, revKey: '' };
   }
   return bayes.bySpecies[species];
@@ -919,6 +972,7 @@ function candRanges(args) {
     processDamageInf, processDamageBayes, processMoveInf, processMoveBayes,
     processAbility: infProcessAbility,
     applyRevealed, candRanges,
+    setTeamContext,
     setMoveV2(v) { BAYES_MOVE_V2 = v; },
     takeDirty() { const d = dirty; dirty = false; return d; },
     getSeen() { return inference.seen; },
