@@ -26,7 +26,7 @@ export function createEstimator(deps) {
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
-  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
+  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
   let infLastMove = null;
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
@@ -216,10 +216,18 @@ function processMoveInf(ev, io) {
   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
   const intents = [];
   const side = labelSide(ev.label);
-  if (ev.move === 'Tailwind') { infCtx.tailwindTurn[side] = ev.turn; intents.push({ t: 'side', side, key: 'tailwind', turn: ev.turn }); }
+  // おいかぜ/トリックルームは「張った後に発動する」ため、張った本人の
+  // 行動順判定では張る直前の状態を使う (本人の技イベント処理で先に
+  // tailwindTurn を更新してしまうと、本人の素早さにまで倍化が及び、
+  // 全候補と矛盾して素早さ仮説フラグが誤発動する。battle_20261122_050512
+  // の seq11/seq37 が実例)。この関数に入った時点の状態を先に控える
+  const twBefore = { p1: ev.turn - infCtx.tailwindTurn.p1 >= 0 && ev.turn - infCtx.tailwindTurn.p1 < 4, p2: ev.turn - infCtx.tailwindTurn.p2 >= 0 && ev.turn - infCtx.tailwindTurn.p2 < 4 };
+  const trickBefore = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+  if (ev.move === 'Tailwind') { infCtx.tailwindTurn[side] = ev.turn; infCtx.tailwindSetTw[side] = twBefore[side]; intents.push({ t: 'side', side, key: 'tailwind', turn: ev.turn }); }
   else if (ev.move === 'Trick Room') {
     // トリックルーム中に再度使うと解除される (張り直しにはならない)
     const trActive = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+    infCtx.trickSetState = trickBefore;
     infCtx.trickRoomTurn = trActive ? -99 : ev.turn;
   }
   else if (ev.move === 'Reflect') { infCtx.screenTurn[side].reflect = ev.turn; intents.push({ t: 'side', side, key: 'reflect', turn: ev.turn }); }
@@ -272,18 +280,29 @@ function processMoveInf(ev, io) {
   const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
   if (!myRow) return intents;
   const tw = s => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
-  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.itemLost ? '' : mySpec.item, mySpec.status, tw('p1'), mySpec.ability, io.field.weather, io.field.terrain, !!mySpec.unburden);
-  const trick = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+  // この比較に使うフィールド状態は「比較対象の技が出た瞬間」のものにする:
+  // おいかぜを張った本人の技が基準・本人のどちらの立場でも、張る直前の
+  // 状態 (twBefore / tailwindSetTw) で判定する。張った後の状態で判定すると
+  // 本人の素早さが倍化して全候補と矛盾し、仮説フラグが誤発動する
+  const effTw = s => {
+    if (ev.move === 'Tailwind' && side === s) return twBefore[s];
+    if (prev.move === 'Tailwind' && prev.turn === ev.turn && prev.side === s) return infCtx.tailwindSetTw[s];
+    return tw(s);
+  };
+  const trick = ev.move === 'Trick Room' ? trickBefore
+    : (prev.move === 'Trick Room' && prev.turn === ev.turn) ? !!infCtx.trickSetState
+    : (ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5);
+  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.itemLost ? '' : mySpec.item, mySpec.status, effTw('p1'), mySpec.ability, io.field.weather, io.field.terrain, !!mySpec.unburden);
   const itemKnown = (oppSpec.corrected || []).includes('持ち物');
   const abKnown = (oppSpec.corrected || []).includes('特性');
   const feasible = new Set();
   for (const row of table.spe) {
-    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? (oppSpec.itemLost ? '' : oppSpec.item) : '', oppSpec.status, tw('p2'), abKnown ? oppSpec.ability : '', io.field.weather, io.field.terrain, !!oppSpec.unburden);
+    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? (oppSpec.itemLost ? '' : oppSpec.item) : '', oppSpec.status, effTw('p2'), abKnown ? oppSpec.ability : '', io.field.weather, io.field.terrain, !!oppSpec.unburden);
     // 通常: 先に動いた方が速い (同速の両勝ちはありうる)。トリックルーム下では逆
     const ok = trick ? (firstIsOpp ? eff <= myEff : eff >= myEff) : (firstIsOpp ? eff >= myEff : eff <= myEff);
     if (ok) feasible.add(row.nature + '|' + row.sp);
   }
-  lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw('p2'), oppMd, myPrio: myBr.prio };
+  lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: effTw('p2'), oppMd, myPrio: myBr.prio };
   infIntersect(oppSpecies, 'spe', feasible, null);
   return intents;
 }
@@ -483,6 +502,13 @@ function bayesPairFactor(c, a, b, stats) {
 function bayesMoveUpdate(ent, species, moves) {
   if (!ent || !ent.cands) return;
   const stats = bayesMoveStats(species);
+  // その種族の技の世界 (使用率・コーパスの技プールと全候補の技) に一切
+  // 現れない技は、読み取り誤り等の無効な証拠として捨てる。候補の種類で
+  // 係数が違うため、全候補が持たない技でも一様にはならず、事後分布を
+  // 歪める (battle_20261122_050512 の seq18: ひんし済み個体の幻の
+  // Heat Wave が Sneasler の証拠として処理された)
+  const inUniverse = mv => (stats && stats.marg.has(mv)) || ent.cands.some(c => c.moves.includes(mv) || (c.movePool && c.movePool.includes(mv)));
+  moves = moves.filter(inUniverse);
   const prev = ent.revMoves || [];
   const added = moves.filter(mv => !prev.includes(mv));
   const removed = prev.filter(mv => !moves.includes(mv));
@@ -1201,7 +1227,7 @@ function candRanges(args) {
 
   function reset() {
     inference = { seen: 0, bySpecies: {} };
-    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
+    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
     infLastMove = null;
     dirty = false;
     pendingOpts = null;
