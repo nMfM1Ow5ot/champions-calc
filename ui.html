@@ -798,7 +798,8 @@ function speciesAbilities(spec) {
 }
 function abilitiesOf(spec) {
   const vals = speciesAbilities(spec);
-  if (spec.ability && !vals.includes(spec.ability)) vals.push(spec.ability);
+  // メガシンカ中は現在の特性 (= メガ前の特性) を混ぜない
+  if (!spec.mega && spec.ability && !vals.includes(spec.ability)) vals.push(spec.ability);
   return [...new Set(vals)];
 }
 function formesOf(en) {
@@ -1207,7 +1208,8 @@ function metaRow(side) {
   const spec = DS(side);
   const corr = f => side === 'opps' && (spec.corrected || []).includes(f);
   const abs = abilitiesOf(spec);
-  if (spec.ability && !abs.includes(spec.ability)) abs.push(spec.ability);
+  // メガシンカ中はメガ後の特性のみ (メガ前の特性を混ぜない)
+  if (!spec.mega && spec.ability && !abs.includes(spec.ability)) abs.push(spec.ability);
   if (spec.mega && spec.megaAbility && !abs.includes(spec.megaAbility)) abs.push(spec.megaAbility);
   regDD(`ability:${side}`, {
     options: abilityOptionsFor(spec, abs),
