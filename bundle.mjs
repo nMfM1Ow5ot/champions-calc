@@ -26075,7 +26075,7 @@ var require_dist = __commonJS({
   }
 });
 
-// .bundle_entry_tmp.mjs
+// .bundle_entry.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 
 // core.mjs
@@ -26963,6 +26963,18 @@ function createEstimator(deps) {
       }
       const hpRow = table.hp.find((r) => r.sp === sp.hp);
       values.hp = hpRow ? hpRow.value : null;
+      let valuesMega;
+      const megaName = isMega ? full : fallback.megaSpecies;
+      if (megaName) {
+        const mt = statTable(megaName);
+        if (mt) {
+          valuesMega = { hp: values.hp };
+          for (const k of ["atk", "def", "spa", "spd", "spe"]) {
+            const row = mt[k].find((r) => r.nature === nature && r.sp === sp[k]);
+            valuesMega[k] = row ? row.value : null;
+          }
+        }
+      }
       const ability = metaNameEn("ability", e.ability);
       out.push({
         nature,
@@ -26974,6 +26986,7 @@ function createEstimator(deps) {
         moves: (e.moves || []).map((mv) => metaNameEn("move", mv)).filter(Boolean),
         moveExact: true,
         values,
+        valuesMega,
         post: 0,
         corpus: true,
         _w: Math.max(e.weight || 0, 0.01)
@@ -27015,6 +27028,7 @@ function createEstimator(deps) {
     const combos = [];
     for (const p of patterns) for (const n of natures) combos.push({ p, n, w: (p.rate + 0.5) * (n.rate + 0.5) });
     combos.sort((a, b) => b.w - a.w);
+    const mtable = u.megaSpecies ? statTable(u.megaSpecies) : null;
     const mk = (combo, item, ability, wMul) => {
       const sp = {};
       for (const k of ["hp", "atk", "def", "spa", "spd", "spe"]) sp[k] = combo.p.sp[k] || 0;
@@ -27025,6 +27039,14 @@ function createEstimator(deps) {
       }
       const hpRow = table.hp.find((r) => r.sp === sp.hp);
       values.hp = hpRow ? hpRow.value : null;
+      let valuesMega;
+      if (mtable) {
+        valuesMega = { hp: values.hp };
+        for (const k of ["atk", "def", "spa", "spd", "spe"]) {
+          const row = mtable[k].find((r) => r.nature === combo.n.en && r.sp === sp[k]);
+          valuesMega[k] = row ? row.value : null;
+        }
+      }
       const mod = NATURE_MOD[combo.n.en] || [null, null];
       let phys = 1, spec = 1, statAff = 1;
       if (mod[0] === "atk") phys *= 1.5;
@@ -27057,6 +27079,7 @@ function createEstimator(deps) {
         movePool,
         moveExact: false,
         values,
+        valuesMega,
         post: 0,
         _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul
       };
@@ -27180,7 +27203,8 @@ function createEstimator(deps) {
     if (!ent) return;
     const panel = io.opp[ctx.species] || null;
     const counts = ent.cands.map((c) => {
-      if (c.values.spe == null) return 0;
+      const speVal = panel && panel.mega && c.valuesMega ? c.valuesMega.spe : c.values.spe;
+      if (speVal == null) return 0;
       if (ctx.oppMd) {
         const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
         if (cAb === "Gale Wings" && ctx.oppMd.type === "Flying") return 16;
@@ -27189,7 +27213,7 @@ function createEstimator(deps) {
         if (cBr.prio !== ctx.myPrio) return cBr.prio > ctx.myPrio === ctx.firstIsOpp ? 16 : 0;
       }
       const eff = infEffSpe(
-        c.values.spe,
+        speVal,
         panel ? panel.boosts : {},
         panel && panel.itemLost ? "" : c.item,
         panel ? panel.status : "",
@@ -27280,19 +27304,20 @@ function createEstimator(deps) {
         }
       }
       view.sp[k] = [lo ?? (bySp[0].sp[k] || 0), hi ?? (bySp[bySp.length - 1].sp[k] || 0)];
-      const byVal = ent.cands.filter((c) => c.values[k] != null).sort((a, b) => a.values[k] - b.values[k]);
+      const valOf = (c) => spec.mega && c.valuesMega ? c.valuesMega[k] : c.values[k];
+      const byVal = ent.cands.filter((c) => valOf(c) != null).sort((a, b) => valOf(a) - valOf(b));
       if (byVal.length) {
         acc = 0;
         let vlo = null, vhi = null;
         for (const c of byVal) {
-          if (vlo === null && acc >= 0.05) vlo = c.values[k];
+          if (vlo === null && acc >= 0.05) vlo = valOf(c);
           acc += c.post;
           if (acc >= 0.95) {
-            vhi = c.values[k];
+            vhi = valOf(c);
             break;
           }
         }
-        view.stat[k] = [vlo ?? byVal[0].values[k], vhi ?? byVal[byVal.length - 1].values[k]];
+        view.stat[k] = [vlo ?? valOf(byVal[0]), vhi ?? valOf(byVal[byVal.length - 1])];
       }
     }
     const nProb = {};
