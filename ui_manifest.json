@@ -23,7 +23,7 @@
   "data/species_moves.json": "03c0f240de9d9a66cefc65c9e1ea155ccf120c9b4f91d6e46296ca29b6b0d181",
   "data/species_types.json": "ce11f9ae2d01f8a6061b473ed9260b61c95c1c3d58c40e5231cfde9df05623ec",
   "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
-  "data/usage_sets.json": "7eacee14bf58184f0182e295ac9b2e9bf4eb24426ed36b0937edfc00186d66bf",
+  "data/usage_sets.json": "232a446e1c95db0cc1695533394addf1e6b005969d1a523a1ae3b088d0fe33b8",
   "estimate_engine.mjs": "ad89a9c8e51c7655aed5c90409094ef6dfff4bd25671519ef1be06528eee4e0b",
   "fetch_champions_dex.mjs": "278d7db46a15a6a78318839bebe4fbd4843af90e6a80b5f4677cdda0cd641a65",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
@@ -44,5 +44,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_0145"
+ "rev": "20261122_0154"
 }
