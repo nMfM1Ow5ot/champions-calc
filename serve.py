@@ -118,8 +118,9 @@ def sync_loop():
 # (battle_<試合ID>_debugNN.jpg/.json、画面全体の画像とイベント
 # 情報) も同じ便で送る。目録 (logs_enc/index.json) にはログと同じ形式で
 # フラットに載るため、同梱の無い試合では従来と完全に同じになる。
-# デバッグ同梱は保持ルールで掃除する: 送信から 30 日超、または総数 300 件
-# 超の古いものから目録と実体を削除する (ログ本体は削除対象にしない)。
+# デバッグ同梱は保持ルールで掃除する: 送信から 30 日超、または総数
+# _DEBUG_KEEP_MAX 件超の古いものから目録と実体を削除する
+# (ログ本体は削除対象にしない)。
 # リポジトリは公開のため、平文は置かず my_team.enc と同じ
 # AES-256-CBC + PBKDF2 100k 回の暗号化を必須とする。
 # 送信には Mac 側の github_log_token.txt (このリポジトリへの Contents
@@ -498,9 +499,16 @@ def save_log_note(key, note):
     return True
 
 
+# デバッグ同梱の総数保持上限。記録側の上限が 1 試合最大 19 件に
+# なったため (2026-11-21 のクラス分け)、保持できる試合数を従来
+# 並み (約 30 試合分) に保つよう比例で引き上げた (旧: 300 件)
+_DEBUG_KEEP_MAX = 570
+
+
 def _prune_debug_entries(index, token, limit=10):
-    # デバッグ同梱の保持ルール (30 日超 / 総数 300 件超の古い順) に従い、
-    # 目録と実体 (logs_enc/*.enc) を削除する。1 回の掃除は limit 件まで。
+    # デバッグ同梱の保持ルール (30 日超 / 総数 _DEBUG_KEEP_MAX 件超の
+    # 古い順) に従い、目録と実体 (logs_enc/*.enc) を削除する。
+    # 1 回の掃除は limit 件まで。
     now = datetime.now(JST)
     entries = index.get("files", [])
     debug_entries = [e for e in entries if "_debug" in (e.get("name") or "")]
@@ -512,7 +520,7 @@ def _prune_debug_entries(index, token, limit=10):
             return -1
 
     victims = [e for e in debug_entries if age_days(e) > 30]
-    excess = len(debug_entries) - len(victims) - 300
+    excess = len(debug_entries) - len(victims) - _DEBUG_KEEP_MAX
     if excess > 0:
         rest = sorted((e for e in debug_entries if e not in victims),
                       key=lambda e: e.get("uploaded_at", ""))
