@@ -568,6 +568,7 @@ var lastDamageLabel = ""                          // 直近にダメージを受
 var lastDamageAt = Date.distantPast
 var lastPendingLabel = ""                         // 確定待ちダメージの枠 (急所はダメージ行より先に表示される)
 var pendingSwitchSpecies: [String: String] = [:]  // プレート名 -> 確定待ちの交代先種族
+var pendingSwitchSince: [String: Date] = [:]      // プレート名 -> その種族を最初に検出した時刻
 var slotLastHitAt: [String: Date] = [:]           // 枠ごとの最終プレートヒット時刻 (plate_stale 監視用)
 var plateStaleOtherHits: [String: Int] = [:]      // その枠が無ヒットの間に相方枠がヒットしたフレーム数
 var pendingSwitchCount: [String: Int] = [:]       // 同じ種族が連続で見えた回数
@@ -1262,6 +1263,13 @@ func emitLog(_ line: String, applyNow: Bool) {
                          detail: ["line": line, "turn": currentTurn, "mode": "off_field_evidence"])
         }
     }
+    if line.hasPrefix("|-item|"), itemLineImplausible(line) {
+        print("[reader] 場にいない種族の持ち物行を記録しませんでした: \(line)")
+        fflush(stdout)
+        debugCapture(kind: "item_guard", key: "item_guard:\(line)", rawText: "",
+                     detail: ["line": line, "turn": currentTurn])
+        return
+    }
     // ターン行の構造ガード: ターン判定 (コマンドフェーズ検出) が遅れて、
     // ラウンドの出来事がそのラウンドの |turn| 行より先に記録されることが
     // ある (実例: 2026-11-21 battle_20261121_140658、初回ラウンド全体が
@@ -1524,7 +1532,7 @@ func resetLogState() {
     lastBoostApply = [:]
     boostPathAt = [:]
     lastEffectAt = [:]
-    pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
+    pendingSwitchSpecies = [:]; pendingSwitchCount = [:]; pendingSwitchSince = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastDamageTime = [:]; lastCritAt = [:]; actionSeq = 0
     suspectJump = [:]; firstEntryPlateHP = [:]; sitrusWatch = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
     fieldSetByMoveTurn = -1; switchInTurn = [:]
@@ -1596,6 +1604,26 @@ func battleStamp(for date: Date = Date()) -> String {
     f.timeZone = TimeZone(identifier: "Asia/Tokyo")
     f.dateFormat = "yyyyMMdd_HHmmss"
     return f.string(from: date)
+}
+
+// |-item| 行の不可能性: 持ち主がその枠の occupants と同種族
+// ファミリーでなく、相方枠の occupants でも交代確定待ちでもない
+// 場合は、種族名の誤読が持ち物の再掲経路から入ったものとして弾く
+// (実例: 2026-11-22 battle_20261122_051707、リザードンの名前が
+//  リザードに崩れ、Charmeleon の持ち物行が出た)。枠の occupants が
+// 未確定なら通す
+func itemLineImplausible(_ line: String) -> Bool {
+    let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+    guard f.count >= 3, let ss = parseSlotSpecies(f[2]) else { return false }
+    let prefix = ss.side == "p1" ? "mine" : "opp"
+    let plate = prefix + (ss.slot.hasSuffix("a") ? "A" : "B")
+    guard let occ = lastSlots[plate]?.speciesEn ?? eventSlotSpecies[ss.slot] else { return false }
+    if sameSpeciesFamily(occ, ss.speciesEn) { return false }
+    if occ.hasPrefix("Ditto") { return false }
+    if pendingSwitchSpecies[plate] == ss.speciesEn { return false }
+    let sib = prefix + (ss.slot.hasSuffix("a") ? "B" : "A")
+    if let sibOcc = lastSlots[sib]?.speciesEn, sameSpeciesFamily(sibOcc, ss.speciesEn) { return false }
+    return true
 }
 
 // アーカイブ時のヘッダー補完: 見せ合いが取得できなかった試合
@@ -2565,10 +2593,25 @@ func processPlates(_ hits: [String: SlotState]) {
             } else {
                 pendingSwitchSpecies[plate.name] = s.speciesEn
                 pendingSwitchCount[plate.name] = 1
+                pendingSwitchSince[plate.name] = Date()
             }
             if (pendingSwitchCount[plate.name] ?? 0) >= 2 {
+                // 同種族が相方枠に在席したままの確定は、同時交代時の
+                // 隣枠への写り込みとして保留する (同一個体が 2 枠に
+                // 同時に存在することはない。実例: 2026-11-22
+                // battle_20261122_051707、場にいる Gardevoir が別枠にも
+                // 「入場」した)。相方側の記録が古いだけの場合に備え、
+                // 保留が 6 秒を超えたら確定に進む
+                let sibPlate = plate.name.hasPrefix("mine") ? (plate.name.hasSuffix("A") ? "mineB" : "mineA") : (plate.name.hasSuffix("A") ? "oppB" : "oppA")
+                if let sib = lastSlots[sibPlate]?.speciesEn, sameSpeciesFamily(sib, s.speciesEn),
+                   Date().timeIntervalSince(pendingSwitchSince[plate.name] ?? Date()) < 6 {
+                    debugCapture(kind: "switch_species_dup", key: "switch_species_dup:\(plate.name):\(s.speciesEn):\(currentTurn)", rawText: "",
+                                 detail: ["plate": plate.name, "species": s.speciesEn, "sibling": sibPlate, "turn": currentTurn])
+                    continue
+                }
                 pendingSwitchSpecies[plate.name] = nil
                 pendingSwitchCount[plate.name] = nil
+                pendingSwitchSince[plate.name] = nil
                 // 交代要員を選んでいる間は、控え一覧画面のバーが場のプレートと
                 // して読めて、生きている枠にまで交代行が出ることがある
                 // (実例: 2026-11-20、グレンアルマの交代要員選択中に
@@ -2684,6 +2727,7 @@ func processPlates(_ hits: [String: SlotState]) {
         } else {
             pendingSwitchSpecies[plate.name] = nil
             pendingSwitchCount[plate.name] = nil
+            pendingSwitchSince[plate.name] = nil
             // ひんし確定済みの枠は、交代が確定するまでプレート読みを無視する
             // (交代要員選択画面で満タンのバーが読めて「全回復」行が出たり、
             //  0% に戻って ひんし行が二重に出たりした実例: 2026-11-20)
@@ -3008,6 +3052,10 @@ func setWeather(_ ui: String, _ logName: String, via text: String = "", stale: B
     }
     let prev = logFieldWeather
     fieldWeatherSetAt = Date()
+    // この天候が保留中のメガのフィールド特性によるものなら、
+    // 天候行より先にメガ完了を補う (順序の保持)
+    let weatherAbility: [String: String] = ["Sun": "Drought", "Rain": "Drizzle", "Sand": "Sand Stream", "Snow": "Snow Warning"]
+    if let ab = weatherAbility[ui] { completePendingMegaForField(ability: ab) }
     emitLog("|-weather|\(logName)")  // 状態への反映は applyEvent が行う
     attributeFieldAbilities()
     // 天候の変化は根拠テキストごと残す (変化の経路を後から特定できるように)
@@ -3045,6 +3093,8 @@ func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
     }
     let prev = logFieldTerrain
     fieldTerrainSetAt = Date()
+    let terrainAbility: [String: String] = ["Psychic": "Psychic Surge", "Electric": "Electric Surge", "Grassy": "Grassy Surge", "Misty": "Misty Surge"]
+    if let ab = terrainAbility[ui] { completePendingMegaForField(ability: ab) }
     emitLog("|-fieldstart|move: \(ui) Terrain")  // 状態への反映は applyEvent が行う
     attributeFieldAbilities()
     retroSeedCheck(terrain: ui)
@@ -3152,6 +3202,35 @@ func attributeFieldAbilities() {
             emitAbilityOnce(slot: sw.slot, side: side, speciesEn: en, abilityEn: ab)
         }
     }
+    // メガフォルム側のフィールド特性: ベース種族のプールには含まれない
+    // (リザードンの ひでり は メガリザードンY 側)。完了済み・保留中の
+    // メガフォルムの特性で現在の天候・地形と一致するものがあれば、
+    // その特性行をメガフォルム名で出す (完了が保留中なら先に補う)
+    for (key, sw) in lastSwitchIn {
+        if fieldAbilityDone[key] == sw.at { continue }
+        let parts = key.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2 else { continue }
+        let side = String(parts[0]), en = String(parts[1])
+        let forme = monStates[key]?.megaSpecies ?? pendingMegaForme(side: side, baseEn: en)
+        guard let forme, forme != en, let mpool = speciesAbilityMap[forme] else { continue }
+        let mfield = mpool.filter { allField.contains($0) }
+        guard mfield.count == 1, let ab = mfield.first else { continue }
+        var matched = false
+        if weatherAb[logFieldWeather] == ab && now.timeIntervalSince(fieldWeatherSetAt) < 30 && now.timeIntervalSince(sw.at) < 30 { matched = true }
+        if terrainAb[logFieldTerrain] == ab && now.timeIntervalSince(fieldTerrainSetAt) < 30 && now.timeIntervalSince(sw.at) < 30 { matched = true }
+        let inTurn = switchInTurn[key].map { max($0, 1) }
+        if weatherAb[logFieldWeather] == ab && inTurn != nil && inTurn == fieldWeatherSetTurn && fieldSetByMoveTurn != fieldWeatherSetTurn { matched = true }
+        if terrainAb[logFieldTerrain] == ab && inTurn != nil && inTurn == fieldTerrainSetTurn && fieldSetByMoveTurn != fieldTerrainSetTurn { matched = true }
+        if switchInTurn[key] == 0 {
+            if weatherAb[prevFieldWeather] == ab && fieldSetByMoveTurn != prevFieldWeatherSetTurn { matched = true }
+            if terrainAb[prevFieldTerrain] == ab && fieldSetByMoveTurn != prevFieldTerrainSetTurn { matched = true }
+        }
+        if matched {
+            fieldAbilityDone[key] = sw.at
+            if pendingMegaSpecies[side] == en { completeMega(side: side, baseEn: en, megaEn: forme) }
+            emitAbilityOnce(slot: sw.slot, side: side, speciesEn: forme, abilityEn: ab)
+        }
+    }
 }
 
 // |-ability| の二重出力抑止 (バナー読みとフィールド帰属が同じ特性を二重に出さない)
@@ -3252,6 +3331,17 @@ func completeMega(side: String, baseEn: String, megaEn: String) {
     pendingMegaSpecies[side] = nil
 }
 
+// 反応保留中のメガフォルムを、保留中のストーンで一意に決める
+func pendingMegaForme(side: String, baseEn: String) -> String? {
+    var cands = speciesDict.filter { $0.en.hasPrefix(baseEn + "-Mega") }
+    if cands.count > 1, let stoneJa = pendingMegaStone[side], let last = stoneJa.last {
+        let filtered = cands.filter { $0.en.hasSuffix("-Mega-\(last)") }
+        if filtered.count == 1 { cands = filtered }
+    }
+    guard cands.count == 1 else { return nil }
+    return cands.first?.en
+}
+
 // メガ完了の文を取りこぼした場合の保険: 反応の文は拾えたのに完了の文だけ
 // 落ちることがある (実例: 2026-11-20 vs Benn 戦のガブリアス)。
 // 反応した時点でメガシンカ自体は確定しているため、その種族が次に技を
@@ -3259,13 +3349,23 @@ func completeMega(side: String, baseEn: String, megaEn: String) {
 func synthesizeMegaIfPending(side: String, speciesEn: String) {
     guard pendingMegaSpecies[side] == speciesEn else { return }
     guard (monStates["\(side):\(speciesEn)"]?.megaSpecies ?? "").isEmpty else { return }
-    var cands = speciesDict.filter { $0.en.hasPrefix(speciesEn + "-Mega") }
-    if cands.count > 1, let stoneJa = pendingMegaStone[side], let last = stoneJa.last {
-        let filtered = cands.filter { $0.en.hasSuffix("-Mega-\(last)") }
-        if filtered.count == 1 { cands = filtered }
+    guard let me = pendingMegaForme(side: side, baseEn: speciesEn) else { return }
+    completeMega(side: side, baseEn: speciesEn, megaEn: me)
+}
+
+// 天候・地形の開始が、保留中のメガフォルムのフィールド特性による
+// ものなら、メガはその時点で完了しているはずなので、天候行より
+// 先に完了を補う (実例: 2026-11-22 battle_20261122_051707、
+// ターン1に ひでり の日照しが発生したのに、リザードンの
+// detailschange がターン2へずれ込んだ)
+func completePendingMegaForField(ability: String) {
+    for side in ["p1", "p2"] {
+        guard let baseEn = pendingMegaSpecies[side],
+              let forme = pendingMegaForme(side: side, baseEn: baseEn),
+              let pool = speciesAbilityMap[forme], pool.contains(ability),
+              lastSwitchIn["\(side):\(baseEn)"] != nil else { continue }
+        completeMega(side: side, baseEn: baseEn, megaEn: forme)
     }
-    guard cands.count == 1, let me = cands.first else { return }
-    completeMega(side: side, baseEn: speciesEn, megaEn: me.en)
 }
 
 // 繰り出しの記録 (天候・フィールド特性の帰属判定に使う)
@@ -4463,6 +4563,11 @@ func translateBattleMessage(_ text: String) -> Bool {
             // 出し直さない (実例: 2026-11-21 vs Toshiro 戦、終盤に
             // カメックスのストーン反応が再読され |-item| が漏れた)
             if let ms = monStates["\(side):\(sp.en)"]?.megaSpecies, !ms.isEmpty { return true }
+            // 完了判定はファミリー単位でも行う: 名前側が崩れて別種族に
+            // 解決された再読 (リザードン → リザード = Charmeleon) では
+            // 解決先のキーに完了記録が無く素通りし、誤った種族の
+            // 持ち物行が出る (実例: 2026-11-22 battle_20261122_051707)
+            if monStates.contains(where: { $0.key.hasPrefix("\(side):") && sameSpeciesFamily(String($0.key.dropFirst(3)), sp.en) && !($0.value.megaSpecies ?? "").isEmpty }) { return true }
             if monStates["\(side):\(sp.en)"] == nil { monStates["\(side):\(sp.en)"] = MonState() }
             if let itJa = megaStoneJa {
                 stoneResolved = true
@@ -4475,9 +4580,26 @@ func translateBattleMessage(_ text: String) -> Bool {
                 let stoneCand = String(t[r.upperBound...].prefix(while: { $0 != "と" }))
                 if let itJa = itemDict[normalize(stoneCand)] {
                     stoneResolved = true
-                    emitItemOnce(slot: slotFor(side: side, speciesEn: sp.en), side: side, speciesEn: sp.en, itemJa: itJa)
-                                pendingMegaStone[side] = itJa
-                    pendingMegaSpecies[side] = sp.en
+                    // ストーンが特定できたら、種族は文中の名前ではなく
+                    // ストーンから引き直す。名前側が崩れていると
+                    // (リザードン → リザード)、誤った種族の持ち物行に
+                    // なる (実例: 2026-11-22 battle_20261122_051707、
+                    // Charmeleon の Charizardite Y 行)
+                    var useSp = sp
+                    var useSide = side
+                    if let sEn = itemJa2En[itJa] {
+                        var baseEn = sEn
+                        for suf in ["ite X", "ite Y", "ite"] where baseEn.hasSuffix(suf) {
+                            baseEn = String(baseEn.dropLast(suf.count)); break
+                        }
+                        if let stoneSp = speciesDict.first(where: { $0.en == baseEn }) {
+                            useSp = stoneSp
+                            useSide = megaTextSide(t, baseEn: stoneSp.en)
+                        }
+                    }
+                    emitItemOnce(slot: slotFor(side: useSide, speciesEn: useSp.en), side: useSide, speciesEn: useSp.en, itemJa: itJa)
+                    pendingMegaStone[useSide] = itJa
+                    pendingMegaSpecies[useSide] = useSp.en
                 }
             }
         }
@@ -5132,6 +5254,15 @@ func translateBattleMessage(_ text: String) -> Bool {
     let ejFold = foldDakuten(normalize(t).replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ"))
     if t.contains("だっしゅつボタン") || t.contains("しゅつボタン") || (t.contains("だっしゅつ") && t.contains("ボダン")) || (t.contains("ボタン") && (t.contains("戻って") || t.contains("もどって"))) || ejFold.contains("タツシュツホタン") {
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "だっしゅつボタン")
+        return true
+    }
+    // 交代技で戻っていく文 (すてゼリフ等: 「<種族>は<相手>の元へ
+    // 戻っていく！」)。交代そのものはプレート側で記録するため、
+    // ここでは消費だけする。OCR 崩れ (戻→買、場所→完) でも拾う
+    // (実例: 2026-11-22 battle_20261122_051707、ターン2の正しい
+    //  文面とターン3の崩れた文がどちらも |-message| に残った)
+    if (t.contains("戻ってい") || t.contains("買ってい") || t.contains("どってい"))
+        && (t.contains("元へ") || t.contains("完へ") || t.contains("場所") || t.contains("もと")) {
         return true
     }
     // せんせいのツメの発動 (実例: 2026-11-20 の対戦で「キュウコンは
@@ -7103,7 +7234,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0535"
+let readerBuild = "20261122_0552"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
