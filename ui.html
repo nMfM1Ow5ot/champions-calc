@@ -1864,9 +1864,9 @@ function renderField() {
     onPick: v => { setFieldManual('terrain', v); calcAll(); },
   });
   return `
+    <div class="frow"><div class="flabel">↑ 自分の場</div><div class="fchips">${sideChips('mine')}</div></div>
     <div class="frow"><div class="flabel">天候</div><div class="fcontrol">${ddHTML('weather')}</div></div>
     <div class="frow"><div class="flabel">フィールド</div><div class="fcontrol">${ddHTML('terrain')}</div></div>
-    <div class="frow"><div class="flabel">↑ 自分の場</div><div class="fchips">${sideChips('mine')}</div></div>
     <div class="frow"><div class="flabel">↓ 相手の場</div><div class="fchips">${sideChips('opp')}</div></div>`;
 }
 
