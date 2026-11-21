@@ -386,7 +386,12 @@ function abilityOptionsFor(spec, abs) {
   const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
   const rates = {};
   if (pd && Array.isArray(pd.abilities)) for (const e of pd.abilities) if (e.name) rates[z2h(e.name)] = e.rate;
-  return usageSortOptions(abs.map(a => ({ v: a, l: biLabel(ja('abilities', a), a) })), en => rates[z2h(ja('abilities', en))]);
+  const rateOf = en => rates[z2h(ja('abilities', en))];
+  // メガシンカ中はメガ後の特性のみ (従来どおり)。それ以外は全特性から選べる
+  if (spec.mega) return usageSortOptions(abs.map(a => ({ v: a, l: biLabel(ja('abilities', a), a) })), rateOf);
+  const opts = usageSortOptions(ABILITY_OPTIONS, rateOf);
+  if (spec.ability && !opts.some(o => o.v === spec.ability)) opts.push({ v: spec.ability, l: biLabel(ja('abilities', spec.ability), spec.ability) });
+  return opts;
 }
 // 技プルダウンの選択肢: その種族の使用率順 (% 併記)、残りはあいうえお順
 function moveOptionsFor(spec) {
@@ -966,7 +971,7 @@ const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 /* ---------- custom dropdown (Showdex react-select reproduction) ---------- */
 const DDREG = {};
 let openDDId = null;
-let SPECIES_OPTIONS = [], MOVE_OPTIONS = [], ITEM_OPTIONS = [];
+let SPECIES_OPTIONS = [], MOVE_OPTIONS = [], ITEM_OPTIONS = [], ABILITY_OPTIONS = [];
 function regDD(id, cfg) { DDREG[id] = cfg; }
 function ddHTML(id) {
   const d = DDREG[id];
@@ -2412,8 +2417,7 @@ async function poll() {
   // 種族は実装範囲に絞らない (レギュレーション変更で他種族が解禁されても
   // そのまま選べるように、全ポケモンを候補にする)。候補の正本は champions_dex
   // の species (全種族・フォルム) で、データ push の前後で表示が欠けないよう
-  // 名前索引にある種族との和集合にする。技・持ち物は現行レギュレーションの
-  // スコープ分のみ (effScopeSet)
+  // 名前索引にある種族との和集合にする。技・持ち物・特性も同様に全て候補にする
   const en2ja = {};
   for (const e of (NAMES._indexSpecies || [])) if (!(e.en in en2ja)) en2ja[e.en] = e.ja;
   const speciesEns = new Set(Object.values(NAMES._ja2en || {}));
@@ -2421,18 +2425,28 @@ async function poll() {
   SPECIES_OPTIONS = [...speciesEns]
     .map(en => ({ v: en, l: biLabel(en2ja[en] || (NAMES.species || {})[idOf(en)] || '', en) }))
     .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
-  const moveScope = effScopeSet(CHAMP && CHAMP.moves, REG && REG.moves);
-  const itemScope = effScopeSet(CHAMP && CHAMP.items, REG && REG.items);
+  // 技・持ち物・特性はレギュレーションのスコープで絞らず全て選択可能にする
+  // (ユニバース = champions_dex / calc の全データ)。ただし Zワザ・ダイマックス
+  // わざは仕組み側の技で、名前で直接選ぶとダミー威力 (Z=1 / Max=10) で計算され
+  // てしまうため、技プルダウンからは外す (Z / ダイマックスのトグルで使う)。
+  // 相手型の自動補完 (fallbackMovesFor) は従来どおりレギュレーション範囲を使う。
+  const mechMoves = new Set([...gen.moves].filter(m => m.isZ || m.isMax).map(m => m.name));
+  // 技 ID をキーに構築する (日本語名キーだと めざめるパワー のタイプ別バリアント
+  // のように同名で潰れてしまう。英名併記で区別できる)
+  const moveById = new Map([...gen.moves].map(m => [idOf(m.name), m]));
   MOVE_OPTIONS = [{ v: '', l: '（技なし）' }].concat(
-    Object.entries(NAMES._moveJa2en || {})
-      .filter(([, en]) => !moveScope.size || moveScope.has(en))
-      .map(([jaName, en]) => ({ v: en, l: biLabel(jaName, en) }))
+    Object.entries(NAMES.moves || {})
+      .map(([id, jaName]) => { const mv = moveById.get(id); return mv && !mechMoves.has(mv.name) ? { v: mv.name, l: biLabel(jaName, mv.name) } : null; })
+      .filter(Boolean)
       .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
   ITEM_OPTIONS = [{ v: '', l: 'なし' }].concat(
     [...gen.items].map(it => it.name)
-      .filter(en => !itemScope.size || itemScope.has(en))
       .map(en => ({ v: en, l: biLabel((NAMES._itemEn2ja || {})[idOf(en)] || en, en) }))
       .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
+  ABILITY_OPTIONS = Object.keys(NAMES.abilities || {})
+    .map(id => { const a = gen.abilities.get(id); return a && a.name ? { v: a.name, l: biLabel(NAMES.abilities[id] || a.name, a.name) } : null; })
+    .filter(Boolean)
+    .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
   await loadMyTeam();
   calcAll();
   // データが揃った状態で最新の state.json を反映し直す
