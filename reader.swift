@@ -550,6 +550,7 @@ var pendingDamagePct: [String: Int] = [:]        // プレート名 -> 確定待
 var lastEmittedPct: [String: Int] = [:]          // プレート名 -> ログ出力済みの HP%
 var suspectJump: [String: (toPct: Int, turn: Int)] = [:]  // プレート名 -> 疑わしい大きな HP 跳びの保留 (誤読の疑い)
 var firstEntryPlateHP: [String: String] = [:]  // プレート名 -> 初登場の交代行が示した HP 表記 (同値のダメージ行の重複抑止)
+var sitrusWatch: [String: Int] = [:]  // key -> オボンのみ発動条件 (HP 半分以下) を跨いだ直後の HP% (発動の取りこぼし監視)
 var lastMoveEmitSeq = -1                          // 最後に |move| 行を出した時点の actionSeq
 var lastSwitchEmitSeq = -1                        // 最後に |switch| 行を出した時点の actionSeq
 var fieldSetByMoveTurn = -1                       // 技で天候・地形を張ったターン (特性帰属のターン一致判定用。技が原因の場合は交代帰属しない)
@@ -1412,7 +1413,7 @@ func resetLogState() {
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastDamageTime = [:]; lastCritAt = [:]; actionSeq = 0
-    suspectJump = [:]; firstEntryPlateHP = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
+    suspectJump = [:]; firstEntryPlateHP = [:]; sitrusWatch = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
     fieldSetByMoveTurn = -1; switchInTurn = [:]
     heldWeatherStart = nil; heldTerrainStart = nil; fieldHoldBypass = false
     wishSetTurn = [:]
@@ -1836,6 +1837,24 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     // 初登場フラグは、異なる値の読みが来たら失効する (同値の重複
     // ダメージ行の抑止は、交代行の直後の一致だけが対象)
     if let fe = firstEntryPlateHP[plateName], fe != hpText { firstEntryPlateHP[plateName] = nil }
+    // オボンのみの発動監視の解消: 条件を跨いだ低下の後に回復が
+    // 記録されれば通常どおり発動が取れたことになる。回復が無いまま
+    // 次の被弾 (または ひんし) に進んだ場合は、発動イベント
+    // (回復+持ち物判明) が丸ごと取り込まれていない疑いとして、
+    // 証拠だけを残す (行の合成はしない。実例: 2026-11-21
+    // battle_20261121_233243、リキキリンが 52% から 7% に落ちた
+    // 場面で発動したはずのオボンのみの回復行・持ち物行が無かった)
+    if let watched = sitrusWatch[key] {
+        if toPct > watched {
+            sitrusWatch[key] = nil
+        } else if toPct < watched {
+            debugCapture(kind: "berry_activation_suspect", key: "berry_activation_suspect|\(key)", rawText: "",
+                         detail: ["slot": slot, "species": speciesEn, "droppedToPct": watched, "toPct": toPct, "turn": currentTurn])
+            print("[reader] オボンのみの発動条件を跨いだ後に回復が記録されないまま HP が動きました (発動の取りこぼしの疑い): \(slot): \(speciesEn) \(watched)% -> \(toPct)%")
+            fflush(stdout)
+            sitrusWatch[key] = nil
+        }
+    }
     var effFrom = fromPct
     var dirBase = fromPct
     if let h = heldLine[plateName], h.seq == actionSeq, h.turn == currentTurn { dirBase = h.toPct }
@@ -1991,6 +2010,13 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         if let fromCode { line += "|[from] \(fromCode)" }
         emitLog(line)
         recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, hpText: hpText)
+        // オボンのみの発動条件 (HP 半分以下) を跨ぐ低下は、持ち物が
+        // 未判明なら発動の監視を始める (解消はこの関数の冒頭で行う)
+        if effFrom > 50, toPct <= 50, toPct > 0 {
+            let knownItem = key.hasPrefix("p2") ? revealedItems[speciesEn]
+                : ((teamEntries[speciesEn]?["item"] as? String) ?? revealedItems[speciesEn])
+            if knownItem == nil { sitrusWatch[key] = toPct }
+        }
     } else if toPct > effFrom {
         // 1 回の回復が 55 ポイントを超えることはあり得ない (最大でも
         // じこさいせい/ねがいの 50%)。ログ画面経路と同じ基準で、大きな
@@ -2309,6 +2335,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     var hp = monStates[key]!.hpText
                     if let st = monStates[key]?.status, !st.isEmpty { hp += " \(st)" }
                     emitLog("|switch|\(slot): \(s.speciesEn)|\(s.speciesEn)|\(hp)")
+                    sitrusWatch[key] = nil   // 交代を挟んだ監視は持ち越さない
                     if firstEntry { firstEntryPlateHP[plate.name] = effText }
                     recordSwitchIn(side: side, slot: slot, speciesEn: s.speciesEn)
                     if side == "p2" { checkHeaderMismatch(slot: slot, speciesEn: s.speciesEn) }
@@ -6620,7 +6647,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0003"
+let readerBuild = "20261122_0009"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
