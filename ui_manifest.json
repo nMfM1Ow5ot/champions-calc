@@ -31,10 +31,10 @@
   "fetch_usage.mjs": "e6e2df5d0b361c2b78c19a1f9a4ce97f70bc4ef502e898133358f82fe30af44b",
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
-  "preview_test.sh": "a56b144b8f93f80da61c7c5e00e495c7de0b0b9fdd8a1f07659a572fe47af4f1",
+  "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
   "reader.swift": "382087d1c56450a3a9e33fe08d14f7686503250490f30a711e2d5059ff3d6e23",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
-  "serve.py": "2a6f1f21a78bf5d3bd68c5a2bb2a3847a581f917571e177ca3904989e6ba8e79",
+  "serve.py": "206041eb3e17361a15d71cc9f548db715f496219edc43e05521d83ee5d8d81b2",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
   "tests/bayes_equiv_golden.json": "cea9d9dcf7b828e6795ee412b09f239379436528ac81151c332c7e25a6a8ab1b",
@@ -43,5 +43,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_2232"
+ "rev": "20261121_2235"
 }
