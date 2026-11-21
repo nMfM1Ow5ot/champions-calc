@@ -4227,6 +4227,14 @@ var previewEvidenceSaved = false
 // 最良スコア中央値 ≈ 0.39。同定率は閾値 0.35 で正解時 86% /
 // 読み違い時 54%、0.25 で 86% / 75% と、0.25 が最もバランスが良い)。
 let pvSoftGateScore = 0.25
+// 全種族へ広げた再照合を採用する条件: 広げた先の最良が元の最良より
+// この値以上良いこと。実フレーム (2026-11-21、ユーザー提供の見せ合い
+// 画面) では、正しいプールのスコアがゲーム内モデルと HOME 参照の
+// ポーズ差で 0.4 前後まで悪化し、従来の 0.03 では性別違い等の
+// 無関係な種族への飛び移りが起きた (例: ゴリランダー♂の枠で
+// ロトムやツアリーナが上位に来る)。0.20 に広げても代理測定の
+// 読み違い救済率は下がらないことを tests/preview_eval.py で確認済み
+let pvExpandMargin = 0.20
 // 選出同定 1 枠分の結果 (投票・マージ用)
 struct PvSlotInfo {
     var pick: String? = nil        // このフレームで割り当てた種族
@@ -4235,8 +4243,10 @@ struct PvSlotInfo {
     var expanded: Bool = false     // タイプ関門を広げて再照合した結果か
     var types: [String] = []              // その枠で読み取ったタイプアイコン
     var candidates: [(String, Double)] = []  // その枠の候補上位 (種族, スコア)
+    var gender: String = ""               // 読み取った性別マーク ("M" / "F" / "" = 不明)
 }
 var pvSpeciesTypes: [String: [String]] = [:]
+var pvSpeciesGender: [String: [String]] = [:]   // 種族 → なりうる性別 ("M"/"F"/"N")
 var pvFeatures: [String: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)] = [:]
 var pvTypeIcons: [String: (rgb: [Double], glyph: [Double])] = [:]
 var pvDataLoaded = false
@@ -4260,6 +4270,9 @@ func loadPreviewData() {
     }
     for (name, v) in tobj {
         if let d = v as? [String: Any], let ts = d["types"] as? [String] { pvSpeciesTypes[name] = ts }
+        // 性別は species_types.json の "gender" に同梱されている
+        // (別ファイルにすると Mac 側の同期リストに載らず届かないため)
+        if let d = v as? [String: Any], let gs = d["gender"] as? [String] { pvSpeciesGender[name] = gs }
     }
     for (name, v) in fobj {
         guard let d = v as? [String: Any], let hex = d["hash"] as? String else { continue }
@@ -4520,6 +4533,32 @@ func pvClassifyIconSearch(_ buf: (data: [UInt8], w: Int, h: Int), _ x0: Int, _ y
     return (best!.0, best!.1, best!.2)
 }
 
+// パネル右下の性別マーク (♂=青 / ♀=赤の丸) を読む。位置は実フレーム
+// で実測 (中心はパネル相対 x=0.716, y=0.75、2026-11-21)。マークの
+// 円は鮮やかな単色で、窓内の該当色ピクセル数が反対色の 2 倍未満の
+// 場合は判定しない。読めない場合は nil を返す (性別なしの種族は
+// マーク自体が出ないため、「読めない = 性別なし」とは扱わない)
+func pvReadGender(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: Int, w: Int, h: Int)) -> String? {
+    let cx = panel.x + Int(0.716 * Double(panel.w))
+    let cy = panel.y + Int(0.75 * Double(panel.h))
+    let half = Int(0.08 * Double(panel.w))
+    if half <= 0 || buf.w <= 0 { return nil }
+    var red = 0, blue = 0
+    for yy in (cy - half)..<(cy + half) {
+        if yy < 0 || yy >= buf.h { continue }
+        for xx in (cx - half)..<(cx + half) {
+            if xx < 0 || xx >= buf.w { continue }
+            let i = (yy * buf.w + xx) * 4
+            let r = Int(buf.data[i]), g = Int(buf.data[i + 1]), b = Int(buf.data[i + 2])
+            if r > 180 && g < 110 && b < 110 { red += 1 }
+            if b > 150 && r < 110 && b - r > 60 { blue += 1 }
+        }
+    }
+    let best = max(red, blue)
+    if best < 25 || best < 2 * min(red, blue) { return nil }
+    return red > blue ? "F" : "M"
+}
+
 // パネル左側の 3D モデルを背景色との差分で切り出し、特徴量を取る
 func pvModelFeatures(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: Int, w: Int, h: Int))
     -> (hash: [UInt8], hue: [Double], aspect: Double, density: Double)? {
@@ -4636,11 +4675,20 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
     var slotMargin: [Double] = []
     var slotExpanded: [Bool] = []
     var slotTypes: [[String]] = []
-    // 全種族への再照合 (候補を広げたランキングを返す)
-    func rankedAll(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)) -> [(String, Double)] {
-        pvFeatures.map { (n, ref) in (n, pvScore(f, ref)) }.sorted { $0.1 < $1.1 }
+    var slotGender: [String] = []
+    // 全種族への再照合 (候補を広げたランキングを返す)。性別が読めて
+    // いれば、その性別になりえない種族は広げた先でも除外する
+    func rankedAll(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double), _ gender: String?) -> [(String, Double)] {
+        var all = pvFeatures.map { (n, ref) in (n, pvScore(f, ref)) }.sorted { $0.1 < $1.1 }
+        if let gender {
+            let filtered = all.filter { pvSpeciesGender[$0.0]?.contains(gender) ?? true }
+            if !filtered.isEmpty { all = filtered }
+        }
+        return all
     }
     for panel in panels {
+        let gender = pvReadGender(buf, panel)
+        slotGender.append(gender ?? "")
         var types: [String] = []
         var unknownPresent = false
         // アイコン位置はパネル相対 (2026-11-20 の実機フレームで再実測:
@@ -4672,6 +4720,13 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
             pool = Array(pvFeatures.keys)
             expanded = true
         }
+        if let gender {
+            // 性別マークが読めた枠では、その性別になりえない種族を
+            // 候補から外す (例: ♂の枠に♀のみのツアリーナは来ない)。
+            // 絞って空になる場合はデータ不整合を疑い、絞り込みをしない
+            let filtered = pool.filter { pvSpeciesGender[$0]?.contains(gender) ?? true }
+            if !filtered.isEmpty { pool = filtered }
+        }
         if pool.isEmpty {
             slotRanked.append([]); slotDecisive.append(false); slotPoolCount.append(0); slotMargin.append(0); slotExpanded.append(false)
             continue
@@ -4702,16 +4757,16 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
             if ranked[0].1 <= pvSoftGateScore {
                 decisive = true
             } else {
-                let all = rankedAll(f)
-                if let top = all.first, top.1 < ranked[0].1 - 0.03 {
+                let all = rankedAll(f, gender)
+                if let top = all.first, top.1 < ranked[0].1 - pvExpandMargin {
                     ranked = all; expanded = true
                 }
             }
         } else if ranked[0].1 > pvSoftGateScore {
             // 関門の緩和: 候補内の照合が全体的に悪い場合は候補を広げる。
             // 広げた先の最良が元の最良より明確に良い場合だけ採用する
-            let all = rankedAll(f)
-            if let top = all.first, top.1 < ranked[0].1 - 0.03 {
+            let all = rankedAll(f, gender)
+            if let top = all.first, top.1 < ranked[0].1 - pvExpandMargin {
                 ranked = all; expanded = true
             }
         }
@@ -4728,6 +4783,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
     for i in panels.indices {
         slots[i].types = slotTypes[i]
         slots[i].candidates = Array(slotRanked[i].prefix(3))
+        slots[i].gender = slotGender[i]
     }
     var noteByIdx: [Int: String] = [:]
     var order = panels.indices.filter { !slotRanked[$0].isEmpty }
@@ -4745,7 +4801,8 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         team[i] = pickCand.0
         slots[i] = PvSlotInfo(pick: pickCand.0, score: pickCand.1,
                                decisive: slotDecisive[i], expanded: slotExpanded[i],
-                               types: slotTypes[i], candidates: Array(slotRanked[i].prefix(3)))
+                               types: slotTypes[i], candidates: Array(slotRanked[i].prefix(3)),
+                               gender: slotGender[i])
         let rank = ranked.firstIndex(where: { $0.0 == pickCand.0 }) ?? 0
         if slotDecisive[i] {
             noteByIdx[i] = "選出\(i + 1): \(pvJa(pickCand.0)) (タイプで確定)"
@@ -5249,7 +5306,7 @@ func runOnce(image: CGImage) {
         previewEvidenceSaved = true
         let slotDetails: [[String: Any]] = previewEvidenceSlots.map { s in
             ["pick": s.pick ?? "", "score": (s.score * 1000).rounded() / 1000,
-             "decisive": s.decisive, "expanded": s.expanded, "types": s.types,
+             "decisive": s.decisive, "expanded": s.expanded, "types": s.types, "gender": s.gender,
              "candidates": s.candidates.map { [$0.0, ($0.1 * 1000).rounded() / 1000] as [Any] }]
         }
         debugCapture(kind: "preview_id", key: "preview_id", rawText: "",
@@ -5330,7 +5387,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1446"
+let readerBuild = "20261121_1504"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
