@@ -662,6 +662,7 @@ var pendingSwitchSince: [String: Date] = [:]      // プレート名 -> その�
 var slotLastHitAt: [String: Date] = [:]           // 枠ごとの最終プレートヒット時刻 (plate_stale 監視用)
 var plateStaleOtherHits: [String: Int] = [:]      // その枠が無ヒットの間に相方枠がヒットしたフレーム数
 var pendingSwitchCount: [String: Int] = [:]       // 同じ種族が連続で見えた回数
+var slotSwapPending: [String: (a: String, b: String, count: Int)] = [:]  // 側 -> 枠入れ替わり候補 (2 回連続で確定)
 var actionSeq = 0                                  // |move| / |turn| の通し番号 (行動の区切り)
 var lastDamageSeq: [String: Int] = [:]             // プレート名 -> ダメージ行を出した行動番号
 var lastDamageTurn: [String: Int] = [:]            // プレート名 -> ダメージ行を出したターン番号
@@ -691,6 +692,7 @@ var entryBatchOpen = false                        // 入場ウィンドウ (|swi
 var entryBatchMembers: Set<String> = []           // 現バッチで入場したラベル ("p2a: 種族")
 var entryBatchAbBuffer: [(label: String, ability: String)] = []  // ウィンドウ内の |-ability| 行 (発動順)
 var lastExactHp: [String: [Int]] = [:]            // key -> [現在HP, 最大HP] (自軍の正確な数値の追跡)
+var lastDmgEventPrevExact: [String: [Int]] = [:]  // key -> 直近の dmg イベントが使った基準実数 ([] = 基準なし)。再放出の上書き時に amt を元の基準から計算し直すため
 var lastMoveMsgAt = Date.distantPast
 var lastFallbackText = ""                         // 直近の |-message| の正規化文 (OCR ゆれの重複防止)
 var fieldWeatherSetAt = Date.distantPast          // 天候が張られた時刻 (特性の帰属判定用)
@@ -1639,6 +1641,7 @@ func resetLogState() {
     entryBatchMembers = []
     entryBatchAbBuffer = []
     lastExactHp = [:]
+    lastDmgEventPrevExact = [:]
     lastMoveName = ""
     lastMoveSeq = -1
     lastMoveLabel = ""
@@ -2302,7 +2305,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 要員選択中に 53% へ訂正され、独立したダメージ行として
         // 追記された)。行動中の小さな実ダメージは、直前の行と行動が
         // 近いため、この条件には入らない
-        if effFrom - toPct <= 3, let lt = prevDamageAt, Date().timeIntervalSince(lt) >= 10,
+        if toPct != 0, effFrom - toPct <= 3, let lt = prevDamageAt, Date().timeIntervalSince(lt) >= 10,
            prevDamageSeq != actionSeq, Date().timeIntervalSince(lastMoveMsgAt) >= 5 {
             debugCapture(kind: "hp_correction", key: "hp_correction|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct])
@@ -2439,6 +2442,17 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 回復の発生源 (オボンのみ/たべのこし/グラッシーフィールド) が
         // 推定できれば [from] を付け、持ち物なら判明としても記録する
         let src = healSource(plateName: plateName, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
+        // オボンのみと分類できた回復が本来の +25% に大きく届かず、かつ
+        // プレートの最新読みがさらに上を示している場合は、回復
+        // アニメーションの途中値とみて確定せずに戻す (基準値は戻し、
+        // 後続の読みが最終値で再駆動する。実例: 2026-11-22
+        // battle_20261122_070237、+20% で確定し、残り +5% が出所不明の
+        // 回復として二重に残った)
+        if src?.label == "item: Sitrus Berry", effFrom <= 50, toPct - effFrom <= 21,
+           (lastSlots[plateName]?.hpPercent ?? toPct) > toPct {
+            lastEmittedPct[plateName] = effFrom
+            return false
+        }
         // 発生源を特定できず、回復技・ねがいごとの遅延回復・吸収特性
         // でも説明できない回復は、行を出さず証拠記録だけを残す。
         // 以前は行も出していたが、演出中の一時的な満タン誤読が
@@ -2536,9 +2550,33 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
     }
     let prevExact = lastExactHp[key]
     if let exact { lastExactHp[key] = exact }
+    // 同じ行動・同じ対象・同じ基準 HP からの被ダメが再び放出された
+    // 場合は、別イベントとして足さずに先の記録を上書きする。二重の
+    // 記録 (推定側での二重処理) を防ぎ、途中値で記録されたイベントを
+    // 最終値へ是正するのが目的。連続ヒットは基準 HP が前回の到達値と
+    // 一致するため、この条件には当たらず別イベントとして残る
+    // (実例: 2026-11-22 battle_20261122_070237、Milotic のイベント
+    // 二重化と Farigiraf の amt 食い違い)
+    let defLabelForEv = "\(slot): \(speciesEn)"
+    let supersedeIdx = battleEvents.lastIndex(where: {
+        $0.contains("\"k\":\"dmg\"") && $0.contains("\"turn\":\(currentTurn)")
+            && $0.contains("\"atk\":\"\(jsonEscape(lastMoveLabel))\"")
+            && $0.contains("\"def\":\"\(jsonEscape(defLabelForEv))\"")
+            && $0.contains("\"move\":\"\(jsonEscape(lastMoveName))\"")
+            && $0.contains("\"defHp\":\(fromPct)")
+    })
+    var effPrevExact = prevExact
+    if supersedeIdx != nil, let stashed = lastDmgEventPrevExact[key] {
+        effPrevExact = stashed.isEmpty ? nil : stashed
+    }
     guard battleEvents.count < 600 else { return }
+    // 時刻の上限は行動の区切り (actionSeq) 側が本筋の帰属ガードで、
+    // こちらは暴走防止の緩い上限にとどめる。開幕の演出や範囲技の
+    // 解決が長いと 8 秒では正当な証拠まで落ちる (実例: 2026-11-22
+    // battle_20261122_070237 ターン1、ユキメノコのふぶきの被ダメ
+    // イベントが欠落した)
     guard !lastMoveLabel.isEmpty, actionSeq - lastMoveSeq <= 1,
-          Date().timeIntervalSince(lastMoveMsgAt) < 8 else { return }
+          Date().timeIntervalSince(lastMoveMsgAt) < 20 else { return }
     let defSide = key.hasPrefix("p1") ? "p1" : "p2"
     let atkSide = lastMoveLabel.hasPrefix("p1") ? "p1" : "p2"
     guard atkSide != defSide else { return }
@@ -2576,13 +2614,18 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
     // 被ダメ量 (63) がイベントに載る (実例: 2026-11-21
     // battle_20261121_233243、ウッドハンマーの被ダメとして推定側へ
     // 渡り、攻撃側の自己ダメージと誤認された)
-    if defSide == "p1", let pe = prevExact, let ce = exact, pe[1] == ce[1], pe[0] > ce[0] {
+    if defSide == "p1", let pe = effPrevExact, let ce = exact, pe[1] == ce[1], pe[0] > ce[0] {
         ev += ",\"amt\":\(pe[0] - ce[0]),\"max\":\(ce[1])"
     } else {
         ev += ",\"pct\":\(fromPct - toPct)"
     }
     ev += "}"
-    battleEvents.append(ev)
+    if let idx = supersedeIdx {
+        battleEvents[idx] = ev
+    } else {
+        battleEvents.append(ev)
+        lastDmgEventPrevExact[key] = prevExact ?? []
+    }
 }
 
 // 自分自身への反動ダメージのイベント (推定エンジンとの契約:
@@ -2714,6 +2757,43 @@ func processPlates(_ hits: [String: SlotState]) {
                 emitLog("|faint|\(f.slot): \(f.speciesEn)")
             }
         }
+    }
+    // 枠の入れ替わり: 両枠が互いの登録種族を同時に示し、HP もそれぞれの
+    // 登録値と一致する場合は、2 件の交代ではなく表示位置の入れ替わり
+    // として登録を入れ替える (交代行は出さない)。ひんし交代の後任が
+    // 想定と逆の枠に表示される場合に起きる。2 回続けて観測されたら確定
+    // する (実例: 2026-11-22 battle_20261122_070237、コータスが左枠・
+    //  オオニューラが右枠に表示され、幻の交代行と両枠ともオオニューラ
+    //  という状態破損が起きた)
+    for (a, b) in [("mineA", "mineB"), ("oppA", "oppB")] {
+        let sideKey = a.hasPrefix("mine") ? "mine" : "opp"
+        guard let pa = lastSlots[a], let pb = lastSlots[b],
+              let ha = hits[a], let hb = hits[b],
+              pa.speciesEn != pb.speciesEn,
+              ha.speciesEn == pb.speciesEn, hb.speciesEn == pa.speciesEn,
+              faintedSlots[slotId(a)] == nil, faintedSlots[slotId(b)] == nil,
+              abs(ha.hpPercent - pb.hpPercent) <= 3, abs(hb.hpPercent - pa.hpPercent) <= 3
+        else { slotSwapPending[sideKey] = nil; continue }
+        if slotSwapPending[sideKey]?.a == ha.speciesEn {
+            slotSwapPending[sideKey]?.count += 1
+        } else {
+            slotSwapPending[sideKey] = (a: ha.speciesEn, b: hb.speciesEn, count: 1)
+        }
+        guard (slotSwapPending[sideKey]?.count ?? 0) >= 2 else { continue }
+        slotSwapPending[sideKey] = nil
+        lastSlots[a] = ha
+        lastSlots[b] = hb
+        let ea = lastEmittedPct[a]; lastEmittedPct[a] = lastEmittedPct[b]; lastEmittedPct[b] = ea
+        let fa = firstEntryPlateHP[a]; firstEntryPlateHP[a] = firstEntryPlateHP[b]; firstEntryPlateHP[b] = fa
+        for p in [a, b] {
+            pendingDamagePct[p] = nil; pendingDamageCount[p] = nil; pendingDamageSince[p] = nil
+            pendingSwitchSpecies[p] = nil; pendingSwitchCount[p] = nil; pendingSwitchSince[p] = nil
+            heldLine[p] = nil; suspectJump[p] = nil
+        }
+        debugCapture(kind: "slot_swap", key: "slot_swap:\(sideKey):\(currentTurn)", rawText: "",
+                     detail: ["side": sideKey, "a": "\(a)=\(ha.speciesEn)", "b": "\(b)=\(hb.speciesEn)", "turn": currentTurn])
+        print("[reader] 枠の表示位置の入れ替わりを検出し、登録を入れ替えました: \(a)=\(ha.speciesEn) / \(b)=\(hb.speciesEn)")
+        fflush(stdout)
     }
     for plate in plates {
         guard let s = hits[plate.name] else { continue }
@@ -2952,8 +3032,11 @@ func processPlates(_ hits: [String: SlotState]) {
     // battle_20261122_050512、グラスフィールド開始行が
     // ゴリランダーの交代行より前に置かれた)
     if heldWeatherStart != nil || heldTerrainStart != nil {
-        let ready = pendingSwitchSpecies.isEmpty
-            || Date().timeIntervalSince((heldWeatherStart?.at ?? heldTerrainStart?.at) ?? .distantPast) > 6.0
+        // 要員待ちが続く間は上限を延ばす (要員選択は 6 秒を超えることが
+        // 普通にある。要員が登録されれば即座に流れる)
+        let awaitingNow = anyAwaitingReplacement()
+        let heldAge = Date().timeIntervalSince((heldWeatherStart?.at ?? heldTerrainStart?.at) ?? .distantPast)
+        let ready = (pendingSwitchSpecies.isEmpty && !awaitingNow) || heldAge > (awaitingNow ? 20.0 : 6.0)
         if ready {
             fieldHoldBypass = true
             if let h = heldWeatherStart { heldWeatherStart = nil; setWeather(h.ui, h.logName, via: h.text) }
@@ -2962,7 +3045,7 @@ func processPlates(_ hits: [String: SlotState]) {
         }
     }
     // 入場特性の効果として保留した行: 交代の確定待ちが空になったら流す
-    if !heldEntryBoosts.isEmpty && pendingSwitchSpecies.isEmpty { flushHeldEntryBoosts() }
+    if !heldEntryBoosts.isEmpty && pendingSwitchSpecies.isEmpty && !anyAwaitingReplacement() { flushHeldEntryBoosts() }
     // 出所未確認で保留した地形の上書きの確認 (採用/破棄)
     confirmHeldTerrainReplace()
 }
@@ -3220,7 +3303,7 @@ func setWeather(_ ui: String, _ logName: String, via text: String = "", stale: B
     // battle_20261121_230402、ペリッパーの あめふらし の雨開始行が
     // 繰り出し行より前に出た)。交代確定待ちがある間は開始文を保留し、
     // プレート処理の末尾で流す (最大 2.5 秒で強制的に流す)
-    if !stale && !text.isEmpty && !fieldHoldBypass && !pendingSwitchSpecies.isEmpty {
+    if !stale && !text.isEmpty && !fieldHoldBypass && (!pendingSwitchSpecies.isEmpty || anyAwaitingReplacement()) {
         if heldWeatherStart?.ui != ui {
             heldWeatherStart = (ui: ui, logName: logName, text: text, at: Date())
         }
@@ -3297,7 +3380,7 @@ func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
         return
     }
     // 天候と同じく、交代確定待ちの間は開始文を保留する (順序の保持)
-    if !stale && !text.isEmpty && !fieldHoldBypass && !pendingSwitchSpecies.isEmpty {
+    if !stale && !text.isEmpty && !fieldHoldBypass && (!pendingSwitchSpecies.isEmpty || anyAwaitingReplacement()) {
         if heldTerrainStart?.ui != ui {
             heldTerrainStart = (ui: ui, text: text, at: Date())
         }
@@ -3454,6 +3537,39 @@ func attributeFieldAbilities() {
             fieldAbilityDone[key] = sw.at
             if pendingMegaSpecies[side] == en { completeMega(side: side, baseEn: en, megaEn: forme) }
             emitAbilityOnce(slot: sw.slot, side: side, speciesEn: forme, abilityEn: ab)
+        }
+    }
+    // 別フォルム側のフィールド特性: 現在の天候・地形が、場の誰の現在の
+    // フォルムでも説明できず、交代で入った相手の同種族の別フォルム
+    // (リージョンフォルム等) の特性でだけ説明できる場合は、フォルムの
+    // 登録自体が誤りとみて訂正した上で帰属する (プレート同定は同名
+    // フォルムを区別できず、見せ合い側でも通常種として登録される
+    // ことがある。実例: 2026-11-22 battle_20261122_070237、キュウコン
+    // (アローラ) が通常種で登録され、ゆきふらし が帰属しなかった)
+    for (key, sw) in Array(lastSwitchIn) {
+        if fieldAbilityDone[key] == sw.at { continue }
+        let parts = key.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2 else { continue }
+        let side = String(parts[0]), en = String(parts[1])
+        guard side == "p2" else { continue }
+        for ab in [weatherAb[logFieldWeather], terrainAb[logFieldTerrain]].compactMap({ $0 }) {
+            // 場の誰かの現在のフォルムで説明できるなら、その個体が原因
+            if lastSlots.values.contains(where: { (speciesAbilityMap[$0.speciesEn] ?? []).contains(ab) }) { continue }
+            // 自分の現在のフォルムで持てるなら通常の帰属が担当する
+            if (speciesAbilityMap[en] ?? []).contains(ab) { continue }
+            guard let entry = speciesDict.first(where: { $0.en == en }) else { continue }
+            let cands = formeGroup(entry).filter { $0.en != en && (speciesAbilityMap[$0.en] ?? []).contains(ab) }
+            guard cands.count == 1, let newEn = cands.first?.en else { continue }
+            var matched = false
+            if weatherAb[logFieldWeather] == ab && now.timeIntervalSince(fieldWeatherSetAt) < 30 && now.timeIntervalSince(sw.at) < 30 { matched = true }
+            if terrainAb[logFieldTerrain] == ab && now.timeIntervalSince(fieldTerrainSetAt) < 30 && now.timeIntervalSince(sw.at) < 30 { matched = true }
+            let inTurn = switchInTurn[key].map { max($0, 1) }
+            if weatherAb[logFieldWeather] == ab && inTurn != nil && inTurn == fieldWeatherSetTurn && fieldSetByMoveTurn != fieldWeatherSetTurn { matched = true }
+            if terrainAb[logFieldTerrain] == ab && inTurn != nil && inTurn == fieldTerrainSetTurn && fieldSetByMoveTurn != fieldTerrainSetTurn { matched = true }
+            guard matched else { continue }
+            correctFormeByAbility(side: side, slot: sw.slot, speciesEn: en, abilityEn: ab)
+            fieldAbilityDone["\(side):\(newEn)"] = sw.at
+            emitAbilityOnce(slot: sw.slot, side: side, speciesEn: newEn, abilityEn: ab)
         }
     }
 }
@@ -3661,6 +3777,34 @@ func awaitingReplacement(_ platePrefix: String, _ side: String) -> Bool {
     if seen.count < 4 { return true }   // まだ場に出ていない選出枠が残っている
     let onField = Set(lastSlots.filter { $0.key.hasPrefix(platePrefix) }.map { $0.value.speciesEn })
     return seen.contains { !onField.contains($0) && (monStates["\(side):\($0)"]?.hpPercent ?? 0) > 0 }
+}
+
+// どちらかの側が、ひんし交代の要員待ち (場が 1 体で後任が未登録) か
+// その側で「ひんしした枠が空いていて、後任がまだ登録されていない」
+// 状態か。開幕 (場が揃う前) や、後任がもう残っていない終盤と区別する
+// ため、ひんし枠があることと、後任の見込み (未確認の残り枠があるか、
+// 体力のある控えがいる) の両方を条件にする
+func sideAwaitingReplacement(_ prefix: String, _ side: String) -> Bool {
+    if aliveOnFieldCount(prefix, side) >= 2 { return false }
+    let slotNames = side == "p1" ? ["p1a", "p1b"] : ["p2a", "p2b"]
+    if !slotNames.contains(where: { faintedSlots[$0] != nil }) { return false }
+    let seen = fieldSeen[side] ?? []
+    if seen.count < 4 { return true }
+    let onField = Set(lastSlots.filter { $0.key.hasPrefix(prefix) }.values.map { $0.speciesEn })
+    return seen.contains { !onField.contains($0) && (monStates["\(side):\($0)"]?.hpPercent ?? 0) > 0 }
+}
+
+func anyAwaitingReplacement() -> Bool {
+    sideAwaitingReplacement("mine", "p1") || sideAwaitingReplacement("opp", "p2")
+}
+
+// key (変化を受ける側) の反対側で、入場効果の原因になる交代が
+// 未確定 (プレート確定待ち、またはひんし交代の要員待ち) か
+func entryEffectPending(key: String) -> Bool {
+    let otherPrefix = key.hasPrefix("p1") ? "opp" : "mine"
+    let otherSide = key.hasPrefix("p1") ? "p2" : "p1"
+    return !pendingSwitchSpecies.filter({ $0.key.hasPrefix(otherPrefix) }).isEmpty
+        || sideAwaitingReplacement(otherPrefix, otherSide)
 }
 func clearTerrain(stale: Bool = false) {
     if logFieldTerrain.isEmpty { return }
@@ -3872,13 +4016,20 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
         //  サイコシード発動行が p1a で出た (実際は p1b))
         heldBoostLines[key, default: []].append((stat, delta, Date()))
     } else if stat == "atk" && delta < 0 && Date().timeIntervalSince(lastMoveMsgAt) > 3
-                && !pendingSwitchSpecies.filter({ $0.key.hasPrefix(key.hasPrefix("p1") ? "opp" : "mine") }).isEmpty {
+                && entryEffectPending(key: key) {
         // 入場特性 (いかく) の効果とみられる攻撃低下が、原因側の
         // 交代確定より先に届いた場合は、行だけを保留して交代行の
         // 後に流す (状態への適用は上の applyEvent で済んでいる)。
         // 技の文が直近にある場合は技の効果なので保留しない
         // (実例: 2026-11-22 battle_20261122_050512、ボーマンダの
         //  いかくの低下行が交代行・特性行より前に並んだ)
+        heldEntryBoosts.append((key: key, line: line, at: Date()))
+    } else if heldEntryBoosts.contains(where: { $0.key == key }) && Date().timeIntervalSince(lastMoveMsgAt) > 3 {
+        // 入場効果として保留中の個体の後続の変化 (いかくを受けた
+        // かちき の特攻上昇など) も、原因の交代行が出るまで一緒に
+        // 保留する (片方だけ先に出ると順序が崩れる。実例: 2026-11-22
+        // battle_20261122_070237、ミロカロスの攻撃低下と特攻上昇が
+        // キュウコンとムクホークの交代行より前に並んだ)
         heldEntryBoosts.append((key: key, line: line, at: Date()))
     } else {
         emitLog(line, applyNow: false)
@@ -3939,7 +4090,8 @@ func flushHeldEntryBoosts() {
 }
 
 func flushHeldBoostsTimeout() {
-    if heldEntryBoosts.contains(where: { Date().timeIntervalSince($0.at) > 6 }) { flushHeldEntryBoosts() }
+    let cap: TimeInterval = anyAwaitingReplacement() ? 20 : 6
+    if heldEntryBoosts.contains(where: { Date().timeIntervalSince($0.at) > cap }) { flushHeldEntryBoosts() }
     if heldBoostLines.isEmpty { return }
     let now = Date()
     for k in Array(heldBoostLines.keys) {
@@ -4516,7 +4668,7 @@ func isMoveFragmentText(_ text: String) -> Bool {
     guard t.hasSuffix("！") || t.hasSuffix("!") else { return false }
     guard t.contains("の") && normalize(t).count <= 16 else { return false }
     if findSpeciesJa(in: t) != nil { return false }   // 解決できる文は通常経路に任せる
-    if t.contains("たおれた") || t.contains("効果は") || t.contains("回復") { return false }
+    if t.contains("たおれた") || foldDakuten(t).contains("たおれた") || t.contains("効果は") || t.contains("回復") { return false }
     guard let tail = t.split(separator: "の").last.map(String.init) else { return false }
     // 技名は助詞を含まない短い名詞句。文の形 (助詞入り・長文) は対象外
     if tail.contains("は") || tail.contains("が") || tail.contains("を") || tail.contains("に") { return false }
@@ -4754,6 +4906,17 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 同じ急所文の再読で二重に出さない (枠ごとに 6 秒あける)
         if !target.isEmpty && Date().timeIntervalSince(lastCritAt[target] ?? .distantPast) > 6 {
             lastCritAt[target] = Date()
+            // 急所の告知文は被ダメ行より後に来るため、記録時点では
+            // dmg イベントの crit が false のまま残る。対象の直近の
+            // イベントを是正する (実例: 2026-11-22
+            // battle_20261122_070237 ターン2、プロトコルには急所行が
+            // あるのにイベントは crit=false だった)
+            if let idx = battleEvents.lastIndex(where: { ev in
+                ev.contains("\"k\":\"dmg\"") && ev.contains("\"def\":\"\(jsonEscape(target))\"")
+                    && !ev.contains("\"atk\":\"\(jsonEscape(target))\"") && ev.contains("\"crit\":false")
+            }) {
+                battleEvents[idx] = battleEvents[idx].replacingOccurrences(of: "\"crit\":false", with: "\"crit\":true")
+            }
             emitLog("|-crit|\(target)")
         }
         return true
@@ -5352,7 +5515,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 技の使用: 「(相手の) <種族>の <技>！」— <技> は種族名の直後から文末までと完全一致
     // 「たおれた」を含む文は技の告知ではあり得ない (ひんし文を技と誤読する
     // 事故の防止。検証 R5: カイリキーのひんし文から かいりき を誤検出)
-    if (t.hasSuffix("！") || t.hasSuffix("!")) && !t.contains("たおれた") {
+    if (t.hasSuffix("！") || t.hasSuffix("!")) && !t.contains("たおれた") && !foldDakuten(t).contains("たおれた") {
         var cand: String? = nil
         // 長音落ちまで畳んだ変換 (種族名・技名とも全件衝突なしを確認済み)
         let deepFold: (String) -> String = { foldDakuten($0.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")).replacingOccurrences(of: "ー", with: "") }
@@ -5453,8 +5616,12 @@ func translateBattleMessage(_ text: String) -> Bool {
     }
     // 状態異常で動けない (行動失敗。実例: 2026-11-20 の対戦で
     // 「イエツサンは 体がしびれて 動けない！」が日本語のまま漏れた)
-    let cantCode = (t.contains("しびれて") && t.contains("動けない")) ? "par"
-        : (t.contains("凍って") && t.contains("動けない")) ? "frz"
+    // 「動けない」の 動 が 勤 に崩れる OCR ゆれも拾う (実例: 2026-11-22
+    // battle_20261122_070237、「凍ってしまって勤けない！」が行動不能行と
+    // 併記で日本語のまま残った)
+    let cantVerb = t.contains("動けない") || t.contains("勤けない")
+    let cantCode = (t.contains("しびれて") && cantVerb) ? "par"
+        : (t.contains("凍って") && cantVerb) ? "frz"
         : (t.contains("ひるんで") && t.contains("だせない")) ? "flinch"
         : (t.contains("眠っている") || t.contains("ねむっている")) ? "slp" : ""
     if !cantCode.isEmpty {
@@ -5591,8 +5758,10 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 持ち物分岐が先に処理する)
     if t.contains("回復した") { return true }
     // ひんし (プレート側で既に 0% になっている場合も文は消費する。
-    // 消費しないと |-message| に化けて同じ文が残り続ける)
-    if t.contains("たおれた") {
+    // 消費しないと |-message| に化けて同じ文が残り続ける)。
+    // 末尾の濁点ゆれ (たおれだ) も拾う (実例: 2026-11-22
+    // battle_20261122_070237、ひんし文が faint 行と併記で残った)
+    if t.contains("たおれた") || foldDakuten(t).contains("たおれた") {
         if (monStates[key]?.hpPercent ?? 0) > 0 {
             // プレートで 0% を読む前に倒れた場合 (ひんしアニメーションで
             // プレートがすぐ消える等)、被ダメ行もここで補う
@@ -6143,12 +6312,34 @@ func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int,
         raw = raw.filter { $0.1 - $0.0 >= Int(0.05 * Double(H)) }.sorted { $0.0 < $1.0 }
     }
     if raw.count > 6 {
-        // 帯が 7 本以上ある場合は、高さが中央値に近い 6 本を残す
-        // (トレーナー名の帯など、パネル以外の帯が混ざる場合)
+        // 帯が 7 本以上ある場合は、等間隔のグリッドに最もよく合い、
+        // かつ高さがそろった 6 本を残す。コストは間隔の分散 + 高さ
+        // 偏差の二乗和。余分な帯はグリッドの延長上に来ることも
+        // あるため (上下どちらの型も実例あり)、間隔だけでも高さ
+        // だけでも決め手にならない (実例: 2026-11-22
+        // battle_20261122_070237 の上部の帯、2026-11-21 Jose /
+        // benn_test1 の下部の帯)
         let hs = raw.map { $0.1 - $0.0 + 1 }.sorted()
         let med = hs[hs.count / 2]
-        raw = raw.sorted { abs($0.1 - $0.0 + 1 - med) < abs($1.1 - $1.0 + 1 - med) }
-            .prefix(6).sorted { $0.0 < $1.0 }
+        var bestCombo: [Int]? = nil
+        var bestKey: Double? = nil
+        var idx = [0, 1, 2, 3, 4, 5]
+        let n = raw.count
+        while true {
+            let ys = idx.map { Double(raw[$0].0) }
+            let diffs = (1..<6).map { ys[$0] - ys[$0 - 1] }
+            let mean = diffs.reduce(0, +) / 5.0
+            let variance = diffs.reduce(0.0) { $0 + ($1 - mean) * ($1 - mean) }
+            let hdevSq = idx.reduce(0.0) { let d = Double(raw[$1].1 - raw[$1].0 + 1 - med); return $0 + d * d }
+            let key = variance + hdevSq
+            if bestKey == nil || key < bestKey! { bestKey = key; bestCombo = idx }
+            var i = 5
+            while i >= 0 && idx[i] == n - 6 + i { i -= 1 }
+            if i < 0 { break }
+            idx[i] += 1
+            if i + 1 < 6 { for j in (i + 1)..<6 { idx[j] = idx[j - 1] + 1 } }
+        }
+        if let combo = bestCombo { raw = combo.map { raw[$0] } }
     }
     if raw.count == 6 {
         // 各パネルの左右端を列分布 (行の半分超がエンジ色の列) から測る
@@ -7194,6 +7385,7 @@ func runOnce(image: CGImage) {
                         previewLocked[i] = nil
                     }
                 }
+                let incumbents = previewBestTeam
                 for i in r.team.indices {
                     if let locked = previewLocked[i] {
                         previewBestTeam[i] = locked
@@ -7208,8 +7400,57 @@ func runOnce(image: CGImage) {
                             if sa != sb { return sa < sb }
                             return a < b
                         }.first
-                        if let leader { previewBestTeam[i] = leader }
+                        if let leader {
+                            // 同点なら現行を維持する: 挑戦側の票数が
+                            // 現行の種族と同数なら、スコアの僅差では
+                            // 入れ替えない。幾何の崩れた 1 回の試行が
+                            // 正しかった前回の結果を上書きする事故の
+                            // 防止 (実例: 2026-11-22
+                            // battle_20261122_070237、枠ずれした試行が
+                            // 同点・スコア勝ちで以後の枠をずらした)
+                            if let inc = incumbents[i], inc != leader, !vetoed[i].contains(inc),
+                               previewVotes[i][inc, default: 0] >= previewVotes[i][leader, default: 0] {
+                                previewBestTeam[i] = inc
+                            } else {
+                                previewBestTeam[i] = leader
+                            }
+                        }
                     }
+                }
+                // マージ結果の重複排除: 同じ種族が複数枠に立つことは
+                // ありえないため、主張の強い枠 (ロック済み → 票数 →
+                // スコア) が先に確保し、譲った枠は未使用の次点候補、
+                // 無ければ未使用の現行へ落とす。どちらも無ければ
+                // 空にする (誤った重複より空枠の方が後の試行で
+                // 直せる)
+                var claimed = Set<String>()
+                let claimOrder = r.team.indices.sorted { a, b in
+                    let la = previewLocked[a] != nil, lb = previewLocked[b] != nil
+                    if la != lb { return la }
+                    let ca = previewBestTeam[a].map { previewVotes[a][$0, default: 0] } ?? 0
+                    let cb = previewBestTeam[b].map { previewVotes[b][$0, default: 0] } ?? 0
+                    if ca != cb { return ca > cb }
+                    let sa = previewBestTeam[a].map { previewVoteScore[a][$0] ?? 9 } ?? 9
+                    let sb = previewBestTeam[b].map { previewVoteScore[b][$0] ?? 9 } ?? 9
+                    if sa != sb { return sa < sb }
+                    return a < b
+                }
+                for i in claimOrder {
+                    guard let cur = previewBestTeam[i] else { continue }
+                    if !claimed.contains(cur) { claimed.insert(cur); continue }
+                    let alts = previewVotes[i].keys.filter { !vetoed[i].contains($0) && !claimed.contains($0) }.sorted { a, b in
+                        let ca = previewVotes[i][a, default: 0], cb = previewVotes[i][b, default: 0]
+                        if ca != cb { return ca > cb }
+                        let sa = previewVoteScore[i][a] ?? 9, sb = previewVoteScore[i][b] ?? 9
+                        if sa != sb { return sa < sb }
+                        return a < b
+                    }
+                    var replacement: String? = alts.first
+                    if replacement == nil, let inc = incumbents[i], !claimed.contains(inc), !vetoed[i].contains(inc) {
+                        replacement = inc
+                    }
+                    previewBestTeam[i] = replacement
+                    if let replacement { claimed.insert(replacement) }
                 }
                 let filled = previewBestTeam.compactMap { $0 }
                 oppTeamSeen = filled
@@ -7523,7 +7764,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0633"
+let readerBuild = "20261122_0744"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
