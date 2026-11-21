@@ -458,7 +458,15 @@ async function captureTeam(tab) {
     say('撮影失敗： リーダーに接続できません（run_reader.sh を起動してください）', 'ng');
   }
 }
-let CHAMP = null; // data/champions_dex.json (チャンピオンズ実装済みリスト)
+let CHAMP = null; // data/champions_dex.json (全ポケモンのユニバース)
+let REG = null; // data/regulation.json (現行レギュレーションの実装範囲スコープを含む)
+let SPECIES_MOVES = null; // data/species_moves.json (種族ごとの習得技)
+// 技・持ち物の候補スコープ (データ範囲の取り決め): regulation.json にスコープ
+// リストがあればそれを正とし、無い間は champions_dex をそのまま使う
+function effScopeSet(champSet, regList) {
+  if (Array.isArray(regList) && regList.length) return new Set(regList);
+  return champSet || new Set();
+}
 let CHAMP_MOVES_JA = null;
 function champMoveList() { return CHAMP_MOVES_JA || Object.keys(NAMES._moveJa2en || {}); }
 let USAGE_SETS = null; // data/usage_sets.json の sets (pokedb 使用率トップ型)
@@ -480,15 +488,42 @@ function usageFor(speciesEn) {
   }
   return null;
 }
+// 使用率セットが無い種族の初期技: 習得技 (species_moves.json) から
+// ダメージ技 > STAB 一致 > 威力降順 で最大4つを選ぶ (候補は現行スコープ内の技のみ)
+function fallbackMovesFor(speciesEn) {
+  if (!SPECIES_MOVES) return [];
+  let list = SPECIES_MOVES[speciesEn];
+  if (!Array.isArray(list)) {
+    const base = gen.species.get(idOf(speciesEn))?.baseSpecies;
+    if (base && base !== speciesEn) list = SPECIES_MOVES[base];
+  }
+  if (!Array.isArray(list) || !list.length) return [];
+  const sd = gen.species.get(idOf(speciesEn));
+  const types = sd && Array.isArray(sd.types) ? sd.types : [];
+  const scope = effScopeSet(CHAMP && CHAMP.moves, REG && REG.moves);
+  const scored = [];
+  for (const name of list) {
+    const mv = gen.moves.get(idOf(name));
+    if (!mv) continue;
+    if (scope.size && !scope.has(mv.name)) continue;
+    scored.push({ name: mv.name, dmg: (mv.basePower || 0) > 0 && mv.category !== 'Status' ? 1 : 0, stab: types.includes(mv.type) ? 1 : 0, bp: mv.basePower || 0 });
+  }
+  scored.sort((a, b) => (b.dmg - a.dmg) || (b.stab - a.stab) || (b.bp - a.bp));
+  return scored.slice(0, 4).map(s => s.name);
+}
 function oppSpec(speciesEn, kind) {
   if (kind === 'usage') {
     const u = usageFor(speciesEn);
-    if (u) return { ...u, kind, moves: [...u.moves], origMoves: [...u.moves], knownMoves: [],
-      curHPPercent: 100, boosts: blankBoosts(), status: '', corrected: [] };
+    if (u) {
+      const mv = u.moves && u.moves.filter(Boolean).length ? [...u.moves] : fallbackMovesFor(speciesEn);
+      return { ...u, kind, moves: mv, origMoves: [...mv], knownMoves: [],
+        curHPPercent: 100, boosts: blankBoosts(), status: '', corrected: [] };
+    }
   }
   const a = assumedSet(speciesEn, kind === 'usage' ? 'attacker' : kind);
   const u = usageFor(speciesEn);
-  const moves = u ? [...u.moves] : [];
+  let moves = u ? [...u.moves] : [];
+  if (!moves.filter(Boolean).length) moves = fallbackMovesFor(speciesEn);
   return { species: speciesEn, kind, sp: { ...a.sp }, nature: a.nature, ability: a.ability, item: '',
     moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [],
     noUsage: kind === 'usage' && !USAGE_SETS ? true : undefined };
@@ -2185,26 +2220,32 @@ async function poll() {
     } catch (e) { /* champions dex optional */ } })(),
     (async () => { try {
       const rg = await (await fetch('./data/regulation.json')).json();
+      if (rg) REG = rg;
       if (rg && rg.regulation) { const el = document.getElementById('regname'); if (el) el.textContent = 'レギュレーション' + rg.regulation; }
     } catch (e) { /* regulation optional */ } })(),
+    (async () => { try {
+      SPECIES_MOVES = await (await fetch('./data/species_moves.json')).json();
+    } catch (e) { /* species moves optional (初期技の補完用) */ } })(),
   ]);
   // dropdown option lists
   const seen = new Set();
-  // 種族は Champions 実装分に絞らない (レギュレーション変更で他種族が解禁されても
-  // そのまま選べるように、全ポケモンを候補にする)。技・持ち物は従来どおり
-  // Champions 実装分のみ
+  // 種族は実装範囲に絞らない (レギュレーション変更で他種族が解禁されても
+  // そのまま選べるように、全ポケモンを候補にする)。技・持ち物は現行
+  // レギュレーションのスコープ分のみ (effScopeSet)
   SPECIES_OPTIONS = Object.entries(NAMES._ja2en || {})
     .filter(([, en]) => { if (seen.has(en)) return false; seen.add(en); return true; })
     .map(([jaName, en]) => ({ v: en, l: biLabel(jaName, en) }))
     .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  const moveScope = effScopeSet(CHAMP && CHAMP.moves, REG && REG.moves);
+  const itemScope = effScopeSet(CHAMP && CHAMP.items, REG && REG.items);
   MOVE_OPTIONS = [{ v: '', l: '（技なし）' }].concat(
     Object.entries(NAMES._moveJa2en || {})
-      .filter(([, en]) => !CHAMP.moves.size || CHAMP.moves.has(en))
+      .filter(([, en]) => !moveScope.size || moveScope.has(en))
       .map(([jaName, en]) => ({ v: en, l: biLabel(jaName, en) }))
       .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
   ITEM_OPTIONS = [{ v: '', l: 'なし' }].concat(
     [...gen.items].map(it => it.name)
-      .filter(en => !CHAMP.items.size || CHAMP.items.has(en))
+      .filter(en => !itemScope.size || itemScope.has(en))
       .map(en => ({ v: en, l: biLabel((NAMES._itemEn2ja || {})[idOf(en)] || en, en) }))
       .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
   await loadMyTeam();
