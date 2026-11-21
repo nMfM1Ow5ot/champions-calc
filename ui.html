@@ -126,6 +126,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .level{font-size:.8rem; color:var(--dim)}
 .typesfield{display:flex; gap:.3rem}
 .typechip{font-size:.8rem; font-weight:700; color:#fff; border-radius:.4rem; padding:.15rem .5rem; text-shadow:0 0 2px rgba(0,0,0,.45); white-space:nowrap}
+.typechip.tera{box-shadow:0 0 0 2px #fff inset, 0 0 6px rgba(255,255,255,.55)}
+.terawrap{display:inline-flex; align-items:center; gap:.35rem}
+.terawrap .sdd{min-width:9.5rem}
 .secondline{display:flex; align-items:center; gap:.8rem; margin-top:.5rem}
 .hpbar{width:10rem; height:.4rem; border-radius:1.5rem; background:rgba(255,255,255,.15); overflow:hidden; flex:none}
 .hpbar i{display:block; height:100%; background:var(--blue); border-radius:1.5rem}
@@ -346,9 +349,10 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
 import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData, createEstimator, labelSide, labelSpecies } from './bundle.mjs';
 
 const gen = Generations.get(9);const STATJ = [['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SPA'],['spd','SPD'],['spe','SPE']];
-const TYPE_JA = {Normal:'ノーマル',Fire:'ほのお',Water:'みず',Electric:'でんき',Grass:'くさ',Ice:'こおり',Fighting:'かくとう',Poison:'どく',Ground:'じめん',Flying:'ひこう',Psychic:'エスパー',Bug:'むし',Rock:'いわ',Ghost:'ゴースト',Dragon:'ドラゴン',Dark:'あく',Steel:'はがね',Fairy:'フェアリー'};
+const TYPE_JA = {Normal:'ノーマル',Fire:'ほのお',Water:'みず',Electric:'でんき',Grass:'くさ',Ice:'こおり',Fighting:'かくとう',Poison:'どく',Ground:'じめん',Flying:'ひこう',Psychic:'エスパー',Bug:'むし',Rock:'いわ',Ghost:'ゴースト',Dragon:'ドラゴン',Dark:'あく',Steel:'はがね',Fairy:'フェアリー',Stellar:'ステラ'};
+const TERA_TYPES = Object.keys(TYPE_JA);
 const TYPE_SHORT = {Normal:'NRML',Fire:'FIRE',Water:'WATR',Electric:'ELEC',Grass:'GRASS',Ice:'ICE',Fighting:'FIGHT',Poison:'POISON',Ground:'GROUND',Flying:'FLYING',Psychic:'PSYC',Bug:'BUG',Rock:'ROCK',Ghost:'GHOST',Dragon:'DRAGON',Dark:'DARK',Steel:'STEEL',Fairy:'FARY'};
-const TYPE_COLOR = {Normal:'#8a8a6a',Fire:'#d96f26',Water:'#4f7de0',Electric:'#d9b62a',Grass:'#67b83c',Ice:'#7fc9c6',Fighting:'#b02a24',Poison:'#923a92',Ground:'#c9a94f',Flying:'#8f7fe8',Psychic:'#e84f7f',Bug:'#93a51a',Rock:'#a08f2f',Ghost:'#5f4a8a',Dragon:'#5f2ef0',Dark:'#5f4a3d',Steel:'#9a9ab5',Fairy:'#d685ad'};
+const TYPE_COLOR = {Normal:'#8a8a6a',Fire:'#d96f26',Water:'#4f7de0',Electric:'#d9b62a',Grass:'#67b83c',Ice:'#7fc9c6',Fighting:'#b02a24',Poison:'#923a92',Ground:'#c9a94f',Flying:'#8f7fe8',Psychic:'#e84f7f',Bug:'#93a51a',Rock:'#a08f2f',Ghost:'#5f4a8a',Dragon:'#5f2ef0',Dark:'#5f4a3d',Steel:'#9a9ab5',Fairy:'#d685ad',Stellar:'#35a29f'};
 const NATURES = ['Hardy','Lonely','Brave','Adamant','Naughty','Bold','Docile','Relaxed','Impish','Lax','Timid','Hasty','Serious','Jolly','Naive','Modest','Mild','Quiet','Bashful','Rash','Calm','Gentle','Sassy','Careful','Quirky'];
 const NAT_JA = {Hardy:'がんばりや',Lonely:'さみしがり',Brave:'ゆうかん',Adamant:'いじっぱり',Naughty:'やんちゃ',Bold:'ずぶとい',Docile:'すなお',Relaxed:'のんき',Impish:'わんぱく',Lax:'のうてんき',Timid:'おくびょう',Hasty:'せっかち',Serious:'まじめ',Jolly:'ようき',Naive:'むじゃき',Modest:'ひかえめ',Mild:'おっとり',Quiet:'れいせい',Bashful:'てれや',Rash:'うっかりや',Calm:'おだやか',Gentle:'おとなしい',Sassy:'なまいき',Careful:'しんちょう',Quirky:'きまぐれ'};
 const NAT_UPDOWN = {Lonely:['atk','def'],Brave:['atk','spe'],Adamant:['atk','spa'],Naughty:['atk','spd'],Bold:['def','atk'],Relaxed:['def','spe'],Impish:['def','spa'],Lax:['def','spd'],Timid:['spe','atk'],Hasty:['spe','def'],Jolly:['spe','spa'],Naive:['spe','spd'],Modest:['spa','atk'],Mild:['spa','def'],Quiet:['spa','spe'],Rash:['spa','spd'],Calm:['spd','atk'],Gentle:['spd','def'],Sassy:['spd','spe'],Careful:['spd','spa']};
@@ -857,6 +861,10 @@ document.addEventListener('error', e => {
   }
 }, true);
 function typeChips(spec) {
+  if (spec.terastallized && spec.teraType) {
+    const t = spec.teraType;
+    return `<span class="typechip tera" style="background:${TYPE_COLOR[t] || '#555'}">${TYPE_JA[t] || t}</span>`;
+  }
   return speciesData(spec).types.map(t => `<span class="typechip" style="background:${TYPE_COLOR[t] || '#555'}">${TYPE_JA[t] || t}</span>`).join('');
 }
 function natureMark(spec, key) {
@@ -890,6 +898,7 @@ function exportText(spec) {
     `${effSpecies(spec)}${spec.item ? ' @ ' + spec.item : ''}`,
     `Ability: ${spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability}`,
     'Level: 50',
+    ...(spec.teraType ? [`Tera Type: ${spec.teraType}`] : []),
     `${spec.nature} Nature`,
   ];
   if (spParts.length) lines.push(`SPs: ${spParts.join(' / ')}`);
@@ -951,6 +960,7 @@ function parseSet(text) {
   for (const line of lines.slice(1)) {
     let m;
     if ((m = line.match(/^Ability:\s*(.+)$/i))) out.ability = resolveAbility(m[1]) || m[1].trim();
+    else if ((m = line.match(/^Tera Type:\s*(.+)$/i))) { const tt = TERA_TYPES.find(t => t.toLowerCase() === m[1].trim().toLowerCase()); if (tt) out.teraType = tt; }
     else if ((m = line.match(/^(\w+)\s+Nature$/i))) out.nature = m[1];
     else if ((m = line.match(/^SPs:\s*(.+)$/i))) for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) out.sp[statMap[p[2]]] = Math.min(32, +p[1]); }
     else if ((m = line.match(/^EVs:\s*(.+)$/i))) for (const part of m[1].split('/')) { const p = part.trim().match(/^(\d+)\s+(\w+)$/); if (p && statMap[p[2]]) out.sp[statMap[p[2]]] = Math.min(32, Math.round(+p[1] / 8)); }
@@ -1195,11 +1205,18 @@ function pokeInfo(side) {
     });
     nameHTML = ddHTML('species:mine');
   }
+  if (spec.terastallized) {
+    regDD(`tera:${side}`, {
+      options: TERA_TYPES.map(t => ({ v: t, l: biLabel(TYPE_JA[t] || t, t) })),
+      value: spec.teraType || (sd && sd.types && sd.types[0]) || 'Normal',
+      onPick: v => { spec.teraType = v; calcAll(); },
+    });
+  }
   const hp = Math.max(0, Math.min(100, Math.round(spec.curHPPercent ?? 100)));
   return `<div class="pokeinfo">
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
-      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span></div>
+      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><span class="terawrap"><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${spec.terastallized ? ddHTML(`tera:${side}`) : ''}</span></div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
         <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
@@ -1552,6 +1569,7 @@ function applyImport(side, parsed) {
     moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
     curHPPercent: keep.curHPPercent, boosts: keep.boosts, status: keep.status,
     megaSpecies, megaAbility, mega: mp ? true : (!!megaSpecies && keep.mega),
+    teraType: parsed.teraType || '', terastallized: !!parsed.teraType,
     knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
     note: 'Imported set', corrected: ['読み込み'],
   };
@@ -1727,6 +1745,14 @@ document.addEventListener('click', e => {
   }
   const cr = t.closest('[data-crit]');
   if (cr) { const side = cr.dataset.crit; ui.crit[side] = !ui.crit[side]; calcAll(); return; }
+  const tr = t.closest('[data-tera]');
+  if (tr) {
+    const spec = DS(tr.dataset.tera);
+    spec.terastallized = !spec.terastallized;
+    if (spec.terastallized && !spec.teraType) { const sd2 = speciesData(spec); spec.teraType = (sd2 && sd2.types && sd2.types[0]) || 'Normal'; }
+    calcAll();
+    return;
+  }
   const spb = t.closest('[data-spread]');
   if (spb) {
     if (Date.now() - (ui.spreadGuard || 0) < 1000) return;
@@ -1860,6 +1886,7 @@ function applyRevealedPreserving(spec, rev) {
   if (!fresh.megaSpecies && spec.megaSpecies) fresh.megaSpecies = spec.megaSpecies;
   fresh.knownMoves = [...new Set([...(fresh.knownMoves || []), ...(spec.knownMoves || [])])];
   fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status; fresh.moveSpec = spec.moveSpec;
+  fresh.teraType = spec.teraType; fresh.terastallized = spec.terastallized;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
