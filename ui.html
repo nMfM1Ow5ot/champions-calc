@@ -984,6 +984,8 @@ function oppInfoLine() {
   const parts = [];
   if (rates.ability && !corr.includes('特性')) parts.push(`特性 ${ja('abilities', spec.ability)} ${rates.ability}%`);
   else if (rates.ability) parts.push(`特性 ${ja('abilities', spec.ability)}`);
+  if (rates.nature && !corr.includes('性格')) parts.push(`性格 ${NAT_JA[spec.nature] || spec.nature} ${rates.nature}%`);
+  else if (rates.nature) parts.push(`性格 ${NAT_JA[spec.nature] || spec.nature}`);
   if (rates.item && !corr.includes('持ち物')) parts.push(`持ち物 ${spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : 'なし'} ${rates.item}%`);
   else if (rates.item) parts.push(`持ち物 ${spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : 'なし'}`);
   if (rates.patternLabel && !corr.includes('EV')) parts.push(`EV型 ${rates.patternLabel} ${rates.pattern || ''}%`);
