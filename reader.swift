@@ -5920,7 +5920,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1629"
+let readerBuild = "20261121_1636"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -6647,6 +6647,58 @@ func teamScreenCardCount(image: CGImage) -> Int {
 
 // MARK: - 撮影ボタンの HTTP 受付 (UI から localhost:8899/capture?tab=ability|status)
 
+// 見せ合いテスト用の一発同定 (テスト用 .sh から localhost:8899/previewtest)。
+// 対戦の流れとは独立に、その時点の画面で identifyPreview を 1 回だけ
+// 実行し、撮影画像と結果を logs/preview_test_<日時>.jpg/.json に残す。
+// 投票・選出セッション・ログ状態には一切触れない。結果 JSON は
+// ログ分析チャットでの精度分析用に、枠ごとの候補・タイプ・スコアを
+// 含む (preview_id の証拠と同じ形)
+func handlePreviewTestRequest() -> String {
+    guard let img = captureQuickTime() else {
+        return "{\"ok\":false,\"error\":\"QuickTime の画面を取得できませんでした\"}"
+    }
+    if isBlankFrame(img) {
+        return "{\"ok\":false,\"error\":\"画面が暗い/真っ黒です（iPad の画面が消えていないか確認してください）\"}"
+    }
+    let result = identifyPreview(image: img)
+    let base = "preview_test_\(battleStamp())"
+    try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+    var imageFile = ""
+    if let data = NSBitmapImageRep(cgImage: img).representation(using: .jpeg, properties: [.compressionFactor: 0.7]),
+       (try? data.write(to: logsDirURL.appendingPathComponent(base + ".jpg"))) != nil {
+        imageFile = base + ".jpg"
+    }
+    let slotDetails: [[String: Any]] = (result?.slots ?? []).map { s in
+        ["pick": s.pick ?? "", "score": (s.score * 1000).rounded() / 1000,
+         "decisive": s.decisive, "expanded": s.expanded, "types": s.types, "gender": s.gender,
+         "candidates": s.candidates.map { [$0.0, ($0.1 * 1000).rounded() / 1000] as [Any] }]
+    }
+    var oppTeam: [String] = (result?.team ?? []).map { $0 ?? "" }
+    while oppTeam.count < 6 { oppTeam.append("") }
+    let mineLine = (trainerMine.isEmpty ? "Your team:" : "\(trainerMine)'s team:") + " " + teamOrder.joined(separator: " / ")
+    let oppLine = (trainerOpp.isEmpty ? "Opponent" : trainerOpp) + "'s team: " + oppTeam.map { $0.isEmpty ? "?" : $0 }.joined(separator: " / ")
+    let f = ISO8601DateFormatter()
+    f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    f.formatOptions = [.withInternetDateTime]
+    let ev: [String: Any] = ["kind": "preview_test", "at": f.string(from: Date()), "readerBuild": readerBuild,
+                             "trainerMine": trainerMine, "trainerOpp": trainerOpp,
+                             "mine": teamOrder, "oppTeam": oppTeam, "slots": slotDetails,
+                             "identified": result != nil, "lines": [mineLine, oppLine],
+                             "jpg": imageFile, "json": base + ".json"]
+    if let data = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
+        try? data.write(to: logsDirURL.appendingPathComponent(base + ".json"), options: .atomic)
+    }
+    print("[preview-test] 見せ合いテストを保存しました: logs/\(base) (同定: \(result != nil ? "実施" : "失敗"))")
+    print(mineLine)
+    print(oppLine)
+    fflush(stdout)
+    let respObj: [String: Any] = ["ok": true, "lines": [mineLine, oppLine],
+                                  "jpg": imageFile, "json": base + ".json", "slots": slotDetails]
+    if let data = try? JSONSerialization.data(withJSONObject: respObj, options: []),
+       let s = String(data: data, encoding: .utf8) { return s }
+    return "{\"ok\":false,\"error\":\"結果の作成に失敗しました\"}"
+}
+
 var captureListener: NWListener? = nil
 
 func startCaptureServer() {
@@ -6655,6 +6707,12 @@ func startCaptureServer() {
     listener.newConnectionHandler = { conn in
         conn.start(queue: .global())
         conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, _, _ in
+            if let d = data, let s = String(data: d, encoding: .utf8), s.contains("previewtest") {
+                let body = handlePreviewTestRequest()
+                let resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
+                conn.send(content: resp.data(using: .utf8), completion: .contentProcessed { _ in conn.cancel() })
+                return
+            }
             var tab = "ability"
             if let d = data, let s = String(data: d, encoding: .utf8), s.contains("tab=status") { tab = "status" }
             var body = "{\"ok\":false,\"error\":\"QuickTime の画面を取得できませんでした\"}"
