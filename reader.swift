@@ -1062,6 +1062,16 @@ func emitLog(_ line: String) { emitLog(line, applyNow: true) }
 // applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
 // (交代行の後に出す保留ランク行など。適用は applyEvent で発生時に行う)
 func emitLog(_ line: String, applyNow: Bool) {
+    // 勝敗が確定した後の新規行は次試合のものなので、前試合のログへ
+    // 連結しないよう先に新しい試合のログを始める (最終防衛)。
+    // 入口側のガード (繰り出し文・プレート・ログ画面・見せ合い) を
+    // すり抜けた行もここで必ず切り分ける。実例: 2026-11-20 の
+    // battle_20261120_124322 は、|win| で完結した vs Ryzz 戦に
+    // 次試合 (開始検出が発火しなかった vs Foxy2905 戦) の行が
+    // ヘッダーなしで追記され、2 試合が 1 ファイルに連結していた。
+    // startBattleLog 内のヘッダー行は resetLogState で winLogged が
+    // 落ちた後に emitLog されるため、ここで再帰はしない
+    if winLogged { startBattleLog() }
     // 終了行 (sideend/fieldend) が開始行なしで出た場合は、開始側を
     // 取りこぼした可能性をまず疑う (2026-11-20 vs チャンピオン戦の
     // 教訓: 序盤の取り込み失敗で開始行が欠け、実在した条件の終了行
@@ -1742,7 +1752,11 @@ func flushPendingDamage(force: Bool = false) {
 
 // プレートの差分をログ行に変換する
 func processPlates(_ hits: [String: SlotState]) {
-    if !logStarted {
+    // 開始処理を行う条件: (a) まだ開始していない、または (b) 勝敗確定後に
+    // 前試合と異なる種族のプレートが現れた (= 次試合の開始証拠なので、
+    // 前試合のログへ連結しないよう先に新しい試合を始める。同試合の余韻で
+    // プレートが変わらない間は始め直さない)
+    if !logStarted || (winLogged && hits.contains { (name, s) in lastSlots[name]?.speciesEn != s.speciesEn }) {
         // 選出画面を経ずにプレートから対戦が始まった場合は、開始処理を
         // 取りこぼしている (対戦開始時に画面がキーボード等で覆われていた、
         // アプリが裏画面だった等。2026-11-21 のユーザー報告)。相手の先発は
@@ -2799,7 +2813,7 @@ func parseLogScreen(image: CGImage) -> Bool {
     if debugMode {
         print("ログ画面診断: ターン=\(turnFound.map { "\($0)" } ?? "不明 (\(tn) として処理)") チップ=\(chipHits.count)件")
     }
-    if !logStarted { startBattleLog() }
+    if !logStarted || winLogged { startBattleLog() }
     scanFieldHeader(boxes)
     if tn > currentTurn {
         currentTurn = tn
@@ -4857,7 +4871,7 @@ func runOnce(image: CGImage) {
                 let filled = previewBestTeam.compactMap { $0 }
                 oppTeamSeen = filled
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
-                if !logStarted { startBattleLog() }
+                if !logStarted || winLogged { startBattleLog() }
                 var obj: [String: Any] = [:]
                 obj["mine"] = [Any]()
                 obj["opps"] = [Any]()
@@ -5020,7 +5034,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1417"
+let readerBuild = "20261121_1421"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
