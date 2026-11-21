@@ -774,8 +774,37 @@ def _report_upload_completion(state):
     if held:
         print(f"[log] 送信できる分は完了しました "
               f"(備考の入力待ちが {len(held)} 件あります)", flush=True)
+        _auto_submit_empty_notes()
     else:
         print("[log] 送信が完了しました", flush=True)
+
+
+def _auto_submit_empty_notes():
+    """「送信できる分は完了しました (備考の入力待ちが N 件あります)」
+    の表示時点で備考待ちの試合を、空欄の備考で送信に進める
+    (2026-11-21 のユーザー追加指示)。プロンプト表示からの30秒
+    タイムアウトと並ぶ、もう1つの空欄処理の契機。対象は
+    list_pending_log_notes() が返す試合で、ゲート導入前の試合は
+    含まれない。すでに備考ファイルがある試合は触らない。
+    プロンプトが表示中の試合でユーザーがこの後に入力した場合は、
+    プロンプト側の保存が上書きする (ユーザーの入力が優先)。
+    作成した備考の試合は次の送信サイクルで送られる。
+    """
+    try:
+        pending = list_pending_log_notes()
+    except Exception as e:
+        _record_crash("auto_empty_notes", e)
+        return
+    done = 0
+    for p in pending:
+        key = p.get("key") or ""
+        if _note_exists_any(key):
+            continue
+        if save_log_note(key, ""):
+            done += 1
+    if done:
+        print(f"[log] 備考の入力待ちが {done} 件あったため、"
+              "空欄の備考で送信します", flush=True)
 
 
 def check_log_token():
