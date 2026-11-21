@@ -213,23 +213,32 @@ function megaFromItemJa(jaName, speciesEn) {
   return { megaSpecies: sd.name, itemEn };
 }
 function pickNature(naturesJa, sp, styleKey) {
-  const cands = [];
+  // 「使用率トップ型」は最も使われている性格をそのまま採用する。
+  // 以前は「振った能力を下げない/上げる」性格に絞っていたため、実使用率
+  // 1位でない性格 (例: ブリジュラスで ひかえめ 37.2% ← 本来は おだやか
+  // 39.2%) が選ばれる問題があった (2026-11-22 ユーザー指摘で修正)
   for (const n of naturesJa) {
     const en = NAT_JA2EN[n.name];
     if (!en) { unmapped.natures.add(n.name); continue; }
-    cands.push({ en, rate: n.rate });
+    return { en, rate: n.rate };
   }
-  if (!cands.length) return { en: 'Serious', rate: 0 };
-  const invested = k => (sp[k] || 0) >= 16;
-  const ok = cands.filter(c => {
-    const ud = NAT_UPDOWN[c.en];
-    if (!ud) return true;
-    return !invested(ud[1]); // 振った能力を下げる性格は避ける
-  });
-  const pool = ok.length ? ok : cands;
-  const boosting = pool.filter(c => { const ud = NAT_UPDOWN[c.en]; return ud && invested(ud[0]); });
-  const finalPool = boosting.length ? boosting : pool;
-  return finalPool.sort((a, b) => b.rate - a.rate)[0];
+  return { en: 'Serious', rate: 0 };
+}
+// EV 型は「系統」(ラベルの '+' より前の部分。例: 'HD + bcs' の 'HD') ごとに
+// 使用率を合計し、最も大きい系統の中で最も使われている型を採用する。
+// 耐久型のように近い振り方が多数に分散する種族では、単独1位の型 (例:
+// ブリジュラスの 'CS + h' 6.5%) が系統の合計 (HD 系 ≈ 21%) を代表しない
+// ため (2026-11-22 ユーザー指摘で導入)
+function pickPattern(patterns) {
+  if (!patterns || !patterns.length) return null;
+  const fam = new Map();
+  for (const p of patterns) {
+    const key = String(p.label || '').split(' +')[0];
+    fam.set(key, (fam.get(key) || 0) + (p.rate || 0));
+  }
+  let bestKey = null, bestRate = -1;
+  for (const [k, r] of fam) { if (r > bestRate) { bestRate = r; bestKey = k; } }
+  return patterns.find(p => String(p.label || '').split(' +')[0] === bestKey) || patterns[0];
 }
 function buildSet(code, d) {
   const species = resolveSpecies(d.ja);
@@ -249,12 +258,8 @@ function buildSet(code, d) {
   }
   if (topItemJa && !topItemEn && !megaSpecies) unmapped.items.add(topItemJa.name);
   const effSd = megaSpecies ? gen.species.get(megaSpecies.toLowerCase().replace(/[^a-z0-9]/g, '')) : sd;
-  // SP pattern: メガの場合はその攻撃スタイルに合う最上位パターンを優先
-  let pattern = d.patterns[0];
-  if (megaSpecies && d.patterns.length) {
-    const styleKey = effSd.baseStats.spa > effSd.baseStats.atk ? 'spa' : 'atk';
-    pattern = d.patterns.find(p => (p.sp[styleKey] || 0) >= 16) || pattern;
-  }
+  // SP pattern: 系統合計が最大の系統の最上位型 (pickPattern)
+  const pattern = pickPattern(d.patterns);
   const sp = pattern ? { ...pattern.sp } : {};
   const styleKey = (sp.spa || 0) > (sp.atk || 0) ? 'spa' : (sp.atk || 0) > 0 ? 'atk' : (effSd.baseStats.spa > effSd.baseStats.atk ? 'spa' : 'atk');
   const nature = pickNature(d.natures, sp, styleKey);
