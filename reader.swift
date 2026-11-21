@@ -4622,6 +4622,11 @@ struct PvSlotInfo {
 var pvSpeciesTypes: [String: [String]] = [:]
 var pvSpeciesGender: [String: [String]] = [:]   // 種族 → なりうる性別 ("M"/"F"/"N")
 var pvFeatures: [String: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)] = [:]
+// 実フレームテンプレート: 正解が確定した見せ合い画像から抽出した特徴。
+// preview_features.json の各エントリの "templates" に同梱される
+// (build_frame_templates.py が登録する)。種族のスコアは本参照と
+// テンプレート群の最小を取る (pvBestScore)
+var pvTemplateFeatures: [String: [(hash: [UInt8], hue: [Double], aspect: Double, density: Double, gender: String)]] = [:]
 var pvTypeIcons: [String: (rgb: [Double], glyph: [Double])] = [:]
 var pvDataLoaded = false
 
@@ -4670,6 +4675,24 @@ func loadPreviewData() {
         pvFeatures[name] = (bytes, pvNumArray(d["hue"]),
                             (d["aspect"] as? NSNumber)?.doubleValue ?? 1,
                             (d["density"] as? NSNumber)?.doubleValue ?? 0)
+        if let tlist = d["templates"] as? [[String: Any]] {
+            var tpls: [(hash: [UInt8], hue: [Double], aspect: Double, density: Double, gender: String)] = []
+            for t in tlist {
+                guard let thex = t["hash"] as? String else { continue }
+                var tbytes: [UInt8] = []
+                var tidx = thex.startIndex
+                while tidx < thex.endIndex {
+                    let tnxt = thex.index(tidx, offsetBy: 2)
+                    if let b = UInt8(thex[tidx..<tnxt], radix: 16) { tbytes.append(b) }
+                    tidx = tnxt
+                }
+                tpls.append((tbytes, pvNumArray(t["hue"]),
+                             (t["aspect"] as? NSNumber)?.doubleValue ?? 1,
+                             (t["density"] as? NSNumber)?.doubleValue ?? 0,
+                             t["gender"] as? String ?? ""))
+            }
+            if !tpls.isEmpty { pvTemplateFeatures[name] = tpls }
+        }
     }
     for (name, v) in iobj {
         if let d = v as? [String: Any] { pvTypeIcons[name] = (pvNumArray(d["rgb"]), pvNumArray(d["glyph"])) }
@@ -5104,6 +5127,32 @@ func pvScore(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double
     return hd - 0.35 * hc + 0.15 * abs(log(f.aspect / ref.aspect)) + 0.25 * abs(f.density - ref.density)
 }
 
+// 姿・色に実質的な性別差がある種族 (フォルム自体が雌雄を表す
+// Meowstic / Indeedee / Basculegion 等は除く)。これらの種族でのみ、
+// テンプレートの性別で絞り込む
+let pvGenderDimorphic: Set<String> = ["Hippowdon", "Pyroar", "Pikachu", "Scizor", "Heracross", "Weavile"]
+
+// 種族のスコア: 本参照と実フレームテンプレート群の最小スコア。
+// 性別による絞り込みは、性別差のある種族で雌雄両方のテンプレートが
+// あるときだけ行う (性別差の無い種族では、個体の性別タグは見た目と
+// 無関係なため絞り込まない)
+func pvBestScore(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double),
+                 _ name: String, _ gender: String?) -> Double? {
+    var best = pvFeatures[name].map { pvScore(f, $0) }
+    var tpls = pvTemplateFeatures[name] ?? []
+    if let gender, pvGenderDimorphic.contains(name) {
+        let genders = Set(tpls.map { $0.gender }.filter { !$0.isEmpty })
+        if genders.contains(gender) && genders.count >= 2 {
+            tpls = tpls.filter { $0.gender.isEmpty || $0.gender == gender }
+        }
+    }
+    for t in tpls {
+        let s = pvScore(f, (t.hash, t.hue, t.aspect, t.density))
+        if best == nil || s < best! { best = s }
+    }
+    return best
+}
+
 // 選出画面 1 枚から相手チームを推定する。何も分からなければ nil
 // 第1段 (b) タイプ関門の緩和: タイプで絞った候補内の照合スコアが
 // 全体的に悪い (最良でも pvSoftGateScore 超) 場合は、アイコンを
@@ -5129,8 +5178,9 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
     // 全種族への再照合 (候補を広げたランキングを返す)。性別が読めて
     // いれば、その性別になりえない種族は広げた先でも除外する
     func rankedAll(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double), _ gender: String?) -> [(String, Double)] {
-        var all = pvFeatures.filter { !pvBattleOnlyFormes.contains($0.key) }
-            .map { (n, ref) in (n, pvScore(f, ref)) }.sorted { $0.1 < $1.1 }
+        var all = pvFeatures.keys.filter { !pvBattleOnlyFormes.contains($0) }
+            .compactMap { n -> (String, Double)? in pvBestScore(f, n, gender).map { (n, $0) } }
+            .sorted { $0.1 < $1.1 }
         if let gender {
             let filtered = all.filter { pvSpeciesGender[$0.0]?.contains(gender) ?? true }
             if !filtered.isEmpty { all = filtered }
@@ -5201,7 +5251,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
             continue
         }
         var ranked = pool.compactMap { n -> (String, Double)? in
-            pvFeatures[n].map { (n, pvScore(f, $0)) }
+            pvBestScore(f, n, gender).map { (n, $0) }
         }.sorted { $0.1 < $1.1 }
         if ranked.isEmpty {
             slotRanked.append([]); slotDecisive.append(false); slotPoolCount.append(pool.count); slotMargin.append(0); slotExpanded.append(expanded)
@@ -6071,7 +6121,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1731"
+let readerBuild = "20261121_1754"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
