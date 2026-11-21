@@ -369,13 +369,44 @@ function pokedbParsedFor(speciesEn) {
   if (!u) { const base = gen.species.get(idOf(speciesEn))?.baseSpecies; if (base && base !== speciesEn) u = sets[idOf(base)]; }
   return u && u.code ? (POKEDB_PARSED[u.code] || null) : null;
 }
-let _globalNatureRates = null;
-function globalNatureRates() {
-  if (_globalNatureRates) return _globalNatureRates;
-  const agg = {};
-  if (POKEDB_PARSED) for (const e of Object.values(POKEDB_PARSED)) for (const n of (e.natures || [])) { const en = NAT_JA2EN[n.name]; if (en) agg[en] = (agg[en] || 0) + (n.rate || 0); }
-  _globalNatureRates = agg;
-  return agg;
+// 使用率順オプションの共通処理: rateOf(英名) が率を返すものを使用率の降順 (% 併記)、
+// 残りをラベルのあいうえお順に並べ替えた新しい配列を返す
+function usageSortOptions(options, rateOf) {
+  const rated = [], rest = [];
+  for (const o of options) {
+    const r = o.v ? rateOf(o.v) : null;
+    if (r != null) rated.push({ o, r }); else rest.push(o);
+  }
+  rated.sort((a, b) => b.r - a.r);
+  rest.sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  return rated.map(({ o, r }) => ({ ...o, extra: (o.extra || '') + ` <span class="ddrate">${r}%</span>` })).concat(rest);
+}
+// 特性プルダウンの選択肢: その種族の使用率順 (% 併記)、残りはあいうえお順
+function abilityOptionsFor(spec, abs) {
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  const rates = {};
+  if (pd && Array.isArray(pd.abilities)) for (const e of pd.abilities) if (e.name) rates[z2h(e.name)] = e.rate;
+  return usageSortOptions(abs.map(a => ({ v: a, l: biLabel(ja('abilities', a), a) })), en => rates[z2h(ja('abilities', en))]);
+}
+// 技プルダウンの選択肢: その種族の使用率順 (% 併記)、残りはあいうえお順
+function moveOptionsFor(spec) {
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  const head = [{ v: '', l: '（技なし）' }];
+  const used = new Set(['']);
+  if (pd && Array.isArray(pd.moves)) {
+    const byV = new Map(MOVE_OPTIONS.map(o => [o.v, o]));
+    const rated = [];
+    for (const e of pd.moves) {
+      const en = e.ja ? (NAMES._moveJa2en || {})[z2h(e.ja)] : null;
+      if (!en || used.has(en) || !byV.has(en)) continue;
+      used.add(en);
+      rated.push({ o: byV.get(en), r: e.rate || 0 });
+    }
+    rated.sort((a, b) => b.r - a.r);
+    for (const { o, r } of rated) head.push({ ...o, extra: ` <span class="ddrate">${r}%</span>` });
+  }
+  const rest = MOVE_OPTIONS.filter(o => o.v && !used.has(o.v)).sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  return head.concat(rest);
 }
 let _itemJa2en = null;
 function itemJa2en(jaName) {
@@ -411,10 +442,23 @@ function natureOptionsFor(spec) {
   if (pd && Array.isArray(pd.natures) && pd.natures.length) {
     rates = {};
     for (const e of pd.natures) { const en = NAT_JA2EN[e.name]; if (en) rates[en] = e.rate || 0; }
+    if (!Object.keys(rates).length) rates = null;
   }
-  if (!rates || !Object.keys(rates).length) rates = globalNatureRates();
-  return [...NATURES].sort((a, b) => (rates[b] || 0) - (rates[a] || 0))
-    .map(n => ({ v: n, l: biLabel(NAT_JA[n] || n, n), extra: natureExtraHTML(n) }));
+  // 使用率順 (+- 記号の右横に % を併記)、使用率に入っていない残りと
+  // 分布が無い種族はあいうえお順 (記号のみで % なし)
+  const mk = n => {
+    const marks = natureExtraHTML(n).trim();
+    const pct = rates && rates[n] != null ? `<span class="ddrate">${rates[n]}%</span>` : '';
+    const extra = [marks, pct].filter(Boolean).join(' ');
+    return { v: n, l: biLabel(NAT_JA[n] || n, n), extra: extra ? ' ' + extra : '' };
+  };
+  const byJa = (a, b) => (NAT_JA[a] || a).localeCompare(NAT_JA[b] || b, 'ja');
+  if (rates) {
+    const rated = NATURES.filter(n => rates[n] != null).sort((a, b) => rates[b] - rates[a]);
+    const rest = NATURES.filter(n => rates[n] == null).sort(byJa);
+    return rated.concat(rest).map(mk);
+  }
+  return [...NATURES].sort(byJa).map(mk);
 }
 
 let NAMES = { species: {}, moves: {}, abilities: {} };
@@ -1166,7 +1210,7 @@ function metaRow(side) {
   if (spec.ability && !abs.includes(spec.ability)) abs.push(spec.ability);
   if (spec.mega && spec.megaAbility && !abs.includes(spec.megaAbility)) abs.push(spec.megaAbility);
   regDD(`ability:${side}`, {
-    options: abs.map(a => ({ v: a, l: biLabel(ja('abilities', a), a) })),
+    options: abilityOptionsFor(spec, abs),
     value: (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability, highlight: corr('特性'),
     onPick: v => { if (spec.mega && spec.megaAbility) spec.megaAbility = v; else spec.ability = v; if (side === 'opps') markCorrected(spec, '特性'); calcAll(); },
   });
@@ -1269,7 +1313,7 @@ function movesBox(side, res) {
     <div class="mvhead mid">KO %</div>`;
   const rows = [0, 1, 2, 3].map(mi => {
     regDD(`move:${side}:${mi}`, {
-      options: MOVE_OPTIONS, value: spec.moves[mi] || '', clearable: true, placeholder: '（技なし）',
+      options: moveOptionsFor(spec), value: spec.moves[mi] || '', clearable: true, placeholder: '（技なし）',
       extra: (() => {
         const mv0 = spec.moves[mi];
         let out = '';
