@@ -20,8 +20,16 @@ fi
 echo "最新のファイルに同期します..."
 python3 sync_ui.py --force || true
 
-# UI サーバを裏で起動し、終了時に一緒に止める
-python3 serve.py &
+# UI サーバを裏で起動し、終了時に一緒に止める。
+# 備考のターミナル入力が確実に効くよう、標準入力は制御端末 (/dev/tty) に
+# 明示的につなぐ (このスクリプト自体の標準入力がターミナルでない形で
+# 起動されても、serve.py のプロンプトが無言で無効にならないように。
+# 2026-11-21 の備考送信失敗を受けた対策)
+if [ -e /dev/tty ]; then
+  python3 serve.py < /dev/tty &
+else
+  python3 serve.py &
+fi
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null' EXIT INT TERM
 
