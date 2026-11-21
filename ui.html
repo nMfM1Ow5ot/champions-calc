@@ -765,6 +765,7 @@ let POKEDB_PARSED = null; // data/pokedb_parsed.json (pokedb の使用率分布�
 let META_SETS = null;      // data/meta_sets.json (上位勢の実在型コーパス。ベイズ推定の候補へ統合する)
 let META_SETS_LOADED = false; // meta_sets の読み込み成否が確定したか (ファイルが無い場合も確定扱い)
 let VGC_SETS = null;       // data/vgcpastes_sets.json (VGCPastes 収集型。SET プルダウンから選択可能にする)
+let VGC_CORPUS = null;     // data/vgc_pastes.json (VGCPastes 実在型コーパス。推定エンジンへ getData の VGC_SETS として渡す)
 let VGC_TEAMS = null;      // data/vgc_pastes.json (VGCPastes 収集チーム。プリセット欄の一覧用に遅延読み込み)
 let vgcTeamsLoading = false;
 let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
@@ -2659,7 +2660,7 @@ function applyMegaFlag(spec, en) {
 // 型推定エンジン (estimate_engine.mjs)。材料データは getData 経由で渡し、
 // 対戦の証拠は下記のアダプタが画面状態からスナップショットを作って渡す
 const estimator = createEstimator({
-  getData: () => ({ USAGE_SETS, POKEDB_PARSED, META_SETS, META_SETS_LOADED, NAMES }),
+  getData: () => ({ USAGE_SETS, POKEDB_PARSED, META_SETS, META_SETS_LOADED, NAMES, VGC_SETS: VGC_CORPUS }),
   effSpecies,
 });
 let infDirty = false;
@@ -3354,6 +3355,10 @@ document.getElementById('specSel')?.addEventListener('change', e => {
       const vg = await (await fetch('./data/vgcpastes_sets.json')).json();
       if (vg && vg.species) VGC_SETS = vg;
     } catch (e) { /* vgcpastes sets optional */ } })(),
+    (async () => { try {
+      const vc = await (await fetch('./data/vgc_pastes.json')).json();
+      if (vc && Array.isArray(vc.sets)) VGC_CORPUS = vc;
+    } catch (e) { /* vgcpastes corpus optional (engine falls back) */ } })(),
     (async () => { try {
       const cd = await (await fetch('./data/champions_dex.json')).json();
       CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
