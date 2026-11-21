@@ -165,12 +165,12 @@ func diagPrint(_ s: String) { if teamDiag { print(s); fflush(stdout) } }
 // 取得できるようになったら自動で再開するのが前提なので、「止まって
 // いる」のか「待っている」のかをターミナルで区別できるようにする
 func noteCaptureFailed(_ reason: String) {
-    if lastCaptureOK { print("[待機] \(reason) — 復帰を待っています"); fflush(stdout) }
+    if lastCaptureOK { print("[待機] \(reason) — 復帰を待っています"); fflush(stdout); notePreStartEvent("capture_failed") }
     lastCaptureOK = false
 }
 
 func noteCaptureOK() {
-    if !lastCaptureOK { print("[再開] 画面の取得を再開しました"); fflush(stdout) }
+    if !lastCaptureOK { print("[再開] 画面の取得を再開しました"); fflush(stdout); notePreStartEvent("capture_ok") }
     lastCaptureOK = true
 }
 
@@ -248,8 +248,8 @@ func isBlankFrame(_ image: CGImage) -> Bool {
 }
 
 func noteBlankFrame(_ blank: Bool) {
-    if blank && !blankFrameActive { print("[待機] 画面が暗い/真っ黒なため待機します"); fflush(stdout) }
-    if !blank && blankFrameActive { print("[再開] 画面が戻りました"); fflush(stdout) }
+    if blank && !blankFrameActive { print("[待機] 画面が暗い/真っ黒なため待機します"); fflush(stdout); notePreStartEvent("blank_start") }
+    if !blank && blankFrameActive { print("[再開] 画面が戻りました"); fflush(stdout); notePreStartEvent("blank_end") }
     blankFrameActive = blank
 }
 
@@ -2302,8 +2302,11 @@ func processPlates(_ hits: [String: SlotState]) {
             let leads = ["oppA", "oppB"].compactMap { hits[$0]?.speciesEn }
             print("[log] 対戦開始を取りこぼしたため、プレートから開始状態を復旧しました (相手先発: \(leads.joined(separator: ", ")))")
             fflush(stdout)
+            let startNow = Date()
             debugCapture(kind: "late_start", key: "late_start", rawText: "",
-                         detail: ["oppLeads": leads, "note": "preview not captured (screen covered or backgrounded)"])
+                         detail: ["oppLeads": leads, "note": "preview not captured (screen covered or backgrounded)",
+                                  "preStart": preStartEvents.map { "-\(Int(startNow.timeIntervalSince($0.0)))s \($0.1)" },
+                                  "readerUptimeSec": Int(startNow.timeIntervalSince(readerStartedAt))])
         }
     }
     // 保留中のランク変化行: 交代行が来なくても 30 秒経ったら出す
@@ -5039,12 +5042,31 @@ func translateBattleMessage(_ text: String) -> Bool {
     return battleLog.count > before
 }
 
+// 重複ボックスを落とす。Vision が同じ文字を単語ボックスと行ボックスの
+// 両方で返すことがあり (実例: 2026-11-22 battle_20261122_050512 の
+// メガ発表文で「相手の」が二重になった)、結合すると語が重複する。
+// より大きなボックスに矩形ごと内包され、そのテキストにも含まれる
+// ボックスだけを重複として除く
+func dedupeContainedBoxes(_ boxes: [OcrBox]) -> [OcrBox] {
+    return boxes.filter { a in
+        !boxes.contains { b in
+            b.text.contains(a.text) && !a.text.isEmpty
+                && a.x0 >= b.x0 - 0.01 && a.x1 <= b.x1 + 0.01
+                && a.y0 >= b.y0 - 0.01 && a.y1 <= b.y1 + 0.01
+                && (b.x1 - b.x0) * (b.y1 - b.y0) > (a.x1 - a.x0) * (a.y1 - a.y0)
+        }
+    }
+}
+
 // ルビ (ふりがな) のボックスを落とす。ゲーム内メッセージでは漢字の
 // 上に小さなルビが表示され (例: 味方→みかた、周り→まわ、守→まも)、
 // 位置順に結合するとルビが本文へ混入して文が崩れる (実例:
 // 2026-11-21 battle_20261121_224409 のワイドガード持続告知)。
 // ルビは本文より明らかに小さく、本文の字の直上に重なるため、
-// その 2 条件がそろう小さいボックスだけを除く
+// その 2 条件がそろう小さいボックスだけを除く。本文が行単位の
+// ボックスで返る場合は行ボックスがルビ帯まで含むため、その場合は
+// 行ボックスの上部に内包される小ボックスをルビとする (実例:
+// 2026-11-22 battle_20261122_050512 のメガ発表文)
 func dropRubyBoxes(_ boxes: [OcrBox]) -> [OcrBox] {
     let heights = boxes.map { $0.y1 - $0.y0 }.sorted()
     guard !heights.isEmpty else { return boxes }
@@ -5056,7 +5078,8 @@ func dropRubyBoxes(_ boxes: [OcrBox]) -> [OcrBox] {
         let isRuby = boxes.contains { o in
             let oh = o.y1 - o.y0
             return oh >= 0.8 * med && o.x0 < b.x1 && b.x0 < o.x1
-                && abs(o.y0 - b.y1) <= 0.02
+                && (abs(o.y0 - b.y1) <= 0.02
+                    || (b.y0 >= o.y0 - 0.005 && b.y1 <= o.y0 + 0.55 * oh))
         }
         return !isRuby
     }
@@ -5081,7 +5104,7 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
         }
         return true
     }
-    let msgBoxes = dropRubyBoxes(filteredBoxes).sorted { ($0.cy, $0.x0) < ($1.cy, $1.x0) }
+    let msgBoxes = dropRubyBoxes(dedupeContainedBoxes(filteredBoxes)).sorted { ($0.cy, $0.x0) < ($1.cy, $1.x0) }
     let text = msgBoxes.map { $0.text }.joined(separator: "")
     let norm = normalize(text)
     if norm.count < 4 { return }
@@ -6184,6 +6207,22 @@ var emptyBattleFrames = 0   // プレートが見えないフレームの連続�
 // だけは精度が要るため、2 フレーム目以降に 1 回だけ .accurate で取り直す
 var previewLastFrame = false
 var lastPreviewSeenAt = Date.distantPast   // 選出画面を最後に見た時刻 (同定のやり直し判定)
+
+// 開始前の画面状態の遷移記録 (late_start の証拠用)。見せ合いを取り
+// こぼした際、従来は「画面が覆われていたか裏画面だった」という推定
+// の注記しか残らず、実際に何が起きたかを後から区別できなかった
+// (実例: 2026-11-22 battle_20261122_050512)。取得失敗・暗転・マッ
+// チング・見せ合いの遷移だけを時刻付きで残し、late_start の記録に
+// 添付する
+let readerStartedAt = Date()
+var preStartEvents: [(Date, String)] = []
+func notePreStartEvent(_ s: String) {
+    if preStartEvents.last?.1 == s { return }
+    let now = Date()
+    preStartEvents.append((now, s))
+    preStartEvents.removeAll { now.timeIntervalSince($0.0) > 300 }
+    if preStartEvents.count > 40 { preStartEvents.removeFirst(preStartEvents.count - 40) }
+}
 var previewDetectCount = 0                 // この選出セッションで検出したフレーム数
 var previewNamesAccurateDone = false       // トレーナー名の .accurate 取り直し済みか
 func pvExtractTrainers(_ boxes: [OcrBox]) {
@@ -6248,6 +6287,7 @@ func updateMatchingDisplay(image: CGImage) {
     }
     if detectMatching(image: image) {
         let now = Date()
+        notePreStartEvent("matching_seen")
         if !matchingActive {
             matchingActive = true
             matchingSince = now
@@ -6404,6 +6444,7 @@ func runOnce(image: CGImage) {
     let wasPreviewFrame = previewLastFrame
     if detectPreview(image: image) {
         previewFrames += 1
+        notePreStartEvent("preview_seen")
         let sinceLastPreview = Date().timeIntervalSince(lastPreviewSeenAt)
         lastPreviewSeenAt = Date()
         // 見せ合い画面の最終フレームを保持する (同定の成否によらず、
@@ -6530,6 +6571,7 @@ func runOnce(image: CGImage) {
                     try? json.write(to: outURL, atomically: true, encoding: .utf8)
                 }
                 previewTeamWritten = true
+                notePreStartEvent("preview_identified")
                 if (filled.count >= 6 && previewAttempts >= 2) || previewAttempts >= 4 {
                     previewHandled = true
                     // ログの開始 (ヘッダーのスナップショット) は、同定が
@@ -6797,7 +6839,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0038"
+let readerBuild = "20261122_0525"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
