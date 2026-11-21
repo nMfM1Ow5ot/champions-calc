@@ -336,8 +336,25 @@ def _save_inference_log(body):
     name = f"battle_{battle}_inference.json"
     with open(os.path.join(LOG_DIR, name), "wb") as f:
         f.write(body)
-    print(f"[log] 推論過程ログを受け取りました: {name} "
-          f"({len(data['entries'])} 件)", flush=True)
+    # 起動前に終わった試合の推論過程ログが、UI の再送で起動時に
+    # 届くことがある。保存はするが、起動時に過去分の処理が走って
+    # いるように見える表示は出さない (2026-11-21 のユーザー指示)。
+    # 判定はその試合のログの時刻で行う (対戦中の試合にはまだ
+    # ログが無いため、通常どおり表示される)
+    ended_before_start = False
+    try:
+        gk = _gate_key(battle)
+        log_times = []
+        for n in os.listdir(LOG_DIR):
+            k = _battle_key(n)
+            if k is not None and _gate_key(k) == gk and n.endswith(".log"):
+                log_times.append(os.path.getmtime(os.path.join(LOG_DIR, n)))
+        ended_before_start = bool(log_times) and max(log_times) < _PROCESS_STARTED_AT
+    except OSError:
+        ended_before_start = False
+    if not ended_before_start:
+        print(f"[log] 推論過程ログを受け取りました: {name} "
+              f"({len(data['entries'])} 件)", flush=True)
     return name
 
 
@@ -624,8 +641,16 @@ def upload_logs_once(session_only=False):
 
 
 def _battle_group_mtimes(names):
-    """試合キー (salvage 束ね済み) ごとの最新ファイル時刻を返す。"""
-    mtimes = {}
+    """試合キー (salvage 束ね済み) ごとの代表時刻を返す。
+
+    代表時刻は、その試合のログ (.log) の最新時刻とする。推論過程
+    ログのように、対戦の終了後に遅れて届くファイルがあっても、
+    試合が「起動前に終わったものかどうか」の判定は変わらない
+    (2026-11-21 のユーザー報告: 起動時に UI から再送された推論
+    過程ログの時刻で、起動前の試合が送信対象に化けた)。ログの
+    無い一式は、全ファイルの最新時刻で代用する。"""
+    log_mtimes = {}
+    all_mtimes = {}
     for n in names:
         key = _battle_key(n)
         if key is None:
@@ -635,8 +660,10 @@ def _battle_group_mtimes(names):
         except OSError:
             continue
         gk = _gate_key(key)
-        mtimes[gk] = max(mtimes.get(gk, 0.0), mt)
-    return mtimes
+        all_mtimes[gk] = max(all_mtimes.get(gk, 0.0), mt)
+        if n.endswith(".log"):
+            log_mtimes[gk] = max(log_mtimes.get(gk, 0.0), mt)
+    return {gk: log_mtimes.get(gk, mt) for gk, mt in all_mtimes.items()}
 
 
 def _upload_logs_once_locked(session_only=False):
@@ -700,6 +727,14 @@ def _upload_logs_once_locked(session_only=False):
                   "python3 serve.py --note を実行してください)", flush=True)
     _log_hold_notice_keys.intersection_update(
         {_battle_key(n) for n in names if n.endswith(".log")})
+    if session_only:
+        # クラッシュ記録は、起動しただけでは送らない。起動後に
+        # 終わった試合がこのサイクルで送られる時に同梱する
+        # (本来のタイミングでの送信は止めない、という 2026-11-21
+        # のユーザー指示)
+        if not any(_battle_key(n) is not None for n, _, _ in pending):
+            pending = [(n, d, h) for n, d, h in pending
+                       if n != "serve_crashes.log"]
     # デバッグ同梱の掃除は 1 日 1 回まで (送信が無い日でもその回だけ目録を見る)
     prune_due = _log_prune_done_date != datetime.now(JST).date()
     if not pending and not prune_due:
