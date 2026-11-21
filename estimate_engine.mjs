@@ -84,7 +84,7 @@ function logSnapshot(species, turn, trigger) {
         def: ie.pairs.def ? ie.pairs.def.size : null, spd: ie.pairs.spd ? ie.pairs.spd.size : null,
         spe: ie.pairs.spe ? ie.pairs.spe.size : null },
       hpSps: ie.hpSps ? ie.hpSps.size : null } : null;
-    infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, speFlag: (ent && ent.speFlag) || null, map, marg, cover90, cands, inf });
+    infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, speFlag: (ent && ent.speFlag) || null, dmgFlag: (ent && ent.dmgFlag) || null, map, marg, cover90, cands, inf });
     if (infLog.length > 2000) infLog.splice(0, infLog.length - 2000);
   } catch (e) { /* ログ生成の失敗で推論を止めない */ }
 }
@@ -931,6 +931,12 @@ function bayesHardSpe(ent, verdicts) {
   dirty = true;
   return { applied: true, excluded };
 }
+// ダメージ仮説フラグ (dmgFlag) の対象判定: メガストーン候補は持ち物の
+// 上書きをしない (メガ進化と両立しないため)
+function isMegaStoneItem(item) {
+  if (!item) return false;
+  try { const it = gen.items.get(idOf(item)); return !!(it && it.megaStone); } catch (e) { return false; }
+}
 function processDamageBayes(ev, ctx) {
   // 自分自身へのダメージは攻撃として処理せず、反動の経路へ回す
   if (ev.atk && ev.atk === ev.def) { if (labelSide(ev.atk) === 'p2') processRecoilBayes(ev); return; }
@@ -939,6 +945,14 @@ function processDamageBayes(ev, ctx) {
   const md = moveData(ev.move);
   if (!md) return;
   const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
+  // ダメージ仮説フラグ (speFlag のダメージ版): 観測が全候補と矛盾する
+  // 場合に、発動表示のない持ち物効果を暫定仮説として立てる。対象は
+  // 「相手の攻撃が全候補の最大ロール超過」 (物理→こだわりハチマキ、
+  // 特殊→こだわりメガネ) と「自分の特殊攻撃が全候補の最小ロール未満」
+  // (→とつげきチョッキ) のみ。きあいのタスキや耐性きのみは発動が
+  // 明示表示され判明情報として届くため仮説の対象外 (ユーザーの指摘)。
+  // フラグが立っている間は当該方向の尤度を仮説持ち物前提で計算し、
+  // 持ち物が判明したら下ろす (applyRevealed)
   if (labelSide(ev.atk) === 'p2') {
     // 相手の攻撃: 自分の正確な被ダメ量と両立するロールの割合が尤度
     if (typeof ev.amt !== 'number' || ev.amt <= 0) return;
@@ -946,11 +960,29 @@ function processDamageBayes(ev, ctx) {
     const defSpec = ctx.myDef;
     const base = ctx.baseAtk;
     if (!ent || !defSpec || !base) return;
-    const counts = ent.cands.map(c => {
-      const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts);
-      return rolls.filter(r => r === ev.amt).length;
-    });
-    logTrigger = { turn: ev.turn, trig: { kind: 'damage', move: md.name, by: 'opp', amt: ev.amt, crit: !!ev.crit } };
+    const rollsList = ent.cands.map(c => damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts).rolls);
+    let counts = rollsList.map(rolls => rolls.filter(r => r === ev.amt).length);
+    const trig = { kind: 'damage', move: md.name, by: 'opp', amt: ev.amt, crit: !!ev.crit };
+    if (!counts.some(n => n > 0)) {
+      const over = rollsList.every(rolls => rolls.length && ev.amt > Math.max(...rolls));
+      if (over) {
+        trig.dir = 'over';
+        const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
+        if (want && !ent.dmgFlag) { ent.dmgFlag = want; trig.dmgFlagSet = want; }
+      }
+    }
+    const flag = ent.dmgFlag;
+    if (flag === 'Choice Band' || flag === 'Choice Specs') {
+      if ((flag === 'Choice Band' && md.category === 'Physical') || (flag === 'Choice Specs' && md.category === 'Special')) {
+        counts = ent.cands.map(c => {
+          const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
+          const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
+          return rolls.filter(r => r === ev.amt).length;
+        });
+        trig.dmgFlag = flag;
+      }
+    }
+    logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   } else {
     // 自分の攻撃: 相手の HP% 減少 (切り捨て/四捨五入の両対応) と両立するロールの割合
@@ -959,15 +991,37 @@ function processDamageBayes(ev, ctx) {
     const atkSpec = ctx.myAtk;
     const base = ctx.baseDef;
     if (!ent || !atkSpec || !base) return;
-    const counts = ent.cands.map(c => {
+    const pctCounts = (c, rolls) => {
       const hpVal = c.values.hp;
-      if (!hpVal) return 0;
-      const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts);
+      if (!hpVal || !rolls) return 0;
       let n = 0;
       for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
       return n;
-    });
-    logTrigger = { turn: ev.turn, trig: { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit } };
+    };
+    const rollsList = ent.cands.map(c => c.values.hp ? damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts).rolls : null);
+    let counts = ent.cands.map((c, i) => pctCounts(c, rollsList[i]));
+    const trig = { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit };
+    if (!counts.some(n => n > 0)) {
+      const under = ent.cands.every((c, i) => {
+        const rolls = rollsList[i];
+        if (!rolls || !c.values.hp) return false;
+        return ev.pct < Math.min(...rolls.map(r => Math.floor(r / c.values.hp * 100)));
+      });
+      if (under) {
+        trig.dir = 'under';
+        if (md.category === 'Special' && !ent.dmgFlag) { ent.dmgFlag = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
+      }
+    }
+    if (ent.dmgFlag === 'Assault Vest' && md.category === 'Special') {
+      counts = ent.cands.map(c => {
+        if (!c.values.hp) return 0;
+        const cc = isMegaStoneItem(c.item) ? c : { ...c, item: 'Assault Vest' };
+        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
+        return pctCounts(c, rolls);
+      });
+      trig.dmgFlag = 'Assault Vest';
+    }
+    logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   }
 }
@@ -1059,7 +1113,10 @@ function applyRevealed(list) {
     for (const c of ent.cands) { if (matchItem(c) && matchAbility(c)) survivorMass += c.post; else if (c.post > 0) excluded++; }
     const hardMode = (itemHard || ability !== null) && survivorMass > 0;
     let applied = false;
-    if (hardMode && itemHard) ent.speFlag = null; // 持ち物が判明したら素早さ仮説フラグは下ろす
+    // 持ち物が特定できた時点で仮説フラグ (素早さ・ダメージとも) は下ろす。
+    // 候補プールに該当型が無くハード適用できない (hardMode でない) 場合も、
+    // 判明そのものは確定情報なので仮説は維持しない
+    if (itemHard && item) { ent.speFlag = null; ent.dmgFlag = null; }
     if (hardMode) {
       if (excluded > 0) {
         for (const c of ent.cands) if (!(matchItem(c) && matchAbility(c))) c.post = 0;
@@ -1105,7 +1162,7 @@ function bayesView(spec) {
   if (!ent || !ent.used) return null;
   const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
   const map = sorted[0];
-  const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, speFlag: ent.speFlag || null, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
+  const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, speFlag: ent.speFlag || null, dmgFlag: ent.dmgFlag || null, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
   // 周辺分布の首位 (性格・持ち物): MAP は結合分布の最大であり、分布が
   // 拡散している局面では周辺の首位と食い違う。UI が表示で併記できるよう
   // 両方を渡す (採用する型そのものは従来どおり MAP)
@@ -1202,7 +1259,7 @@ function candRanges(args) {
     atkSide: { isHelpingHand: !!args.side[atkKey === 'mine' ? 'mine' : 'opp'].hand },
     defSide: { isLightScreen: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].light, isReflect: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].reflect, isAuroraVeil: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].veil, isFriendGuard: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].guard, isSR: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].rock, spikes: args.side[defKey === 'mine' ? 'mine' : 'opp'].spikes || 0 },
   });
-  const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst) => {
+  const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst, w) => {
     const sc = sideFor(atkKey, defKey);
     (moves || []).forEach((mv, mi) => {
       if (!mv || !defHp) return;
@@ -1215,18 +1272,29 @@ function candRanges(args) {
         { ...F, gameType: singleFn(mv) ? 'Singles' : 'Doubles', crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide });
       if (!rolls || !rolls.length) return;
       const lo = Math.min(...rolls) / defHp * 100, hi = Math.max(...rolls) / defHp * 100;
+      // 事後確率で重み付けした期待値 (包絡と同じ信用集合内での期待値)。
+      // exp = 期待ダメージ% (候補の16ロールの平均)、ko = 期待KO%
+      // (候補のロールのうち現在HP以上を占める割合) を、候補の事後確率で加重
+      const meanPct = (rolls.reduce((s, r) => s + r, 0) / rolls.length) / defHp * 100;
+      const pctNow = defSpec && defSpec.curHPPercent != null ? defSpec.curHPPercent : 100;
+      const curHp = pctNow >= 100 ? defHp : Math.max(1, Math.floor(defHp * pctNow / 100));
+      const koPct = rolls.filter(r => r >= curHp).length / rolls.length * 100;
       const cur = dst[mi];
-      dst[mi] = cur ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi) } : { lo, hi };
+      dst[mi] = cur
+        ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi), exp: cur.exp + w * meanPct, ko: cur.ko + w * koPct }
+        : { lo, hi, exp: w * meanPct, ko: w * koPct };
     });
   };
   for (const c of cov.cover) {
     const candSpec = bayesCandSpec(opp, c);
+    // 信用集合内での事後確率に正規化した重み (包絡と同じ対象範囲)
+    const w = cov.acc > 0 ? c.post / cov.acc : 0;
     // 自分の技 → 相手候補 (防御側が変動)
-    run(mine, candSpec, c.values.hp, mine.moves, args.critMine, 'mine', 'opps', args.isSingleMine, out.mine);
+    run(mine, candSpec, c.values.hp, mine.moves, args.critMine, 'mine', 'opps', args.isSingleMine, out.mine, w);
     // 相手候補の技 → 自分 (攻撃側が変動)
     const myTable = statTable(effSpecies(mine));
     const myHp = myTable ? (myTable.hp.find(r => r.sp === (mine.sp.hp || 0)) || {}).value : null;
-    run(candSpec, mine, myHp, opp.moves, args.critOpps, 'opps', 'mine', args.isSingleOpps, out.opps);
+    run(candSpec, mine, myHp, opp.moves, args.critOpps, 'opps', 'mine', args.isSingleOpps, out.opps, w);
   }
   return out;
 }
