@@ -730,12 +730,13 @@ function oppSpec(speciesEn, kind) {
     moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [],
     noUsage: kind === 'usage' && !USAGE_SETS ? true : undefined };
 }
-// 自分のポケモンをプルダウンで変更したときの初期型: 使用率トップ型を土台に、
+// 自分のポケモンの型: 指定した kind の想定型を土台に、
 // 相手側専用の推定・訂正まわりのフィールドを取り除いたものを返す
-function ownSpeciesSpec(speciesEn) {
-  const u = oppSpec(speciesEn, 'usage');
+function ownSpeciesSpec(speciesEn, kind) {
+  const u = oppSpec(speciesEn, kind || 'usage');
   const ns = { ...u, moves: [...(u.moves || [])], sp: { ...(u.sp || {}) }, boosts: blankBoosts(), status: '', curHPPercent: 100 };
-  delete ns.kind; delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
+  ns.kind = kind || 'usage';
+  delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
   delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual;
   delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
   delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec;
@@ -1140,10 +1141,30 @@ function presetBox(side) {
   const spec = DS(side);
   let dd = '';
   if (side === 'mine') {
+    // 相手側と同じ型選択方式にする。登録済みの自チーム型は「カスタム」として
+    // 表示し、カスタムを選ぶとその種族の登録型に戻す
     regDD('preset:mine', {
-      options: PRESETS.map((p, i) => ({ v: String(i), l: p.label })),
-      value: String(state.sel.mine),
-      onPick: v => { state.sel.mine = +v; calcAll(); },
+      options: [
+        { v: 'usage', l: '使用率トップ型 (pokedb)' },
+        { v: 'attacker', l: '火力特化型' },
+        { v: 'bulky', l: '耐久型' },
+        { v: 'none', l: '素の種族値' },
+        { v: 'custom', l: 'カスタム' },
+      ],
+      value: spec.kind || 'custom',
+      onPick: v => {
+        const keep = DS('mine');
+        let ns;
+        if (v === 'custom') {
+          const pi = PRESETS.findIndex(p => p.species === keep.species);
+          ns = pi >= 0 ? presetSpec(pi) : { ...keep, kind: 'custom' };
+        } else {
+          ns = ownSpeciesSpec(keep.species, v);
+        }
+        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+        state.mine[state.sel.mine] = ns;
+        calcAll();
+      },
     });
     dd = ddHTML('preset:mine');
   } else {
