@@ -4006,6 +4006,15 @@ var previewTeamWritten = false             // このセッションで oppReset 
 var previewVotes: [[String: Int]] = []          // 枠ごとの種族別投票数
 var previewVoteScore: [[String: Double]] = []   // 枠ごとの種族別ベストスコア
 var previewLocked: [String?] = []               // 枠ごとの確定種族 (nil = 未確定)
+// 見せ合い同定の証拠: 同定のたびに最新のフレームと枠情報を保持し、
+// 試合が始まったらその試合のデバッグ同梱として書き出す (runOnce 参照)。
+// 実フレームが残らないと系統的な誤認の原因を後から特定できないため
+// (実例: 2026-11-20 の vs Ryzz 戦 2 試合、6 枠中 4 枠が同一の誤認)
+var previewEvidenceImage: CGImage? = nil        // 最後に同定を試みたフレーム
+var previewEvidenceSlots: [PvSlotInfo] = []     // そのフレームの枠ごとの同定情報
+var previewEvidenceTeam: [String?] = []         // その時点のマージ済み同定結果
+var previewEvidenceAt: Date? = nil
+var previewEvidenceSaved = false
 // タイプ関門の緩和 (第1段 (b)): タイプで絞った候補内の最良スコアが
 // この値より悪い場合は、アイコンの読み違いとみなして全種族へ候補を
 // 広げて再照合する。閾値は tests/preview_eval.py --calibrate の測定で
@@ -4019,6 +4028,8 @@ struct PvSlotInfo {
     var score: Double = 9          // 割り当て種族の照合スコア (小さいほど良い)
     var decisive: Bool = false     // タイプで確定 (かつ照合でも裏付けあり)
     var expanded: Bool = false     // タイプ関門を広げて再照合した結果か
+    var types: [String] = []              // その枠で読み取ったタイプアイコン
+    var candidates: [(String, Double)] = []  // その枠の候補上位 (種族, スコア)
 }
 var pvSpeciesTypes: [String: [String]] = [:]
 var pvFeatures: [String: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)] = [:]
@@ -4419,6 +4430,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
     var slotPoolCount: [Int] = []
     var slotMargin: [Double] = []
     var slotExpanded: [Bool] = []
+    var slotTypes: [[String]] = []
     // 全種族への再照合 (候補を広げたランキングを返す)
     func rankedAll(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double)) -> [(String, Double)] {
         pvFeatures.map { (n, ref) in (n, pvScore(f, ref)) }.sorted { $0.1 < $1.1 }
@@ -4437,6 +4449,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
             let (t, present, _) = pvClassifyIconSearch(buf, ix, iy, iconS)
             if let t { types.append(t) } else if present { unknownPresent = true }
         }
+        slotTypes.append(types)
         var pool: [String] = []
         if types.count == 2 {
             pool = pvSpeciesTypes.filter { Set($0.value) == Set(types) }.map { $0.key }
@@ -4507,6 +4520,10 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
     var used = Set<String>()
     var team: [String?] = Array(repeating: nil, count: panels.count)
     var slots: [PvSlotInfo] = Array(repeating: PvSlotInfo(), count: panels.count)
+    for i in panels.indices {
+        slots[i].types = slotTypes[i]
+        slots[i].candidates = Array(slotRanked[i].prefix(3))
+    }
     var noteByIdx: [Int: String] = [:]
     var order = panels.indices.filter { !slotRanked[$0].isEmpty }
     order.sort { a, b in
@@ -4522,7 +4539,8 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         used.insert(pickCand.0)
         team[i] = pickCand.0
         slots[i] = PvSlotInfo(pick: pickCand.0, score: pickCand.1,
-                               decisive: slotDecisive[i], expanded: slotExpanded[i])
+                               decisive: slotDecisive[i], expanded: slotExpanded[i],
+                               types: slotTypes[i], candidates: Array(slotRanked[i].prefix(3)))
         let rank = ranked.firstIndex(where: { $0.0 == pickCand.0 }) ?? 0
         if slotDecisive[i] {
             noteByIdx[i] = "選出\(i + 1): \(pvJa(pickCand.0)) (タイプで確定)"
@@ -4903,6 +4921,11 @@ func runOnce(image: CGImage) {
                 }
                 let filled = previewBestTeam.compactMap { $0 }
                 oppTeamSeen = filled
+                // 同定の証拠を保持する (試合開始後にデバッグ同梱で書き出す)
+                previewEvidenceImage = image
+                previewEvidenceSlots = r.slots
+                previewEvidenceTeam = previewBestTeam
+                previewEvidenceAt = Date()
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
                 if !logStarted || winLogged { startBattleLog() }
                 var obj: [String: Any] = [:]
@@ -4956,6 +4979,11 @@ func runOnce(image: CGImage) {
         previewVoteScore = []
         previewLocked = []
         previewTeamWritten = false
+        previewEvidenceImage = nil
+        previewEvidenceSlots = []
+        previewEvidenceTeam = []
+        previewEvidenceAt = nil
+        previewEvidenceSaved = false
     }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
     if parseLogScreen(image: image) {
@@ -5007,6 +5035,23 @@ func runOnce(image: CGImage) {
     emptyBattleFrames = 0
     inBattle = true
     processPlates(hits)
+    // 見せ合い同定の証拠の書き出し: 保持しておいた見せ合いフレームと
+    // 枠ごとの同定情報を、この試合のデバッグ同梱として 1 回だけ残す。
+    // 試合開始 (プレート出現) の時点で書き出すため、試合 ID との対応が
+    // 保たれ、既存の配信経路でそのまま届く
+    if !previewEvidenceSaved, let evImage = previewEvidenceImage, let evAt = previewEvidenceAt,
+       Date().timeIntervalSince(evAt) <= 600 {
+        previewEvidenceSaved = true
+        let slotDetails: [[String: Any]] = previewEvidenceSlots.map { s in
+            ["pick": s.pick ?? "", "score": (s.score * 1000).rounded() / 1000,
+             "decisive": s.decisive, "expanded": s.expanded, "types": s.types,
+             "candidates": s.candidates.map { [$0.0, ($0.1 * 1000).rounded() / 1000] as [Any] }]
+        }
+        debugCapture(kind: "preview_id", key: "preview_id", rawText: "",
+                     detail: ["team": previewEvidenceTeam.map { $0 ?? "" },
+                              "slots": slotDetails, "readerBuild": readerBuild],
+                     image: evImage, fullFrame: true)
+    }
     // プレート未確定の記録: 相方の枠は確定しているのに片方の枠だけが、
     // 最初の枠確定から 25 秒以上たっても一度も確定しない場合はプレート
     // 検出側の異常として、その時点の全画面を試合中 1 回だけデバッグ情報
@@ -5067,7 +5112,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1426"
+let readerBuild = "20261121_1431"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
