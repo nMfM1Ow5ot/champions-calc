@@ -1048,7 +1048,7 @@ function bayesView(spec) {
   if (!ent || !ent.used) return null;
   const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
   const map = sorted[0];
-  const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, sp: { ...map.sp } } };
+  const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
   // 周辺分布の首位 (性格・持ち物): MAP は結合分布の最大であり、分布が
   // 拡散している局面では周辺の首位と食い違う。UI が表示で併記できるよう
   // 両方を渡す (採用する型そのものは従来どおり MAP)
