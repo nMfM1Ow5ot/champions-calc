@@ -282,6 +282,11 @@ function applyAbilityOrderEvidence(oppSpecies, mySpecies, firstIsOpp, turn, io) 
 const NATURE_JA2EN = { 'がんばりや': 'Hardy', 'さみしがり': 'Lonely', 'ゆうかん': 'Brave', 'いじっぱり': 'Adamant', 'やんちゃ': 'Naughty', 'ずぶとい': 'Bold', 'すなお': 'Docile', 'のんき': 'Relaxed', 'わんぱく': 'Impish', 'のんてんき': 'Lax', 'おくびょう': 'Timid', 'せっかち': 'Hasty', 'まじめ': 'Serious', 'ようき': 'Jolly', 'むじゃき': 'Naive', 'ひかえめ': 'Modest', 'おっとり': 'Mild', 'れいせい': 'Quiet', 'てれや': 'Bashful', 'うっかりや': 'Rash', 'おだやか': 'Calm', 'おとなしい': 'Gentle', 'なまいき': 'Sassy', 'しんちょう': 'Careful', 'きまぐれ': 'Quirky' };
 const BAYES_FLOOR = 0.02;    // 尤度の下限 (候補を完全に消さない)
 const BAYES_REV_KEEP = 0.05; // 判明情報と矛盾する候補の減衰率
+// 耐久配分の仮定 (ユーザーの指示): まず HP 振りのみを仮定し、HP に振り切って
+// いないのに防御・特防へ振っている型は事前確率を強く割り引く。HP 全振りでも
+// ダメージ結果と整合しない場合にだけ、尤度を通じてそちらが持ち上がる。
+// 完全な排除はしない (HP を振らない耐久型も実在し、強い証拠では覆るため)
+const HP_FIRST_FACTOR = 0.1;
 function bayesReset() { bayes = { bySpecies: {}, skipped: 0 }; try { moveStatsCache = {}; } catch (e) { /* モジュール初期化中の呼び出しでは宣言前になるため無視する */ } }
 /* ===== 技構成からの型予測 (型推定エンジンチャンネル 32274233 の構想に基づく実装) =====
    判明した技を、技構成全体の証拠として扱うための拡張。
@@ -565,7 +570,7 @@ function bayesBuildCandidates(species) {
     const profMoves = poolInfo.map(x => ({ en: x.en, s: (x.rate + 2) * (x.cat === '物理' ? phys : x.cat === '特殊' ? spec : statAff) }))
       .sort((a, b) => b.s - a.s).slice(0, 4).map(x => x.en);
     return { nature: combo.n.en, sp, item: item.en, ability: ability.en, megaAbility, megaSpecies: u.megaSpecies || undefined,
-      moves: profMoves, movePool, moveExact: false, values, valuesMega, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul };
+      moves: profMoves, movePool, moveExact: false, values, valuesMega, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul * (((sp.def > 0 || sp.spd > 0) && (sp.hp || 0) < 32) ? HP_FIRST_FACTOR : 1) };
   };
   const raw = [];
   for (const c of combos.slice(0, 20)) raw.push(mk(c, topItem, topAbility, 1));
