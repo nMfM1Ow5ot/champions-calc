@@ -988,7 +988,7 @@ function oppInfoLine() {
   else if (rates.item) parts.push(`持ち物 ${spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : 'なし'}`);
   if (rates.patternLabel && !corr.includes('EV')) parts.push(`EV型 ${rates.patternLabel} ${rates.pattern || ''}%`);
   const head = `pokedb 使用率トップ型${USAGE_SEASON ? `（${USAGE_SEASON}）` : ''}: `;
-  const corrLine = corr.length ? `<br><span class="corrected">判明情報で訂正済み: ${corr.join('・')}</span>` : '';
+  const corrLine = corr.length ? `<br><span class="corrected">判明情報で訂正済み: ${corr.map(c => c === 'EV' ? '努力値' : c).join('・')}</span>` : '';
   return `<div class="oppinfo">${head}${parts.join(' / ')}${corrLine}</div>`;
 }
 function megaFormeOf(speciesEn) {
