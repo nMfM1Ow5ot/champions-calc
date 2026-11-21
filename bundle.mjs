@@ -27315,7 +27315,7 @@ function createEstimator(deps) {
         },
         hpSps: ie.hpSps ? ie.hpSps.size : null
       } : null;
-      infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, marg, cover90, cands, inf });
+      infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, speFlag: ent && ent.speFlag || null, map, marg, cover90, cands, inf });
       if (infLog.length > 2e3) infLog.splice(0, infLog.length - 2e3);
     } catch (e) {
     }
@@ -27436,6 +27436,7 @@ function createEstimator(deps) {
     const b = boosts?.spe || 0;
     v = b >= 0 ? Math.floor(v * (2 + b) / 2) : Math.floor(v * 2 / (2 - b));
     if (item === "Choice Scarf") v = Math.floor(v * 1.5);
+    if (item === "Iron Ball") v = Math.floor(v / 2);
     if (ability && WEATHER_SPE[ability] === weather) v *= 2;
     if (ability === "Surge Surfer" && terrain === "Electric") v *= 2;
     if (unburden) v *= 2;
@@ -28230,12 +28231,13 @@ function createEstimator(deps) {
         if (cBr.last) return !ctx.firstIsOpp;
         if (cBr.prio !== ctx.myPrio) return cBr.prio > ctx.myPrio === ctx.firstIsOpp;
       }
-      if (c.item === "Quick Claw" || c.item === "Custap Berry") return null;
-      if (c.item === "Lagging Tail" || c.item === "Full Incense") return !ctx.firstIsOpp;
+      const itemForSpe = panel && panel.itemLost ? "" : ent.speFlag || c.item;
+      if (itemForSpe === "Quick Claw" || itemForSpe === "Custap Berry") return null;
+      if (itemForSpe === "Lagging Tail" || itemForSpe === "Full Incense") return !ctx.firstIsOpp;
       const eff = infEffSpe(
         speVal,
         panel ? panel.boosts : {},
-        panel && panel.itemLost ? "" : c.item,
+        itemForSpe,
         panel ? panel.status : "",
         ctx.twP2,
         cAb,
@@ -28247,13 +28249,15 @@ function createEstimator(deps) {
       return ctx.trick ? ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff : ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff;
     });
     const res = bayesHardSpe(ent, verdicts);
+    if (!res.applied && !ent.speFlag) ent.speFlag = ctx.trick ? "Iron Ball" : "Choice Scarf";
     logSnapshot(ctx.species, ev.turn, {
       kind: "moveOrder",
       move: ctx.oppMd ? ctx.oppMd.name : null,
       firstIsOpp: !!ctx.firstIsOpp,
       applied: res.applied,
       excluded: res.excluded,
-      ...res.applied ? {} : { inconsistent: true }
+      ...res.applied ? {} : { inconsistent: true },
+      speFlag: ent.speFlag || null
     });
   }
   function applyRevealed(list) {
@@ -28284,6 +28288,7 @@ function createEstimator(deps) {
       }
       const hardMode = (itemHard || ability !== null) && survivorMass > 0;
       let applied = false;
+      if (hardMode && itemHard) ent.speFlag = null;
       if (hardMode) {
         if (excluded > 0) {
           for (const c of ent.cands) if (!(matchItem(c) && matchAbility(c))) c.post = 0;
@@ -28333,7 +28338,7 @@ function createEstimator(deps) {
     if (!ent || !ent.used) return null;
     const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
     const map = sorted[0];
-    const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
+    const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, speFlag: ent.speFlag || null, map: { nature: map.nature, item: map.item, sp: { ...map.sp } } };
     {
       const mN = /* @__PURE__ */ new Map(), mI = /* @__PURE__ */ new Map();
       for (const c of ent.cands) {
@@ -28512,7 +28517,7 @@ function createEstimator(deps) {
   };
 }
 
-// bundle_entry.mjs
+// .bundle_entry_tmp.mjs
 var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
