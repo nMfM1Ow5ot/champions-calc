@@ -239,8 +239,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .tables{display:flex; gap:1.2rem; margin-top:1.6rem; align-items:center}
 .movesbox{flex:2; min-width:0; background:rgba(18,18,18,.8); border-radius:1.2rem; box-shadow:var(--shadow); padding:.8rem 1.2rem 1.2rem}
 .movesgrid{display:grid; grid-template-columns:minmax(15rem,1.5fr) minmax(0,1.25fr) minmax(0,1fr); column-gap:1rem; row-gap:.3rem; align-items:center}
-.mvcell{display:flex; align-items:center; gap:.35rem; min-width:0}
+.mvcell{position:relative; display:flex; align-items:center; gap:.35rem; min-width:0}
 .mvcell .sdd{flex:1; min-width:0}
+.zwrap{position:absolute; left:calc(100% + .35rem); top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:.35rem; white-space:nowrap; z-index:2}
 .mspecwrap{display:inline-flex; align-items:center; gap:.18rem; flex:none; margin-left:.35rem; margin-right:.55rem}
 .mspeclab{font-size:.68rem; color:var(--label); white-space:nowrap}
 .mspecsel{font:inherit; font-size:.72rem; line-height:1; padding:.18rem .15rem; background:rgba(255,255,255,.08); color:var(--ink); border:1px solid rgba(255,255,255,.18); border-radius:999px; cursor:pointer}
@@ -1662,7 +1663,7 @@ function movesBox(side, res) {
     const zi = zInfoFor(spec, spec.moves[mi]);
     const zon = !!(spec.moveZ && spec.moveZ[mi]);
     const zja = zi && zi.name ? (NAMES.moves[idOf(zi.name)] || zi.name) : '';
-    const zBtn = zi ? `<button class="tgl${zon ? ' on' : ''}" data-zmove="${side}:${mi}" title="${esc(zi.name ? 'Zワザ: ' + zja + ' (' + zi.name + ')' : 'Zワザ')}">Z</button>${zon && zi.fx ? `<span class="zfx">${esc(zi.fx)}</span>` : ''}` : '';
+    const zBtn = zi ? `<span class="zwrap"><button class="tgl${zon ? ' on' : ''}" data-zmove="${side}:${mi}" title="${esc(zi.name ? 'Zワザ: ' + zja + ' (' + zi.name + ')' : 'Zワザ')}">Z</button>${zon && zi.fx ? `<span class="zfx">${esc(zi.fx)}</span>` : ''}</span>` : '';
     regDD(`move:${side}:${mi}`, {
       options: moveOptionsFor(spec), value: spec.moves[mi] || '', clearable: true, placeholder: '（技なし）',
       extra: (() => {
