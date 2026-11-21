@@ -774,37 +774,8 @@ def _report_upload_completion(state):
     if held:
         print(f"[log] 送信できる分は完了しました "
               f"(備考の入力待ちが {len(held)} 件あります)", flush=True)
-        _auto_submit_empty_notes()
     else:
         print("[log] 送信が完了しました", flush=True)
-
-
-def _auto_submit_empty_notes():
-    """「送信できる分は完了しました (備考の入力待ちが N 件あります)」
-    の表示時点で備考待ちの試合を、空欄の備考で送信に進める
-    (2026-11-21 のユーザー追加指示)。プロンプト表示からの30秒
-    タイムアウトと並ぶ、もう1つの空欄処理の契機。対象は
-    list_pending_log_notes() が返す試合で、ゲート導入前の試合は
-    含まれない。すでに備考ファイルがある試合は触らない。
-    プロンプトが表示中の試合でユーザーがこの後に入力した場合は、
-    プロンプト側の保存が上書きする (ユーザーの入力が優先)。
-    作成した備考の試合は次の送信サイクルで送られる。
-    """
-    try:
-        pending = list_pending_log_notes()
-    except Exception as e:
-        _record_crash("auto_empty_notes", e)
-        return
-    done = 0
-    for p in pending:
-        key = p.get("key") or ""
-        if _note_exists_any(key):
-            continue
-        if save_log_note(key, ""):
-            done += 1
-    if done:
-        print(f"[log] 備考の入力待ちが {done} 件あったため、"
-              "空欄の備考で送信します", flush=True)
 
 
 def check_log_token():
@@ -1006,6 +977,34 @@ def _flush_typeahead(stream):
 # 備考は空欄として送信に進む (入力待ちで止まり続けないため)
 _NOTE_PROMPT_TIMEOUT_SEC = 30.0
 
+# プロンプト表示中の割り込み検出 (2026-11-21 のユーザー追加指示)。
+# 入力待ちの間に別の処理のログ出力がターミナルに流れると、入力行が
+# 崩れて何を入力したか分からなくなる。その場合は入力を無効とし、
+# 空欄の備考として送信に進む。検出は、プロンプトを表示している
+# スレッド以外からの標準出力があったことをもって割り込みとする
+# (_InterruptDetectStdout が sys.stdout に被せるラッパー)。
+_prompt_owner_thread = None
+_prompt_interrupted = False
+
+
+class _InterruptDetectStdout:
+    """sys.stdout のラッパー。備考プロンプトの入力待ち中に、
+    プロンプト以外のスレッドから (空白だけではない) 出力があったら
+    _prompt_interrupted を立てる。それ以外は素通しする。"""
+
+    def __init__(self, real):
+        self._real = real
+
+    def write(self, s):
+        global _prompt_interrupted
+        if (s and s.strip() and _prompt_owner_thread is not None
+                and threading.get_ident() != _prompt_owner_thread):
+            _prompt_interrupted = True
+        return self._real.write(s)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
 
 def _read_line_with_timeout(in_stream, deadline):
     """deadline (time.monotonic) までに 1 行読む。
@@ -1063,28 +1062,41 @@ def _prompt_input(in_stream, out_stream, prompt):
     備考として扱って空文字列を返す (聞き直しにまたがって同じ
     締め切りを使う)。手動の `serve.py --note` も同じ経路を使う
     ため、そちらにも同じタイムアウトが効く。
+
+    入力待ちの間に別の処理のログ出力が割り込んだ場合 (入力行が
+    崩れた場合) も、その入力は無効として空文字列を返す。
     """
-    deadline = time.monotonic() + _NOTE_PROMPT_TIMEOUT_SEC
-    for attempt in (1, 2):
-        _flush_typeahead(in_stream)
-        started = time.monotonic()
-        out_stream.write(prompt)
-        out_stream.flush()
-        line = _read_line_with_timeout(in_stream, deadline)
-        if line is None:
-            print(f"[log] プロンプト表示から {_NOTE_PROMPT_TIMEOUT_SEC:.0f} 秒間"
-                  "入力がなかったため、備考なしで送信します", flush=True)
-            return ""
-        elapsed = time.monotonic() - started
-        line = line.rstrip("\n").rstrip("\r")
-        if elapsed < 0.5 and attempt == 1:
-            print(f"[log] プロンプト表示から {elapsed:.2f} 秒で入力が返ったため、"
-                  f"バッファ残りの疑いとして破棄しました: {line!r}。"
-                  "もう一度入力してください", flush=True)
-            continue
-        print(f"[log] 備考の入力が確定しました "
-              f"(プロンプト表示から {elapsed:.1f} 秒)", flush=True)
-        return line
+    global _prompt_owner_thread, _prompt_interrupted
+    _prompt_owner_thread = threading.get_ident()
+    _prompt_interrupted = False
+    try:
+        deadline = time.monotonic() + _NOTE_PROMPT_TIMEOUT_SEC
+        for attempt in (1, 2):
+            _flush_typeahead(in_stream)
+            started = time.monotonic()
+            out_stream.write(prompt)
+            out_stream.flush()
+            line = _read_line_with_timeout(in_stream, deadline)
+            if line is None:
+                print(f"[log] プロンプト表示から {_NOTE_PROMPT_TIMEOUT_SEC:.0f} 秒間"
+                      "入力がなかったため、備考なしで送信します", flush=True)
+                return ""
+            if _prompt_interrupted:
+                print("[log] 入力中に他の出力が割り込んだため、"
+                      "この備考は無効として備考なしで送信します", flush=True)
+                return ""
+            elapsed = time.monotonic() - started
+            line = line.rstrip("\n").rstrip("\r")
+            if elapsed < 0.5 and attempt == 1:
+                print(f"[log] プロンプト表示から {elapsed:.2f} 秒で入力が返ったため、"
+                      f"バッファ残りの疑いとして破棄しました: {line!r}。"
+                      "もう一度入力してください", flush=True)
+                continue
+            print(f"[log] 備考の入力が確定しました "
+                  f"(プロンプト表示から {elapsed:.1f} 秒)", flush=True)
+            return line
+    finally:
+        _prompt_owner_thread = None
 
 
 def _note_prompt_loop(in_stream=None, out_stream=None):
@@ -1174,6 +1186,9 @@ def cli_send_notes():
 
 
 if __name__ == "__main__":
+    # 備考プロンプト表示中の割り込み出力の検出 (サーバ経路・手動
+    # --note 経路の両方に効かせる)
+    sys.stdout = _InterruptDetectStdout(sys.stdout)
     if "--note" in sys.argv:
         # 備考を付けて送るだけの手動コマンド (サーバは起動しない)
         raise SystemExit(cli_send_notes())
