@@ -13,6 +13,7 @@ import hashlib
 import http.server
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -86,6 +87,17 @@ def sync_loop():
 # reader が試合ごとに logs/ へ保存した battle_*.log (人間可読ログ) と
 # battle_*_protocol.log (プロトコルログ) を、team_key.txt で暗号化して
 # GitHub リポジトリ (nMfM1Ow5ot/champions-calc) の logs_enc/ へ送る。
+#
+# 備考ゲート (2026-11-21、ユーザーの指示): 試合ログは、UI の備考欄への
+# 入力が済むまで送信しない。UI (このサーバが配信する画面) の上部に、
+# 送信待ちの試合ごとに備考欄と「備考と一緒にログを送信」ボタンが出る。
+# ボタンが押されると serve.py の POST /log-note が備考を
+# logs/battle_<試合ID>_note.txt に保存し (空欄でもファイルは作る。
+# ファイルの存在そのものが「入力済み」の印)、その時点で初めて
+# その試合のログ・デバッグ一式・備考ファイルがまとめて送信される。
+# 備考ファイルも他のファイルと同じ暗号化で logs_enc/ へ送られ、
+# 受信側 (ログ分析チャット) は備考の内容を到着報告に含めて分析し、
+# 備考の指示に応じて champions_calc 全般の修正につなげる。
 # あわせて、reader が問題発生時に保存したデバッグ同梱ファイル
 # (battle_<試合ID>_debugNN.jpg/.json、メッセージ欄の切り抜きとイベント
 # 情報) も同じ便で送る。目録 (logs_enc/index.json) にはログと同じ形式で
@@ -109,6 +121,8 @@ JST = timezone(timedelta(hours=9))
 _log_notice_shown = False
 _log_last_error = ""
 _log_prune_done_date = None
+_log_hold_notice_keys = set()
+_upload_lock = threading.Lock()
 
 
 def _log_token():
@@ -171,7 +185,142 @@ def _is_upload_target(name):
         return False
     if name.endswith(".log"):
         return True
+    if name.endswith("_note.txt"):
+        return True
     return "_debug" in name and (name.endswith(".jpg") or name.endswith(".json"))
+
+
+# ---- 備考ゲート ----
+# 試合ID (キー) は battle_<日時>[_salvage] の <日時>[_salvage] 部分。
+# ファイル名の種類によらず同じ試合のファイルを 1 つのキーに束ねる。
+_BATTLE_KEY_RE = re.compile(r"^\d{8}_\d{6}(_salvage)?$")
+
+
+def _battle_key(name):
+    """logs/ のファイル名から試合キーを返す。対象外の名前は None。"""
+    if not name.startswith("battle_"):
+        return None
+    rest = name[len("battle_"):]
+    debug_stripped = re.sub(r"_debug\d+\.(jpg|json)$", "", rest)
+    if debug_stripped != rest:
+        return debug_stripped if _BATTLE_KEY_RE.match(debug_stripped) else None
+    if rest.endswith("_note.txt"):
+        rest = rest[: -len("_note.txt")]
+    elif rest.endswith(".log"):
+        rest = rest[: -len(".log")]
+        if rest.endswith("_protocol"):
+            rest = rest[: -len("_protocol")]
+        if rest.endswith("_final"):
+            rest = rest[: -len("_final")]
+        elif rest.endswith("_interrupted"):
+            rest = rest[: -len("_interrupted")]
+    else:
+        return None
+    return rest if _BATTLE_KEY_RE.match(rest) else None
+
+
+def _note_name(key):
+    return f"battle_{key}_note.txt"
+
+
+def _note_exists(key):
+    return os.path.exists(os.path.join(LOG_DIR, _note_name(key)))
+
+
+def _load_upload_state():
+    if os.path.exists(LOG_STATE_PATH):
+        try:
+            return json.loads(open(LOG_STATE_PATH).read())
+        except Exception:
+            return {}
+    return {}
+
+
+def _file_hash(path):
+    try:
+        return hashlib.sha256(open(path, "rb").read()).hexdigest()
+    except OSError:
+        return None
+
+
+def list_pending_log_notes():
+    """備考の入力待ちの試合の一覧を返す (UI の GET /log-pending 用)。
+
+    すでに送信済みの試合 (uploaded.json とハッシュが一致するログしか
+    残っていない試合) と、備考ファイルが既にある試合は含めない。
+    """
+    if not os.path.isdir(LOG_DIR):
+        return []
+    state = _load_upload_state()
+    groups = {}
+    for name in sorted(os.listdir(LOG_DIR)):
+        if not _is_upload_target(name):
+            continue
+        key = _battle_key(name)
+        if key is None:
+            continue
+        groups.setdefault(key, []).append(name)
+    pending = []
+    for key, names in sorted(groups.items()):
+        if _note_exists(key):
+            continue
+        log_names = [n for n in names if n.endswith(".log")]
+        if not log_names:
+            continue
+        # ログが全て送信済みなら、備考待ちではない (備考機能より前に
+        # 送信された試合や、送信後に残ったデバッグ一式だけの状態)
+        unsent = [n for n in log_names
+                  if state.get(n) != _file_hash(os.path.join(LOG_DIR, n))]
+        if not unsent:
+            continue
+        kind = "final" if any("_final" in n for n in log_names) else "interrupted"
+        opponent = ""
+        for n in log_names:
+            if "_protocol" in n:
+                continue
+            try:
+                text = open(os.path.join(LOG_DIR, n), encoding="utf-8").read()
+            except OSError:
+                continue
+            m = re.search(r"Battle started between .+? and (.+?)!", text)
+            if m:
+                opponent = m.group(1).strip()
+                break
+        mtime = 0.0
+        for n in names:
+            try:
+                mtime = max(mtime, os.path.getmtime(os.path.join(LOG_DIR, n)))
+            except OSError:
+                pass
+        pending.append({
+            "key": key, "kind": kind, "opponent": opponent,
+            "files": sorted(names),
+            "saved_at": datetime.fromtimestamp(mtime, JST).isoformat()
+            if mtime else "",
+        })
+    return pending
+
+
+def save_log_note(key, note):
+    """UI から受け取った備考を logs/battle_<key>_note.txt に保存する。
+
+    空欄でもファイルを作る (存在が「入力済み」の印になる)。
+    保存できたら True、キーが不正なら False を返す。
+    """
+    if not key or not _BATTLE_KEY_RE.match(key):
+        return False
+    if not isinstance(note, str):
+        note = ""
+    note = note[:8000]
+    os.makedirs(LOG_DIR, exist_ok=True)
+    path = os.path.join(LOG_DIR, _note_name(key))
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(note)
+    os.replace(tmp, path)
+    print(f"[log] 備考を受け付けました: battle_{key} "
+          f"({len(note)}文字) — ログを送信します", flush=True)
+    return True
 
 
 def _prune_debug_entries(index, token, limit=10):
@@ -210,19 +359,24 @@ def _prune_debug_entries(index, token, limit=10):
 
 
 def upload_logs_once():
+    # 備考の送信ボタンからも呼ばれるため、二重送信を防ぐ
+    if not _upload_lock.acquire(blocking=False):
+        return
+    try:
+        _upload_logs_once_locked()
+    finally:
+        _upload_lock.release()
+
+
+def _upload_logs_once_locked():
     global _log_notice_shown, _log_last_error, _log_prune_done_date
     if not os.path.isdir(LOG_DIR):
         return
     names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
     if not names:
         return
-    state = {}
-    if os.path.exists(LOG_STATE_PATH):
-        try:
-            state = json.loads(open(LOG_STATE_PATH).read())
-        except Exception:
-            state = {}
-    pending = []
+    state = _load_upload_state()
+    pending_all = []
     for n in names:
         try:
             data = open(os.path.join(LOG_DIR, n), "rb").read()
@@ -230,7 +384,28 @@ def upload_logs_once():
             continue
         h = hashlib.sha256(data).hexdigest()
         if state.get(n) != h:
+            pending_all.append((n, data, h))
+    # 備考ゲート: 備考ファイルが無い試合のログ・デバッグ一式は送信しない。
+    # 備考ファイル自体は「入力済み」の印なので常に対象にする
+    pending_log_keys = {_battle_key(n) for n, _, _ in pending_all
+                        if n.endswith(".log")}
+    pending_log_keys.discard(None)
+    pending = []
+    held_keys = set()
+    for n, data, h in pending_all:
+        key = _battle_key(n)
+        if (key is not None and key in pending_log_keys
+                and not n.endswith("_note.txt") and not _note_exists(key)):
+            held_keys.add(key)
+        else:
             pending.append((n, data, h))
+    for key in sorted(held_keys):
+        if key not in _log_hold_notice_keys:
+            _log_hold_notice_keys.add(key)
+            print(f"[log] 試合ログは備考の入力待ちです: battle_{key} "
+                  "(UI の備考欄から送信してください)", flush=True)
+    _log_hold_notice_keys.intersection_update(
+        {_battle_key(n) for n in names if n.endswith(".log")})
     # デバッグ同梱の掃除は 1 日 1 回まで (送信が無い日でもその回だけ目録を見る)
     prune_due = _log_prune_done_date != datetime.now(JST).date()
     if not pending and not prune_due:
@@ -311,6 +486,48 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
+
+    def _send_json(self, status, obj):
+        body = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path.split("?")[0] == "/log-pending":
+            try:
+                self._send_json(200, {"pending": list_pending_log_notes()})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "error": str(e)})
+            return
+        super().do_GET()
+
+    def do_POST(self):
+        if self.path.split("?")[0] != "/log-note":
+            self._send_json(404, {"ok": False, "error": "not found"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 65536:
+            self._send_json(400, {"ok": False, "error": "リクエストが不正です"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            self._send_json(400, {"ok": False, "error": "JSON を読めませんでした"})
+            return
+        key = payload.get("key") if isinstance(payload, dict) else None
+        note = payload.get("note", "") if isinstance(payload, dict) else ""
+        if not save_log_note(key, note):
+            self._send_json(400, {"ok": False, "error": "試合IDが不正です"})
+            return
+        # 備考が付いたので、その試合のログ送信をすぐ試みる
+        threading.Thread(target=upload_logs_once, daemon=True).start()
+        self._send_json(200, {"ok": True})
 
 
 if __name__ == "__main__":
