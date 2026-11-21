@@ -27470,7 +27470,7 @@ function createEstimator(deps) {
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
-  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
+  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
   let infLastMove = null;
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
@@ -27688,11 +27688,15 @@ function createEstimator(deps) {
     if (typeof ev.turn === "number") infLogTurn = ev.turn;
     const intents = [];
     const side = labelSide(ev.label);
+    const twBefore = { p1: ev.turn - infCtx.tailwindTurn.p1 >= 0 && ev.turn - infCtx.tailwindTurn.p1 < 4, p2: ev.turn - infCtx.tailwindTurn.p2 >= 0 && ev.turn - infCtx.tailwindTurn.p2 < 4 };
+    const trickBefore = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
     if (ev.move === "Tailwind") {
       infCtx.tailwindTurn[side] = ev.turn;
+      infCtx.tailwindSetTw[side] = twBefore[side];
       intents.push({ t: "side", side, key: "tailwind", turn: ev.turn });
     } else if (ev.move === "Trick Room") {
       const trActive = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+      infCtx.trickSetState = trickBefore;
       infCtx.trickRoomTurn = trActive ? -99 : ev.turn;
     } else if (ev.move === "Reflect") {
       infCtx.screenTurn[side].reflect = ev.turn;
@@ -27744,17 +27748,22 @@ function createEstimator(deps) {
     const myRow = myTable?.spe.find((r) => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
     if (!myRow) return intents;
     const tw = (s) => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
-    const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.itemLost ? "" : mySpec.item, mySpec.status, tw("p1"), mySpec.ability, io.field.weather, io.field.terrain, !!mySpec.unburden);
-    const trick = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+    const effTw = (s) => {
+      if (ev.move === "Tailwind" && side === s) return twBefore[s];
+      if (prev.move === "Tailwind" && prev.turn === ev.turn && prev.side === s) return infCtx.tailwindSetTw[s];
+      return tw(s);
+    };
+    const trick = ev.move === "Trick Room" ? trickBefore : prev.move === "Trick Room" && prev.turn === ev.turn ? !!infCtx.trickSetState : ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+    const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.itemLost ? "" : mySpec.item, mySpec.status, effTw("p1"), mySpec.ability, io.field.weather, io.field.terrain, !!mySpec.unburden);
     const itemKnown = (oppSpec.corrected || []).includes("\u6301\u3061\u7269");
     const abKnown = (oppSpec.corrected || []).includes("\u7279\u6027");
     const feasible = /* @__PURE__ */ new Set();
     for (const row of table.spe) {
-      const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? oppSpec.itemLost ? "" : oppSpec.item : "", oppSpec.status, tw("p2"), abKnown ? oppSpec.ability : "", io.field.weather, io.field.terrain, !!oppSpec.unburden);
+      const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? oppSpec.itemLost ? "" : oppSpec.item : "", oppSpec.status, effTw("p2"), abKnown ? oppSpec.ability : "", io.field.weather, io.field.terrain, !!oppSpec.unburden);
       const ok = trick ? firstIsOpp ? eff <= myEff : eff >= myEff : firstIsOpp ? eff >= myEff : eff <= myEff;
       if (ok) feasible.add(row.nature + "|" + row.sp);
     }
-    lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw("p2"), oppMd, myPrio: myBr.prio };
+    lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: effTw("p2"), oppMd, myPrio: myBr.prio };
     infIntersect(oppSpecies, "spe", feasible, null);
     return intents;
   }
@@ -27942,6 +27951,8 @@ function createEstimator(deps) {
   function bayesMoveUpdate(ent, species, moves) {
     if (!ent || !ent.cands) return;
     const stats = bayesMoveStats(species);
+    const inUniverse = (mv) => stats && stats.marg.has(mv) || ent.cands.some((c) => c.moves.includes(mv) || c.movePool && c.movePool.includes(mv));
+    moves = moves.filter(inUniverse);
     const prev = ent.revMoves || [];
     const added = moves.filter((mv) => !prev.includes(mv));
     const removed = prev.filter((mv) => !moves.includes(mv));
@@ -28703,7 +28714,7 @@ function createEstimator(deps) {
   }
   function reset() {
     inference = { seen: 0, bySpecies: {} };
-    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
+    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
     infLastMove = null;
     dirty = false;
     pendingOpts = null;
