@@ -645,6 +645,8 @@ var fieldSetByMoveTurn = -1                       // 技で天候・地形を張
 var switchInTurn: [String: Int] = [:]             // "side:Species" -> 交代で入ったターン
 var heldWeatherStart: (ui: String, logName: String, text: String, at: Date)? = nil  // 交代確定待ちで保留した天候開始
 var heldTerrainStart: (ui: String, text: String, at: Date)? = nil                  // 同・地形開始
+var heldTerrainReplace: (ui: String, text: String, at: Date)? = nil  // 出所を確認できない地形の上書き開始の保留
+var pivotReturnAt: [String: Date] = [:]           // side -> 交代技で戻る文を消費した時刻 (後任の交代確定を早める)
 var fieldHoldBypass = false                       // 保留した天候・地形を流す際の再保留防止
 var pendingStatusFrom: [String: (code: String, at: Date)] = [:]  // "p1:Species" -> 状態異常ダメージの帰属
 var wishSetTurn: [String: Int] = [:]               // side -> ねがいごとを使ったターン (回復の説明用)
@@ -994,6 +996,11 @@ func renderLogLine(_ line: String) -> [String] {
         if f[3].contains("Follow Me") || f[3].contains("Rage Powder") {
             return ["\(renderPrefix(side))\(species) became the center of attention!"]
         }
+        return []
+    case "-start":
+        guard f.count >= 4 else { return [] }
+        let (_, side, species) = renderLabelParts(f[2])
+        if f[3] == "move: Yawn" { return ["\(renderPrefix(side))\(species) became drowsy!"] }
         return []
     case "-activate":
         guard f.count >= 4 else { return [] }
@@ -1418,6 +1425,33 @@ func emitLog(_ line: String, applyNow: Bool) {
         if line.hasPrefix("|move|") || line.hasPrefix("|turn|") { actionSeq += 1 }
         applyEvent(line)
     }
+    // ひんし行の直前で、その枠の直近の被ダメ行の HP 表記が「1/202」の
+    // ような 1% 未満の端数だった場合は 0 表記に直す (割合としては
+    // 0% の行であり、ひんしと並ぶと表記だけが矛盾する。実例:
+    // 2026-11-22 battle_20261122_054802、ガオガエンの被ダメ行が
+    // 1/202 なのに ひんし行が続いた)
+    if line.hasPrefix("|faint|") {
+        let ff = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if ff.count >= 3 {
+            let label = ff[2]
+            for i in battleLog.indices.reversed() {
+                let bl = battleLog[i]
+                if bl.hasPrefix("|switch|") && bl.contains("|\(label)|") { break }
+                if bl.hasPrefix("|-damage|\(label)|") {
+                    let parts = bl.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+                    if parts.count >= 4 {
+                        let hp = parts[3].split(separator: "/")
+                        if hp.count == 2, let cur = Int(hp[0].trimmingCharacters(in: .whitespaces)),
+                           let maxHp = Int(hp[1].trimmingCharacters(in: .whitespaces)),
+                           cur > 0, maxHp > 0, Int((Double(cur) / Double(maxHp) * 100).rounded()) == 0 {
+                            battleLog[i] = "|-damage|\(label)|0/\(maxHp)" + (parts.count >= 5 ? "|\(parts[4])" : "")
+                        }
+                    }
+                    break
+                }
+            }
+        }
+    }
     battleLog.append(line)
     // 推定エンジン用イベント (技の使用順)
     if line.hasPrefix("|move|") {
@@ -1625,6 +1659,7 @@ func resetLogState() {
     suspectJump = [:]; firstEntryPlateHP = [:]; sitrusWatch = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
     fieldSetByMoveTurn = -1; switchInTurn = [:]
     heldWeatherStart = nil; heldTerrainStart = nil; fieldHoldBypass = false
+    heldTerrainReplace = nil; pivotReturnAt = [:]
     wishSetTurn = [:]
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
     faintedSpecies = []; heldEntryBoosts = []
@@ -2340,6 +2375,26 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                 }
             }
         }
+        // 分類できない大きな自己ダメージは、プレート誤読の疑いとして
+        // 行を出さずに保留する。自分の技の直後に自分が大きく減る経路は、
+        // 反動技・いのちのたま・接触反動 (いずれも上で分類済み) のほかは
+        // はらだいこ・のろい (自分を削る使い方)・いたみわけ の自己負担
+        // しかなく、それらを除けば 18 ポイントを超える自己低下は実在
+        // しない (実例: 2026-11-22 battle_20261122_054802、ラグラージの
+        // プレートが 116/207 → 10/207 と誤読され、自分の技の被ダメ行
+        // として記録されたうえ、本来の対象 (イエッサン) の被ダメまで
+        // 「技は解決済み」と誤判定されて保留に巻き込まれた)
+        if fromCode == nil, lastMoveLabel == "\(slot): \(speciesEn)",
+           Date().timeIntervalSince(lastMoveMsgAt) < 20, effFrom - toPct > 18,
+           !["Belly Drum", "Curse", "Pain Split"].contains(lastMoveName) {
+            suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
+            lastEmittedPct[plateName] = effFrom
+            debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
+                         detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "reason": "self_unclassified"])
+            print("[reader] 分類できない大きな自己ダメージを誤読の疑いとして保留しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+            fflush(stdout)
+            return true
+        }
         if let fromCode { line += "|[from] \(fromCode)" }
         emitLog(line)
         recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, hpText: hpText)
@@ -2684,7 +2739,10 @@ func processPlates(_ hits: [String: SlotState]) {
                 pendingSwitchCount[plate.name] = 1
                 pendingSwitchSince[plate.name] = Date()
             }
-            if (pendingSwitchCount[plate.name] ?? 0) >= 2 {
+            // 交代技で戻ることが確定している側は、後任を 1 回の読みで
+            // 確定する (戻り文の消費時に pivotReturnAt が立つ)
+            let confirmReads = (pivotReturnAt[side].map { Date().timeIntervalSince($0) < 20 } ?? false) ? 1 : 2
+            if (pendingSwitchCount[plate.name] ?? 0) >= confirmReads {
                 // 同種族が相方枠に在席したままの確定は、同時交代時の
                 // 隣枠への写り込みとして保留する (同一個体が 2 枠に
                 // 同時に存在することはない。実例: 2026-11-22
@@ -2705,9 +2763,16 @@ func processPlates(_ hits: [String: SlotState]) {
                 // して読めて、生きている枠にまで交代行が出ることがある
                 // (実例: 2026-11-20、グレンアルマの交代要員選択中に
                 //  オオニューラが p1a に出現し、直後にサーナイトの交代行も
-                //  重複した)。ひんしの枠への交代 (交代要員そのもの) は通す
+                //  重複した)。ひんしの枠への交代 (交代要員そのもの) は通す。
+                // この破棄は自軍の選択画面が映る場合だけが根拠なので、
+                // 自軍側に限る。相手側のプレートは選択画面に映らず、
+                // 相手の任意交代が ひんし交代の確定待ちと重なると本物の
+                // 交代まで落としてしまう (実例: 2026-11-22
+                // battle_20261122_054802、ターン9に相手の任意交代
+                // (イエッサン→サーナイト) が破棄され、交代行の順序が
+                // 逆転した)
                 let prefix = plate.name.hasPrefix("mine") ? "mine" : "opp"
-                let replacementBusy = faintedSlots[slot] == nil
+                let replacementBusy = plate.name.hasPrefix("mine") && faintedSlots[slot] == nil
                     && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
                 if !replacementBusy {
                     // 前の種族のランク変化・かるわざの解除は、下の |switch| 行の
@@ -2898,6 +2963,8 @@ func processPlates(_ hits: [String: SlotState]) {
     }
     // 入場特性の効果として保留した行: 交代の確定待ちが空になったら流す
     if !heldEntryBoosts.isEmpty && pendingSwitchSpecies.isEmpty { flushHeldEntryBoosts() }
+    // 出所未確認で保留した地形の上書きの確認 (採用/破棄)
+    confirmHeldTerrainReplace()
 }
 
 // MARK: - ゲーム内ログ画面の解析
@@ -3181,6 +3248,42 @@ func clearWeather(stale: Bool = false) {
     }
     emitLog("|-weather|none")
 }
+// 地形の開始に、その地形を張れる出所 (サージ特性での交代・地形技の
+// 使用) が直近にあるか。開始文の再読や古いフレームの再処理は出所を
+// 伴わないため、別の地形への上書き採用の可否の判定に使う
+func terrainSourcePlausible(_ ui: String) -> Bool {
+    let surge: [String: String] = ["Psychic": "Psychic Surge", "Electric": "Electric Surge", "Grassy": "Grassy Surge", "Misty": "Misty Surge"]
+    guard let ab = surge[ui] else { return true }
+    // 地形技が直近の技なら、その技からの開始として妥当
+    if lastMoveName == "\(ui) Terrain", Date().timeIntervalSince(lastMoveMsgAt) < 25 { return true }
+    // 直近の交代で入った個体が、その特性を持ちうるなら妥当
+    // (メガフォルムの特性は別エントリにあるため科単位でも見る)
+    for (key, sw) in lastSwitchIn where Date().timeIntervalSince(sw.at) < 25 {
+        let sp = key.split(separator: ":").last.map(String.init) ?? ""
+        if (speciesAbilityMap[sp] ?? []).contains(ab) { return true }
+        for (other, pool) in speciesAbilityMap where pool.contains(ab) && sameSpeciesFamily(other, sp) { return true }
+    }
+    return false
+}
+
+// 出所未確認で保留した地形の上書き: 出所が付けば採用し、4 秒
+// 付かなければ開始文の再読・古いフレームの再処理とみなして破棄する
+func confirmHeldTerrainReplace() {
+    guard let h = heldTerrainReplace else { return }
+    if terrainSourcePlausible(h.ui) {
+        heldTerrainReplace = nil
+        fieldHoldBypass = true
+        setTerrain(h.ui, via: h.text)
+        fieldHoldBypass = false
+    } else if Date().timeIntervalSince(h.at) > 4.0 {
+        heldTerrainReplace = nil
+        debugCapture(kind: "terrain_change", key: "terrain_change_blocked:\(h.ui)", rawText: h.text,
+                     detail: ["from": logFieldTerrain, "to": h.ui, "turn": currentTurn, "blocked": true, "reason": "unconfirmed_replace"])
+        print("[field] 出所を確認できない地形の上書きを採用しませんでした: \(h.ui) (現在: \(logFieldTerrain))")
+        fflush(stdout)
+    }
+}
+
 func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
     if logFieldTerrain == ui { return }
     // ログ画面経由の古い開始文は、実況で追えている現行の地形を上書きしない
@@ -3197,6 +3300,19 @@ func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
     if !stale && !text.isEmpty && !fieldHoldBypass && !pendingSwitchSpecies.isEmpty {
         if heldTerrainStart?.ui != ui {
             heldTerrainStart = (ui: ui, text: text, at: Date())
+        }
+        return
+    }
+    // 別の地形が張られている状態への上書きは、出所 (サージ特性の
+    // 交代・地形技) が直近に確認できる場合だけ即時に採用する。
+    // 出所の無い上書きは開始文の再読や古いフレームの再処理の疑いが
+    // 強いため短時間保留し、出所が付けば採用し、付かなければ
+    // 破棄する (実例: 2026-11-22 battle_20261122_054802、開始時の
+    // サイコフィールド文がターン3に再処理され、張られたばかりの
+    // グラスフィールドを上書きした)
+    if !logFieldTerrain.isEmpty && !stale && !text.isEmpty && !fieldHoldBypass && !terrainSourcePlausible(ui) {
+        if heldTerrainReplace?.ui != ui {
+            heldTerrainReplace = (ui: ui, text: text, at: Date())
         }
         return
     }
@@ -3482,6 +3598,8 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
     lastSwitchIn["\(side):\(speciesEn)"] = (slot, Date())
     switchInTurn["\(side):\(speciesEn)"] = currentTurn
     fieldSeen[side, default: []].insert(speciesEn)
+    // この交代が出所になって、地形の上書き保留が採用できることがある
+    confirmHeldTerrainReplace()
     attributeFieldAbilities()
     // いかくの遡及帰属: プレート確定がメッセージより遅れ、攻撃 -1 の適用時に
     // 繰り出しが未記録だった場合は、記録したこの時点で特性行を出す
@@ -4779,9 +4897,24 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 状態が変化した文はフィールドの告知として消費する
     // 天候・フィールドの告知文は、状態が変わらなかった (再読だった) 場合も消費する
     if checkFieldText(text: t) { return true }
-    // あくびで眠気を誘った文 (対象は次のターン終了時に眠る。眠気そのものは
-    // 状態として持たないため、漏らさず消費だけする)
-    if (t.contains("眠気") || t.contains("ねむけ")) && (t.contains("誘った") || t.contains("誘つた") || t.contains("さそった") || t.contains("さそつた")) { return true }
+    // あくびで眠気を誘った文 (対象は次のターン終了時に眠る)。文中で
+    // 対象が特定できる場合は、効果の開始行 (|-start|) も記録する
+    // (実例: 2026-11-22 battle_20261122_054802、あくびの効果行が
+    // 一切なく、対象も特定できなかった)。特定できない場合は
+    // 従来どおり消費だけする
+    if (t.contains("眠気") || t.contains("ねむけ")) && (t.contains("誘った") || t.contains("誘つた") || t.contains("さそった") || t.contains("さそつた")) {
+        if lastMoveName == "Yawn", let user = parseSlotSpecies(lastMoveLabel) {
+            let targetPrefix = user.side == "p1" ? "opp" : "mine"
+            let named = lastSlots.filter { plateName, s in
+                plateName.hasPrefix(targetPrefix)
+                    && (speciesDict.first { $0.en == s.speciesEn }.map { t.contains($0.ja) } ?? false)
+            }
+            if named.count == 1, let (plateName, s) = named.first {
+                emitLog("|-start|\(slotId(plateName)): \(s.speciesEn)|move: Yawn")
+            }
+        }
+        return true
+    }
     // やどりぎのたねを植えつけた文 (吸収のダメージ/回復はプレート側で
     // 行が出るため、植えつけ自体は消費だけする)
     if t.contains("植えつけ") || t.contains("植え付け") { return true }
@@ -5372,6 +5505,11 @@ func translateBattleMessage(_ text: String) -> Bool {
     //  文面とターン3の崩れた文がどちらも |-message| に残った)
     if (t.contains("戻ってい") || t.contains("買ってい") || t.contains("どってい"))
         && (t.contains("元へ") || t.contains("完へ") || t.contains("場所") || t.contains("もと")) {
+        // 戻ることが確定しているため、後任の交代はプレート 1 回の
+        // 読みで確定してよい (通常の 2 回確認だと、相手の交代行や
+        // ターン終了時の回復行が先に出て順序がずれる。実例:
+        // 2026-11-22 battle_20261122_054802 ターン4)
+        pivotReturnAt[side] = Date()
         return true
     }
     // せんせいのツメの発動 (実例: 2026-11-20 の対戦で「キュウコンは
@@ -7366,7 +7504,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0611"
+let readerBuild = "20261122_0625"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
