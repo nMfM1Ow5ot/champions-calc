@@ -410,6 +410,7 @@ export function moveData(name) {
     name: m.name, category: m.category, type: m.type, target: m.target,
     priority: m.priority || 0, multihit: m.multihit || null,
     fixedDamage: m.fixedDamage || null, basePower: m.basePower,
+    isZ: !!m.isZ, isMax: !!m.isMax,
     spec: moveSpecInfo(name),
   };
 }
