@@ -4341,6 +4341,22 @@ func parseMineHPText(_ text: String, knownMax: Int?) -> (pct: Int, cur: Int, max
     if groups.count == 2 && groups[1] >= 30 && groups[0] >= 10 && groups[0] <= groups[1] && !text.contains("%") {
         return (pct(groups[0], groups[1]), groups[0], groups[1])
     }
+    // 3b) スラッシュが最大値の先頭桁と融合して 1 文字に化けた場合
+    // (例: "150m71" — "/1" が "m" になった読み)。ペアの後半が現在値
+    // より小さい場合だけ、最大値の先頭桁を補って解釈する。既知の
+    // 最大値と一致する補完を採り、既知値が無ければ成り立つ最小の
+    // 補完を採る (実例: 2026-11-22 battle_20261122_071457、
+    // ムクホークの 150/171 が読めず 65 秒間ヒットしなかった)
+    if groups.count == 2 && groups[0] >= 10 && groups[1] >= 10 && groups[0] > groups[1] && !text.contains("%") {
+        var place = 1
+        for _ in 0..<String(groups[1]).count { place *= 10 }
+        for p in 1...4 {
+            let m = p * place + groups[1]
+            if m >= groups[0] && m <= 500 && (knownMax == nil || m == knownMax) {
+                return (pct(groups[0], m), groups[0], m)
+            }
+        }
+    }
     // 4) 現在値だけ読めた場合: 判明済みの最大HP から割合を復元する
     // (1 桁の数字はカウントダウン等の UI 要素であることが多く、現在値とはみなさない。
     //  スラッシュ形式で読めた場合 (パターン 1) は 1 桁でも正規の読みとして通る)
@@ -6088,6 +6104,7 @@ var previewLocked: [String?] = []               // 枠ごとの確定種族 (nil
 var previewEvidenceImage: CGImage? = nil        // 最後に同定を試みたフレーム
 var previewEvidenceSlots: [PvSlotInfo] = []     // そのフレームの枠ごとの同定情報
 var previewEvidenceTeam: [String?] = []         // その時点のマージ済み同定結果
+var previewEvidenceVotes: [[[String: Any]]] = []  // その時点のマージ票数 (枠ごと・種族ごと)
 var previewEvidenceAt: Date? = nil
 // 見せ合い画面の最終フレーム (同定が走らなかった・失敗した試合でも
 // 画面自体は証拠として残すための保持。preview_id の全試合保証用)
@@ -6873,7 +6890,17 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
             // から Pincurchin に、それぞれ展開で上書きされた)
             let all = rankedAll(f, gender)
             if let top = all.first, top.1 < ranked[0].1 - pvExpandMargin {
-                ranked = all; expanded = true
+                // タイプ読みと 1 つも重ならない展開先は、テンプレート級
+                // (負値) の一致のときだけ採用する。タイプが正しく
+                // 読めている枠で、無関係な種族の偶然の低スコアに
+                // プールを捨てさせる事故の防止 (実例: 2026-11-22
+                // battle_20261122_071457 枠5、Steel/Ghost と正しく
+                // 読めていたのに Scrafty (0.032) が採用された)
+                let topTypes = pvSpeciesTypes[top.0] ?? []
+                let overlaps = !types.isEmpty && !Set(topTypes).isDisjoint(with: Set(types))
+                if overlaps || top.1 < 0 {
+                    ranked = all; expanded = true
+                }
             }
         }
         slotRanked.append(ranked); slotDecisive.append(decisive); slotExpanded.append(expanded)
@@ -7534,6 +7561,16 @@ func runOnce(image: CGImage) {
                 previewEvidenceImage = image
                 previewEvidenceSlots = r.slots
                 previewEvidenceTeam = previewBestTeam
+                // マージの票数も証拠に残す: 単フレームの pick と最終
+                // チームが食い違う場合に、どの試行でどう覆ったかを
+                // 後から追えるようにする (2026-11-22 battle_20261122_
+                // 075240 の共有で、訂正過程が見えないことが判明)
+                previewEvidenceVotes = previewVotes.indices.map { i in
+                    previewVotes[i].map { (sp, v) in
+                        ["species": sp, "votes": v,
+                         "best": ((previewVoteScore[i][sp] ?? 9) * 1000).rounded() / 1000] as [String: Any]
+                    }.sorted { ($0["votes"] as? Int ?? 0) > ($1["votes"] as? Int ?? 0) }
+                }
                 previewEvidenceAt = Date()
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
                 var obj: [String: Any] = [:]
@@ -7764,6 +7801,7 @@ func runOnce(image: CGImage) {
         debugCapture(kind: "preview_id", key: "preview_id", rawText: "",
                      detail: ["team": previewEvidenceTeam.map { $0 ?? "" },
                               "slots": slotDetails, "readerBuild": readerBuild,
+                              "votes": previewEvidenceVotes,
                               "identified": previewEvidenceImage != nil],
                      image: evImage)
     }
@@ -7840,7 +7878,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0801"
+let readerBuild = "20261122_0840"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
