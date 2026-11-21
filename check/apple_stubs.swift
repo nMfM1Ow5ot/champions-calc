@@ -17,6 +17,7 @@ public class CGImage {
     public var width: Int = 0
     public var height: Int = 0
     public init() {}
+    public func cropping(to rect: CGRect) -> CGImage? { nil }
 }
 public class CGColorSpace { public init() {} }
 public func CGColorSpaceCreateDeviceRGB() -> CGColorSpace { CGColorSpace() }
@@ -50,8 +51,11 @@ public class NSImage {
 }
 public class NSBitmapImageRep {
     public enum FileType { case png, jpeg, tiff, gif, bmp }
+    public struct PropertyKey: Hashable {
+        public static let compressionFactor = PropertyKey()
+    }
     public init(cgImage: CGImage) {}
-    public func representation(using type: FileType, properties: [String: Any]) -> Data? { nil }
+    public func representation(using type: FileType, properties: [PropertyKey: Any]) -> Data? { nil }
 }
 
 // MARK: - Vision
