@@ -56,6 +56,7 @@
 :root[data-theme="light"] .sdd-empty{color:rgba(0,0,0,.5)}
 :root[data-theme="light"] .movesbox{background:rgba(255,255,255,.92)}
 :root[data-theme="light"] .spreadtgl{border-color:rgba(0,0,0,.18)}
+:root[data-theme="light"] .mspecsel{background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.18)}
 :root[data-theme="light"] .dmgbtn:hover{background:rgba(0,0,0,.06)}
 :root[data-theme="light"] .evfield:hover{background:rgba(0,0,0,.05)}
 :root[data-theme="light"] .evfield:focus-within{background:rgba(0,0,0,.08)}
@@ -187,6 +188,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .tables{display:flex; gap:1.2rem; margin-top:1.6rem; align-items:center}
 .movesbox{flex:2; min-width:0; background:rgba(18,18,18,.8); border-radius:1.2rem; box-shadow:var(--shadow); padding:.8rem 1.2rem 1.2rem}
 .movesgrid{display:grid; grid-template-columns:minmax(15rem,1.5fr) minmax(0,1.25fr) minmax(0,1fr); column-gap:1rem; row-gap:.3rem; align-items:center}
+.mspecwrap{display:inline-flex; align-items:center; gap:.18rem; flex:none; margin-left:.35rem; margin-right:.55rem}
+.mspeclab{font-size:.68rem; color:var(--label); white-space:nowrap}
+.mspecsel{font:inherit; font-size:.72rem; line-height:1; padding:.18rem .15rem; background:rgba(255,255,255,.08); color:var(--ink); border:1px solid rgba(255,255,255,.18); border-radius:999px; cursor:pointer}
 .spreadtgl{display:flex; flex:none; border:1px solid rgba(255,255,255,.18); border-radius:999px; overflow:hidden}
 .spreadtgl button{font:inherit; font-size:.72rem; line-height:1; padding:.24rem .42rem; background:none; border:none; color:var(--label); cursor:pointer; white-space:nowrap}
 .sdd-control .spreadtgl{margin-left:.35rem; margin-right:.55rem}
@@ -1026,6 +1030,30 @@ function spreadCapable(side, moveName) {
   }
   return md.target === 'allAdjacentFoes' || md.target === 'allAdjacent';
 }
+// 連続技のヒット数・積み技カウンタの指定 (core の moveData().spec が対象技の情報)
+// spec.moveSpec は技スロット番号 → 指定値。未指定なら core の既定 (現行挙動)
+function moveSpecOf(moveName) {
+  if (!moveName) return null;
+  const md = moveData(moveName);
+  return md && md.spec ? md.spec : null;
+}
+function mspecHTML(side, mi, ms, spec) {
+  const cur = spec.moveSpec && spec.moveSpec[mi] != null ? String(spec.moveSpec[mi]) : '';
+  const lab = { hits: 'ヒット', rageFist: '被弾', lastRespects: '味方' }[ms.kind] || '';
+  const unit = ms.kind === 'lastRespects' ? '体' : '回';
+  const title = { hits: '連続技のヒット数を指定（自動 = 既定の計算）', rageFist: 'ふんどのこぶし: 被弾回数を指定（自動 = 0回）', lastRespects: 'おはかまいり: 倒れた味方の数を指定（自動 = 0体）' }[ms.kind] || '';
+  let opts = '<option value="">自動</option>';
+  for (let n = ms.min; n <= ms.max; n++) opts += `<option value="${n}"${String(n) === cur ? ' selected' : ''}>${n}${unit}</option>`;
+  return `<span class="mspecwrap" title="${title}"><span class="mspeclab">${lab}</span><select class="mspecsel" data-mspec="${side}:${mi}">${opts}</select></span>`;
+}
+// calcMatchup の state.moveSpecs 用: {技名: 指定値} (指定のある技だけ)
+function buildMoveSpecs(spec) {
+  const out = {};
+  (spec.moves || []).forEach((mv, i) => {
+    if (mv && spec.moveSpec && spec.moveSpec[i] != null) out[mv] = spec.moveSpec[i];
+  });
+  return out;
+}
 // 単体/全体の現在モード: 手動選択があればそれ、なければ相手の場の残数で決める
 function spreadMode(side, moveName) {
   const sel = ui.spreadSel[side][moveName];
@@ -1046,12 +1074,17 @@ function movesBox(side, res) {
       options: MOVE_OPTIONS, value: spec.moves[mi] || '', clearable: true, placeholder: '（技なし）',
       extra: (() => {
         const mv0 = spec.moves[mi];
-        if (!spreadCapable(side, mv0)) return '';
-        const mode = spreadMode(side, mv0);
-        return `<span class="spreadtgl"><button data-spread="${side}:${mi}:single" class="${mode === 'single' ? 'on' : ''}">単体</button><button data-spread="${side}:${mi}:spread" class="${mode === 'spread' ? 'on' : ''}">全体</button></span>`;
+        let out = '';
+        if (spreadCapable(side, mv0)) {
+          const mode = spreadMode(side, mv0);
+          out += `<span class="spreadtgl"><button data-spread="${side}:${mi}:single" class="${mode === 'single' ? 'on' : ''}">単体</button><button data-spread="${side}:${mi}:spread" class="${mode === 'spread' ? 'on' : ''}">全体</button></span>`;
+        }
+        const ms = moveSpecOf(mv0);
+        if (ms) out += mspecHTML(side, mi, ms, spec);
+        return out;
       })(),
       highlight: side === 'opps' && !!spec.moves[mi] && (spec.knownMoves || []).includes(spec.moves[mi]),
-      onPick: v => { const old = spec.moves[mi]; spec.moves[mi] = v || ''; if (side === 'opps') { markCorrected(spec, '技'); if (!Array.isArray(spec.knownMoves)) spec.knownMoves = []; if (v && !spec.knownMoves.includes(v)) spec.knownMoves.push(v); if (old && old !== v && !spec.moves.includes(old)) spec.knownMoves = spec.knownMoves.filter(m => m !== old); } calcAll(); },
+      onPick: v => { const old = spec.moves[mi]; spec.moves[mi] = v || ''; if (spec.moveSpec) delete spec.moveSpec[mi]; if (side === 'opps') { markCorrected(spec, '技'); if (!Array.isArray(spec.knownMoves)) spec.knownMoves = []; if (v && !spec.knownMoves.includes(v)) spec.knownMoves.push(v); if (old && old !== v && !spec.moves.includes(old)) spec.knownMoves = spec.knownMoves.filter(m => m !== old); } calcAll(); },
     });
     const mr = res && res.moveResults ? res.moveResults[mi] : null;
     const r = mr && mr.vs ? mr.vs[0] : null;
@@ -1218,6 +1251,7 @@ function calcAll() {
     field: { weather: state.field.weather, terrain: state.field.terrain, attackerSide: atkSide, defenderSide: defSide, oppAttackerSide: oppAtkSide, oppDefenderSide: oppDefSide, tailwindMine: !!state.side.mine.tailwind, tailwindOpp: !!state.side.opp.tailwind },
     crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
     singleMoves,
+    moveSpecs: { mine: [buildMoveSpecs(DS('mine'))], opps: [buildMoveSpecs(DS('opps'))] },
   });
   lastCalc.candRanges = computeCandRanges();
   renderAll();
@@ -1306,6 +1340,8 @@ function megaFromItem(itemEn) {
 
 /* ---------- events ---------- */
 document.addEventListener('mousedown', e => {
+  // 技のヒット数等のセレクタ (ネイティブ select) はドロップダウン操作を妨げない
+  if (e.target.closest && e.target.closest('[data-mspec]')) return;
   const spb = e.target.closest('[data-spread]');
   if (spb) {
     e.preventDefault(); e.stopPropagation();
@@ -1488,6 +1524,16 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.matches('[data-mspec]')) {
+    const [sd, mi] = t.dataset.mspec.split(':');
+    const spec = DS(sd);
+    if (spec) {
+      spec.moveSpec = spec.moveSpec || {};
+      if (t.value === '') delete spec.moveSpec[mi]; else spec.moveSpec[mi] = +t.value;
+      calcAll();
+    }
+    return;
+  }
   if (t.matches('[data-hpnum]')) {
     const spec = DS(t.dataset.hpnum);
     spec.curHPPercent = Math.max(0, Math.min(100, Math.round(+t.value || 0)));
@@ -1558,7 +1604,7 @@ function applyRevealedPreserving(spec, rev) {
   if (spec.mega && !fresh.mega) { fresh.mega = true; fresh.megaSpecies = spec.megaSpecies; fresh.megaAbility = spec.megaAbility; }
   if (!fresh.megaSpecies && spec.megaSpecies) fresh.megaSpecies = spec.megaSpecies;
   fresh.knownMoves = [...new Set([...(fresh.knownMoves || []), ...(spec.knownMoves || [])])];
-  fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status;
+  fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status; fresh.moveSpec = spec.moveSpec;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
@@ -2059,7 +2105,7 @@ async function poll() {
         if (!old || old.species !== sp) return oppSpec(sp, 'usage');
         if (!old.noUsage) return old;
         const fresh = oppSpec(sp, 'usage');
-        fresh.curHPPercent = old.curHPPercent; fresh.boosts = old.boosts; fresh.status = old.status;
+        fresh.curHPPercent = old.curHPPercent; fresh.boosts = old.boosts; fresh.status = old.status; fresh.moveSpec = old.moveSpec;
         fresh.knownMoves = old.knownMoves || [];
         if (old.estManual) fresh.estManual = old.estManual;
         for (const f of old.corrected || []) {
