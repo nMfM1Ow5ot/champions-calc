@@ -253,6 +253,54 @@ func noteBlankFrame(_ blank: Bool) {
     blankFrameActive = blank
 }
 
+// MARK: - 生観測アーカイブ (改善計画フェーズ0: 証拠と解釈の分離)
+// reader が処理したフレームの OCR 結果 (文字列・位置・確信度) を、
+// 解釈せずに試合単位の観測ファイル (logs/battle_<試合キー>_obs.jsonl)
+// へ残す。対象フレームへの参照として、runOnce の通し番号と時刻を
+// 記録する。ログ組み立ての挙動には一切影響しない (記録は OCR の
+// 出口での副作用のみで、失敗は無視する)。周期は現行の処理周期
+// (処理時間 + 0.5 秒待機) のまま
+var obsFrameSeq = 0
+var obsFileKey = ""
+var obsFileBytes = 0
+let obsLock = NSLock()
+let obsMaxBytes = 32 * 1024 * 1024
+
+func recordObservation(pass: String, region: [Double],
+                       boxes: [(text: String, x0: Double, y0: Double, x1: Double, y1: Double, conf: Double)]) {
+    guard logStarted, !winLogged, !battleArchiveId.isEmpty, !boxes.isEmpty else { return }
+    obsLock.lock()
+    defer { obsLock.unlock() }
+    if obsFileKey != battleArchiveId { obsFileKey = battleArchiveId; obsFileBytes = 0 }
+    if obsFileBytes >= obsMaxBytes { return }
+    func r4(_ v: Double) -> Double { (v * 10000).rounded() / 10000 }
+    let rec: [String: Any] = [
+        "t": Int(Date().timeIntervalSince1970 * 1000),
+        "frame": obsFrameSeq,
+        "pass": pass,
+        "region": region.map(r4),
+        "boxes": boxes.map { ["s": $0.text, "x": r4($0.x0), "y": r4($0.y0),
+                              "w": r4($0.x1 - $0.x0), "h": r4($0.y1 - $0.y0),
+                              "c": ($0.conf * 1000).rounded() / 1000] },
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: rec, options: []),
+          let lineText = String(data: data, encoding: .utf8) else { return }
+    let line = lineText + "\n"
+    let url = logsDirURL.appendingPathComponent("battle_\(battleArchiveId)_obs.jsonl")
+    do {
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        let fh = try FileHandle(forWritingTo: url)
+        _ = fh.seekToEndOfFile()
+        if let d = line.data(using: .utf8) { fh.write(d) }
+        try fh.close()
+        obsFileBytes += line.utf8.count
+    } catch {
+        // 観測の記録失敗で対戦処理を止めない
+    }
+}
+
 // MARK: - OCR
 
 func ocr(_ image: CGImage, plate: Plate) -> [String] {
@@ -265,7 +313,15 @@ func ocr(_ image: CGImage, plate: Plate) -> [String] {
     req.regionOfInterest = CGRect(x: plate.x0, y: 1.0 - plate.y1, width: plate.x1 - plate.x0, height: plate.y1 - plate.y0)
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try? handler.perform([req])
-    return (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+    let found = (req.results ?? []).compactMap { obs -> (text: String, x0: Double, y0: Double, x1: Double, y1: Double, conf: Double)? in
+        guard let cand = obs.topCandidates(1).first else { return nil }
+        let b = obs.boundingBox // 左下原点の正規化座標
+        return (text: cand.string, x0: Double(b.minX), y0: 1.0 - Double(b.maxY),
+                x1: Double(b.maxX), y1: 1.0 - Double(b.minY), conf: Double(cand.confidence))
+    }
+    recordObservation(pass: "plate:\(plate.name)", region: [plate.x0, plate.y0, plate.x1, plate.y1],
+                      boxes: found.map { (text: $0.text, x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, conf: $0.conf) })
+    return found.map { $0.text }
 }
 
 // MARK: - パース
@@ -7511,6 +7567,7 @@ func maybeRestartForUpdate() {
 }
 
 func runOnce(image: CGImage) {
+    obsFrameSeq += 1   // 生観測アーカイブのフレーム参照 (通し番号)
     // 空フレーム (暗転・消灯・切断) はどの判定にも流さず待機する。
     // 対戦終了カウンタ (emptyBattleFrames) や選出の試行回数も進めない
     if isBlankFrame(image) { noteBlankFrame(true); return }
@@ -8000,7 +8057,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0845"
+let readerBuild = "20261122_0854"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -8094,7 +8151,7 @@ func loadMoveDict() {
     }
 }
 
-struct OcrBox { let text: String; let cx, cy, x0, y0, x1, y1: Double } // 座標は左上原点の割合
+struct OcrBox { let text: String; let cx, cy, x0, y0, x1, y1: Double; let conf: Double } // 座標は左上原点の割合
 
 func ocrBoxes(_ image: CGImage, x0: Double, y0: Double, x1: Double, y1: Double, fast: Bool = false) -> [OcrBox] {
     // Vision のテキスト検出 (.fast) は実機でフレームワーク内部が
@@ -8113,12 +8170,16 @@ func ocrBoxes(_ image: CGImage, x0: Double, y0: Double, x1: Double, y1: Double, 
     req.regionOfInterest = CGRect(x: x0, y: 1.0 - y1, width: x1 - x0, height: y1 - y0)
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try? handler.perform([req])
-    return (req.results ?? []).compactMap { obs -> OcrBox? in
-        guard let t = obs.topCandidates(1).first?.string else { return nil }
+    let found = (req.results ?? []).compactMap { obs -> OcrBox? in
+        guard let cand = obs.topCandidates(1).first else { return nil }
         let b = obs.boundingBox // 左下原点の正規化座標
-        return OcrBox(text: t, cx: Double(b.midX), cy: 1.0 - Double(b.midY),
-                      x0: Double(b.minX), y0: 1.0 - Double(b.maxY), x1: Double(b.maxX), y1: 1.0 - Double(b.minY))
+        return OcrBox(text: cand.string, cx: Double(b.midX), cy: 1.0 - Double(b.midY),
+                      x0: Double(b.minX), y0: 1.0 - Double(b.maxY), x1: Double(b.maxX), y1: 1.0 - Double(b.minY),
+                      conf: Double(cand.confidence))
     }
+    recordObservation(pass: "boxes", region: [x0, y0, x1, y1],
+                      boxes: found.map { (text: $0.text, x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, conf: $0.conf) })
+    return found
 }
 
 // 画像を小さなピクセルバッファにして色を拾う (行0 = 画像の上端になるよう反転して描く)
