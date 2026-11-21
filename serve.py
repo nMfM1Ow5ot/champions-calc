@@ -88,13 +88,17 @@ def sync_loop():
 # battle_*_protocol.log (プロトコルログ) を、team_key.txt で暗号化して
 # GitHub リポジトリ (nMfM1Ow5ot/champions-calc) の logs_enc/ へ送る。
 #
-# 備考ゲート (2026-11-21、ユーザーの指示): 試合ログは、UI の備考欄への
-# 入力が済むまで送信しない。UI (このサーバが配信する画面) の上部に、
-# 送信待ちの試合ごとに備考欄と「備考と一緒にログを送信」ボタンが出る。
-# ボタンが押されると serve.py の POST /log-note が備考を
-# logs/battle_<試合ID>_note.txt に保存し (空欄でもファイルは作る。
-# ファイルの存在そのものが「入力済み」の印)、その時点で初めて
-# その試合のログ・デバッグ一式・備考ファイルがまとめて送信される。
+# 備考ゲート (2026-11-21、ユーザーの指示。当初 UI に備考欄を付けたが、
+# 同日ユーザーの訂正でターミナル入力に変更): 試合ログは、ターミナルで
+# 備考が入力されるまで送信しない。serve.py がターミナルで動いている
+# 場合 (start_all.sh / start_ui.sh)、送信待ちの試合ができるとこの
+# ターミナルに備考の入力プロンプトが出る。1 行入力して Enter を押すと
+# 備考が logs/battle_<試合ID>_note.txt に保存され (空欄で Enter でも
+# ファイルは作る。ファイルの存在そのものが「入力済み」の印)、その時点で
+# 初めてその試合のログ・デバッグ一式・備考ファイルがまとめて送信される。
+# プロンプトが出ていない状況 (別のターミナルから手動で送りたい場合等)
+# では、別のターミナルで `python3 serve.py --note` を実行すれば、
+# 送信待ちの試合を順に聞かれて同じように送れる。
 # 備考ファイルも他のファイルと同じ暗号化で logs_enc/ へ送られ、
 # 受信側 (ログ分析チャット) は備考の内容を到着報告に含めて分析し、
 # 備考の指示に応じて champions_calc 全般の修正につなげる。
@@ -244,7 +248,7 @@ def _file_hash(path):
 
 
 def list_pending_log_notes():
-    """備考の入力待ちの試合の一覧を返す (UI の GET /log-pending 用)。
+    """備考の入力待ちの試合の一覧を返す (ターミナルのプロンプト用)。
 
     すでに送信済みの試合 (uploaded.json とハッシュが一致するログしか
     残っていない試合) と、備考ファイルが既にある試合は含めない。
@@ -302,7 +306,7 @@ def list_pending_log_notes():
 
 
 def save_log_note(key, note):
-    """UI から受け取った備考を logs/battle_<key>_note.txt に保存する。
+    """ターミナルで入力された備考を logs/battle_<key>_note.txt に保存する。
 
     空欄でもファイルを作る (存在が「入力済み」の印になる)。
     保存できたら True、キーが不正なら False を返す。
@@ -319,7 +323,7 @@ def save_log_note(key, note):
         f.write(note)
     os.replace(tmp, path)
     print(f"[log] 備考を受け付けました: battle_{key} "
-          f"({len(note)}文字) — ログを送信します", flush=True)
+          f"({len(note)}文字)", flush=True)
     return True
 
 
@@ -403,7 +407,8 @@ def _upload_logs_once_locked():
         if key not in _log_hold_notice_keys:
             _log_hold_notice_keys.add(key)
             print(f"[log] 試合ログは備考の入力待ちです: battle_{key} "
-                  "(UI の備考欄から送信してください)", flush=True)
+                  "(このターミナルのプロンプトで入力するか、別のターミナルで "
+                  "python3 serve.py --note を実行してください)", flush=True)
     _log_hold_notice_keys.intersection_update(
         {_battle_key(n) for n in names if n.endswith(".log")})
     # デバッグ同梱の掃除は 1 日 1 回まで (送信が無い日でもその回だけ目録を見る)
@@ -487,52 +492,89 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
-    def _send_json(self, status, obj):
-        body = json.dumps(obj, ensure_ascii=False).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
 
-    def do_GET(self):
-        if self.path.split("?")[0] == "/log-pending":
-            try:
-                self._send_json(200, {"pending": list_pending_log_notes()})
-            except Exception as e:
-                self._send_json(500, {"ok": False, "error": str(e)})
-            return
-        super().do_GET()
+# ---- 備考のターミナル入力 ----
+# 送信待ちの試合を 1 件ずつ聞いて備考を保存する。入力は 1 行で、
+# 空欄で Enter を押せば備考なしで送信される。EOF (入力が閉じている)
+# の場合は例外で呼び出し側に知らせる。
+def prompt_for_pending_notes(input_fn=None, do_upload=True):
+    if input_fn is None:
+        input_fn = input
+    count = 0
+    for p in list_pending_log_notes():
+        vs = f" vs {p['opponent']}" if p.get("opponent") else ""
+        kind = "勝敗確定" if p.get("kind") == "final" else "中断"
+        print(f"[log] 試合ログが保存されました (battle_{p['key']}{vs}、{kind})。"
+              "送信前に備考を入力してください", flush=True)
+        note = input_fn("備考 (空欄で Enter = 備考なしで送信): ")
+        if save_log_note(p["key"], note or ""):
+            count += 1
+    if count and do_upload:
+        upload_logs_once()
+    return count
 
-    def do_POST(self):
-        if self.path.split("?")[0] != "/log-note":
-            self._send_json(404, {"ok": False, "error": "not found"})
-            return
+
+def _note_prompt_loop():
+    # serve.py 本体がターミナルで動いている間、送信待ちの試合ができたら
+    # このターミナルで備考を聞く。標準入力がターミナルでない環境では
+    # 呼び出し側がこのスレッド自体を起動しない。EOF になったら静かに終える
+    # (以降の送信待ちは `python3 serve.py --note` で送れる)。
+    while True:
         try:
-            length = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            length = 0
-        if length <= 0 or length > 65536:
-            self._send_json(400, {"ok": False, "error": "リクエストが不正です"})
+            if list_pending_log_notes():
+                prompt_for_pending_notes()
+            else:
+                time.sleep(2)
+        except (EOFError, OSError):
+            print("[log] 備考の入力プロンプトを終了します。"
+                  "送信待ちのログは python3 serve.py --note で送れます", flush=True)
             return
-        try:
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
         except Exception:
-            self._send_json(400, {"ok": False, "error": "JSON を読めませんでした"})
-            return
-        key = payload.get("key") if isinstance(payload, dict) else None
-        note = payload.get("note", "") if isinstance(payload, dict) else ""
-        if not save_log_note(key, note):
-            self._send_json(400, {"ok": False, "error": "試合IDが不正です"})
-            return
-        # 備考が付いたので、その試合のログ送信をすぐ試みる
-        threading.Thread(target=upload_logs_once, daemon=True).start()
-        self._send_json(200, {"ok": True})
+            time.sleep(2)
+
+
+def _server_running():
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", 8765), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def cli_send_notes():
+    """`python3 serve.py --note`: 別のターミナルから備考を付けて送る。"""
+    pending = list_pending_log_notes()
+    if not pending:
+        print("送信待ちの試合ログはありません")
+        return 0
+    try:
+        count = prompt_for_pending_notes(do_upload=False)
+    except (EOFError, OSError):
+        print("入力が中断されました")
+        return 1
+    if count:
+        if _server_running():
+            # 起動中の serve.py の定期送信 (約30秒ごと) に任せる。
+            # 二つのプロセスが同時に送信すると目録の競合が起きるため、
+            # このプロセスからは送信しない
+            print("備考を保存しました。起動中のサーバが約30秒以内に送信します")
+        else:
+            upload_logs_once()
+    return 0
 
 
 if __name__ == "__main__":
+    if "--note" in sys.argv:
+        # 備考を付けて送るだけの手動コマンド (サーバは起動しない)
+        raise SystemExit(cli_send_notes())
     check_log_token()
     threading.Thread(target=sync_loop, daemon=True).start()
+    if sys.stdin is not None and sys.stdin.isatty():
+        # ターミナルで動いている場合だけ、備考の入力プロンプトを出す。
+        # start_all.sh では serve.py は裏で動くが、標準入力は同じ
+        # ターミナルに繋がっている (リーダーは標準入力を読まない)
+        threading.Thread(target=_note_prompt_loop, daemon=True).start()
     handler = functools.partial(QuietHandler, directory=".")
     try:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 8765), handler)
