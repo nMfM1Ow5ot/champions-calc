@@ -388,6 +388,19 @@ function koChanceRec(damage, hp, eot, toxicCounter, maxHP, berryHeal, hits) {
   return sum / n;
 }
 // きのみ / ねをはる が関係する局面の KO テキスト。関係しなければ null (ライブラリのテキストを使う)
+// ライブラリは 9HKO までしか KO テキストを返さないため、それを超える低ダメージ
+// では最大ロール基準の必要発数を補う (possible nHKO)。ターン終了時の回復が
+// 最大ダメージ以上なら、繰り返しても倒せないため補わない (null)
+export function fallbackKoText(attacker, defender, move, field, maxDmg, ingrain, aquaring) {
+  try {
+    const eot = koEndOfTurn(attacker, defender, move, field, !!ingrain, !!aquaring);
+    const per = maxDmg - eot.damage;
+    if (per <= 0) return null;
+    const n = Math.ceil((defender.curHP() - eot.damage) / per);
+    return n > 1 ? `possible ${n}HKO` : null;
+  } catch (e) { return null; }
+}
+
 function recoveryKoText(attacker, defender, move, field, result, koCtx, defIdx) {
   const raw = result.damage;
   const damage = Array.isArray(raw) ? (raw.every(x => typeof x === 'number') ? raw : null) : (typeof raw === 'number' ? [raw] : null);
@@ -473,6 +486,12 @@ function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSi
           if (customKo) {
             koText = customKo;
             if (koText && descText.endsWith(r.kochance().text)) descText = descText.slice(0, descText.length - r.kochance().text.length) + customKo;
+          }
+          if (!koText && range[1] > 0) {
+            const fb = fallbackKoText(attackers[i], defenders[j], moveObj, useField, range[1],
+              !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[j]),
+              !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[j]));
+            if (fb) { koText = fb; descText = descText + ' -- ' + fb; }
           }
           row.vs.push({
             min: range[0], max: range[1],
