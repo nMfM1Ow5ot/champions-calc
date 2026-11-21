@@ -10,7 +10,10 @@
 try{var q=new URLSearchParams(location.search).get('layout');if(q==='sp'||q==='tablet'||q==='pc'){l=q;localStorage.setItem('champions-calc-layout',l);}}catch(e){}
 if(!l){try{l=localStorage.getItem('champions-calc-layout')||'';}catch(e){}}
 if(l!=='sp'&&l!=='tablet'&&l!=='pc'){var w=Math.min(window.innerWidth||9999, (window.screen&&screen.width)||9999);l=w<=640?'sp':(w<=1150?'tablet':'pc');}
-document.documentElement.setAttribute('data-layout',l);})();</script>
+document.documentElement.setAttribute('data-layout',l);
+// PC レイアウトを狭い画面で描くときの縮小率 (デスクトップ幅のまま描いて全体を
+// 縮小する。狭い画面にそのまま流すと各行が収まらず重なって崩れるため)
+if(l==='pc')document.documentElement.style.setProperty('--pcscale',String(Math.min(1,(window.innerWidth||1280)/1280)));})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Work+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -260,6 +263,10 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 @media (max-width:640px){ .tables{flex-direction:column; align-items:stretch} .metarow{flex-direction:column} .presetbox{min-width:0; width:auto} .presethead{flex-wrap:wrap} }
 
 /* ---------- 端末別レイアウト (data-layout は head のスクリプトが ?layout= か画面幅で決める) ---------- */
+/* PC レイアウト: 狭い画面ではデスクトップ幅 (13px 基準) のまま描き、body の zoom で
+   全体を画面幅に縮小する (head のスクリプトが --pcscale を入れる。広い画面では 1) */
+html[data-layout="pc"]{font-size:13px}
+html[data-layout="pc"] body{zoom:var(--pcscale,1)}
 /* iPad 用: 2カラムのまま余白と最小幅を詰めて、縦持ちでも横スクロールなしに収める */
 html[data-layout="tablet"]{font-size:12.5px}
 html[data-layout="tablet"] .wrap{padding:1rem 1rem 1.4rem}
@@ -312,7 +319,10 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
       <button type="button" data-layoutpick="tablet">iPad用</button>
       <button type="button" data-layoutpick="pc">PC用</button>
     </div>
-    <script>(function(){var sw=document.querySelector('.layoutsw');if(!sw)return;function render(){var cur=document.documentElement.getAttribute('data-layout');sw.querySelectorAll('[data-layoutpick]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-layoutpick')===cur);});}sw.addEventListener('click',function(e){var b=e.target.closest('[data-layoutpick]');if(!b)return;var l=b.getAttribute('data-layoutpick');document.documentElement.setAttribute('data-layout',l);try{localStorage.setItem('champions-calc-layout',l);}catch(err){}render();});render();})();</script>
+    <script>(function(){var sw=document.querySelector('.layoutsw');if(!sw)return;function render(){var cur=document.documentElement.getAttribute('data-layout');sw.querySelectorAll('[data-layoutpick]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-layoutpick')===cur);});}
+      function applyScale(){if(document.documentElement.getAttribute('data-layout')==='pc')document.documentElement.style.setProperty('--pcscale',String(Math.min(1,(window.innerWidth||1280)/1280)));}
+      window.addEventListener('resize',applyScale);
+      sw.addEventListener('click',function(e){var b=e.target.closest('[data-layoutpick]');if(!b)return;var l=b.getAttribute('data-layoutpick');document.documentElement.setAttribute('data-layout',l);try{localStorage.setItem('champions-calc-layout',l);}catch(err){}applyScale();render();});render();})();</script>
     <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="false" title="ライトモードに切り替え">☀️ ライト</button>
   </div>
   <script>(function(){var btn=document.getElementById('themeToggle');if(!btn)return;function render(){var light=document.documentElement.getAttribute('data-theme')==='light';btn.textContent=light?'🌙 ダーク':'☀️ ライト';btn.setAttribute('aria-pressed',light?'true':'false');btn.title=light?'ダークモードに切り替え':'ライトモードに切り替え';}btn.addEventListener('click',function(){var next=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',next);try{localStorage.setItem('champions-calc-theme',next);}catch(e){}render();});render();})();</script>
