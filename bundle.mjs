@@ -26937,7 +26937,7 @@ function createEstimator(deps) {
   function logSnapshot(species, turn, trigger) {
     try {
       const ent = bayes && bayes.bySpecies ? bayes.bySpecies[species] : null;
-      let map = null, cover90 = null, cands = null, used = null, hpLifted = false;
+      let map = null, cover90 = null, cands = null, used = null, hpLifted = false, marg = null;
       if (ent && ent.cands) {
         const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
         const top = sorted[0];
@@ -26955,8 +26955,22 @@ function createEstimator(deps) {
           item: c.item,
           ability: c.ability,
           p: +c.post.toFixed(6),
-          src: c.moveExact ? "corpus" : c.generic ? "generic" : c.bulkSynth || c.shapeSynth ? "synth" : "pokedb"
+          src: c.moveExact ? "corpus" : c.generic ? "generic" : c.bulkSynth || c.shapeSynth || c.itemSynth ? "synth" : "pokedb"
         }));
+        const mN = /* @__PURE__ */ new Map(), mI = /* @__PURE__ */ new Map();
+        for (const c of ent.cands) {
+          mN.set(c.nature, (mN.get(c.nature) || 0) + c.post);
+          mI.set(c.item, (mI.get(c.item) || 0) + c.post);
+        }
+        const topOf = (m) => {
+          let bv = null, bp = -1;
+          for (const [v, p] of m) if (p > bp) {
+            bp = p;
+            bv = v;
+          }
+          return { v: bv, p: +bp.toFixed(6) };
+        };
+        marg = { nature: topOf(mN), item: topOf(mI) };
         used = ent.used;
         hpLifted = !!ent.hpLifted;
       }
@@ -26973,7 +26987,7 @@ function createEstimator(deps) {
         },
         hpSps: ie.hpSps ? ie.hpSps.size : null
       } : null;
-      infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, cover90, cands, inf });
+      infLog.push({ v: 1, seq: ++infLogSeq, turn: turn != null ? turn : infLogTurn, species, trigger, used, hpLifted, map, marg, cover90, cands, inf });
       if (infLog.length > 2e3) infLog.splice(0, infLog.length - 2e3);
     } catch (e) {
     }
@@ -26984,6 +26998,12 @@ function createEstimator(deps) {
     return out;
   }
   function infIntersect(species, statKey, feasible, hpSps) {
+    if (bayes && bayes.bySpecies[species] === void 0) {
+      try {
+        bayesEntry(species);
+      } catch (err) {
+      }
+    }
     const e = infEntry(species);
     if (!feasible || !feasible.size) {
       e.dropped++;
@@ -27016,6 +27036,7 @@ function createEstimator(deps) {
     pendingOpts = null;
     const md = moveData(ev.move);
     if (!md || md.category === "Status" || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
+    if (ev.atk && ev.atk === ev.def) return;
     const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
     const oppIsAtk = labelSide(ev.atk) === "p2";
     let target = md.target;
@@ -27143,7 +27164,7 @@ function createEstimator(deps) {
     const mySpecies = firstIsOpp ? labelSpecies(ev.label) : prev.species;
     const mySpec = io.my[mySpecies];
     const oppSpec = io.opp[oppSpecies] || null;
-    const table = statTable(oppSpecies);
+    const table = statTable(effSpecies(oppSpec));
     if (!mySpec || !oppSpec || !table) return intents;
     const myMd = firstIsOpp ? mdB : mdA, oppMd = firstIsOpp ? mdA : mdB;
     const ORDER_ITEMS = ["Quick Claw", "Custap Berry", "Lagging Tail", "Full Incense"];
@@ -27157,7 +27178,7 @@ function createEstimator(deps) {
       if (oppBr.last || oppBr.prio !== myBr.prio) return intents;
       if (oppSpec.ability === "Gale Wings" && oppMd.type === "Flying") return intents;
     }
-    const myTable = statTable(mySpecies);
+    const myTable = statTable(effSpecies(mySpec));
     const myRow = myTable?.spe.find((r) => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
     if (!myRow) return intents;
     const tw = (s) => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
@@ -27212,13 +27233,19 @@ function createEstimator(deps) {
     infIntersect(oppSpecies, "spe", feasible, null);
     const ent = bayesEntry(oppSpecies);
     if (ent) {
-      const counts = ent.cands.map((c) => {
-        if (c.values.spe == null) return 0;
-        if (c.values.spe === myRaw) return 8;
-        const ok = trick ? firstIsOpp ? c.values.spe < myRaw : c.values.spe > myRaw : firstIsOpp ? c.values.spe > myRaw : c.values.spe < myRaw;
-        return ok ? 16 : 0;
+      const verdicts = ent.cands.map((c) => {
+        if (c.values.spe == null) return null;
+        if (c.values.spe === myRaw) return null;
+        return trick ? firstIsOpp ? c.values.spe < myRaw : c.values.spe > myRaw : firstIsOpp ? c.values.spe > myRaw : c.values.spe < myRaw;
       });
-      bayesApply(ent, counts);
+      const res = bayesHardSpe(ent, verdicts);
+      logSnapshot(oppSpecies, turn, {
+        kind: "abilityOrder",
+        firstIsOpp: !!firstIsOpp,
+        applied: res.applied,
+        excluded: res.excluded,
+        ...res.applied ? {} : { inconsistent: true }
+      });
     }
   }
   const NATURE_JA2EN = { "\u304C\u3093\u3070\u308A\u3084": "Hardy", "\u3055\u307F\u3057\u304C\u308A": "Lonely", "\u3086\u3046\u304B\u3093": "Brave", "\u3044\u3058\u3063\u3071\u308A": "Adamant", "\u3084\u3093\u3061\u3083": "Naughty", "\u305A\u3076\u3068\u3044": "Bold", "\u3059\u306A\u304A": "Docile", "\u306E\u3093\u304D": "Relaxed", "\u308F\u3093\u3071\u304F": "Impish", "\u306E\u3093\u3066\u3093\u304D": "Lax", "\u304A\u304F\u3073\u3087\u3046": "Timid", "\u305B\u3063\u304B\u3061": "Hasty", "\u307E\u3058\u3081": "Serious", "\u3088\u3046\u304D": "Jolly", "\u3080\u3058\u3083\u304D": "Naive", "\u3072\u304B\u3048\u3081": "Modest", "\u304A\u3063\u3068\u308A": "Mild", "\u308C\u3044\u305B\u3044": "Quiet", "\u3066\u308C\u3084": "Bashful", "\u3046\u3063\u304B\u308A\u3084": "Rash", "\u304A\u3060\u3084\u304B": "Calm", "\u304A\u3068\u306A\u3057\u3044": "Gentle", "\u306A\u307E\u3044\u304D": "Sassy", "\u3057\u3093\u3061\u3087\u3046": "Careful", "\u304D\u307E\u3050\u308C": "Quirky" };
@@ -27528,6 +27555,7 @@ function createEstimator(deps) {
     const patterns = (pd.patterns || []).slice(0, 5).map((p) => ({ sp: p.sp || {}, rate: p.rate || 0 }));
     const natures = (pd.natures || []).map((n) => ({ en: NATURE_JA2EN[n.name], rate: n.rate || 0 })).filter((n) => n.en).slice(0, 5);
     const items = (pd.items || []).map((i) => ({ en: (NAMES._itemJa2en || {})[i.name], rate: i.rate || 0 })).filter((i) => i.en).slice(0, 4);
+    const itemsAll = (pd.items || []).map((i) => ({ en: (NAMES._itemJa2en || {})[i.name], rate: i.rate || 0 })).filter((i) => i.en).slice(0, 10);
     const abilities = (pd.abilities || []).map((a) => ({ en: (NAMES._abilityJa2en || {})[a.name], rate: a.rate || 0 })).filter((a) => a.en).slice(0, 3);
     const poolInfo = (pd.moves || []).map((mv) => ({ en: (NAMES._moveJa2en || {})[mv.ja], rate: mv.rate || 0, cat: mv.cat || "" })).filter((x) => x.en).slice(0, 10);
     const movePool = poolInfo.map((x) => x.en).slice(0, 8);
@@ -27640,6 +27668,24 @@ function createEstimator(deps) {
     for (const c of out) {
       c.post = c._w / tot;
       delete c._w;
+    }
+    {
+      const present = new Set(out.map((c) => c.item));
+      let added = false;
+      for (const it of itemsAll) {
+        if (it.rate < 1 || present.has(it.en)) continue;
+        const c = mk(combos[0], it, topAbility, 0.5);
+        c.itemSynth = true;
+        c.post = c._w / tot;
+        delete c._w;
+        out.push(c);
+        present.add(it.en);
+        added = true;
+      }
+      if (added) {
+        const t2 = out.reduce((s, c) => s + c.post, 0) || 1;
+        for (const c of out) c.post /= t2;
+      }
     }
     const corpus = bayesCorpusCandidates(species, table, { topAbility: topAbility.en, megaAbility, megaSpecies: u.megaSpecies || void 0 });
     if (!corpus.length) return out.slice(0, 64);
@@ -27764,7 +27810,47 @@ function createEstimator(deps) {
     dirty = true;
     if (lt && ent.species) logSnapshot(ent.species, lt.turn, { ...lt.trig, applied: true, lifted: !!ent.hpLifted && !liftedBefore });
   }
+  const RECOIL_KEEP = 0.1;
+  function processRecoilBayes(ev) {
+    if (typeof ev.turn === "number") infLogTurn = ev.turn;
+    if (typeof ev.pct !== "number" || ev.pct < 8 || ev.pct > 11) return;
+    const species = labelSpecies(ev.atk);
+    const ent = bayesEntry(species);
+    if (!ent) return;
+    let tot = 0;
+    for (const c of ent.cands) {
+      if (c.item !== "Life Orb") c.post *= RECOIL_KEEP;
+      tot += c.post;
+    }
+    if (!(tot > 0)) return;
+    for (const c of ent.cands) c.post /= tot;
+    ent.used++;
+    dirty = true;
+    logSnapshot(species, ev.turn, { kind: "recoil", pct: ev.pct, applied: true });
+  }
+  function bayesHardSpe(ent, verdicts) {
+    let survivorMass = 0, excluded = 0;
+    ent.cands.forEach((c, i) => {
+      if (verdicts[i] === false) {
+        if (c.post > 0) excluded++;
+      } else survivorMass += c.post;
+    });
+    if (!(survivorMass > 0)) return { applied: false, excluded: 0 };
+    if (excluded) {
+      ent.cands.forEach((c, i) => {
+        if (verdicts[i] === false) c.post = 0;
+      });
+      for (const c of ent.cands) c.post /= survivorMass;
+    }
+    ent.used++;
+    dirty = true;
+    return { applied: true, excluded };
+  }
   function processDamageBayes(ev, ctx) {
+    if (ev.atk && ev.atk === ev.def) {
+      if (labelSide(ev.atk) === "p2") processRecoilBayes(ev);
+      return;
+    }
     const opts = pendingOpts;
     if (!opts) return;
     const md = moveData(ev.move);
@@ -27806,33 +27892,41 @@ function createEstimator(deps) {
     const ent = bayesEntry(ctx.species);
     if (!ent) return;
     const panel = io.opp[ctx.species] || null;
-    const counts = ent.cands.map((c) => {
+    const verdicts = ent.cands.map((c) => {
       const speVal = panel && panel.mega && c.valuesMega ? c.valuesMega.spe : c.values.spe;
-      if (speVal == null) return 0;
+      if (speVal == null) return null;
+      const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
       if (ctx.oppMd) {
-        const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
-        if (cAb === "Gale Wings" && ctx.oppMd.type === "Flying") return 16;
+        if (cAb === "Gale Wings" && ctx.oppMd.type === "Flying") return null;
         const cBr = moveBracket(ctx.oppMd, cAb);
-        if (cBr.last) return ctx.firstIsOpp ? 0 : 16;
-        if (cBr.prio !== ctx.myPrio) return cBr.prio > ctx.myPrio === ctx.firstIsOpp ? 16 : 0;
+        if (cBr.last) return !ctx.firstIsOpp;
+        if (cBr.prio !== ctx.myPrio) return cBr.prio > ctx.myPrio === ctx.firstIsOpp;
       }
+      if (c.item === "Quick Claw" || c.item === "Custap Berry") return null;
+      if (c.item === "Lagging Tail" || c.item === "Full Incense") return !ctx.firstIsOpp;
       const eff = infEffSpe(
         speVal,
         panel ? panel.boosts : {},
         panel && panel.itemLost ? "" : c.item,
         panel ? panel.status : "",
         ctx.twP2,
-        c.ability,
+        cAb,
         io.field.weather,
         io.field.terrain,
         !!(panel && panel.unburden)
       );
-      if (eff === ctx.myEff) return 8;
-      const ok = ctx.trick ? ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff : ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff;
-      return ok ? 16 : 0;
+      if (eff === ctx.myEff) return null;
+      return ctx.trick ? ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff : ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff;
     });
-    logTrigger = { turn: ev.turn, trig: { kind: "moveOrder", move: ctx.oppMd ? ctx.oppMd.name : null, firstIsOpp: !!ctx.firstIsOpp } };
-    bayesApply(ent, counts);
+    const res = bayesHardSpe(ent, verdicts);
+    logSnapshot(ctx.species, ev.turn, {
+      kind: "moveOrder",
+      move: ctx.oppMd ? ctx.oppMd.name : null,
+      firstIsOpp: !!ctx.firstIsOpp,
+      applied: res.applied,
+      excluded: res.excluded,
+      ...res.applied ? {} : { inconsistent: true }
+    });
   }
   function applyRevealed(list) {
     if (!bayes) return;
@@ -27889,6 +27983,22 @@ function createEstimator(deps) {
     const sorted = [...ent.cands].sort((a, b) => b.post - a.post);
     const map = sorted[0];
     const view = { nature: null, sp: {}, stat: {}, rows: {}, bayes: true, mapProb: map.post, map: { nature: map.nature, sp: { ...map.sp } } };
+    {
+      const mN = /* @__PURE__ */ new Map(), mI = /* @__PURE__ */ new Map();
+      for (const c of ent.cands) {
+        mN.set(c.nature, (mN.get(c.nature) || 0) + c.post);
+        mI.set(c.item, (mI.get(c.item) || 0) + c.post);
+      }
+      const topOf = (m) => {
+        let bv = null, bp = -1;
+        for (const [v, p] of m) if (p > bp) {
+          bp = p;
+          bv = v;
+        }
+        return { value: bv, mass: bp };
+      };
+      view.marginals = { nature: topOf(mN), item: topOf(mI) };
+    }
     {
       const known = spec.knownMoves || [];
       const mp = /* @__PURE__ */ new Map();
