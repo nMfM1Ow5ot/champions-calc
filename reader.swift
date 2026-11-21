@@ -1205,6 +1205,20 @@ func emitLog(_ line: String, applyNow: Bool) {
         }
     }
     lastLogEventAt = Date()
+    // 特性判明によるフォルム訂正 (相手側のみ): プレートの種族同定は
+    // 名前テキストの照合のため同名フォルムを区別できない。判明した
+    // 特性が現在のフォルムでは持ち得ず、別フォルムのちょうど 1 つだけが
+    // 持ち得る場合は、そちらが正しいフォルムだと確定できる
+    if line.hasPrefix("|-ability|") {
+        let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if f.count >= 4 {
+            let lp = f[2].split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if lp.count == 2 && lp[0].hasPrefix("p2") {
+                correctFormeByAbility(side: "p2", slot: lp[0], speciesEn: lp[1],
+                                      abilityEn: f[3].trimmingCharacters(in: .whitespaces))
+            }
+        }
+    }
 }
 
 func resetLogState() {
@@ -2288,6 +2302,65 @@ func emitAbilityOnce(slot: String, side: String, speciesEn: String, abilityEn: S
     if let at = lastAbilityEmit[k], Date().timeIntervalSince(at) < 10 { return }
     lastAbilityEmit[k] = Date()
     emitLog("|-ability|\(slot): \(speciesEn)|\(abilityEn)")
+}
+
+// 判明した特性からのフォルム訂正 (相手側のみ。自軍はチーム登録が正のため
+// 適用しない)。現在のフォルムでは持ち得ない特性が判明し、同種族の別
+// フォルムのうちちょうど 1 つだけが持ち得る場合に、記録をそのフォルム
+// へ訂正する。プレート同定は名前テキストの照合で同名フォルムを区別
+// できないため、特性が対戦中にフォルムを確定できる唯一の確実な信号に
+// なる (実例: 2026-11-21 vs KAM 戦、相手のバクフーンが おみとおし を
+// 発動したが通常フォルムで記録されていた。おみとおし はヒスイだけの
+// 特性で、タイプも ほのお単 → ほのお/ゴースト に変わるため影響が大きい)。
+// 訂正の対象: 場のプレート、状態 (次の state.json 書き出しに反映)、
+// 選出の蓄積、プロトコルログの過去行 (見せ合い・交代・この特性行を含む
+// この枠のラベル)、人間可読ログの相手側の行
+func correctFormeByAbility(side: String, slot: String, speciesEn: String, abilityEn: String) {
+    guard side == "p2" else { return }
+    // 現在のフォルムでも持ち得る特性なら訂正しない
+    if (speciesAbilityMap[speciesEn] ?? []).contains(abilityEn) { return }
+    guard let entry = speciesDict.first(where: { $0.en == speciesEn }) else { return }
+    let cands = formeGroup(entry).filter { $0.en != speciesEn && (speciesAbilityMap[$0.en] ?? []).contains(abilityEn) }
+    guard cands.count == 1, let newEn = cands.first?.en else { return }
+    for name in ["oppA", "oppB"] where lastSlots[name]?.speciesEn == speciesEn {
+        lastSlots[name]?.speciesEn = newEn
+    }
+    let oldKey = "\(side):\(speciesEn)", newKey = "\(side):\(newEn)"
+    if let st = monStates[oldKey] {
+        if monStates[newKey] == nil { monStates[newKey] = st }
+        monStates[oldKey] = nil
+    }
+    oppTeamSeen = oppTeamSeen.map { $0 == speciesEn ? newEn : $0 }
+    if oppUnconfirmed.contains(speciesEn) { oppUnconfirmed.remove(speciesEn); oppUnconfirmed.insert(newEn) }
+    if fieldSeen[side]?.contains(speciesEn) == true { fieldSeen[side]?.remove(speciesEn); fieldSeen[side]?.insert(newEn) }
+    if let sw = lastSwitchIn[oldKey] { lastSwitchIn[newKey] = sw; lastSwitchIn[oldKey] = nil }
+    if let ab = revealedAbilities[speciesEn] { revealedAbilities[newEn] = ab; revealedAbilities[speciesEn] = nil }
+    if emittedSwitchKeys.contains("\(side):\(speciesEn)") {
+        emittedSwitchKeys.remove("\(side):\(speciesEn)")
+        emittedSwitchKeys.insert("\(side):\(newEn)")
+    }
+    renderSlotSpecies[slot] = newEn
+    for i in battleLog.indices {
+        let f = battleLog[i].split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard f.count >= 3 else { continue }
+        if battleLog[i].hasPrefix("|poke|p2|") && f[3] == speciesEn {
+            var nf = f; nf[3] = newEn
+            battleLog[i] = nf.joined(separator: "|")
+        } else if f[2] == "\(slot): \(speciesEn)" {
+            var nf = f; nf[2] = "\(slot): \(newEn)"
+            if battleLog[i].hasPrefix("|switch|") && nf.count >= 4 { nf[3] = newEn }
+            battleLog[i] = nf.joined(separator: "|")
+        }
+    }
+    for i in displayLog.indices {
+        if displayLog[i].contains("opposing \(speciesEn)") || displayLog[i].contains("sent out \(speciesEn)") || displayLog[i].contains("withdrew \(speciesEn)") {
+            displayLog[i] = displayLog[i].replacingOccurrences(of: speciesEn, with: newEn)
+        }
+    }
+    try? (battleLog.joined(separator: "\n") + "\n").write(to: protocolLogURL, atomically: true, encoding: .utf8)
+    try? (displayLog.joined(separator: "\n") + "\n").write(to: battleLogURL, atomically: true, encoding: .utf8)
+    print("[reader] 特性 \(abilityEn) の判明によりフォルムを訂正しました: \(speciesEn) -> \(newEn)")
+    fflush(stdout)
 }
 
 var lastItemEmit: [String: Date] = [:]   // "side:Species:ItemJa" -> 最後に |-item| を出した時刻
@@ -3535,6 +3608,18 @@ func translateBattleMessage(_ text: String) -> Bool {
                 emitItemOnce(slot: oslot, side: oside, speciesEn: anch.en, itemJa: itJa)
                 if t.contains("はたき落とした") {
                     noteItemLost(slot: oslot, side: oside, speciesEn: anch.en)
+                }
+                // おみとおしの文は、主語 (特性の持ち主) の特性判明でもある。
+                // 判明を記録すると、特性からフォルムを訂正する処理が
+                // 必要に応じて働く (バクフーン → ヒスイの判別など)
+                if t.contains("見通し"), let subj = findAllSpeciesJa(in: t).first(where: { $0.en != anch.en }) {
+                    let sAnch = anchoredSpeciesForText(subj, text: t)
+                    let sInMine = lastSlots["mineA"]?.speciesEn == sAnch.en || lastSlots["mineB"]?.speciesEn == sAnch.en
+                    let sInOpp = lastSlots["oppA"]?.speciesEn == sAnch.en || lastSlots["oppB"]?.speciesEn == sAnch.en
+                    let subjSide: String
+                    if sInMine != sInOpp { subjSide = sInOpp ? "p2" : "p1" }
+                    else { subjSide = oside == "p1" ? "p2" : "p1" }   // おみとおしは相手の道具を見るため、主語は持ち主の反対側
+                    emitAbilityOnce(slot: slotFor(side: subjSide, speciesEn: sAnch.en), side: subjSide, speciesEn: sAnch.en, abilityEn: "Frisk")
                 }
                 return true
             }
@@ -5182,7 +5267,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1435"
+let readerBuild = "20261121_1438"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
