@@ -951,6 +951,29 @@ function resolveMove(name) {
 }
 // 相手パネルの技を正規化する: 解決できない名前は枠から外し (「（技なし）」の
 // 見た目で実在の技を押し出さない)、空いた枠は使用率型の技で補完する
+// 判明した技 (knownMoves) を、判明した順に上から詰めて並べる。
+// 残りの枠は現在の技 (使用率型など) で後ろに続ける。枠番号で持つ
+// moveSpec / moveZ は技名で引き直して付け替える
+function arrangeKnownFirst(spec) {
+  const known = (spec.knownMoves || []).filter(Boolean);
+  if (!known.length || !Array.isArray(spec.moves)) return;
+  const old = spec.moves;
+  const rest = old.filter(m => m && !known.includes(m));
+  const next = [...known, ...rest].slice(0, 4);
+  const remap = (obj) => {
+    if (!obj) return obj;
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const mv = old[+k];
+      const j = mv ? next.indexOf(mv) : -1;
+      if (j >= 0) out[j] = v;
+    }
+    return out;
+  };
+  spec.moveSpec = remap(spec.moveSpec);
+  spec.moveZ = remap(spec.moveZ);
+  spec.moves = next;
+}
 function sanitizeOppMoves(spec) {
   const fixed = [];
   for (const mv of spec.moves || []) { const r = mv ? resolveMove(mv) : null; if (r && !fixed.includes(r)) fixed.push(r); }
@@ -2005,6 +2028,7 @@ function applyRevealedPreserving(spec, rev) {
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
   sanitizeOppMoves(fresh);
+  arrangeKnownFirst(fresh);
   return fresh;
 }
 // リーダーがメガシンカを検出したら、その枠をメガ種族として計算する
@@ -2609,6 +2633,7 @@ document.getElementById('dbgSend')?.addEventListener('click', sendDebugSnapshot)
         }
         if (old.mega && !fresh.mega) { fresh.mega = true; fresh.megaSpecies = old.megaSpecies; fresh.megaAbility = old.megaAbility; }
         sanitizeOppMoves(fresh);
+        arrangeKnownFirst(fresh);
         return fresh;
       });
     } catch (e) { /* usage sets optional */ } })(),
