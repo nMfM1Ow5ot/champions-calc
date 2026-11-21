@@ -4,7 +4,7 @@
   "audit_items_ja.mjs": "b536fff2ca001daed9e79d2c8859484339f41e32c702bade0d5c62dd39136b4a",
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
   "build_species_gender.py": "36e4d0d6f2cf2125b3e7d575660c25afc9ffaaf7fac45a51738cca99106adaa3",
-  "bundle.mjs": "bc4b983579f3e19a2605374248cb0ec3ef01925eed306390d81e79c7afe87f11",
+  "bundle.mjs": "938365faa56bfd0503a926b1e3acca442a30a1755a937a0d22cb71af0a13688c",
   "check/apple_stubs.swift": "b54bf022428e2a6a30a35b206a14e01f276a20866d04376928109e4bcd6da175",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
   "core.mjs": "4a9414d3c792f79375b6ff4661cabc5e5af431070aef19dee0eccdd231c05126",
@@ -27,7 +27,7 @@
   "data/vgc_pastes.json": "7cd039d0628c7d6ed7822f8ac8125ac4d8670f37fd16826478cbf124649933fb",
   "data/vgc_pastes_stats.json": "94c2211fea37f32390a17e1086173a427ef4de89082ab27bd6f0f12c0a43440d",
   "data/vgcpastes_sets.json": "6232518a3c8b11dae770b0a3b5f2941da6cbc41a8c2defe142d3c8320a3a543c",
-  "estimate_engine.mjs": "1f189d73929bfdb0f7ca5a165fc86de9f6ad12f4fd0d2c45221256bd1cc0991f",
+  "estimate_engine.mjs": "52e2f9d1d973bfda124f13083c1a2d41aa2f1d0e4c2e45a2f69d18f08ff1efa9",
   "fetch_champions_dex.mjs": "278d7db46a15a6a78318839bebe4fbd4843af90e6a80b5f4677cdda0cd641a65",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
   "fetch_species_abilities.mjs": "1f1221256a11ead833ec1a18a73e65bdb71c70f651b7bc800ed7d7db7afc1603",
@@ -42,11 +42,11 @@
   "serve.py": "a93814b8c9c79a764d1c0386ef0a54aca08424329c0654ff05b678ae212e283b",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
-  "tests/bayes_equiv_golden.json": "a1d5ebb921f632bafa384ab6567e53e47af44d047db0b514d71fc620733040a7",
+  "tests/bayes_equiv_golden.json": "144de6d910c9a3d7ce4ea384e2d54f7b05efd604a2119c9d0205f2164bb4ab6e",
   "tests/bayes_sim.mjs": "0a1221f18ccc0ad0b974ff2719cc3e6b2d30e1e1d0f8e5f89b8cf80943420658",
   "ui.html": "80926b8e3d186e190d62533794d87156679e77939ca4643fde19c096d408e4aa",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_0634"
+ "rev": "20261122_0638"
 }
