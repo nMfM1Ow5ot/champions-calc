@@ -26275,7 +26275,9 @@ function toPokemon(spec) {
     // 実数 (undefined = 満タン)
     // かるわざ発動中 (持ち物を失った) のときだけ素早さ2倍がかかる。
     // abilityOn は他の特性にも効くフラグのため、かるわざ以外では渡さない
-    abilityOn: ability === "Unburden" && spec.unburden ? true : void 0
+    abilityOn: ability === "Unburden" && spec.unburden ? true : void 0,
+    // テラスタル中のみテラスタイプを渡す (エンジンが STAB・タイプ変化を処理する)
+    teraType: spec.terastallized && spec.teraType ? spec.teraType : void 0
   });
   return p;
 }
