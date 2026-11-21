@@ -427,12 +427,16 @@ func writeState() {
     }
     let hzJson = hzParts.isEmpty ? "" : ", \"hazards\": {\(hzParts.joined(separator: ", "))}"
     let trainer = trainerOpp.isEmpty ? "" : ", \"oppTrainer\": \"\(jsonEscape(trainerOpp))\""
+    // 相手のランク/レート (見せ合い後に画像認識側が oppRank /
+    // oppRating へ読み取る。記録はトレーナー名と並べてここで行う)
+    let rankJson = oppRank.isEmpty ? "" : ", \"oppRank\": \"\(jsonEscape(oppRank))\""
+    let ratingJson = oppRating.isEmpty ? "" : ", \"oppRating\": \"\(jsonEscape(oppRating))\""
     // 試合 ID (開始時刻ベース)。UI 側が「イベント列が縮んだ」推測ではなく
     // この値の変化で新しい対戦の開始を確実に検知できるようにするための
     // 材料 (前の対戦の自動コンディションが次の対戦に残る事故の対策)
     let battleJson = battleArchiveId.isEmpty ? "" : ", \"battle\": \"\(battleArchiveId)\""
     let eventsJson = ", \"events\": [\(battleEvents.joined(separator: ", "))]"
-    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(battleJson)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
+    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(rankJson)\(ratingJson)\(battleJson)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
     if json == lastWritten { return }
     lastWritten = json
     try? json.write(to: outURL, atomically: true, encoding: .utf8)
@@ -668,11 +672,16 @@ func renderLogLine(_ line: String) -> [String] {
         return []
     case "start":
         let mine = trainerMine.isEmpty ? "you" : trainerMine
-        return ["\(mine) and \(oppName) joined", "Format:", "[Gen 9 Champions] VGC 2026 Reg \(regulationDisplay())", "Rated battle",
+        var header = ["\(mine) and \(oppName) joined", "Format:", "[Gen 9 Champions] VGC 2026 Reg \(regulationDisplay())", "Rated battle",
                 "Species Clause: Limit one of each Pokémon", "Item Clause: Limit 1 of each item",
                 trainerMine.isEmpty ? "Your team:" : "\(trainerMine)'s team:", renderPokeP1.joined(separator: " / "),
                 "\(oppName)'s team:", renderPokeP2.joined(separator: " / "), "",
-                "Battle started between \(mine) and \(oppName)!", ""]
+                "Battle started between \(mine) and \(oppName)!"]
+        // 相手のランク/レート (読み取れた場合のみ、トレーナー名と併記)
+        if !oppRank.isEmpty { header.append("\(oppName)'s rank: \(oppRank)") }
+        if !oppRating.isEmpty { header.append("\(oppName)'s rating: \(oppRating)") }
+        header.append("")
+        return header
     case "switch":
         guard f.count >= 5 else { return [] }
         let (slot, side, _) = renderLabelParts(f[2])
@@ -1300,6 +1309,18 @@ func resetLogState() {
     roundEventSeen = false
     suppressNextDetectorTurn = false
     defaultAttribCount = [:]
+    // 相手のランク/レート (画像認識側が oppRank / oppRating に入れる):
+    // 見せ合いが直近 (60 秒以内) に目撃されていれば、この対戦の開始
+    // 前に読み取られた値として保持する (同定が失敗して開始処理が
+    // 読み取り後に走る経路で消えないように)。そうでなければ前対戦の
+    // 残りなので消す (見せ合いを取り逃した対戦で前対戦のランクが
+    // 記録されるのを防ぐ)。新しい見せ合い画面の出現時にも画像認識
+    // 側で消去される
+    if Date().timeIntervalSince(lastPreviewSeenAt) >= 60 {
+        oppRank = ""
+        oppRating = ""
+        oppRankRecorded = false
+    }
     lastMoveSigAt = [:]
     lastSingleActAt = [:]
     battleEvents = []
@@ -4705,14 +4726,11 @@ func pvReadGender(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: I
 }
 
 // パネル左側の 3D モデルを背景色との差分で切り出し、特徴量を取る
-func pvModelFeatures(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: Int, w: Int, h: Int))
-    -> (hash: [UInt8], hue: [Double], aspect: Double, density: Double)? {
+func pvFeaturesWithBg(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: Int, w: Int, h: Int),
+                      _ bg: (Int, Int, Int))
+    -> (hash: [UInt8], hue: [Double], aspect: Double, density: Double, cover: Double, widthRatio: Double)? {
     let cw = Int(0.52 * Double(panel.w)), ch = panel.h
     if cw <= 0 || ch <= 0 { return nil }
-    let bgx = max(0, min(panel.x + Int(0.55 * Double(panel.w)), buf.w - 1))
-    let bgy = max(0, min(panel.y + 4, buf.h - 1))
-    let bi = (bgy * buf.w + bgx) * 4
-    let bg = (Int(buf.data[bi]), Int(buf.data[bi + 1]), Int(buf.data[bi + 2]))
     var mask = [Bool](repeating: false, count: cw * ch)
     for yy in 0..<ch {
         for xx in 0..<cw {
@@ -4790,7 +4808,52 @@ func pvModelFeatures(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y
             }
         }
     }
-    return (hash, hue, Double(sw) / Double(sh), Double(areas[bi2]) / Double(sw * sh))
+    return (hash, hue, Double(sw) / Double(sh), Double(areas[bi2]) / Double(sw * sh),
+            Double(areas[bi2]) / Double(cw * ch), Double(sw) / Double(cw))
+}
+
+// パネルのモデル特徴。背景色はまず従来の 1 点サンプルで推定するが、
+// サンプル点がパネル上端の暗い帯などに当たると背景推定が外れ、
+// パネル全体が前景化して特徴が壊れる (実例: 2026-11-21
+// battle_20261121_153443 の枠4〜6。正解種族のスコアが 0.6 前後に
+// 悪化し、全種族展開で誤同定した)。最大成分が切り出し幅の 98%
+// 以上か面積の 6 割以上を占める場合は推定失敗とみなし、切り出し
+// 内の最頻色 (パネル地の色) を背景として抽出をやり直す。やり直し
+// ても失敗の場合は特徴なしとする
+func pvModelFeatures(_ buf: (data: [UInt8], w: Int, h: Int), _ panel: (x: Int, y: Int, w: Int, h: Int))
+    -> (hash: [UInt8], hue: [Double], aspect: Double, density: Double)? {
+    let cw = Int(0.52 * Double(panel.w))
+    if cw <= 0 || panel.h <= 0 { return nil }
+    let bgx = max(0, min(panel.x + Int(0.55 * Double(panel.w)), buf.w - 1))
+    let bgy = max(0, min(panel.y + 4, buf.h - 1))
+    let bi = (bgy * buf.w + bgx) * 4
+    let bgPoint = (Int(buf.data[bi]), Int(buf.data[bi + 1]), Int(buf.data[bi + 2]))
+    func strip(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double, cover: Double, widthRatio: Double)?)
+        -> (hash: [UInt8], hue: [Double], aspect: Double, density: Double)? {
+        guard let f = f else { return nil }
+        return (f.hash, f.hue, f.aspect, f.density)
+    }
+    let first = pvFeaturesWithBg(buf, panel, bgPoint)
+    if let f = first, f.widthRatio < 0.98, f.cover < 0.60 { return strip(f) }
+    // 背景推定のやり直し: 切り出し領域の最頻色ビン (32 刻み) の平均色
+    var binCount: [Int: Int] = [:]
+    var binSum: [Int: (Int, Int, Int)] = [:]
+    for yy in 0..<panel.h {
+        for xx in 0..<cw {
+            let i = ((panel.y + yy) * buf.w + (panel.x + xx)) * 4
+            let r = Int(buf.data[i]), g = Int(buf.data[i + 1]), b = Int(buf.data[i + 2])
+            let key = (r / 32) * 64 + (g / 32) * 8 + (b / 32)
+            binCount[key, default: 0] += 1
+            let s = binSum[key] ?? (0, 0, 0)
+            binSum[key] = (s.0 + r, s.1 + g, s.2 + b)
+        }
+    }
+    guard let bestKey = binCount.max(by: { $0.value < $1.value })?.key,
+          let s = binSum[bestKey], let c = binCount[bestKey], c > 0 else { return strip(first) }
+    let bgMode = (s.0 / c, s.1 / c, s.2 / c)
+    let second = pvFeaturesWithBg(buf, panel, bgMode)
+    if let f = second, f.widthRatio >= 0.98, f.cover >= 0.60 { return nil }
+    return strip(second) ?? strip(first)
 }
 
 func pvScore(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double),
@@ -5712,7 +5775,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1550"
+let readerBuild = "20261121_1603"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
