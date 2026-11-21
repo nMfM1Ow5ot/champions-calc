@@ -513,8 +513,8 @@ const $ = id => document.getElementById(id);
 const state = {
   field: { weather: '', terrain: '' },
   side: {
-    mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 },
-    opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 },
+    mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0, seeded: false },
+    opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0, seeded: false },
   },
   mine: [], opps: [],
   oppTeam: ['Garchomp', 'Rillaboom'],
@@ -758,7 +758,7 @@ function ownSpeciesSpec(speciesEn, kind) {
   delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
   delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual; delete ns.estMarginal;
   delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
-  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec;
+  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain;
   return ns;
 }
 // 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
@@ -1403,7 +1403,7 @@ function pokeInfo(side) {
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
       <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span></div>
-      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}</div>
+      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}<button class="tgl${spec.ingrain ? ' on' : ''}" data-ingrain="${side}" title="ねをはる (ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます)">ねをはる</button></div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
         <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
@@ -1685,7 +1685,7 @@ function renderPanel(side) {
 /* ---------- field ---------- */
 function sideChips(which) {
   const s = state.side[which];
-  const defs = [['light', 'ひかりのかべ'], ['reflect', 'リフレクター'], ['veil', 'オーロラベール'], ['tailwind', 'おいかぜ'], ['hand', 'てだすけ'], ['guard', 'フレンドガード'], ['rock', 'ステルスロック']];
+  const defs = [['light', 'ひかりのかべ'], ['reflect', 'リフレクター'], ['veil', 'オーロラベール'], ['tailwind', 'おいかぜ'], ['hand', 'てだすけ'], ['guard', 'フレンドガード'], ['rock', 'ステルスロック'], ['seeded', 'やどりぎのタネ']];
   const sp = s.spikes || 0;
   const ts = s.toxicSpikes || 0;
   return defs.map(([k, label]) => `<button class="tgl primary${s[k] ? ' on' : ''}" data-sidechip="${which}:${k}">${label}</button>`).join('')
@@ -1771,10 +1771,16 @@ function computeCandRanges() {
 function calcAll() {
   ui.formePop = null;
   if (!DS('mine') || !DS('opps')) { lastCalc = null; renderAll(); return; }
-  const atkSide = { isHelpingHand: !!state.side.mine.hand };
-  const defSide = { isLightScreen: !!state.side.opp.light, isReflect: !!state.side.opp.reflect, isAuroraVeil: !!state.side.opp.veil, isFriendGuard: !!state.side.opp.guard, isSR: !!state.side.opp.rock, spikes: state.side.opp.spikes || 0, toxicSpikes: state.side.opp.toxicSpikes || 0 };
-  const oppAtkSide = { isHelpingHand: !!state.side.opp.hand };
-  const oppDefSide = { isLightScreen: !!state.side.mine.light, isReflect: !!state.side.mine.reflect, isAuroraVeil: !!state.side.mine.veil, isFriendGuard: !!state.side.mine.guard, isSR: !!state.side.mine.rock, spikes: state.side.mine.spikes || 0, toxicSpikes: state.side.mine.toxicSpikes || 0 };
+  const atkSide = { isHelpingHand: !!state.side.mine.hand, isSeeded: !!state.side.mine.seeded };
+  const defSide = { isLightScreen: !!state.side.opp.light, isReflect: !!state.side.opp.reflect, isAuroraVeil: !!state.side.opp.veil, isFriendGuard: !!state.side.opp.guard, isSR: !!state.side.opp.rock, spikes: state.side.opp.spikes || 0, toxicSpikes: state.side.opp.toxicSpikes || 0, isSeeded: !!state.side.opp.seeded };
+  const oppAtkSide = { isHelpingHand: !!state.side.opp.hand, isSeeded: !!state.side.opp.seeded };
+  const oppDefSide = { isLightScreen: !!state.side.mine.light, isReflect: !!state.side.mine.reflect, isAuroraVeil: !!state.side.mine.veil, isFriendGuard: !!state.side.mine.guard, isSR: !!state.side.mine.rock, spikes: state.side.mine.spikes || 0, toxicSpikes: state.side.mine.toxicSpikes || 0, isSeeded: !!state.side.mine.seeded };
+  // 場に出ている2体の特性 (きんちょうかんによる きのみ無効化の判定用)
+  const effAbOf = s => s ? (s.mega && s.megaAbility ? s.megaAbility : s.ability) : '';
+  const fieldAbilities = {
+    mine: (state.active.mine || []).map(ix => state.mine[ix]).map(effAbOf).filter(Boolean),
+    opps: (state.active.opps || []).map(ix => state.opps[ix]).map(effAbOf).filter(Boolean),
+  };
   const singleMoves = { mine: [], opps: [] };
   for (const sd of ['mine', 'opps']) {
     for (const mv of DS(sd).moves || []) {
@@ -1786,6 +1792,7 @@ function calcAll() {
     // withCurHP でパネルの現在 HP を実数に変換して渡すと、@smogon/calc の
     // kochance が defender.curHP() 基準で計算する。両方向とも同じ前提。
     mine: [withCurHP(DS('mine'))], opps: [withCurHP(DS('opps'))],
+    fieldAbilities,
     field: { weather: state.field.weather, terrain: state.field.terrain, attackerSide: atkSide, defenderSide: defSide, oppAttackerSide: oppAtkSide, oppDefenderSide: oppDefSide, tailwindMine: !!state.side.mine.tailwind, tailwindOpp: !!state.side.opp.tailwind },
     crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
     singleMoves,
@@ -2042,6 +2049,13 @@ document.addEventListener('click', e => {
     calcAll();
     return;
   }
+  const ig = t.closest('[data-ingrain]');
+  if (ig) {
+    const spec = DS(ig.dataset.ingrain);
+    spec.ingrain = !spec.ingrain;
+    calcAll();
+    return;
+  }
   const zb = t.closest('[data-zmove]');
   if (zb) {
     const [zsd, zmi] = zb.dataset.zmove.split(':');
@@ -2194,6 +2208,7 @@ function applyRevealedPreserving(spec, rev) {
   fresh.teraType = spec.teraType; fresh.terastallized = spec.terastallized;
   fresh.moveZ = spec.moveZ;
   fresh.dynamax = spec.dynamax;
+  fresh.ingrain = spec.ingrain;
   if (spec.estManual) fresh.estManual = { ...spec.estManual };
   if (spec.itemLost) fresh.itemLost = true;
   if (spec.unburden) fresh.unburden = true;
@@ -2236,7 +2251,7 @@ function resetInference() {
   // 対戦イベントから自動反映したサイドコンディション (おいかぜ・壁・てだすけ) の
   // セットされたターン。新しい対戦では場の状態ごとリセットする
   autoSideTurn = { mine: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 }, opp: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 } };
-  state.side = { mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 }, opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 } };
+  state.side = { mine: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0, seeded: false }, opp: { light: false, reflect: false, veil: false, hand: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0, seeded: false } };
 }
 // 設置物 (ステルスロック/まきびし) をそのサイドから消す
 // 設置物 (ステルスロック/まきびし) をそのサイドから消す
