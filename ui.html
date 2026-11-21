@@ -968,10 +968,8 @@ function pokeInfo(side) {
       valueLabel: biLabel(ja('species', eff), eff),
       onPick: v => {
         if (!v || v === spec.species) return;
-        const keep = DS('mine');
-        const ns = ownSpeciesSpec(v);
-        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
-        state.mine[state.sel.mine] = ns;
+        // 種族を変えたら HP・ランク・状態も含めてすべて初期化する
+        state.mine[state.sel.mine] = ownSpeciesSpec(v);
         calcAll();
       },
     });
