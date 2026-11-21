@@ -26078,6 +26078,53 @@ var require_dist = __commonJS({
 // core.mjs
 var import_calc = __toESM(require_dist(), 1);
 var gen = import_calc.Generations.get(9);
+var specPatchData = null;
+var activeSpecPatchVer = null;
+var specPristine = /* @__PURE__ */ new Map();
+var patchIdOf = (name) => String(name).toLowerCase().replace(/[^a-z0-9]/g, "");
+function patchAssign(obj, prop, value, key) {
+  if (!specPristine.has(key)) specPristine.set(key, { obj, prop, value: obj[prop] });
+  obj[prop] = value;
+}
+function setSpecPatchData(data) {
+  specPatchData = data && Array.isArray(data.versions) ? data : { versions: [] };
+}
+function specPatchVersions() {
+  return specPatchData ? specPatchData.versions : [];
+}
+function activeSpecPatch() {
+  return activeSpecPatchVer;
+}
+function applySpecPatch(id) {
+  for (const { obj, prop, value } of specPristine.values()) obj[prop] = value;
+  specPristine.clear();
+  activeSpecPatchVer = null;
+  for (const k of Object.keys(_statTables)) delete _statTables[k];
+  if (!id || !specPatchData) return null;
+  const v = specPatchData.versions.find((x) => x.id === id);
+  if (!v) return null;
+  for (const [name, patch] of Object.entries(v.species || {})) {
+    const sp = gen.species.get(patchIdOf(name));
+    if (!sp) continue;
+    for (const [prop, val] of Object.entries(patch)) {
+      if (prop === "baseStats" && val && typeof val === "object") {
+        for (const [k, bv] of Object.entries(val)) patchAssign(sp.baseStats, k, bv, `sp:${sp.id}:bs:${k}`);
+      } else patchAssign(sp, prop, val, `sp:${sp.id}:${prop}`);
+    }
+  }
+  for (const [name, patch] of Object.entries(v.moves || {})) {
+    const mv = gen.moves.get(patchIdOf(name));
+    if (!mv) continue;
+    for (const [prop, val] of Object.entries(patch)) patchAssign(mv, prop, val, `mv:${mv.id}:${prop}`);
+  }
+  for (const [atkType, defs] of Object.entries(v.types || {})) {
+    const t = gen.types.get(patchIdOf(atkType));
+    if (!t || !t.effectiveness) continue;
+    for (const [defType, mult] of Object.entries(defs)) patchAssign(t.effectiveness, defType, mult, `ty:${t.name}:${defType}`);
+  }
+  activeSpecPatchVer = v;
+  return v;
+}
 var IVS = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 var STAT_KEYS = ["hp", "atk", "def", "spa", "spd", "spe"];
 var NATURE_MODS = {
@@ -28472,6 +28519,8 @@ export {
   Z_EXCLUSIVE,
   Z_EXCLUSIVE_FX,
   Z_STATUS,
+  activeSpecPatch,
+  applySpecPatch,
   assumedSet,
   calcMatchup,
   createEstimator,
@@ -28484,7 +28533,9 @@ export {
   labelSpecies,
   moveData,
   moveSpecInfo,
+  setSpecPatchData,
   spToEvs,
+  specPatchVersions,
   statTable,
   usageSpec,
   withCurHP,
