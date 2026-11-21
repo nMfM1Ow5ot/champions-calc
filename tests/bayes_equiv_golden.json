@@ -119,29 +119,6 @@
     },
     {
      "a": "Rough Skin",
-     "corp": false,
-     "i": "Life Orb",
-     "ma": null,
-     "ms": null,
-     "mv": [
-      "Rock Slide",
-      "Dragon Claw",
-      "Earthquake",
-      "Stomping Tantrum"
-     ],
-     "n": "Adamant",
-     "p": 0.047739,
-     "sp": {
-      "atk": 32,
-      "def": 0,
-      "hp": 2,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
-     }
-    },
-    {
-     "a": "Rough Skin",
      "corp": true,
      "i": "Choice Scarf",
      "ma": null,
@@ -173,10 +150,33 @@
       "Rock Slide",
       "Dragon Claw",
       "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.047011,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Life Orb",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.047207,
+     "p": 0.046487,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -199,7 +199,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.039477,
+     "p": 0.038874,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -222,7 +222,7 @@
       "Stomping Tantrum"
      ],
      "n": "Jolly",
-     "p": 0.039037,
+     "p": 0.038441,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -245,7 +245,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.028856,
+     "p": 0.028416,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -383,7 +383,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.02387,
+     "p": 0.023505,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -406,7 +406,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.02387,
+     "p": 0.023505,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -429,7 +429,7 @@
       "Rock Slide"
      ],
      "n": "Modest",
-     "p": 0.023862,
+     "p": 0.023498,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -452,7 +452,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.017321,
+     "p": 0.017057,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -475,7 +475,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.017128,
+     "p": 0.016867,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -498,7 +498,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.014428,
+     "p": 0.014208,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -521,7 +521,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.014323,
+     "p": 0.014105,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -567,7 +567,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.01047,
+     "p": 0.01031,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -590,7 +590,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.008245,
+     "p": 0.008119,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -613,7 +613,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.006055,
+     "p": 0.005963,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -636,7 +636,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.005988,
+     "p": 0.005897,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -659,7 +659,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.005202,
+     "p": 0.005123,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -682,7 +682,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.005144,
+     "p": 0.005066,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -705,7 +705,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.00366,
+     "p": 0.003604,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -728,7 +728,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.003145,
+     "p": 0.003097,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -751,12 +751,35 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.002991,
+     "p": 0.002946,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Rocky Helmet",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.00226,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -774,12 +797,58 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001888,
+     "p": 0.001859,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Haban Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.001582,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Sitrus Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.001431,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -797,7 +866,7 @@
       "Protect"
      ],
      "n": "Impish",
-     "p": 0.00133,
+     "p": 0.001309,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -820,7 +889,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001274,
+     "p": 0.001255,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -843,7 +912,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.00126,
+     "p": 0.001241,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -866,11 +935,34 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.001046,
+     "p": 0.00103,
      "sp": {
       "atk": 28,
       "def": 0,
       "hp": 6,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Focus Sash",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.000829,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
       "spa": 0,
       "spd": 0,
       "spe": 32
@@ -889,7 +981,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.00077,
+     "p": 0.000759,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -912,7 +1004,7 @@
       "Protect"
      ],
      "n": "Impish",
-     "p": 0.000665,
+     "p": 0.000655,
      "sp": {
       "atk": 0,
       "def": 32,
@@ -935,7 +1027,7 @@
       "Protect"
      ],
      "n": "Impish",
-     "p": 0.000665,
+     "p": 0.000655,
      "sp": {
       "atk": 0,
       "def": 16,
@@ -958,7 +1050,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000563,
+     "p": 0.000555,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -981,7 +1073,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000557,
+     "p": 0.000549,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -1004,7 +1096,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000535,
+     "p": 0.000527,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -1027,7 +1119,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000529,
+     "p": 0.000521,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -1050,7 +1142,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.00034,
+     "p": 0.000335,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -1073,7 +1165,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000323,
+     "p": 0.000319,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -1096,7 +1188,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000097,
+     "p": 0.000096,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -1119,7 +1211,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000069,
+     "p": 0.000068,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -1142,7 +1234,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.000068,
+     "p": 0.000067,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2127,7 +2219,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.101869,
+     "p": 0.101757,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2150,7 +2242,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.099191,
+     "p": 0.099082,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2173,7 +2265,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.096406,
+     "p": 0.0963,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2196,7 +2288,7 @@
       "Rock Slide"
      ],
      "n": "Adamant",
-     "p": 0.087729,
+     "p": 0.087633,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2219,7 +2311,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.081945,
+     "p": 0.081855,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2227,29 +2319,6 @@
       "spa": 0,
       "spd": 0,
       "spe": 0
-     }
-    },
-    {
-     "a": "Rough Skin",
-     "corp": false,
-     "i": "Life Orb",
-     "ma": null,
-     "ms": null,
-     "mv": [
-      "Rock Slide",
-      "Dragon Claw",
-      "Earthquake",
-      "Stomping Tantrum"
-     ],
-     "n": "Adamant",
-     "p": 0.045675,
-     "sp": {
-      "atk": 32,
-      "def": 0,
-      "hp": 2,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
      }
     },
     {
@@ -2265,7 +2334,7 @@
       "Earthquake"
      ],
      "n": "Adamant",
-     "p": 0.054523,
+     "p": 0.054463,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2285,10 +2354,33 @@
       "Rock Slide",
       "Dragon Claw",
       "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.044929,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Life Orb",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.045166,
+     "p": 0.044429,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2311,7 +2403,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.03777,
+     "p": 0.037153,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2334,7 +2426,7 @@
       "Stomping Tantrum"
      ],
      "n": "Jolly",
-     "p": 0.037349,
+     "p": 0.036739,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2357,7 +2449,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.027609,
+     "p": 0.027158,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2380,7 +2472,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.030957,
+     "p": 0.030923,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2403,7 +2495,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.030957,
+     "p": 0.030923,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2426,7 +2518,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.030207,
+     "p": 0.030174,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2449,7 +2541,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.029779,
+     "p": 0.029746,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2472,7 +2564,7 @@
       "Rock Tomb"
      ],
      "n": "Jolly",
-     "p": 0.029779,
+     "p": 0.029746,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2541,7 +2633,7 @@
       "Rock Slide"
      ],
      "n": "Modest",
-     "p": 0.02283,
+     "p": 0.022457,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2564,7 +2656,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.016572,
+     "p": 0.016302,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2587,7 +2679,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.016388,
+     "p": 0.01612,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2633,7 +2725,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.013704,
+     "p": 0.01348,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2656,7 +2748,7 @@
       "Protect"
      ],
      "n": "Timid",
-     "p": 0.015532,
+     "p": 0.015515,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2679,7 +2771,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.010017,
+     "p": 0.009854,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -2702,7 +2794,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.007888,
+     "p": 0.007759,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2725,7 +2817,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001931,
+     "p": 0.0019,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -2748,7 +2840,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.00191,
+     "p": 0.001879,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -2771,7 +2863,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.004977,
+     "p": 0.004896,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2794,7 +2886,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.004922,
+     "p": 0.004842,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2817,7 +2909,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.001167,
+     "p": 0.001148,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -2840,7 +2932,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.003009,
+     "p": 0.00296,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2863,12 +2955,35 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.002862,
+     "p": 0.002815,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Rocky Helmet",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.00216,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -2886,12 +3001,58 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001806,
+     "p": 0.001776,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Haban Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.001512,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Sitrus Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.001368,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -2909,7 +3070,7 @@
       "Protect"
      ],
      "n": "Impish",
-     "p": 0.001272,
+     "p": 0.001252,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2932,7 +3093,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001219,
+     "p": 0.001199,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2955,7 +3116,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.001206,
+     "p": 0.001186,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -2978,11 +3139,34 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000334,
+     "p": 0.000328,
      "sp": {
       "atk": 28,
       "def": 0,
       "hp": 6,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Focus Sash",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.000792,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
       "spa": 0,
       "spd": 0,
       "spe": 32
@@ -3001,7 +3185,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000737,
+     "p": 0.000725,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -3070,7 +3254,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000647,
+     "p": 0.000636,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -3093,7 +3277,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.00064,
+     "p": 0.000629,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -3116,7 +3300,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000341,
+     "p": 0.000336,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -3139,7 +3323,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000338,
+     "p": 0.000332,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -3162,7 +3346,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000391,
+     "p": 0.000385,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -3185,7 +3369,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000206,
+     "p": 0.000203,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -3208,7 +3392,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000112,
+     "p": 0.00011,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -3231,7 +3415,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000066,
+     "p": 0.000065,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -3254,7 +3438,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.000065,
+     "p": 0.000064,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -8060,31 +8244,31 @@
     }
    },
    "panel": {
-    "estMapProb": 0.101869,
+    "estMapProb": 0.101757,
     "estMovePred": [
      {
       "move": "Protect",
-      "prob": 0.735339
+      "prob": 0.732998
      },
      {
       "move": "Rock Slide",
-      "prob": 0.519678
+      "prob": 0.52051
      },
      {
       "move": "Dragon Claw",
-      "prob": 0.504199
+      "prob": 0.505326
      },
      {
       "move": "Earthquake",
-      "prob": 0.4043
+      "prob": 0.405672
      },
      {
       "move": "Stomping Tantrum",
-      "prob": 0.392621
+      "prob": 0.394883
      },
      {
       "move": "Power Gem",
-      "prob": 0.354803
+      "prob": 0.353475
      }
     ],
     "estNature": null,
@@ -8152,27 +8336,27 @@
    },
    "used": 4,
    "view": {
-    "mapProb": 0.101869,
+    "mapProb": 0.101757,
     "movePred": [
      [
       "Protect",
-      0.735339
+      0.732998
      ],
      [
       "Rock Slide",
-      0.519678
+      0.52051
      ],
      [
       "Dragon Claw",
-      0.504199
+      0.505326
      ],
      [
       "Earthquake",
-      0.4043
+      0.405672
      ],
      [
       "Stomping Tantrum",
-      0.392621
+      0.394883
      ]
     ],
     "nature": null,
@@ -9187,7 +9371,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.083209,
+     "p": 0.082734,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9210,7 +9394,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.025927,
+     "p": 0.025779,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9233,7 +9417,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.025199,
+     "p": 0.025055,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9256,7 +9440,7 @@
       "Rock Slide"
      ],
      "n": "Adamant",
-     "p": 0.07166,
+     "p": 0.07125,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9279,7 +9463,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.021419,
+     "p": 0.021297,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9287,29 +9471,6 @@
       "spa": 0,
       "spd": 0,
       "spe": 0
-     }
-    },
-    {
-     "a": "Rough Skin",
-     "corp": false,
-     "i": "Life Orb",
-     "ma": null,
-     "ms": null,
-     "mv": [
-      "Rock Slide",
-      "Dragon Claw",
-      "Earthquake",
-      "Stomping Tantrum"
-     ],
-     "n": "Adamant",
-     "p": 0.011939,
-     "sp": {
-      "atk": 32,
-      "def": 0,
-      "hp": 2,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
      }
     },
     {
@@ -9325,7 +9486,7 @@
       "Earthquake"
      ],
      "n": "Adamant",
-     "p": 0.044536,
+     "p": 0.044281,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9345,10 +9506,33 @@
       "Rock Slide",
       "Dragon Claw",
       "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.01169,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Life Orb",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.011806,
+     "p": 0.011559,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9371,7 +9555,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.096411,
+     "p": 0.094398,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9394,7 +9578,7 @@
       "Stomping Tantrum"
      ],
      "n": "Jolly",
-     "p": 0.297929,
+     "p": 0.291707,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9417,7 +9601,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.045103,
+     "p": 0.044161,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9440,7 +9624,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.025287,
+     "p": 0.025142,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9463,7 +9647,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.025287,
+     "p": 0.025142,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9486,7 +9670,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.024674,
+     "p": 0.024533,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9509,7 +9693,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.024324,
+     "p": 0.024185,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9532,7 +9716,7 @@
       "Rock Tomb"
      ],
      "n": "Jolly",
-     "p": 0.024324,
+     "p": 0.024185,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9601,7 +9785,7 @@
       "Rock Slide"
      ],
      "n": "Modest",
-     "p": 0.018649,
+     "p": 0.018259,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9624,7 +9808,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.013537,
+     "p": 0.013254,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9647,7 +9831,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.013386,
+     "p": 0.013107,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9693,7 +9877,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.011194,
+     "p": 0.01096,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9716,7 +9900,7 @@
       "Protect"
      ],
      "n": "Timid",
-     "p": 0.00406,
+     "p": 0.004037,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9739,7 +9923,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.002618,
+     "p": 0.002564,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -9762,7 +9946,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.012887,
+     "p": 0.012618,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9785,7 +9969,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000505,
+     "p": 0.000494,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -9808,7 +9992,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000499,
+     "p": 0.000489,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -9831,7 +10015,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.012705,
+     "p": 0.01244,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9854,7 +10038,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.039262,
+     "p": 0.038442,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9877,7 +10061,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.001907,
+     "p": 0.001867,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -9900,7 +10084,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.002458,
+     "p": 0.002406,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9923,12 +10107,35 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000748,
+     "p": 0.000732,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Rocky Helmet",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.005488,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -9946,12 +10153,58 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001475,
+     "p": 0.001444,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Haban Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.003842,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Sitrus Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.003476,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -9969,7 +10222,7 @@
       "Protect"
      ],
      "n": "Impish",
-     "p": 0.000333,
+     "p": 0.000326,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -9992,7 +10245,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000319,
+     "p": 0.000312,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -10015,7 +10268,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000315,
+     "p": 0.000309,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -10038,11 +10291,34 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000545,
+     "p": 0.000533,
      "sp": {
       "atk": 28,
       "def": 0,
       "hp": 6,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Focus Sash",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.002012,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
       "spa": 0,
       "spd": 0,
       "spe": 32
@@ -10061,7 +10337,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.001204,
+     "p": 0.001179,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -10130,7 +10406,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000169,
+     "p": 0.000166,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -10153,7 +10429,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000167,
+     "p": 0.000164,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -10176,7 +10452,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000089,
+     "p": 0.000087,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -10199,7 +10475,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000088,
+     "p": 0.000086,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -10222,7 +10498,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000639,
+     "p": 0.000625,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -10245,7 +10521,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000337,
+     "p": 0.00033,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -10268,7 +10544,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000182,
+     "p": 0.000179,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -10291,7 +10567,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000168,
+     "p": 0.000165,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -10314,7 +10590,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.00052,
+     "p": 0.000509,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -15390,31 +15666,31 @@
     }
    },
    "panel": {
-    "estMapProb": 0.297929,
+    "estMapProb": 0.291707,
     "estMovePred": [
      {
       "move": "Rock Slide",
-      "prob": 0.686028
+      "prob": 0.687338
      },
      {
       "move": "Dragon Claw",
-      "prob": 0.673384
+      "prob": 0.674993
      },
      {
       "move": "Earthquake",
-      "prob": 0.58761
+      "prob": 0.589883
      },
      {
       "move": "Stomping Tantrum",
-      "prob": 0.571958
+      "prob": 0.575126
      },
      {
       "move": "Protect",
-      "prob": 0.463373
+      "prob": 0.459087
      },
      {
       "move": "Power Gem",
-      "prob": 0.146427
+      "prob": 0.144531
      }
     ],
     "estNature": null,
@@ -15482,27 +15758,27 @@
    },
    "used": 7,
    "view": {
-    "mapProb": 0.297929,
+    "mapProb": 0.291707,
     "movePred": [
      [
       "Rock Slide",
-      0.686028
+      0.687338
      ],
      [
       "Dragon Claw",
-      0.673384
+      0.674993
      ],
      [
       "Earthquake",
-      0.58761
+      0.589883
      ],
      [
       "Stomping Tantrum",
-      0.571958
+      0.575126
      ],
      [
       "Protect",
-      0.463373
+      0.459087
      ]
     ],
     "nature": null,
@@ -16517,7 +16793,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.102764,
+     "p": 0.102039,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16540,7 +16816,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.00064,
+     "p": 0.000636,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16563,7 +16839,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.000622,
+     "p": 0.000618,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16586,7 +16862,7 @@
       "Rock Slide"
      ],
      "n": "Adamant",
-     "p": 0.00177,
+     "p": 0.001758,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16609,7 +16885,7 @@
       "Protect"
      ],
      "n": "Modest",
-     "p": 0.000529,
+     "p": 0.000525,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16617,29 +16893,6 @@
       "spa": 0,
       "spd": 0,
       "spe": 0
-     }
-    },
-    {
-     "a": "Rough Skin",
-     "corp": false,
-     "i": "Life Orb",
-     "ma": null,
-     "ms": null,
-     "mv": [
-      "Rock Slide",
-      "Dragon Claw",
-      "Earthquake",
-      "Stomping Tantrum"
-     ],
-     "n": "Adamant",
-     "p": 0.014745,
-     "sp": {
-      "atk": 32,
-      "def": 0,
-      "hp": 2,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
      }
     },
     {
@@ -16655,7 +16908,7 @@
       "Earthquake"
      ],
      "n": "Adamant",
-     "p": 0.055002,
+     "p": 0.054614,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16675,10 +16928,33 @@
       "Rock Slide",
       "Dragon Claw",
       "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.014417,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Life Orb",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.01458,
+     "p": 0.014257,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -16701,7 +16977,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.119068,
+     "p": 0.116425,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -16724,7 +17000,7 @@
       "Stomping Tantrum"
      ],
      "n": "Jolly",
-     "p": 0.367942,
+     "p": 0.359775,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -16747,7 +17023,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.055703,
+     "p": 0.054466,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -16770,7 +17046,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.031229,
+     "p": 0.031009,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16793,7 +17069,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.000625,
+     "p": 0.00062,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16816,7 +17092,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.000609,
+     "p": 0.000605,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16839,7 +17115,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.03004,
+     "p": 0.029829,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16862,7 +17138,7 @@
       "Rock Tomb"
      ],
      "n": "Jolly",
-     "p": 0.03004,
+     "p": 0.029829,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16931,7 +17207,7 @@
       "Rock Slide"
      ],
      "n": "Modest",
-     "p": 0.023031,
+     "p": 0.02252,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -16954,7 +17230,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.016718,
+     "p": 0.016347,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -16977,7 +17253,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.016532,
+     "p": 0.016165,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -17023,7 +17299,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.013825,
+     "p": 0.013518,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -17046,7 +17322,7 @@
       "Protect"
      ],
      "n": "Timid",
-     "p": 0.005014,
+     "p": 0.004979,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -17069,7 +17345,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.003234,
+     "p": 0.003162,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -17092,7 +17368,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.015915,
+     "p": 0.015562,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17115,7 +17391,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000623,
+     "p": 0.00061,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -17138,7 +17414,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000616,
+     "p": 0.000603,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -17161,7 +17437,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.015691,
+     "p": 0.015343,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17184,7 +17460,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.048489,
+     "p": 0.047412,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17207,7 +17483,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.002355,
+     "p": 0.002303,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -17230,7 +17506,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.003035,
+     "p": 0.002968,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17253,12 +17529,35 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000924,
+     "p": 0.000903,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Rocky Helmet",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.006769,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -17276,12 +17575,58 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001822,
+     "p": 0.001781,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Haban Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.004738,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Sitrus Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.004287,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -17299,7 +17644,7 @@
       "Protect"
      ],
      "n": "Impish",
-     "p": 0.000411,
+     "p": 0.000402,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17322,7 +17667,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000394,
+     "p": 0.000385,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17345,7 +17690,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000389,
+     "p": 0.000381,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17368,11 +17713,34 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000673,
+     "p": 0.000658,
      "sp": {
       "atk": 28,
       "def": 0,
       "hp": 6,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Focus Sash",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.002482,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
       "spa": 0,
       "spd": 0,
       "spe": 32
@@ -17391,7 +17759,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.001487,
+     "p": 0.001454,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17460,7 +17828,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000209,
+     "p": 0.000204,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -17483,7 +17851,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000206,
+     "p": 0.000202,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -17506,7 +17874,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.00011,
+     "p": 0.000108,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17529,7 +17897,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000109,
+     "p": 0.000107,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17552,7 +17920,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000789,
+     "p": 0.000771,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -17575,7 +17943,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000416,
+     "p": 0.000407,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17598,7 +17966,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000225,
+     "p": 0.00022,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -17621,7 +17989,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000208,
+     "p": 0.000203,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -17644,7 +18012,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.000642,
+     "p": 0.000628,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -24875,31 +25243,31 @@
     }
    },
    "panel": {
-    "estMapProb": 0.367942,
+    "estMapProb": 0.359775,
     "estMovePred": [
      {
       "move": "Dragon Claw",
-      "prob": 0.771162
+      "prob": 0.772456
      },
      {
       "move": "Rock Slide",
-      "prob": 0.730651
+      "prob": 0.731952
      },
      {
       "move": "Earthquake",
-      "prob": 0.695093
+      "prob": 0.697139
      },
      {
       "move": "Stomping Tantrum",
-      "prob": 0.589774
+      "prob": 0.593556
      },
      {
       "move": "Protect",
-      "prob": 0.337267
+      "prob": 0.332869
      },
      {
       "move": "Power Gem",
-      "prob": 0.093035
+      "prob": 0.091073
      }
     ],
     "estNature": null,
@@ -24967,27 +25335,27 @@
    },
    "used": 8,
    "view": {
-    "mapProb": 0.367942,
+    "mapProb": 0.359775,
     "movePred": [
      [
       "Dragon Claw",
-      0.771162
+      0.772456
      ],
      [
       "Rock Slide",
-      0.730651
+      0.731952
      ],
      [
       "Earthquake",
-      0.695093
+      0.697139
      ],
      [
       "Stomping Tantrum",
-      0.589774
+      0.593556
      ],
      [
       "Protect",
-      0.337267
+      0.332869
      ]
     ],
     "nature": null,
@@ -26191,7 +26559,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.494018,
+     "p": 0.495267,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26295,29 +26663,6 @@
     },
     {
      "a": "Rough Skin",
-     "corp": false,
-     "i": "Life Orb",
-     "ma": null,
-     "ms": null,
-     "mv": [
-      "Rock Slide",
-      "Dragon Claw",
-      "Earthquake",
-      "Stomping Tantrum"
-     ],
-     "n": "Adamant",
-     "p": 0.031808,
-     "sp": {
-      "atk": 32,
-      "def": 0,
-      "hp": 2,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
-     }
-    },
-    {
-     "a": "Rough Skin",
      "corp": true,
      "i": "Choice Scarf",
      "ma": null,
@@ -26329,7 +26674,7 @@
       "Earthquake"
      ],
      "n": "Adamant",
-     "p": 0.013221,
+     "p": 0.013254,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26349,10 +26694,33 @@
       "Rock Slide",
       "Dragon Claw",
       "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.031402,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Life Orb",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.031454,
+     "p": 0.031052,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26375,7 +26743,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.012843,
+     "p": 0.012679,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26398,7 +26766,7 @@
       "Stomping Tantrum"
      ],
      "n": "Jolly",
-     "p": 0.039688,
+     "p": 0.039181,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26421,7 +26789,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.056083,
+     "p": 0.055367,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26444,7 +26812,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.025154,
+     "p": 0.025217,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26467,7 +26835,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.003003,
+     "p": 0.00301,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26490,7 +26858,7 @@
       "Protect"
      ],
      "n": "Adamant",
-     "p": 0.000491,
+     "p": 0.000492,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26513,7 +26881,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.144413,
+     "p": 0.144778,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26536,7 +26904,7 @@
       "Rock Tomb"
      ],
      "n": "Jolly",
-     "p": 0.024196,
+     "p": 0.024258,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26605,7 +26973,7 @@
       "Rock Slide"
      ],
      "n": "Modest",
-     "p": 0.001159,
+     "p": 0.001145,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26628,7 +26996,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.036066,
+     "p": 0.035605,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26651,7 +27019,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.035664,
+     "p": 0.035209,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26697,7 +27065,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001491,
+     "p": 0.001472,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26743,7 +27111,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.003256,
+     "p": 0.003214,
      "sp": {
       "atk": 0,
       "def": 0,
@@ -26766,7 +27134,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.0241,
+     "p": 0.023793,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26789,7 +27157,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001345,
+     "p": 0.001328,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -26812,7 +27180,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.00133,
+     "p": 0.001313,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -26835,7 +27203,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.001693,
+     "p": 0.001671,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26858,7 +27226,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.00523,
+     "p": 0.005163,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26881,7 +27249,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.002371,
+     "p": 0.002341,
      "sp": {
       "atk": 28,
       "def": 0,
@@ -26904,7 +27272,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000153,
+     "p": 0.000151,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26927,12 +27295,35 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.001399,
+     "p": 0.001381,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Rocky Helmet",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.000737,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -26950,12 +27341,58 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000197,
+     "p": 0.000194,
      "sp": {
       "atk": 0,
       "def": 0,
       "hp": 2,
       "spa": 32,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Haban Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.000516,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Sitrus Berry",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.000467,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
+      "spa": 0,
       "spd": 0,
       "spe": 32
      }
@@ -26973,7 +27410,7 @@
       "Protect"
      ],
      "n": "Impish",
-     "p": 0.000886,
+     "p": 0.000875,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -26996,7 +27433,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000849,
+     "p": 0.000838,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -27019,7 +27456,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.00084,
+     "p": 0.000829,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -27042,11 +27479,34 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.001019,
+     "p": 0.001006,
      "sp": {
       "atk": 28,
       "def": 0,
       "hp": 6,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     }
+    },
+    {
+     "a": "Rough Skin",
+     "corp": false,
+     "i": "Focus Sash",
+     "ma": null,
+     "ms": null,
+     "mv": [
+      "Rock Slide",
+      "Dragon Claw",
+      "Earthquake",
+      "Stomping Tantrum"
+     ],
+     "n": "Adamant",
+     "p": 0.00027,
+     "sp": {
+      "atk": 32,
+      "def": 0,
+      "hp": 2,
       "spa": 0,
       "spd": 0,
       "spe": 32
@@ -27065,7 +27525,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.001497,
+     "p": 0.001478,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -27134,7 +27594,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.00045,
+     "p": 0.000445,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -27157,7 +27617,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000445,
+     "p": 0.00044,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -27180,7 +27640,7 @@
       "Stomping Tantrum"
      ],
      "n": "Adamant",
-     "p": 0.000238,
+     "p": 0.000235,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -27203,7 +27663,7 @@
       "Protect"
      ],
      "n": "Jolly",
-     "p": 0.000235,
+     "p": 0.000232,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -27226,7 +27686,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000794,
+     "p": 0.000784,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -27249,7 +27709,7 @@
       "Dragon Pulse"
      ],
      "n": "Modest",
-     "p": 0.000419,
+     "p": 0.000414,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -27272,7 +27732,7 @@
       "Power Gem"
      ],
      "n": "Timid",
-     "p": 0.000341,
+     "p": 0.000337,
      "sp": {
       "atk": 32,
       "def": 2,
@@ -27318,7 +27778,7 @@
       "Earthquake"
      ],
      "n": "Jolly",
-     "p": 0.000069,
+     "p": 0.000068,
      "sp": {
       "atk": 32,
       "def": 0,
@@ -34549,31 +35009,31 @@
     }
    },
    "panel": {
-    "estMapProb": 0.367942,
+    "estMapProb": 0.359775,
     "estMovePred": [
      {
       "move": "Dragon Claw",
-      "prob": 0.771162
+      "prob": 0.772456
      },
      {
       "move": "Rock Slide",
-      "prob": 0.730651
+      "prob": 0.731952
      },
      {
       "move": "Earthquake",
-      "prob": 0.695093
+      "prob": 0.697139
      },
      {
       "move": "Stomping Tantrum",
-      "prob": 0.589774
+      "prob": 0.593556
      },
      {
       "move": "Protect",
-      "prob": 0.337267
+      "prob": 0.332869
      },
      {
       "move": "Power Gem",
-      "prob": 0.093035
+      "prob": 0.091073
      }
     ],
     "estNature": null,
@@ -34641,19 +35101,19 @@
    },
    "used": 9,
    "view": {
-    "mapProb": 0.494018,
+    "mapProb": 0.495267,
     "movePred": [
      [
       "Protect",
-      0.825413
+      0.825449
      ],
      [
       "Rock Slide",
-      0.717587
+      0.718169
      ],
      [
       "Stomping Tantrum",
-      0.308841
+      0.309664
      ]
     ],
     "nature": null,
@@ -34686,7 +35146,7 @@
     "stat": {
      "atk": [
       150,
-      182
+      195
      ],
      "def": [
       115,
@@ -35842,7 +36302,7 @@
   }
  },
  "cp5_cand_ranges": {
-  "acc": 0.918544,
+  "acc": 0.917337,
   "mine": [
    {
     "hi": 59.016393,
