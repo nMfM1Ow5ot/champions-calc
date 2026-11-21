@@ -26075,9 +26075,6 @@ var require_dist = __commonJS({
   }
 });
 
-// .bundle_entry.mjs
-var import_calc2 = __toESM(require_dist(), 1);
-
 // core.mjs
 var import_calc = __toESM(require_dist(), 1);
 var gen = import_calc.Generations.get(9);
@@ -26349,7 +26346,7 @@ function isImmune(atkP, defP, moveObj) {
   }
   return false;
 }
-function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves) {
+function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs) {
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
@@ -26360,8 +26357,7 @@ function calcDirection(attackers, defenders, atkSpecs, field, critFlags, fieldSi
         entry.moveResults.push(row);
         continue;
       }
-      const moveObj = new import_calc.Move(gen, mv);
-      if (critFlags && critFlags[i]) moveObj.isCrit = true;
+      const moveObj = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : void 0, !!(critFlags && critFlags[i]));
       const useField = fieldSingle && singleMoves && singleMoves.includes(mv) ? fieldSingle : field;
       for (let j = 0; j < defenders.length; j++) {
         if (moveObj.category === "Status") {
@@ -26426,8 +26422,8 @@ function calcMatchup(state, names) {
     defenderSide: state.field.oppDefenderSide || {}
   });
   const out = { results: [], oppResults: [], speeds: { mine: [], opps: [] } };
-  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine);
-  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps);
+  out.results = calcDirection(mine, opps, state.mine, field, state.crit && state.crit.mine, fieldS, state.singleMoves && state.singleMoves.mine, state.moveSpecs && state.moveSpecs.mine);
+  out.oppResults = calcDirection(opps, mine, state.opps, oppField, state.crit && state.crit.opps, oppFieldS, state.singleMoves && state.singleMoves.opps, state.moveSpecs && state.moveSpecs.opps);
   out.speeds.mine = mine.map((p) => boostedSpe(p, state.field.tailwindMine));
   out.speeds.opps = opps.map((p) => boostedSpe(p, state.field.tailwindOpp));
   out.stats = {
@@ -26441,11 +26437,44 @@ function withCurHP(spec) {
   const p = toPokemon({ ...spec, curHP: void 0 });
   return { ...spec, curHP: Math.max(1, Math.floor(p.stats.hp * spec.curHPPercent / 100)) };
 }
+var _moveSpecCache = {};
+function moveSpecInfo(name) {
+  if (name in _moveSpecCache) return _moveSpecCache[name];
+  const m = gen.moves.get(String(name).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  let spec = null;
+  if (m) {
+    if (Array.isArray(m.multihit)) {
+      spec = { kind: "hits", min: m.multihit[0], max: m.multihit[1], def: m.multihit[0] + 1 };
+    } else if (m.multiaccuracy && typeof m.multihit === "number") {
+      spec = { kind: "hits", min: 1, max: m.multihit, def: m.multihit };
+    } else if (m.name === "Rage Fist") {
+      spec = { kind: "rageFist", min: 0, max: 6, def: 0 };
+    } else if (m.name === "Last Respects") {
+      spec = { kind: "lastRespects", min: 0, max: 5, def: 0 };
+    }
+  }
+  _moveSpecCache[name] = spec;
+  return spec;
+}
+function buildMove(moveName, specValue, crit) {
+  const info = moveSpecInfo(moveName);
+  let moveObj = null;
+  if (info && specValue != null && Number.isFinite(+specValue)) {
+    const v = Math.min(info.max, Math.max(info.min, Math.floor(+specValue)));
+    if (info.kind === "hits") {
+      moveObj = new import_calc.Move(gen, moveName, { hits: v });
+    } else {
+      moveObj = new import_calc.Move(gen, moveName, { overrides: { basePower: 50 + 50 * v } });
+    }
+  }
+  if (!moveObj) moveObj = new import_calc.Move(gen, moveName);
+  if (crit) moveObj.isCrit = true;
+  return moveObj;
+}
 function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   const atk = toPokemon(atkSpec);
   const def = toPokemon(defSpec);
-  const moveObj = new import_calc.Move(gen, moveName);
-  if (opts.crit) moveObj.isCrit = true;
+  const moveObj = buildMove(moveName, opts.moveSpec, opts.crit);
   const field = new import_calc.Field({
     gameType: opts.gameType || "Doubles",
     weather: opts.weather || void 0,
@@ -26458,6 +26487,15 @@ function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   try {
     const r = (0, import_calc.calculate)(gen, atk, def, moveObj, field);
     const d = r.damage;
+    const info = moveSpecInfo(moveName);
+    if (opts.moveSpec != null && info && info.kind === "hits" && Array.isArray(d) && Array.isArray(d[0])) {
+      const totals = new Array(16).fill(0);
+      for (const hitRolls of d) {
+        if (!Array.isArray(hitRolls)) continue;
+        for (let i = 0; i < 16; i++) totals[i] += hitRolls[i] || 0;
+      }
+      return { rolls: totals };
+    }
     return { rolls: Array.isArray(d) ? d : [d] };
   } catch (e) {
     return { rolls: [], error: e.message };
@@ -26493,7 +26531,8 @@ function moveData(name) {
     priority: m.priority || 0,
     multihit: m.multihit || null,
     fixedDamage: m.fixedDamage || null,
-    basePower: m.basePower
+    basePower: m.basePower,
+    spec: moveSpecInfo(name)
   };
 }
 
@@ -27436,6 +27475,9 @@ function createEstimator(deps) {
     }
   };
 }
+
+// bundle_entry.mjs
+var import_calc2 = __toESM(require_dist(), 1);
 var export_Generations = import_calc2.Generations;
 export {
   export_Generations as Generations,
@@ -27451,6 +27493,7 @@ export {
   labelSide,
   labelSpecies,
   moveData,
+  moveSpecInfo,
   spToEvs,
   statTable,
   usageSpec,
