@@ -187,13 +187,13 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .presetsave{display:flex; gap:.4rem}
 .presetnamein{flex:1; min-width:0; background:var(--panel); border:1px solid rgba(127,127,127,.35); border-radius:.4rem; color:var(--ink); padding:.3rem .45rem; font:inherit}
 .presetrow{display:flex; align-items:center; gap:.4rem}
-.presetname{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; background:none; border:none; color:var(--ink); cursor:pointer; padding:.3rem; border-radius:.4rem; font:inherit}
+.presetname{flex:1; min-width:0; display:flex; align-items:center; gap:.4rem; text-align:left; background:none; border:none; color:var(--ink); cursor:pointer; padding:.3rem; border-radius:.4rem; font:inherit}
 .presetname:hover{background:var(--panel)}
+.presetnametext{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .presetedit{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .35rem; font:inherit}
 .presetedit:hover{color:var(--ink)}
 .preseticons{display:flex; gap:.12rem; flex:none; align-items:center}
-.preseticons[data-presetload]{cursor:pointer; border-radius:.4rem; padding:.3rem; margin:-.3rem}
-.preseticons[data-presetload]:hover{background:var(--panel)}
+
 .preseticon{width:1.7rem; height:1.7rem; object-fit:contain; image-rendering:pixelated}
 .presetdel{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .45rem; font:inherit}
 .presetempty{color:var(--dim); font-size:.85rem}
@@ -1462,13 +1462,12 @@ function applyPreset(side, idx) {
   applySetterAbility(specs[0]);
   calcAll();
 }
-function presetIconsHTML(p, loadKey) {
+function presetIconsHTML(p) {
   const imgs = (p.slots || []).map(b => {
     const sp = b.mega && b.megaSpecies ? b.megaSpecies : b.species;
     return spriteImg(sp, gen.species.get(idOf(sp))?.baseSpecies || sp, 'preseticon');
   }).join('');
-  // loadKey があればアイコン部分も名前ボタンと同じ読み込みボタンにする
-  return `<span class="preseticons"${loadKey ? ` data-presetload="${loadKey}" title="このプリセットに切り替え"` : ''}>${imgs}</span>`;
+  return `<span class="preseticons">${imgs}</span>`;
 }
 function presetPopHTML(side) {
   const list = loadPresetStore()[side];
@@ -1479,7 +1478,7 @@ function presetPopHTML(side) {
     if (i === renaming) {
       return `<div class="presetrow">${presetIconsHTML(p)}<input type="text" class="presetnamein" data-presetrename="${side}" value="${esc(ui.presetDraft.rename || p.name)}"><button class="tgl" data-presetrenamesave="${side}:${i}">変更</button><button class="presetdel" data-presetrenamecancel="1" title="キャンセル">×</button></div>`;
     }
-    return `<div class="presetrow">${presetIconsHTML(p, `${side}:${i}`)}<button class="presetname" data-presetload="${side}:${i}" title="このプリセットに切り替え">${esc(p.name)}</button><button class="presetedit" data-presetedit="${side}:${i}" title="名前を変更">✎</button><button class="presetdel" data-presetdel="${side}:${i}" title="削除">×</button></div>`;
+    return `<div class="presetrow"><button class="presetname" data-presetload="${side}:${i}" title="このプリセットに切り替え">${presetIconsHTML(p)}<span class="presetnametext">${esc(p.name)}</span></button><button class="presetedit" data-presetedit="${side}:${i}" title="名前を変更">✎</button><button class="presetdel" data-presetdel="${side}:${i}" title="削除">×</button></div>`;
   }).join('');
   const draft = ui.presetDraft.save[side];
   return `<span class="presetpop">
