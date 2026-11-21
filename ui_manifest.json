@@ -30,14 +30,14 @@
   "fetch_usage.mjs": "28c71b85cae10b8a8d45b84aee1ca9d3315c047b1cdf65a30ac4c90aae83b17d",
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
-  "reader.swift": "f2fb15705c3574c31d48972f2f3d9e346d5624cb26e6c81d177cbfa37dbe19a4",
+  "reader.swift": "c3132ad29aae6505cb797d7cde32b775f76c0419e006fcb6c8d728d1bfc5d4fd",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "cfb8f5ada0303c747966b58d941826fe468b0de90740d5c1cbb8a4dbba546256",
   "start_all.sh": "8d23ffe75deaacae0e296035a0c4b2c5adb92d864535c5e14d178431c3bf54a2",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
-  "ui.html": "aed82cf4f870bae8512ac114bf0a393b61663b9f935f8be41a1f8a3c7b1155e0",
+  "ui.html": "2fd2aba4877356b65a1c88959250174b2bb17760068b0e3f0b059823cccfdff0",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261121_1611"
+ "rev": "20261121_1618"
 }
