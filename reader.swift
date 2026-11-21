@@ -472,7 +472,7 @@ var fieldWeatherSetTurn = 0
 var fieldTerrainSetTurn = 0
 var fieldTrickRoomSetTurn = 0
 var sideCondSetTurns: [String: [String: Int]] = [:]  // side -> 状態名(EN) -> 実効開始ターン
-let sideCondDurations: [String: Int] = ["Reflect": 5, "Light Screen": 5, "Aurora Veil": 5, "Tailwind": 4, "Mist": 5, "Safeguard": 5]
+let sideCondDurations: [String: Int] = ["Reflect": 5, "Light Screen": 5, "Aurora Veil": 5, "Tailwind": 4, "Mist": 5, "Safeguard": 5, "Wide Guard": 1]
 let fieldDurations = 5  // 天気・フィールド・トリックルームの基本継続ターン (岩・粘土等の延長は画面から知りえないため数えない)
 
 func turnsLeft(setTurn: Int, duration: Int) -> Int {
@@ -872,6 +872,7 @@ func renderLogLine(_ line: String) -> [String] {
         let (_, side, species) = renderLabelParts(f[2])
         if f[3].contains("Focus Sash") { return ["(\(renderPrefix(side))\(species) held on thanks to its Focus Sash!)"] }
         if f[3].contains("Protect") { return ["\(renderPrefix(side))\(species) protected itself!"] }
+        if f[3].contains("Wide Guard") { return ["\(renderPrefix(side))\(species) was protected by Wide Guard!"] }
         if f[3].contains("Terrain") {
             let tn = f[3].replacingOccurrences(of: "move: ", with: "")
             return ["\(renderPrefix(side))\(species) was protected by the \(tn)!"]
@@ -2780,6 +2781,7 @@ func applyMoveField(_ mvJa: String, side: String) {
     case "グラスフィールド": setTerrain("Grassy")
     case "ミストフィールド": setTerrain("Misty")
     case "サイコフィールド": setTerrain("Psychic")
+    case "ワイドガード": emitLog("|-sidestart|\(side)|move: Wide Guard")
     // 設置物 (Showdown のサイドコンディションとして扱う)
     case "ステルスロック": emitHazard(foe, "Stealth Rock", start: true)
     case "まきびし": emitHazard(foe, "Spikes", start: true)
@@ -3897,7 +3899,11 @@ func translateBattleMessage(_ text: String) -> Bool {
     }
     // 効果の確認文・交代の指示文 (出来事そのものは別の行で記録済みのため、
     // 本文だけを |-message| に残さないよう消費する)
-    if t.contains("手助けする") || t.contains("ワイドガード") || t.contains("守られた") || t.contains("身を守った") || t.contains("体勢に入った")
+    // ワイドガードの文はここで消費しない (使用告知は後段の技使用として
+    // |move| に、防御の確認文は種族固定後の |-activate| 分岐で処理する)。
+    // 以前は確認文として一律に消費していたため使用告知まで巻き込まれ、
+    // ワイドガードがログに一切出なかった
+    if !t.contains("ワイドガード") && (t.contains("手助けする") || t.contains("守られた") || t.contains("身を守った") || t.contains("体勢に入った")
         || t.contains("戻れ") || t.contains("引っこめた") || t.contains("引っ込めた")
         || t.contains("引つこめた") || t.contains("引つ込めた")
         || t.contains("引っごめた") || t.contains("引つごめた")
@@ -3905,7 +3911,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         || t.contains("イリュージョンが解けた") || t.contains("イリュージョンがとけた")
         || (t.contains("ランク") && t.contains("級"))
         || ((t.contains("ゆけ") || t.contains("もどれ")) && findSpeciesJa(in: t) != nil)
-        || t.contains("場所を入れ替えた") {
+        || t.contains("場所を入れ替えた")) {
         // 引っ込めた は OCR で「引つこめた」(っ->つ、込->こ) と崩れる
         // (実例: 2026-11-20 vs Ony 戦「Onyはコリランダーを引つこめた！」)
         // ラテン文字が混入する崩れ (「引Iっこめた」) もあるため、
@@ -4154,6 +4160,16 @@ func translateBattleMessage(_ text: String) -> Bool {
         if !lastMoveLabel.isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 8 {
             emitLog("|-miss|\(lastMoveLabel)|\(slot): \(sp.en)")
         }
+        return true
+    }
+    // ワイドガードで守られた: 「<対象>は ワイドガードで 守られた！」
+    // (まもられた の表記も拾う)。文中の ワイドガード を技の使用と
+    // 誤読しないよう、技使用の解析より前にここで処理する
+    if t.contains("ワイドガード") && (t.contains("守られ") || t.contains("まもられ")) {
+        let pk = slot + "|wideguard"
+        if let at = lastSingleActAt[pk], Date().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[pk] = Date()
+        emitLog("|-activate|\(slot): \(sp.en)|move: Wide Guard")
         return true
     }
     // 技の使用: 「(相手の) <種族>の <技>！」— <技> は種族名の直後から文末までと完全一致
@@ -6145,7 +6161,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1822"
+let readerBuild = "20261121_1846"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
