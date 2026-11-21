@@ -358,6 +358,10 @@ import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurH
 const gen = Generations.get(9);const STATJ = [['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SPA'],['spd','SPD'],['spe','SPE']];
 const TYPE_JA = {Normal:'ノーマル',Fire:'ほのお',Water:'みず',Electric:'でんき',Grass:'くさ',Ice:'こおり',Fighting:'かくとう',Poison:'どく',Ground:'じめん',Flying:'ひこう',Psychic:'エスパー',Bug:'むし',Rock:'いわ',Ghost:'ゴースト',Dragon:'ドラゴン',Dark:'あく',Steel:'はがね',Fairy:'フェアリー',Stellar:'ステラ'};
 const TERA_TYPES = Object.keys(TYPE_JA);
+// items_ja.json に無い持ち物の日本語名 (表示用サプリメント)。
+// Leek は Stick と同一アイテム (第8世代で改名)、第2世代のきのみ4件は金銀の実名、
+// Mail は総称名、Crucibellite / Vile Vial は CAP の持ち物で公式名が無いためカタカナ表記
+const ITEM_JA_EXTRA = { 'Leek': 'ながねぎ', 'Miracle Berry': 'きせきのみ', 'Mystery Berry': 'ふしぎなきのみ', 'PRZ Cure Berry': 'まひなおしのみ', 'PSN Cure Berry': 'どくけしのみ', 'Mail': 'メール', 'Crucibellite': 'クルシーベルナイト', 'Vile Vial': 'バイルバイアル' };
 const TYPE_SHORT = {Normal:'NRML',Fire:'FIRE',Water:'WATR',Electric:'ELEC',Grass:'GRASS',Ice:'ICE',Fighting:'FIGHT',Poison:'POISON',Ground:'GROUND',Flying:'FLYING',Psychic:'PSYC',Bug:'BUG',Rock:'ROCK',Ghost:'GHOST',Dragon:'DRAGON',Dark:'DARK',Steel:'STEEL',Fairy:'FARY'};
 const TYPE_COLOR = {Normal:'#8a8a6a',Fire:'#d96f26',Water:'#4f7de0',Electric:'#d9b62a',Grass:'#67b83c',Ice:'#7fc9c6',Fighting:'#b02a24',Poison:'#923a92',Ground:'#c9a94f',Flying:'#8f7fe8',Psychic:'#e84f7f',Bug:'#93a51a',Rock:'#a08f2f',Ghost:'#5f4a8a',Dragon:'#5f2ef0',Dark:'#5f4a3d',Steel:'#9a9ab5',Fairy:'#d685ad',Stellar:'#35a29f'};
 const NATURES = ['Hardy','Lonely','Brave','Adamant','Naughty','Bold','Docile','Relaxed','Impish','Lax','Timid','Hasty','Serious','Jolly','Naive','Modest','Mild','Quiet','Bashful','Rash','Calm','Gentle','Sassy','Careful','Quirky'];
@@ -2447,6 +2451,7 @@ async function poll() {
           const ij = await (await fetch('./data/items_ja.json')).json();
           NAMES._itemJa2en = ij;
           for (const [jaName, en] of Object.entries(ij)) (NAMES._itemEn2ja || {})[idOf(en)] = jaName;
+          for (const [en, jaName] of Object.entries(ITEM_JA_EXTRA)) { const k = idOf(en); if (!(k in NAMES._itemEn2ja)) NAMES._itemEn2ja[k] = jaName; }
         } catch (e) { /* items_ja optional */ }
       }
     } catch (e) { /* names are optional */ } })(),
