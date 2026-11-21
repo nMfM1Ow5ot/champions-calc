@@ -4931,6 +4931,12 @@ var pvBattleOnlyFormes: Set<String> = []
 // ロトムやツアリーナが上位に来る)。0.20 に広げても代理測定の
 // 読み違い救済率は下がらないことを tests/preview_eval.py で確認済み
 let pvExpandMargin = 0.20
+// アイコン分類で 1 位と 2 位の距離差がこれ未満なら分類は近接として
+// 扱い、両タイプのプールを統合する (距離逆転でプールが誤固定される
+// 事故の防止。実例: 2026-11-21 battle_20261121_233243 枠3、
+// Grass アイコンが Bug=0.167 / Grass=0.205 と逆転し Rillaboom の
+// 枠が Pinsir 単独プールになった)
+let pvIconAmbigDelta = 0.05
 // パネルのレイアウト幅と高さの比 (実フレーム4件で実測: エンジ色幅が
 // 健全な全画面フレームでは高さの約2.5〜2.6倍)。アイコン・性別の
 // サンプリング幅は、エンジ色の実測幅がこれを下回る場合に高さから
@@ -5239,7 +5245,7 @@ func pvDetectPanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int,
 }
 
 // タイプアイコン 1 セルを分類。(種族タイプ名, アイコンが存在したか, 診断文字列)
-func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in: Int, _ s: Int) -> (String?, Bool, String, Double) {
+func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in: Int, _ s: Int) -> (String?, Bool, String, Double, String?, Double) {
     let x0 = max(0, min(x0in, buf.w - s)), y0 = max(0, min(y0in, buf.h - s))
     var gray: [Double] = []
     var pix: [(Double, Double, Double)] = []
@@ -5254,7 +5260,7 @@ func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in:
     }
     let mean = gray.reduce(0, +) / Double(gray.count)
     let std = sqrt(gray.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(gray.count))
-    if std <= 30 { return (nil, false, String(format: "std=%.1f (アイコンなし)", std), 999) }
+    if std <= 30 { return (nil, false, String(format: "std=%.1f (アイコンなし)", std), 999, nil, 999) }
     let kept = pix.filter { ($0.0 + $0.1 + $0.2) / 3 < 210 }
     let src = kept.isEmpty ? pix : kept
     func med(_ arr: [Double]) -> Double {
@@ -5277,7 +5283,7 @@ func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in:
                     + (rgb[2] - 28) * (rgb[2] - 28)) / 441.7
         return ("Electric", true,
                 String(format: "std=%.1f rgb=[%.0f,%.0f,%.0f] Electric(黄色判定)", std, rgb[0], rgb[1], rgb[2]),
-                0.05 + cd * 0.3)
+                0.05 + cd * 0.3, nil, 999)
     }
     let grid = pvResizeGray(gray, s, s, 12, 12)
     var scored: [(String, Double)] = []
@@ -5293,7 +5299,14 @@ func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in:
     let bs = scored.first?.1 ?? Double.greatestFiniteMagnitude
     let top3 = scored.prefix(3).map { String(format: "%@=%.3f", $0.0, $0.1) }.joined(separator: " ")
     let diag = String(format: "std=%.1f rgb=[%.0f,%.0f,%.0f] %@", std, rgb[0], rgb[1], rgb[2], top3)
-    return (bs < 0.42 ? best : nil, true, diag, bs)
+    // 2 位との距離差 (近接判定用)。分類が成立しない場合は曖昧さなし
+    var alt: String? = nil
+    var gap = 999.0
+    if bs < 0.42 && scored.count > 1 {
+        alt = scored[1].0
+        gap = scored[1].1 - bs
+    }
+    return (bs < 0.42 ? best : nil, true, diag, bs, alt, gap)
 }
 
 // アイコン 1 枠分: 基準位置の近傍 (3x3) を探索し、最もスコアの良い窓を
@@ -5304,17 +5317,17 @@ func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in:
 // 探索窓は隣のアイコンや 3D モデルの端を拾って「無い枠にタイプを
 // 発明」しうる (単タイプが複合と誤読され、候補が 1 種に確定して
 // しまう事故の経路)。中心で無ければ探索しない。
-func pvClassifyIconSearch(_ buf: (data: [UInt8], w: Int, h: Int), _ x0: Int, _ y0: Int, _ s: Int) -> (String?, Bool, String) {
+func pvClassifyIconSearch(_ buf: (data: [UInt8], w: Int, h: Int), _ x0: Int, _ y0: Int, _ s: Int) -> (String?, Bool, String, Double, String?, Double) {
     let center = pvClassifyIcon(buf, x0, y0, s)
-    if !center.1 { return (center.0, center.1, center.2) }
-    var best: (String?, Bool, String, Double)? = nil
+    if !center.1 { return center }
+    var best = center
     for dy in [-s / 5, 0, s / 5] {
         for dx in [-s / 6, 0, s / 6] {
             let r = pvClassifyIcon(buf, x0 + dx, y0 + dy, s)
-            if best == nil || r.3 < best!.3 { best = r }
+            if r.3 < best.3 { best = r }
         }
     }
-    return (best!.0, best!.1, best!.2)
+    return best
 }
 
 // パネル右下の性別マーク (♂=青 / ♀=赤の丸) を読む。位置は実フレーム
@@ -5549,6 +5562,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         slotGenderCounts.append([gRed, gBlue])
         slotPanels.append([panel.x, panel.y, panel.w, panel.h])
         var types: [String] = []
+        var iconCands: [[String]] = []
         var iconDiags: [String] = []
         var unknownPresent = false
         // アイコン位置はパネル相対 (2026-11-20 の実機フレームで再実測:
@@ -5559,20 +5573,29 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         for slot in 0..<2 {
             let ix = panel.x + Int((slot == 0 ? 0.620 : 0.810) * Double(panel.w))
             let iy = panel.y + Int(0.050 * Double(panel.h))
-            let (t, present, diag) = pvClassifyIconSearch(buf, ix, iy, iconS)
+            let (t, present, diag, _, alt, gap) = pvClassifyIconSearch(buf, ix, iy, iconS)
             iconDiags.append(diag)
-            if let t { types.append(t) } else if present { unknownPresent = true }
+            if let t {
+                types.append(t)
+                var cands = [t]
+                // 1 位と 2 位が近接している場合は分類を確定とみなさず、
+                // 両タイプを候補に残してプールを統合する
+                if let alt, gap < pvIconAmbigDelta { cands.append(alt) }
+                iconCands.append(cands)
+            } else if present { unknownPresent = true }
         }
         slotIconDiags.append(iconDiags)
         slotTypes.append(types)
         var pool: [String] = []
-        if types.count == 2 {
-            pool = pvSpeciesTypes.filter { Set($0.value) == Set(types) }.map { $0.key }
-        } else if types.count == 1 {
+        if !iconCands.isEmpty {
+            var combos: [Set<String>] = [[]]
+            for cands in iconCands {
+                combos = combos.flatMap { base in cands.map { base.union([$0]) } }
+            }
             if unknownPresent {
-                pool = pvSpeciesTypes.filter { $0.value.contains(types[0]) }.map { $0.key }
+                pool = pvSpeciesTypes.filter { sp in combos.contains { Set(sp.value).isSuperset(of: $0) } }.map { $0.key }
             } else {
-                pool = pvSpeciesTypes.filter { $0.value == types }.map { $0.key }
+                pool = pvSpeciesTypes.filter { combos.contains(Set($0.value)) }.map { $0.key }
             }
         }
         // 見せ合い画面に現れないフォルム (メガ等) は候補から外す
@@ -6508,7 +6531,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_2337"
+let readerBuild = "20261121_2355"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -6557,7 +6580,7 @@ func runDebug(image: CGImage) {
                 for slot in 0..<2 {
                     let ix = panel.x + Int((slot == 0 ? 0.620 : 0.810) * Double(panel.w))
                     let iy = panel.y + Int(0.050 * Double(panel.h))
-                    let (t, present, diag) = pvClassifyIconSearch(buf, ix, iy, iconS)
+                    let (t, present, diag, _, _, _) = pvClassifyIconSearch(buf, ix, iy, iconS)
                     print("    スロット\(slot + 1) @(\(ix),\(iy)) \(diag) -> \(t ?? (present ? "不明" : "なし"))")
                 }
             }
