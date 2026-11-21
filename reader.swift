@@ -5746,7 +5746,6 @@ func runOnce(image: CGImage) {
                 previewEvidenceTeam = previewBestTeam
                 previewEvidenceAt = Date()
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
-                if !logStarted || winLogged { startBattleLog() }
                 var obj: [String: Any] = [:]
                 obj["mine"] = [Any]()
                 obj["opps"] = [Any]()
@@ -5762,6 +5761,14 @@ func runOnce(image: CGImage) {
                 previewTeamWritten = true
                 if (filled.count >= 6 && previewAttempts >= 2) || previewAttempts >= 4 {
                     previewHandled = true
+                    // ログの開始 (ヘッダーのスナップショット) は、同定が
+                    // 確定したこの時点で行う。初回の試行で開始すると
+                    // ヘッダーが最も未熟なマージで固定されてしまう
+                    // (実例: 2026-11-21 battle_20261121_161334、ヘッダーと
+                    //  preview_id の team が食い違った)。確定前に画面が
+                    //  切り替わった場合は、繰り出し文・プレート・ログ
+                    //  画面等の従来経路がその時点の最良マージで開始する
+                    if !logStarted || winLogged { startBattleLog() }
                 }
             } else if previewAttempts >= 4 {
                 // 4 回試みても何も同定できなかった: 従来通りリセットする。
@@ -6018,7 +6025,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1658"
+let readerBuild = "20261121_1701"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
