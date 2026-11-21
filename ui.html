@@ -660,7 +660,7 @@ function missingCriticalLoaders() { return DATA_LOADERS.filter(d => d.critical &
 function reapplyLastState() { if (lastStateText) { try { applyState(JSON.parse(lastStateText)); } catch (e) {} } }
 function scheduleDataRetry() {
   if (dataRetryTimer) return;
-  if (!missingCriticalLoaders().some(d => (loadStatus[d.id] ? loadStatus[d.id].attempts : 0) < 40)) { renderLoadWarn(); return; }
+  if (!missingCriticalLoaders().some(d => (loadStatus[d.id] ? loadStatus[d.id].attempts : 0) < 240)) { renderLoadWarn(); return; }
   dataRetryTimer = setTimeout(async () => {
     dataRetryTimer = null;
     let recovered = false;
@@ -3541,23 +3541,23 @@ document.getElementById('specSel')?.addEventListener('change', e => {
   } catch (e) {}
 })();
 const LOADER_ITEMS_JA = regDataLoader('items_ja', '持ち物名', true, async () => {
-  const ij = await (await fetch('./data/items_ja.json')).json();
+  const ij = await (await fetch('./data/items_ja.json', { cache: 'no-store' })).json();
   if (!ij || typeof ij !== 'object' || !Object.keys(ij).length) throw new Error('items_ja: bad shape');
   ITEM_MAPS = ij; applyItemMaps();
 });
 const LOADER_VGC_CORPUS = regDataLoader('vgc_pastes', 'VGCPastesコーパス', true, async () => {
-  const vc = await (await fetch('./data/vgc_pastes.json')).json();
+  const vc = await (await fetch('./data/vgc_pastes.json', { cache: 'no-store' })).json();
   if (!vc || !Array.isArray(vc.sets)) throw new Error('vgc_pastes: bad shape');
   VGC_CORPUS = vc;
 });
 const LOADER_META_SETS = regDataLoader('meta_sets', '対戦データ', true, async () => {
   try {
-    const ms = await (await fetch('./data/meta_sets.json')).json();
+    const ms = await (await fetch('./data/meta_sets.json', { cache: 'no-store' })).json();
     if (ms && Array.isArray(ms.sets)) META_SETS = ms; else throw new Error('meta_sets: bad shape');
   } finally { META_SETS_LOADED = true; }
 });
 const LOADER_POKEDB = regDataLoader('pokedb_parsed', '使用率分布', true, async () => {
-  const pd = await (await fetch('./data/pokedb_parsed.json')).json();
+  const pd = await (await fetch('./data/pokedb_parsed.json', { cache: 'no-store' })).json();
   if (!pd || typeof pd !== 'object') throw new Error('pokedb_parsed: bad shape');
   POKEDB_PARSED = pd;
 });
