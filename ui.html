@@ -192,6 +192,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .presetedit{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .35rem; font:inherit}
 .presetedit:hover{color:var(--ink)}
 .preseticons{display:flex; gap:.12rem; flex:none; align-items:center}
+.preseticons[data-presetload]{cursor:pointer}
 .preseticon{width:1.7rem; height:1.7rem; object-fit:contain; image-rendering:pixelated}
 .presetdel{background:none; border:none; color:var(--dim); cursor:pointer; padding:.3rem .45rem; font:inherit}
 .presetempty{color:var(--dim); font-size:.85rem}
@@ -1451,12 +1452,13 @@ function applyPreset(side, idx) {
   applySetterAbility(specs[0]);
   calcAll();
 }
-function presetIconsHTML(p) {
+function presetIconsHTML(p, loadKey) {
   const imgs = (p.slots || []).map(b => {
     const sp = b.mega && b.megaSpecies ? b.megaSpecies : b.species;
     return spriteImg(sp, gen.species.get(idOf(sp))?.baseSpecies || sp, 'preseticon');
   }).join('');
-  return `<span class="preseticons">${imgs}</span>`;
+  // loadKey があればアイコン部分も名前ボタンと同じ読み込みボタンにする
+  return `<span class="preseticons"${loadKey ? ` data-presetload="${loadKey}" title="このプリセットに切り替え"` : ''}>${imgs}</span>`;
 }
 function presetPopHTML(side) {
   const list = loadPresetStore()[side];
@@ -1467,7 +1469,7 @@ function presetPopHTML(side) {
     if (i === renaming) {
       return `<div class="presetrow">${presetIconsHTML(p)}<input type="text" class="presetnamein" data-presetrename="${side}" value="${esc(ui.presetDraft.rename || p.name)}"><button class="tgl" data-presetrenamesave="${side}:${i}">変更</button><button class="presetdel" data-presetrenamecancel="1" title="キャンセル">×</button></div>`;
     }
-    return `<div class="presetrow">${presetIconsHTML(p)}<button class="presetname" data-presetload="${side}:${i}" title="このプリセットに切り替え">${esc(p.name)}</button><button class="presetedit" data-presetedit="${side}:${i}" title="名前を変更">✎</button><button class="presetdel" data-presetdel="${side}:${i}" title="削除">×</button></div>`;
+    return `<div class="presetrow">${presetIconsHTML(p, `${side}:${i}`)}<button class="presetname" data-presetload="${side}:${i}" title="このプリセットに切り替え">${esc(p.name)}</button><button class="presetedit" data-presetedit="${side}:${i}" title="名前を変更">✎</button><button class="presetdel" data-presetdel="${side}:${i}" title="削除">×</button></div>`;
   }).join('');
   const draft = ui.presetDraft.save[side];
   return `<span class="presetpop">
