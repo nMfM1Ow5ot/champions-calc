@@ -1313,6 +1313,37 @@ func moveLineOffField(_ line: String) -> Bool {
     return true
 }
 
+// 天候・地形を呼ぶ特性と、対応するフィールド行 (プロトコル表記と
+// 表示表記) の対応。特性行の生成がフィールド行より遅れた場合の
+// 並び訂正に使う (emitLog / 描画部)
+func fieldLineForAbility(_ ability: String) -> String? {
+    switch ability {
+    case "Drought": return "|-weather|Sunny Day"
+    case "Drizzle": return "|-weather|Rain Dance"
+    case "Sand Stream": return "|-weather|Sandstorm"
+    case "Snow Warning": return "|-weather|Snow"
+    case "Electric Surge": return "|-fieldstart|move: Electric Terrain"
+    case "Grassy Surge": return "|-fieldstart|move: Grassy Terrain"
+    case "Misty Surge": return "|-fieldstart|move: Misty Terrain"
+    case "Psychic Surge": return "|-fieldstart|move: Psychic Terrain"
+    default: return nil
+    }
+}
+
+func fieldRenderForAbility(_ ability: String) -> String? {
+    switch ability {
+    case "Drought": return "The sunlight turned harsh!"
+    case "Drizzle": return "It started to rain!"
+    case "Sand Stream": return "A sandstorm kicked up!"
+    case "Snow Warning": return "It started to snow!"
+    case "Electric Surge": return "An electric current ran across the battlefield!"
+    case "Grassy Surge": return "Grass grew to cover the battlefield!"
+    case "Misty Surge": return "Mist swirled around the battlefield!"
+    case "Psychic Surge": return "The battlefield got weird!"
+    default: return nil
+    }
+}
+
 func emitLog(_ line: String) { emitLog(line, applyNow: true) }
 
 // applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
@@ -1334,7 +1365,7 @@ func emitLog(_ line: String, applyNow: Bool) {
     // 「|-ability|p1a: Charizard|Intimidate」 (メガ後の特性ではあり得ない)
     // と「|move|p2a: Sneasler|Heat Wave」 (前ターンに倒れた種族) が出た
     if line.hasPrefix("|-ability|"), !abilityLinePlausible(line) {
-        print("[reader] あり得ない特性行を記録しませんでした: \(line)")
+        if debugMode { print("[reader] あり得ない特性行を記録しませんでした: \(line)") }
         fflush(stdout)
         debugCapture(kind: "ability_guard", key: "ability_guard:\(line)", rawText: "",
                      detail: ["line": line, "turn": currentTurn])
@@ -1347,7 +1378,7 @@ func emitLog(_ line: String, applyNow: Bool) {
         // てみだしの技行の後に置かれた)
         emitPendingFaints()
         if moveLineHardImplausible(line) {
-            print("[reader] あり得ない技行を記録しませんでした: \(line)")
+            if debugMode { print("[reader] あり得ない技行を記録しませんでした: \(line)") }
             fflush(stdout)
             debugCapture(kind: "move_guard", key: "move_guard:\(line)", rawText: "",
                          detail: ["line": line, "turn": currentTurn])
@@ -1361,7 +1392,7 @@ func emitLog(_ line: String, applyNow: Bool) {
         }
     }
     if line.hasPrefix("|-item|"), itemLineImplausible(line) {
-        print("[reader] 場にいない種族の持ち物行を記録しませんでした: \(line)")
+        if debugMode { print("[reader] 場にいない種族の持ち物行を記録しませんでした: \(line)") }
         fflush(stdout)
         debugCapture(kind: "item_guard", key: "item_guard:\(line)", rawText: "",
                      detail: ["line": line, "turn": currentTurn])
@@ -1407,7 +1438,7 @@ func emitLog(_ line: String, applyNow: Bool) {
                     !movesSinceTurnLine.contains(mover),
                     enteredThisSegment.contains(mover.split(separator: ":").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? "") { guardN = currentTurn + 1 }
             if let n = guardN {
-                print("[reader] ターン行ガードが発火しました: |turn|\(n) を先に出します (きっかけ: \(line))")
+                if debugMode { print("[reader] ターン行ガードが発火しました: |turn|\(n) を先に出します (きっかけ: \(line))") }
                 fflush(stdout)
                 debugCapture(kind: "turn_guard", key: "turn_guard:\(n)", rawText: "",
                              detail: ["turn": n, "line": line, "readerBuild": readerBuild,
@@ -1454,7 +1485,40 @@ func emitLog(_ line: String, applyNow: Bool) {
             }
         }
     }
-    battleLog.append(line)
+    // 並びの訂正: 急所行は同じ対象の ひんし行より前に、天候・地形を
+    // 呼ぶ特性行は対応するフィールド行より前に置く。ゲーム内の発生
+    // 順はその順だが、プレート確定や帰属が遅れると行の生成が前後
+    // する (実例: 2026-11-22 battle_20261122_075240、急所行が
+    // ひんし行の後ろに、天候行が ひでり の特性行より前に出た)。
+    // 表示ログ側の並びは描画部で対処する
+    var insertAt: Int? = nil
+    if line.hasPrefix("|-crit|") {
+        let cf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if cf.count >= 3 {
+            let label = cf[2]
+            var i = battleLog.count - 1
+            while i >= 0 && battleLog.count - i <= 40 {
+                let bl = battleLog[i]
+                if bl.hasPrefix("|turn|") || bl.hasPrefix("|move|") || bl.hasPrefix("|switch|") { break }
+                if bl == "|faint|\(label)" { insertAt = i; break }
+                i -= 1
+            }
+        }
+    } else if line.hasPrefix("|-ability|") {
+        let af = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if af.count >= 4, let fieldLine = fieldLineForAbility(af[3]) {
+            let label = af[2]
+            var i = battleLog.count - 1
+            while i >= 0 && battleLog.count - i <= 40 {
+                let bl = battleLog[i]
+                if bl == fieldLine { insertAt = i; break }
+                if bl.hasPrefix("|turn|") { break }
+                if bl.hasPrefix("|switch|") && bl.contains("|\(label)|") { break }
+                i -= 1
+            }
+        }
+    }
+    if let insertAt { battleLog.insert(line, at: insertAt) } else { battleLog.append(line) }
     // 推定エンジン用イベント (技の使用順)
     if line.hasPrefix("|move|") {
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
@@ -1550,9 +1614,47 @@ func emitLog(_ line: String, applyNow: Bool) {
             if kind == "move" { renderMovesSeen = true }
         }
     }
-    for l in out {
-        displayLog.append(l)
-        print(l)
+    // 表示ログの並び訂正 (プロトコル側の挿入と対): 急所の表示は
+    // 同じ対象の ひんし表示より前に、天候・地形特性の表示は対応する
+    // フィールド表示より前に割り込ませる。表示ログは逐次構築のため、
+    // 既に積まれた行の前へ挿入する必要がある。ターミナルへのライブ
+    // 出力は発生順のまま (過去の表示は遡れないため)
+    var displayInsertAt: Int? = nil
+    if out.count == 1 {
+        if line.hasPrefix("|-crit|") {
+            let cf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            if cf.count >= 3 {
+                let (_, side, species) = renderLabelParts(cf[2])
+                let anchor = "\(renderPrefix(side))\(species) fainted!"
+                var i = displayLog.count - 1
+                while i >= 0 && displayLog.count - i <= 60 {
+                    let dl = displayLog[i]
+                    if dl.hasPrefix("Turn ") { break }
+                    if dl == anchor { displayInsertAt = i; break }
+                    i -= 1
+                }
+            }
+        } else if line.hasPrefix("|-ability|") {
+            let af = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            if af.count >= 4, let anchor = fieldRenderForAbility(af[3]) {
+                var i = displayLog.count - 1
+                while i >= 0 && displayLog.count - i <= 60 {
+                    let dl = displayLog[i]
+                    if dl.hasPrefix("Turn ") { break }
+                    if dl == anchor { displayInsertAt = i; break }
+                    i -= 1
+                }
+            }
+        }
+    }
+    if let displayInsertAt {
+        displayLog.insert(out[0], at: displayInsertAt)
+        print(out[0])
+    } else {
+        for l in out {
+            displayLog.append(l)
+            print(l)
+        }
     }
     fflush(stdout)
     try? (displayLog.joined(separator: "\n") + "\n").write(to: battleLogURL, atomically: true, encoding: .utf8)
@@ -1968,7 +2070,7 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     if let data = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
         try? data.write(to: logsDirURL.appendingPathComponent(base + ".json"), options: .atomic)
     }
-    print("[debug] デバッグ情報を保存しました: logs/\(base) (\(kind))")
+    if debugMode { print("[debug] デバッグ情報を保存しました: logs/\(base) (\(kind))") }
     fflush(stdout)
 }
 
@@ -2206,7 +2308,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         } else if toPct < watched {
             debugCapture(kind: "berry_activation_suspect", key: "berry_activation_suspect|\(key)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "droppedToPct": watched, "toPct": toPct, "turn": currentTurn])
-            print("[reader] オボンのみの発動条件を跨いだ後に回復が記録されないまま HP が動きました (発動の取りこぼしの疑い): \(slot): \(speciesEn) \(watched)% -> \(toPct)%")
+            if debugMode { print("[reader] オボンのみの発動条件を跨いだ後に回復が記録されないまま HP が動きました (発動の取りこぼしの疑い): \(slot): \(speciesEn) \(watched)% -> \(toPct)%") }
             fflush(stdout)
             sitrusWatch[key] = nil
         }
@@ -2272,6 +2374,9 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     // 保留された 25% が基準に固定され、実値 41% への回復が
     // 発生源なしとして抑止され、状態が 25% のまま固定された)
     let baselineWasSuspect = suspectJump[plateName].map { $0.toPct == effFrom } ?? false
+    // この呼び出しで「低下の疑わしさ」が解けたかどうか (下の解消で
+    // suspectJump は消えるため、ここで控える)
+    var clearedDropSuspect = false
     // 疑わしい大きな跳びの解消: 保留していた値と同じ読みが次のターン
     // でも続くなら、誤読は内部状態の方だったとみなし、行を出さずに
     // 値だけを取り込む (実例: 2026-11-21 battle_20261121_230402、
@@ -2287,11 +2392,12 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                 monStates[key]?.hpText = hpText
                 debugCapture(kind: "hp_jump_adopted", key: "hp_jump_adopted|\(plateName)", rawText: "",
                              detail: ["slot": slot, "species": speciesEn, "toPct": toPct, "suspectTurn": sj.turn])
-                print("[reader] 疑わしい跳びとして保留していた値を、持続したため状態訂正として取り込みました: \(slot): \(speciesEn) -> \(toPct)%")
+                if debugMode { print("[reader] 疑わしい跳びとして保留していた値を、持続したため状態訂正として取り込みました: \(slot): \(speciesEn) -> \(toPct)%") }
                 fflush(stdout)
             }
             return true
         }
+        if sj.toPct < effFrom { clearedDropSuspect = true }
         suspectJump[plateName] = nil
     }
     if toPct < effFrom {
@@ -2320,7 +2426,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct])
-            print("[reader] 大きな低下を誤読の疑いとして保留しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+            if debugMode { print("[reader] 大きな低下を誤読の疑いとして保留しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%") }
             fflush(stdout)
             return true
         }
@@ -2420,8 +2526,24 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "reason": "self_unclassified"])
-            print("[reader] 分類できない大きな自己ダメージを誤読の疑いとして保留しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+            if debugMode { print("[reader] 分類できない大きな自己ダメージを誤読の疑いとして保留しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%") }
             fflush(stdout)
+            return true
+        }
+        // 疑わしい低下を保留した直後に、別の値への説明できない低下が
+        // 来た場合は、その値も誤読の連鎖とみて確定させない。保留に
+        // なったプレートは読みが安定しておらず、値が変わっただけで
+        // 疑いが解けたとは言えない (実例: 2026-11-22
+        // battle_20261122_075240、Sneasler に 100% -> 10% の誤読が
+        // 保留された後、88% の読みがターン終了時の確定として幻の
+        // ダメージ行になった)。持続すれば次ターンに状態訂正として
+        // 取り込まれ (冒頭の解消規則)、実値に戻れば何も残らない。
+        // 分類できた低下 (状態異常の経過等) は従来どおり出す
+        if fromCode == nil, clearedDropSuspect, effFrom - toPct > 3 {
+            suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
+            lastEmittedPct[plateName] = effFrom
+            debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
+                         detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "reason": "post_suspect_unexplained"])
             return true
         }
         if let fromCode { line += "|[from] \(fromCode)" }
@@ -2461,7 +2583,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_jump_rejected", key: "hp_jump|\(key)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "source": "plate"])
-            print("[reader] 大きな回復を誤読として却下しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+            if debugMode { print("[reader] 大きな回復を誤読として却下しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%") }
             fflush(stdout)
             return true
         }
@@ -2505,12 +2627,12 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                     debugCapture(kind: "hp_jump_adopted", key: "hp_jump_adopted|\(plateName)", rawText: "",
                                  detail: ["slot": slot, "species": speciesEn, "toPct": toPct,
                                           "via": "heal_from_suspect_baseline"])
-                    print("[reader] 疑わしい基準値からの回復を、状態訂正として取り込みました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+                    if debugMode { print("[reader] 疑わしい基準値からの回復を、状態訂正として取り込みました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%") }
                     fflush(stdout)
                     return true
                 }
                 lastEmittedPct[plateName] = effFrom
-                print("[reader] 発生源を特定できない回復を記録し、行は出しませんでした: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+                if debugMode { print("[reader] 発生源を特定できない回復を記録し、行は出しませんでした: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%") }
                 fflush(stdout)
                 debugCapture(kind: "heal_no_source", key: "heal_no_source:\(slot)", rawText: "",
                              detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct,
@@ -2729,7 +2851,7 @@ func checkHeaderMismatch(slot: String, speciesEn: String) {
     }
     guard !inHeader else { return }
     headerMismatchFired.insert(speciesEn)
-    print("[reader] ヘッダーと異なる相手種族がプレートで確定しました: \(speciesEn) (ヘッダー: \(headerOppTeam.joined(separator: ", ")))")
+    if debugMode { print("[reader] ヘッダーと異なる相手種族がプレートで確定しました: \(speciesEn) (ヘッダー: \(headerOppTeam.joined(separator: ", ")))") }
     fflush(stdout)
     debugCapture(kind: "header_mismatch", key: "header_mismatch:\(speciesEn)", rawText: "",
                  detail: ["species": speciesEn, "header": headerOppTeam,
@@ -2818,7 +2940,7 @@ func processPlates(_ hits: [String: SlotState]) {
         }
         debugCapture(kind: "slot_swap", key: "slot_swap:\(sideKey):\(currentTurn)", rawText: "",
                      detail: ["side": sideKey, "a": "\(a)=\(ha.speciesEn)", "b": "\(b)=\(hb.speciesEn)", "turn": currentTurn])
-        print("[reader] 枠の表示位置の入れ替わりを検出し、登録を入れ替えました: \(a)=\(ha.speciesEn) / \(b)=\(hb.speciesEn)")
+        if debugMode { print("[reader] 枠の表示位置の入れ替わりを検出し、登録を入れ替えました: \(a)=\(ha.speciesEn) / \(b)=\(hb.speciesEn)") }
         fflush(stdout)
     }
     for plate in plates {
@@ -2972,7 +3094,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     // 2026-11-21 battle_20261121_150535 では mineB の交代が
                     // 数ターン確定せず、ガードが確定試行を消費した可能性を
                     // 否定できなかったが、記録が無く切り分けられなかった
-                    print("[reader] 交代の確定が交代要員選択中のため破棄されました: \(plate.name) -> \(s.speciesEn)")
+                    if debugMode { print("[reader] 交代の確定が交代要員選択中のため破棄されました: \(plate.name) -> \(s.speciesEn)") }
                     fflush(stdout)
                     debugCapture(kind: "switch_guard_drop",
                                  key: "switch_guard_drop:\(plate.name):\(s.speciesEn)",
@@ -3319,7 +3441,7 @@ func setWeather(_ ui: String, _ logName: String, via text: String = "", stale: B
     // ログ画面経由の古い開始文は、実況で追えている現行の天候を上書きしない
     // (地形側と同じ再適用の穴。現行が空のときの復旧は従来どおり行う)
     if stale && !logFieldWeather.isEmpty {
-        print("[field] ログ画面の古い天候文を採用しませんでした: \(ui) (現在: \(logFieldWeather))")
+        if debugMode { print("[field] ログ画面の古い天候文を採用しませんでした: \(ui) (現在: \(logFieldWeather))") }
         debugCapture(kind: "weather_change", key: "weather_change_blocked:\(ui)", rawText: text,
                      detail: ["from": logFieldWeather, "to": ui, "turn": currentTurn, "blocked": true])
         return
@@ -3352,7 +3474,7 @@ func setWeather(_ ui: String, _ logName: String, via text: String = "", stale: B
 func clearWeather(stale: Bool = false) {
     if logFieldWeather.isEmpty { return }
     if stale {
-        print("[field] ログ画面の古い天候終了文で現行の天候を消しませんでした: \(logFieldWeather)")
+        if debugMode { print("[field] ログ画面の古い天候終了文で現行の天候を消しませんでした: \(logFieldWeather)") }
         return
     }
     emitLog("|-weather|none")
@@ -3388,7 +3510,7 @@ func confirmHeldTerrainReplace() {
         heldTerrainReplace = nil
         debugCapture(kind: "terrain_change", key: "terrain_change_blocked:\(h.ui)", rawText: h.text,
                      detail: ["from": logFieldTerrain, "to": h.ui, "turn": currentTurn, "blocked": true, "reason": "unconfirmed_replace"])
-        print("[field] 出所を確認できない地形の上書きを採用しませんでした: \(h.ui) (現在: \(logFieldTerrain))")
+        if debugMode { print("[field] 出所を確認できない地形の上書きを採用しませんでした: \(h.ui) (現在: \(logFieldTerrain))") }
         fflush(stdout)
     }
 }
@@ -3400,7 +3522,7 @@ func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
     //  文がターン2終了時に再適用され、グラスフィールド下でサイコシードの
     //  消費まで補完された。現行が空のときの復旧は従来どおり行う)
     if stale && !logFieldTerrain.isEmpty {
-        print("[field] ログ画面の古い地形文を採用しませんでした: \(ui) (現在: \(logFieldTerrain))")
+        if debugMode { print("[field] ログ画面の古い地形文を採用しませんでした: \(ui) (現在: \(logFieldTerrain))") }
         debugCapture(kind: "terrain_change", key: "terrain_change_blocked:\(ui)", rawText: text,
                      detail: ["from": logFieldTerrain, "to": ui, "turn": currentTurn, "blocked": true])
         return
@@ -3663,7 +3785,7 @@ func correctFormeByAbility(side: String, slot: String, speciesEn: String, abilit
     }
     try? (battleLog.joined(separator: "\n") + "\n").write(to: protocolLogURL, atomically: true, encoding: .utf8)
     try? (displayLog.joined(separator: "\n") + "\n").write(to: battleLogURL, atomically: true, encoding: .utf8)
-    print("[reader] 特性 \(abilityEn) の判明によりフォルムを訂正しました: \(speciesEn) -> \(newEn)")
+    if debugMode { print("[reader] 特性 \(abilityEn) の判明によりフォルムを訂正しました: \(speciesEn) -> \(newEn)") }
     fflush(stdout)
 }
 
@@ -3851,7 +3973,7 @@ func entryEffectPending(key: String) -> Bool {
 func clearTerrain(stale: Bool = false) {
     if logFieldTerrain.isEmpty { return }
     if stale {
-        print("[field] ログ画面の古い地形終了文で現行の地形を消しませんでした: \(logFieldTerrain)")
+        if debugMode { print("[field] ログ画面の古い地形終了文で現行の地形を消しませんでした: \(logFieldTerrain)") }
         return
     }
     let old = logFieldTerrain
@@ -4441,7 +4563,7 @@ func parseLogScreen(image: CGImage) -> Bool {
     guard turnFound != nil || chipHits.count >= 3 else { return false }
     let tn = turnFound ?? max(currentTurn, 1)
     if debugMode {
-        print("ログ画面診断: ターン=\(turnFound.map { "\($0)" } ?? "不明 (\(tn) として処理)") チップ=\(chipHits.count)件")
+        if debugMode { print("ログ画面診断: ターン=\(turnFound.map { "\($0)" } ?? "不明 (\(tn) として処理)") チップ=\(chipHits.count)件") }
     }
     if !logStarted || winLogged { startBattleLog() }
     scanFieldHeader(boxes)
@@ -7855,7 +7977,7 @@ func runOnce(image: CGImage) {
             // 判定側の出力は抑止する (同じラウンドのターン行を二重に
             // 出さない)。証拠記録は判定の発火自体の記録なので従来どおり行う
             suppressNextDetectorTurn = false
-            print("[reader] ターン判定の出力を抑止しました (構造ガードが |turn|\(currentTurn) を出力済み)")
+            if debugMode { print("[reader] ターン判定の出力を抑止しました (構造ガードが |turn|\(currentTurn) を出力済み)") }
             fflush(stdout)
         } else {
             currentTurn += 1
@@ -7878,7 +8000,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0840"
+let readerBuild = "20261122_0845"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
