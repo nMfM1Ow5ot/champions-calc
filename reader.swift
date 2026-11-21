@@ -452,6 +452,9 @@ var currentTurn = 0
 var movesSinceTurnLine: Set<String> = []
 var roundEventSeen = false
 var suppressNextDetectorTurn = false
+// 場にいない種族の文が既定枠へ帰属された回数 (側+種族ごと)。
+// 繰り返しのデフォルト帰属をデバッグ記録するための数え
+var defaultAttribCount: [String: Int] = [:]
 // 場・サイド状態の残りターン管理: 開始した実効ターン (対戦開始前の
 // 繰り出しで張られた場合は 1 として数える) を記録し、writeState が
 // 現在ターンとの差から残りターンを出す。追跡は emitLog のフックで行う
@@ -1273,6 +1276,10 @@ func emitLog(_ line: String, applyNow: Bool) {
 }
 
 func resetLogState() {
+    // 見せ合い画面の保持フレームはこの試合で消費済みとして消す
+    // (次の試合が選出を経ない開始でも、前の画面が付かないように)
+    previewLastImage = nil
+    previewLastImageAt = nil
     monStates = [:]
     revealedMoves = [:]
     revealedItems = [:]
@@ -1288,6 +1295,7 @@ func resetLogState() {
     movesSinceTurnLine = []
     roundEventSeen = false
     suppressNextDetectorTurn = false
+    defaultAttribCount = [:]
     lastMoveSigAt = [:]
     lastSingleActAt = [:]
     battleEvents = []
@@ -1438,7 +1446,11 @@ func debugShouldCapture(seen: [(key: String, at: Date)], count: Int, key: String
 
 func debugStateExcerpt() -> [String: Any] {
     var slots: [String: Any] = [:]
-    for (k, s) in lastSlots { slots[k] = ["species": s.speciesEn, "hpPct": s.hpPercent] }
+    // HP はプレートの最新観測値ではなく、ログに確定した値を優先する。
+    // 観測値には却下された誤読 (満タンの跳ね等) が混ざっており、その
+    // まま写すと記録の state がログと食い違う (実例: 2026-11-21
+    // battle_20261121_145658 の hp_jump_rejected 記録)
+    for (k, s) in lastSlots { slots[k] = ["species": s.speciesEn, "hpPct": lastEmittedPct[k] ?? s.hpPercent] }
     return ["turn": currentTurn, "weather": logFieldWeather, "terrain": logFieldTerrain, "slots": slots]
 }
 
@@ -1626,6 +1638,39 @@ func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int,
     return nil
 }
 
+// プレート経路の回復に、発生源として説明が付くか (healSource で
+// 推定できない分を補う)。自分または相方の直前の技が回復系の場合、
+// 判明持ち物が回復系の場合、フィラのみ系のパターンと判明持ち物が
+// 矛盾しない場合、天候や状態と噛み合う回復特性が判明している場合は
+// 説明ありとする
+func healExplained(key: String, slot: String, speciesEn: String, fromPct: Int, toPct: Int,
+                   knownItem: String?, abilityJa: String?) -> Bool {
+    let delta = toPct - fromPct
+    let selfHeal: Set<String> = ["Recover", "Soft-Boiled", "Milk Drink", "Slack Off", "Heal Order",
+                                 "Roost", "Synthesis", "Morning Sun", "Moonlight", "Shore Up", "Rest",
+                                 "Wish", "Strength Sap", "Life Dew", "Lunar Blessing", "Jungle Healing",
+                                 "Absorb", "Mega Drain", "Giga Drain", "Drain Punch", "Leech Life",
+                                 "Horn Leech", "Oblivion Wing", "Parabolic Charge", "Draining Kiss",
+                                 "Dream Eater", "Bitter Blade", "Matcha Gotcha"]
+    let allyHeal: Set<String> = ["Life Dew", "Heal Pulse", "Floral Healing", "Pollen Puff",
+                                 "Lunar Blessing", "Jungle Healing"]
+    let label = "\(slot): \(speciesEn)"
+    if lastMoveLabel == label && selfHeal.contains(lastMoveName) { return true }
+    if allyHeal.contains(lastMoveName) && lastMoveLabel != label
+        && lastMoveLabel.hasPrefix(String(slot.prefix(2))) { return true }
+    if knownItem == "たべのこし" || knownItem == "くろいヘドロ" { return true }
+    let figyBerries: Set<String> = ["フィラのみ", "ウイのみ", "マゴのみ", "バンジのみ", "イアのみ"]
+    if fromPct <= 34 && (30...36).contains(delta)
+        && (knownItem == nil || figyBerries.contains(knownItem ?? "")) { return true }
+    if abilityJa == "あめうけざら" && logFieldWeather == "Rain" { return true }
+    if abilityJa == "アイスボディ" && logFieldWeather == "Snow" { return true }
+    if abilityJa == "どくしゅ" {
+        let st = monStates[key]?.status ?? ""
+        if st == "psn" || st == "tox" { return true }
+    }
+    return false
+}
+
 // ダメージ/回復行を 1 件出す (確定待ちの消化と新規確定の両方から呼ばれる)
 @discardableResult
 func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: String, fromPct: Int, toPct: Int, hpText: String, force: Bool = false) -> Bool {
@@ -1710,11 +1755,15 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // vs KAM 戦、ふんか演出中にプレートが一時的に満タンと読まれ、
         // 42/177 から全回復の |-heal| が発生源なしで出た)
         if toPct - effFrom > 55 {
+            // 記録の state が却下後の値で写るよう、確定基準の巻き戻しを
+            // 記録の取得より前に行う (実例: 2026-11-21
+            // battle_20261121_145658、却下した 100% が記録の state に
+            // そのまま写り、切り分けの妨げになった)
+            lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_jump_rejected", key: "hp_jump|\(key)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "source": "plate"])
             print("[reader] 大きな回復を誤読として却下しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
             fflush(stdout)
-            lastEmittedPct[plateName] = effFrom
             return true
         }
         // 回復の発生源 (オボンのみ/たべのこし/グラッシーフィールド) が
@@ -1729,6 +1778,28 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         var line = "|-heal|\(slot): \(speciesEn)|\(hpText)"
         if let src { line += "|[from] \(src.label)" }
         emitLog(line)
+        // 発生源を特定できない回復は、大きさによらず証拠として残す
+        // (行自体は却下しない)。実例: 2026-11-21
+        // battle_20261121_144858、タスキ判明済みのフシギバナに
+        // 発生源のない +33% の幻回復が出たが、55 ポイント以下のため
+        // 従来のガードでは記録が残らなかった。記録は枠ごとに最初の
+        // 1 件のみ (デバッグ上限の圧迫を避ける)
+        if src == nil {
+            let knownItem = key.hasPrefix("p2") ? revealedItems[speciesEn]
+                : ((teamEntries[speciesEn]?["item"] as? String) ?? revealedItems[speciesEn])
+            let knownAbility = key.hasPrefix("p2") ? revealedAbilities[speciesEn]
+                : ((teamEntries[speciesEn]?["ability"] as? String) ?? revealedAbilities[speciesEn])
+            if !healExplained(key: key, slot: slot, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct,
+                              knownItem: knownItem, abilityJa: knownAbility) {
+                print("[reader] 発生源を特定できない回復を記録しました: \(slot): \(speciesEn) \(effFrom)% -> \(toPct)%")
+                fflush(stdout)
+                debugCapture(kind: "heal_no_source", key: "heal_no_source:\(slot)", rawText: "",
+                             detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct,
+                                      "turn": currentTurn, "knownItem": knownItem ?? "", "knownAbility": knownAbility ?? "",
+                                      "terrain": logFieldTerrain, "weather": logFieldWeather,
+                                      "lastMove": lastMoveName, "lastMoveLabel": lastMoveLabel])
+            }
+        }
     }
     if toPct == 0 { deferFaint(slot: slot, speciesEn: speciesEn) }
     return true
@@ -3758,6 +3829,32 @@ func translateBattleMessage(_ text: String) -> Bool {
             }
         }
     }
+    // デフォルト帰属の繰り返しの記録: 確実に解決できた種族が、その側の
+    // 場におらず、救済登録 (空き枠が 1 つの場合) も発動しなかった場合、
+    // 文は既定枠 (a 枠) へ無言で帰属される。交代の取りこぼしで枠状態が
+    // 古いままだと、これが何ターンも続いて内部矛盾 (同じ枠から 2 つの
+    // 技行) の原因になる (実例: 2026-11-21 battle_20261121_150535、
+    // イエッサン♀への交代が取りこぼされ、エルフーンのままの p1a へ
+    // 3 ターン帰属が続いた)。2 回目で証拠を残す。古い枠への自動登録は
+    // しない (どちらの枠が古いか文だけでは判別できず、正しい占有者を
+    // 消す危険があるため)
+    if looseMoveStart == nil {
+        let onSideNow = side == "p1"
+            ? (lastSlots["mineA"]?.speciesEn == sp.en || lastSlots["mineB"]?.speciesEn == sp.en)
+            : (lastSlots["oppA"]?.speciesEn == sp.en || lastSlots["oppB"]?.speciesEn == sp.en)
+        if !onSideNow {
+            let ckey = "\(side)|\(sp.en)"
+            defaultAttribCount[ckey, default: 0] += 1
+            if defaultAttribCount[ckey] == 2 {
+                let names = side == "p1" ? ["mineA", "mineB"] : ["oppA", "oppB"]
+                print("[log] 場にいない種族の文が繰り返し既定枠へ帰属されています: \(sp.en) (\(side)) — 現在の枠状態: \(names.map { "\($0)=\(lastSlots[$0]?.speciesEn ?? "（空き）")" }.joined(separator: ", "))")
+                fflush(stdout)
+                debugCapture(kind: "default_attribution", key: "default_attribution:\(side):\(sp.en)", rawText: t,
+                             detail: ["species": sp.en, "side": side, "count": 2, "turn": currentTurn,
+                                      "slots": names.map { lastSlots[$0]?.speciesEn ?? "" }, "text": t])
+            }
+        }
+    }
     let slot = slotFor(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
@@ -4224,7 +4321,11 @@ var previewEvidenceImage: CGImage? = nil        // 最後に同定を試みた�
 var previewEvidenceSlots: [PvSlotInfo] = []     // そのフレームの枠ごとの同定情報
 var previewEvidenceTeam: [String?] = []         // その時点のマージ済み同定結果
 var previewEvidenceAt: Date? = nil
-var previewEvidenceSaved = false
+// 見せ合い画面の最終フレーム (同定が走らなかった・失敗した試合でも
+// 画面自体は証拠として残すための保持。preview_id の全試合保証用)
+var previewLastImage: CGImage? = nil
+var previewLastImageAt: Date? = nil
+var previewIdWritten = false                    // この試合で preview_id を書き出したか
 // タイプ関門の緩和 (第1段 (b)): タイプで絞った候補内の最良スコアが
 // この値より悪い場合は、アイコンの読み違いとみなして全種族へ候補を
 // 広げて再照合する。閾値は tests/preview_eval.py --calibrate の測定で
@@ -4232,6 +4333,11 @@ var previewEvidenceSaved = false
 // 最良スコア中央値 ≈ 0.39。同定率は閾値 0.35 で正解時 86% /
 // 読み違い時 54%、0.25 で 86% / 75% と、0.25 が最もバランスが良い)。
 let pvSoftGateScore = 0.25
+// 見せ合い画面には現れないフォルム (対戦中の変化でのみ現れる)。
+// 見せ合いの同定候補から除外する。メガが素の見せ合い枠として選ばれ、
+// ヘッダーに入る事故の防止 (2026-11-21 battle_20261121_145658 で
+// Meowstic-M-Mega がヘッダーに入った)。loadPvData で構築する
+var pvBattleOnlyFormes: Set<String> = []
 // 全種族へ広げた再照合を採用する条件: 広げた先の最良が元の最良より
 // この値以上良いこと。実フレーム (2026-11-21、ユーザー提供の見せ合い
 // 画面) では、正しいプールのスコアがゲーム内モデルと HOME 参照の
@@ -4279,6 +4385,13 @@ func loadPreviewData() {
         // (別ファイルにすると Mac 側の同期リストに載らず届かないため)
         if let d = v as? [String: Any], let gs = d["gender"] as? [String] { pvSpeciesGender[name] = gs }
     }
+    // 見せ合い画面に現れないフォルム (メガ進化と対戦中だけの姿) は
+    // 同定候補から外す。名前の末尾で判定できるメガに、名前だけでは
+    // 区別できない対戦中フォルムを明示で加える
+    pvBattleOnlyFormes = Set(pvSpeciesTypes.keys.filter {
+        $0.hasSuffix("-Mega") || $0.hasSuffix("-Mega-X") || $0.hasSuffix("-Mega-Y")
+    }).union(["Greninja-Bond", "Palafin-Hero", "Mimikyu-Busted", "Morpeko-Hangry"]
+        .filter { pvSpeciesTypes[$0] != nil })
     for (name, v) in fobj {
         guard let d = v as? [String: Any], let hex = d["hash"] as? String else { continue }
         var bytes: [UInt8] = []
@@ -4684,7 +4797,8 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
     // 全種族への再照合 (候補を広げたランキングを返す)。性別が読めて
     // いれば、その性別になりえない種族は広げた先でも除外する
     func rankedAll(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double), _ gender: String?) -> [(String, Double)] {
-        var all = pvFeatures.map { (n, ref) in (n, pvScore(f, ref)) }.sorted { $0.1 < $1.1 }
+        var all = pvFeatures.filter { !pvBattleOnlyFormes.contains($0.key) }
+            .map { (n, ref) in (n, pvScore(f, ref)) }.sorted { $0.1 < $1.1 }
         if let gender {
             let filtered = all.filter { pvSpeciesGender[$0.0]?.contains(gender) ?? true }
             if !filtered.isEmpty { all = filtered }
@@ -4718,6 +4832,8 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
                 pool = pvSpeciesTypes.filter { $0.value == types }.map { $0.key }
             }
         }
+        // 見せ合い画面に現れないフォルム (メガ等) は候補から外す
+        pool = pool.filter { !pvBattleOnlyFormes.contains($0) }
         var expanded = false
         if pool.isEmpty && !types.isEmpty {
             // 読み取れたタイプの組み合わせを持つ種族が存在しない =
@@ -5130,9 +5246,36 @@ func runOnce(image: CGImage) {
     debugUpdateRing(image)
     // 選出画面はプレート判定より先に判定する。
     // (選出画面の自軍パネルや「0/4」表示をプレートと誤検出しないため)
+    let wasPreviewFrame = previewLastFrame
     if detectPreview(image: image) {
         previewFrames += 1
+        let sinceLastPreview = Date().timeIntervalSince(lastPreviewSeenAt)
         lastPreviewSeenAt = Date()
+        // 見せ合い画面の最終フレームを保持する (同定の成否によらず、
+        // 試合開始時に preview_id として書き出すための全試合保証)
+        previewLastImage = image
+        previewLastImageAt = Date()
+        if !wasPreviewFrame {
+            // 新しい見せ合い画面の出現: preview_id の書き出しを再武装する
+            previewIdWritten = false
+            // 前の見せ合いから 1.5 秒以上画面が消えていたら、別の選出
+            // セッションとみなして同定をやり直す。従来のリセット条件
+            // (対戦終了 / 対戦中 / 最終目撃から 10 秒超) では、相手の
+            // 切断やキャンセルの後に短時間で再マッチした場合に同定済み
+            // フラグが残り、前の相手のチームが次の対戦のヘッダーに
+            // なる事故があった (2026-11-21 battle_20261121_145658)
+            if sinceLastPreview >= 1.5, previewHandled || !previewBestTeam.isEmpty {
+                previewHandled = false
+                previewAttempts = 0
+                previewBestTeam = []
+                previewVotes = []
+                previewVoteScore = []
+                previewLocked = []
+                previewTeamWritten = false
+                print("[preview] 見せ合い画面の再出現を検出したため、選出セッションをリセットして同定をやり直します")
+                fflush(stdout)
+            }
+        }
         maybeRestartForUpdate()
         // 同定は 1 フレーム目から試みる (従来は出現アニメーション待ちで
         // 2 フレーム目まで始めず、全画面 OCR 2 回分 = 数秒遅れていた)。
@@ -5193,7 +5336,6 @@ func runOnce(image: CGImage) {
                 previewEvidenceSlots = r.slots
                 previewEvidenceTeam = previewBestTeam
                 previewEvidenceAt = Date()
-                previewEvidenceSaved = false   // 新しい証拠は未書き出しとして扱う
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
                 if !logStarted || winLogged { startBattleLog() }
                 var obj: [String: Any] = [:]
@@ -5308,10 +5450,16 @@ func runOnce(image: CGImage) {
     // 見せ合い同定の証拠の書き出し: 保持しておいた見せ合いフレームと
     // 枠ごとの同定情報を、この試合のデバッグ同梱として 1 回だけ残す。
     // 試合開始 (プレート出現) の時点で書き出すため、試合 ID との対応が
-    // 保たれ、既存の配信経路でそのまま届く
-    if !previewEvidenceSaved, let evImage = previewEvidenceImage, let evAt = previewEvidenceAt,
+    // 保たれ、既存の配信経路でそのまま届く。同定の証拠が無い試合でも
+    // 見せ合い画面の最終フレームを書き出す (全試合保証)
+    // 同定の証拠が無い試合 (同定が走らなかった・失敗した) でも、
+    // 見せ合い画面の最終フレームだけは残す (全試合保証。ユーザーの
+    // 常設指示 2026-11-21)。同定の有無は detail の identified で示す
+    let evImage = previewEvidenceImage ?? previewLastImage
+    let evAt = previewEvidenceImage != nil ? previewEvidenceAt : previewLastImageAt
+    if !previewIdWritten, let evImage, let evAt,
        Date().timeIntervalSince(evAt) <= 600 {
-        previewEvidenceSaved = true
+        previewIdWritten = true
         let slotDetails: [[String: Any]] = previewEvidenceSlots.map { s in
             ["pick": s.pick ?? "", "score": (s.score * 1000).rounded() / 1000,
              "decisive": s.decisive, "expanded": s.expanded, "types": s.types, "gender": s.gender,
@@ -5319,7 +5467,8 @@ func runOnce(image: CGImage) {
         }
         debugCapture(kind: "preview_id", key: "preview_id", rawText: "",
                      detail: ["team": previewEvidenceTeam.map { $0 ?? "" },
-                              "slots": slotDetails, "readerBuild": readerBuild],
+                              "slots": slotDetails, "readerBuild": readerBuild,
+                              "identified": previewEvidenceImage != nil],
                      image: evImage)
     }
     // プレート未確定の記録: 相方の枠は確定しているのに片方の枠だけが、
@@ -5395,7 +5544,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261121_1519"
+let readerBuild = "20261121_1539"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
