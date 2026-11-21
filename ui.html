@@ -611,6 +611,17 @@ let battleResetPending = false;
 let lastEventCount = 0;
 let lastBattleKey = null;
 let inferLog = [];
+// 推論過程ログの対戦別アーカイブ (試合キー → 記録配列)。リセットをまたいでも
+// 同一対戦分は蓄積し続け、送信は常に対戦分の全件を送る (リセット後の記録
+// だけでファイルを上書きし、対戦前半の記録が失われる事故の再発防止)
+const inferArchive = {};
+const inferPendingKeys = new Set();
+let inferSendAt = 0;
+let inferSendChain = Promise.resolve();
+function inferBucketKey() {
+  const key = String(lastBattleKey || '').replace(/^battle_/, '');
+  return /^[0-9]{8}_[0-9]{6}(_salvage)?$/.test(key) ? key : '';
+}
 function confirmNewBattle() {
   battleResetPending = false;
   faintLock.mine.clear();
@@ -2671,9 +2682,11 @@ const estimator = createEstimator({
 let infDirty = false;
 let autoSideTurn;
 function resetInference() {
-  sendInferenceLog(true); // 前の対戦分を消す前に最終送信する
+  sendInferenceLog(true); // 前の対戦分の最終送信 (送信は直列化され、実行中でも省略されない)
   estimator.reset();
-  inferLog = [];
+  // 蓄積は対戦別アーカイブに残る。inferLog は現在の対戦分のアーカイブを
+  // 指し続けるため、同一対戦内のリセットで記録が切り捨てられることはない
+  inferLog = inferArchive[inferBucketKey()] || [];
   infDirty = false;
   // 新しい対戦では天候/フィールドの手動編集の保持も解除する
   fieldHold.weather = null;
@@ -2786,32 +2799,47 @@ function drainInferenceLog() {
   try { recs = estimator.takeInferenceLog(); } catch (e) { return; }
   if (!recs || !recs.length) return;
   const at = new Date().toISOString();
-  for (const r of recs) inferLog.push({ at, battle: lastBattleKey, ...r });
+  const bucket = inferBucketKey();
+  const arr = inferArchive[bucket] || (inferArchive[bucket] = []);
+  for (const r of recs) arr.push({ at, battle: lastBattleKey, ...r });
+  inferLog = arr;
   sendInferenceLog(false);
 }
 // 推論過程ログを serve.py へ送る (POST /inference_log、上書き方式・全件再送)。
 // serve.py 側で logs/battle_<試合キー>_inference.json として保存され、
 // その試合のログ一式 (備考ゲート・暗号化) に同梱される
-let inferSendAt = 0, inferSendBusy = false;
 function inferBattleKey() {
   if (!inferLog.length) return null;
   const key = String(inferLog[0].battle || '').replace(/^battle_/, '');
   return /^[0-9]{8}_[0-9]{6}(_salvage)?$/.test(key) ? key : null;
 }
-async function sendInferenceLog(force) {
+// 実際の送信。実行時点のアーカイブ全件を送るため、キュー待ちの間に
+// 取り込まれた記録も漏れない。送れた対戦分のアーカイブは、現在の対戦
+// でなければ破棄する (現在の対戦分は以降の送信でも全件が要る)
+async function doSendInferenceLog(key) {
   const host = (typeof location !== 'undefined' && location.hostname) || '';
   if (host !== 'localhost' && host !== '127.0.0.1') return;
-  if (!inferLog.length || inferSendBusy) return;
-  const now = Date.now();
-  if (!force && now - inferSendAt < 5000) return;
-  const key = inferBattleKey();
-  if (!key) return;
-  inferSendBusy = true;
-  inferSendAt = now;
+  const records = inferArchive[key];
+  if (!records || !records.length) return;
+  inferSendAt = Date.now();
+  let ok = false;
   try {
-    await fetch('./inference_log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'inference-log', version: 1, battle: key, entries: inferLog }) });
+    const res = await fetch('./inference_log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'inference-log', version: 1, battle: key, entries: records }) });
+    ok = !res || res.ok !== false;
   } catch (e) { /* serve.py 未起動時は黙って諦める (次の更新で再送される) */ }
-  inferSendBusy = false;
+  if (ok && key !== inferBucketKey()) delete inferArchive[key];
+}
+// 送信は全て直列化する。リセット時の最終送信 (force) は、直前の送信が
+// 実行中でも省略されず、必ず順番に実行される
+function sendInferenceLog(force) {
+  const key = inferBattleKey();
+  if (!key) return Promise.resolve();
+  if (!force && Date.now() - inferSendAt < 5000) return Promise.resolve();
+  if (!force && inferPendingKeys.has(key)) return Promise.resolve();
+  inferPendingKeys.add(key);
+  const p = inferSendChain.then(async () => { try { await doSendInferenceLog(key); } finally { inferPendingKeys.delete(key); } });
+  inferSendChain = p.catch(() => {});
+  return p;
 }
 // エンジンが返した場への副作用の意図を、UI 側の状態へ適用する
 function applyEstIntent(it) {
