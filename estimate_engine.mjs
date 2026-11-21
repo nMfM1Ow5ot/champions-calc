@@ -975,25 +975,58 @@ function applyRevealed(list) {
     if (!ent) continue;
     bayesMoveUpdate(ent, species, p.knownMoves || []);
     const corr = p.corrected || [];
-    const item = p.itemLost ? '' : (corr.includes('持ち物') ? (p.item || '') : null);
-    const ability = corr.includes('特性') ? p.ability : null;
+    // 判明値は候補の英語名と突き合わせる。メガストーン等が日本語名で
+    // 届く経路があり (battle_20261121_234913 seq6: リザードナイトY)、
+    // そのままだと全候補が不一致になって判明が無効化されるため、
+    // 名前マップで正規化してから比較する
+    const normItem = v => v == null ? null : ((NAMES._itemJa2en || {})[v] || v);
+    const normAbility = v => v == null ? null : ((NAMES._abilityJa2en || {})[v] || v);
+    const item = p.itemLost ? '' : (corr.includes('持ち物') ? normItem(p.item || '') : null);
+    const ability = corr.includes('特性') ? normAbility(p.ability) : null;
     const key = (item ?? '?') + '|' + (ability ?? '?');
     if (key === ent.revKey) continue;
     ent.revKey = key;
-    let changed = false;
-    for (const c of ent.cands) {
-      let f = 1;
-      if (item !== null && c.item !== item) f *= BAYES_REV_KEEP;
-      if (ability !== null && c.ability !== ability && !(p.mega && c.megaAbility === ability)) f *= BAYES_REV_KEEP;
-      if (f !== 1) { c.post *= f; changed = true; }
+    // 判明内容が無い呼び出し (item/ability とも null) は記録しない
+    // (空の revealed スナップショットの抑制)
+    if (item === null && ability === null) continue;
+    // 判明情報はハード制約として固定する: 確定した持ち物・特性と矛盾する
+    // 候補は確率0で除外する (行動順と同じ原則。乗算の尤度更新では0は
+    // 復活しないため、その後の証拠で覆ることはない)。持ち物を失った
+    // 状態 (itemLost の '') は「元々何も持っていなかった」ことの判明では
+    // ないため対象外とし、従来どおりの減衰に留める。全候補が矛盾する
+    // 場合は判明値の取り違えが疑われるため、分布を壊さず減衰へ
+    // フォールバックし、hard:false として記録する
+    const itemHard = item !== null && !p.itemLost;
+    const matchItem = c => !itemHard || c.item === item;
+    const matchAbility = c => ability === null || c.ability === ability || (p.mega && c.megaAbility === ability);
+    let survivorMass = 0, excluded = 0;
+    for (const c of ent.cands) { if (matchItem(c) && matchAbility(c)) survivorMass += c.post; else if (c.post > 0) excluded++; }
+    const hardMode = (itemHard || ability !== null) && survivorMass > 0;
+    let applied = false;
+    if (hardMode) {
+      if (excluded > 0) {
+        for (const c of ent.cands) if (!(matchItem(c) && matchAbility(c))) c.post = 0;
+        for (const c of ent.cands) c.post /= survivorMass;
+        dirty = true;
+      }
+      applied = true;
+    } else {
+      let changed = false;
+      for (const c of ent.cands) {
+        let f = 1;
+        if (item !== null && c.item !== item) f *= BAYES_REV_KEEP;
+        if (ability !== null && c.ability !== ability && !(p.mega && c.megaAbility === ability)) f *= BAYES_REV_KEEP;
+        if (f !== 1) { c.post *= f; changed = true; }
+      }
+      if (changed) {
+        let tot = 0;
+        for (const c of ent.cands) tot += c.post;
+        if (tot > 0) for (const c of ent.cands) c.post /= tot;
+        dirty = true;
+      }
+      applied = changed;
     }
-    if (changed) {
-      let tot = 0;
-      for (const c of ent.cands) tot += c.post;
-      if (tot > 0) for (const c of ent.cands) c.post /= tot;
-      dirty = true;
-    }
-    logSnapshot(species, infLogTurn, { kind: 'revealed', item, ability, applied: changed });
+    logSnapshot(species, infLogTurn, { kind: 'revealed', item, ability, applied, hard: hardMode, excluded: hardMode ? excluded : 0 });
   }
 }
 
