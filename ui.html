@@ -90,6 +90,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .topbar h1{font-family:'Work Sans',sans-serif; font-size:1.5rem; margin:0; color:#fff; font-weight:700}
 .titlebox{display:flex; flex-direction:column}
 .revline{font-size:1.36rem; color:var(--label); line-height:1.3}
+.loadwarn{font-size:1.15rem; color:#d97706; line-height:1.35; cursor:pointer; max-width:36rem}
 .topbar .cam{display:flex; align-items:center; gap:.6rem; font-size:1rem; color:var(--dim)}
 .topbar button{font:inherit; font-size:1rem; background:var(--panel); color:var(--ink); border:none; border-radius:.5rem; padding:.4rem .8rem; cursor:pointer; box-shadow:var(--dd-shadow)}
 .topbar button:hover{background:rgba(33,150,243,.15); color:#fff}
@@ -362,6 +363,7 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
 <div class="wrap">
   <div class="topbar">
     <div class="titlebox"><h1>チャンピオンズ ダメージ計算</h1><div class="revline" id="revLine"></div></div>
+    <div class="loadwarn" id="loadWarn" data-loadretry hidden></div>
     <div class="cam" id="camBox">チーム画面を取り込む
       <button data-capture="ability">能力画面を撮影</button>
       <button data-capture="status">ステータス画面を撮影</button><span id="capStatusText"></span>
@@ -636,6 +638,61 @@ let calcLastAt = 0; // 直前に記録した時刻 (自動再計算の間引き�
 let curTurn = null; // 対戦の現在ターン (イベントから追跡。不明なら null)
 const CALCLOG_MAX = 300; // 1対戦あたりの記録上限
 function markCalcSrc(src) { calcSrcPending = { src, at: Date.now() }; }
+// データ読み込みの状態管理: 失敗を記録・可視化し、重要ファイルは再試行する
+// (読み込み失敗が握りつぶされ、セッションが欠けたまま劣化し続ける事故の再発防止)
+const loadStatus = {};
+const DATA_LOADERS = [];
+let dataRetryTimer = null;
+function regDataLoader(id, label, critical, load) { const d = { id, label, critical, load }; DATA_LOADERS.push(d); return d; }
+async function runDataLoader(d) {
+  const st = loadStatus[d.id] || (loadStatus[d.id] = { ok: false, attempts: 0, lastError: '' });
+  st.attempts++;
+  try { await d.load(); st.ok = true; st.lastError = ''; }
+  catch (e) { st.ok = false; st.lastError = String((e && e.message) || e); try { console.warn('[data load]', d.id, st.lastError); } catch (e2) {} }
+  renderLoadWarn();
+  return st.ok;
+}
+function missingCriticalLoaders() { return DATA_LOADERS.filter(d => d.critical && !(loadStatus[d.id] && loadStatus[d.id].ok)); }
+function scheduleDataRetry() {
+  if (dataRetryTimer) return;
+  if (!missingCriticalLoaders().some(d => (loadStatus[d.id] ? loadStatus[d.id].attempts : 0) < 40)) { renderLoadWarn(); return; }
+  dataRetryTimer = setTimeout(async () => {
+    dataRetryTimer = null;
+    let recovered = false;
+    for (const d of missingCriticalLoaders()) { if (await runDataLoader(d)) recovered = true; }
+    // 対戦中に遅れて揃った場合は、完全なデータで推定を作り直す
+    if (recovered && lastBattleKey) resetInference();
+    if (missingCriticalLoaders().length) scheduleDataRetry();
+  }, 30000);
+}
+function renderLoadWarn() {
+  const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById('loadWarn') : null;
+  if (!el) return;
+  const missing = missingCriticalLoaders();
+  if (!missing.length) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.textContent = 'データ読込: ' + missing.map(d => d.label).join('・') + ' が未読込です（再試行中・クリックで再試行）';
+}
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
+  const t = e.target && e.target.closest ? e.target.closest('[data-loadretry]') : null;
+  if (!t) return;
+  (async () => {
+    let recovered = false;
+    for (const d of missingCriticalLoaders()) { if (await runDataLoader(d)) recovered = true; }
+    if (recovered && lastBattleKey) resetInference();
+    if (missingCriticalLoaders().length) scheduleDataRetry();
+  })();
+});
+// 持ち物名マップは names 本体と独立に読み込む (従来は names_ja と
+// names_index の成功に入れ子で依存し、失敗が握りつぶされていた)
+let ITEM_MAPS = null;
+function applyItemMaps() {
+  if (!ITEM_MAPS || !NAMES) return;
+  NAMES._itemJa2en = ITEM_MAPS;
+  NAMES._itemEn2ja = {};
+  for (const [jaName, en] of Object.entries(ITEM_MAPS)) NAMES._itemEn2ja[idOf(en)] = jaName;
+  for (const [en, jaName] of Object.entries(ITEM_JA_EXTRA)) { const k = idOf(en); if (!(k in NAMES._itemEn2ja)) NAMES._itemEn2ja[k] = jaName; }
+}
 function confirmNewBattle() {
   battleResetPending = false;
   faintLock.mine.clear();
@@ -3347,6 +3404,7 @@ function debugSnapshot() {
     readerState: (() => { try { return lastStateText ? JSON.parse(lastStateText) : null; } catch (e) { return lastStateText; } })(),
     uiState: state,
     uiFlags: ui,
+    loadStatus: JSON.parse(JSON.stringify(loadStatus)),
     calc: lastCalc,
     estimator: (() => { try { return estimator._debug(); } catch (e) { return null; } })(),
     inferenceLog: inferLog,
@@ -3434,6 +3492,27 @@ document.getElementById('specSel')?.addEventListener('change', e => {
     if (el && t && !el.textContent) el.textContent = 'rev ' + t;
   } catch (e) {}
 })();
+const LOADER_ITEMS_JA = regDataLoader('items_ja', '持ち物名', true, async () => {
+  const ij = await (await fetch('./data/items_ja.json')).json();
+  if (!ij || typeof ij !== 'object' || !Object.keys(ij).length) throw new Error('items_ja: bad shape');
+  ITEM_MAPS = ij; applyItemMaps();
+});
+const LOADER_VGC_CORPUS = regDataLoader('vgc_pastes', 'VGCPastesコーパス', true, async () => {
+  const vc = await (await fetch('./data/vgc_pastes.json')).json();
+  if (!vc || !Array.isArray(vc.sets)) throw new Error('vgc_pastes: bad shape');
+  VGC_CORPUS = vc;
+});
+const LOADER_META_SETS = regDataLoader('meta_sets', '対戦データ', true, async () => {
+  try {
+    const ms = await (await fetch('./data/meta_sets.json')).json();
+    if (ms && Array.isArray(ms.sets)) META_SETS = ms; else throw new Error('meta_sets: bad shape');
+  } finally { META_SETS_LOADED = true; }
+});
+const LOADER_POKEDB = regDataLoader('pokedb_parsed', '使用率分布', true, async () => {
+  const pd = await (await fetch('./data/pokedb_parsed.json')).json();
+  if (!pd || typeof pd !== 'object') throw new Error('pokedb_parsed: bad shape');
+  POKEDB_PARSED = pd;
+});
 (async function init() {
   // state.json の取り込みはデータ読み込みの完了を待たずに即開始する
   // (選出画面・試合開始直後の反映を速くするため)
@@ -3456,13 +3535,7 @@ document.getElementById('specSel')?.addEventListener('change', e => {
         for (const [id, jaName] of Object.entries(NAMES.moves)) { const mv = [...gen.moves].find(m => idOf(m.name) === id); if (mv) NAMES._moveJa2en[z2h(jaName)] = mv.name; }
         NAMES._abilityJa2en = {};
         for (const [id, jaName] of Object.entries(NAMES.abilities)) { const ab = [...gen.abilities].find(a => idOf(a.name) === id); if (ab) NAMES._abilityJa2en[z2h(jaName)] = ab.name; }
-        NAMES._itemEn2ja = {};
-        try {
-          const ij = await (await fetch('./data/items_ja.json')).json();
-          NAMES._itemJa2en = ij;
-          for (const [jaName, en] of Object.entries(ij)) (NAMES._itemEn2ja || {})[idOf(en)] = jaName;
-          for (const [en, jaName] of Object.entries(ITEM_JA_EXTRA)) { const k = idOf(en); if (!(k in NAMES._itemEn2ja)) NAMES._itemEn2ja[k] = jaName; }
-        } catch (e) { /* items_ja optional */ }
+        applyItemMaps(); // 持ち物名マップは独立ローダー (LOADER_ITEMS_JA) が読み込む
       }
     } catch (e) { /* names are optional */ } })(),
     (async () => { try {
@@ -3497,21 +3570,14 @@ document.getElementById('specSel')?.addEventListener('change', e => {
       const sa = await (await fetch('./data/species_abilities.json')).json();
       SPECIES_ABILITIES = sa || {};
     } catch (e) { /* species abilities optional */ } })(),
-    (async () => { try {
-      POKEDB_PARSED = await (await fetch('./data/pokedb_parsed.json')).json();
-    } catch (e) { /* pokedb distributions optional (bayes falls back) */ } })(),
-    (async () => { try {
-      const ms = await (await fetch('./data/meta_sets.json')).json();
-      if (ms && Array.isArray(ms.sets)) META_SETS = ms;
-    } catch (e) { /* meta sets optional (bayes uses pokedb candidates only) */ } finally { META_SETS_LOADED = true; } })(),
+    runDataLoader(LOADER_ITEMS_JA),
+    runDataLoader(LOADER_POKEDB),
+    runDataLoader(LOADER_META_SETS),
     (async () => { try {
       const vg = await (await fetch('./data/vgcpastes_sets.json')).json();
       if (vg && vg.species) VGC_SETS = vg;
     } catch (e) { /* vgcpastes sets optional */ } })(),
-    (async () => { try {
-      const vc = await (await fetch('./data/vgc_pastes.json')).json();
-      if (vc && Array.isArray(vc.sets)) VGC_CORPUS = vc;
-    } catch (e) { /* vgcpastes corpus optional (engine falls back) */ } })(),
+    runDataLoader(LOADER_VGC_CORPUS),
     (async () => { try {
       const cd = await (await fetch('./data/champions_dex.json')).json();
       CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
@@ -3532,6 +3598,7 @@ document.getElementById('specSel')?.addEventListener('change', e => {
       if (saved) applySpecPatch(saved);
     } catch (e) { /* spec patches optional (無い場合は現行仕様のみ) */ } finally { renderSpecSel(); } })(),
   ]);
+  if (missingCriticalLoaders().length) scheduleDataRetry();
   // dropdown option lists
   // 保存済みの仕様選択が無ければ、レギュレーションの既定 (シーズン対応) を適用する
   { const defId = defaultSpecPatchId(REG); if (defId) applySpecPatch(defId); renderSpecSel(); }
