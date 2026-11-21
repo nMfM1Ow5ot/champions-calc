@@ -711,6 +711,16 @@
    "uploaded_at": "2026-11-21T17:12:49.225660+09:00"
   },
   {
+   "name": "preview_test_20261121_171455.jpg",
+   "sha256": "d81bccd370ab2843801c9156ac156ec7842c3e38298ba2a6b323873e801f65b9",
+   "uploaded_at": "2026-11-21T17:15:02.551646+09:00"
+  },
+  {
+   "name": "preview_test_20261121_171455.json",
+   "sha256": "904a2f62d0b3543e0ac2f80a2654b89a0a422a989b26a3fd76a88d3b7e4fca6f",
+   "uploaded_at": "2026-11-21T17:15:04.167837+09:00"
+  },
+  {
    "name": "serve_crashes.log",
    "sha256": "03210f50b92256aa42d5d1ad885222a916710acba4b3980f3f5f1ba6c76c2539",
    "uploaded_at": "2026-11-21T15:57:07.766409+09:00"
