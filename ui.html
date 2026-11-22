@@ -1274,8 +1274,9 @@ function koFmt(t) {
 /* ---------- import / export ---------- */
 function exportText(spec) {
   // Showdown の Teams.exportSet (sim/teams.ts) の出力形式に合わせる。
-  // 努力値は EVs: 行に EV = SP×8 で書く (exportSet は保持値をそのまま
-  // 出力し、読み込み側も丸めない)。以前の SPs: 行は Showdown に無い
+  // ただし努力値は M-C の作法に合わせ、EVs: 行に SP の値をそのまま
+  // 書く (VGCPastes の M-C の paste はすべてこの形: 1能力 32 まで、
+  // 合計 66 までを EVs: に書く)。以前の SPs: 行は Showdown に無い
   // フィールドで、読み込み時に無視されて努力値が落ちていた
   const sp = effSpecies(spec);
   let head = sp;
@@ -1289,7 +1290,7 @@ function exportText(spec) {
     ...(spec.teraType ? [`Tera Type: ${spec.teraType}`] : []),
   ];
   const evParts = STATJ.filter(([k]) => (spec.sp[k] || 0) > 0)
-    .map(([k]) => `${spec.sp[k] * 8} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
+    .map(([k]) => `${spec.sp[k]} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
   if (evParts.length) lines.push(`EVs: ${evParts.join(' / ')}`);
   lines.push(`${spec.nature} Nature`);
   for (const mv of spec.moves || []) if (mv) lines.push(`- ${mv}`);
