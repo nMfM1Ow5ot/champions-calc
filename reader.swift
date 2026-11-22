@@ -2522,7 +2522,7 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String], idSc
     return (proto, disp, added, removed)
 }
 
-func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String) {
+func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String, quiet: Bool = false) {
     guard protocolLines.contains("|start") else { return }
     let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines, idScores: headerIdScores)
     if !completed.added.isEmpty, debugMode {
@@ -2535,8 +2535,10 @@ func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [Stri
     let dispText = completed.displayLines.joined(separator: "\n") + "\n"
     try? protoText.write(to: logsDirURL.appendingPathComponent(base + "_protocol.log"), atomically: true, encoding: .utf8)
     try? dispText.write(to: logsDirURL.appendingPathComponent(base + ".log"), atomically: true, encoding: .utf8)
-    print("[log] 試合ログを保存しました: logs/\(base).log / logs/\(base)_protocol.log")
-    fflush(stdout)
+    if !quiet {
+        print("[log] 試合ログを保存しました: logs/\(base).log / logs/\(base)_protocol.log")
+        fflush(stdout)
+    }
 }
 
 // 現在進行中の試合を logs/ へ保存する (勝敗確定時は final: true)
@@ -2704,14 +2706,6 @@ func salvageLeftoverLogs() {
     guard let proto = try? String(contentsOf: protocolLogURL, encoding: .utf8) else { return }
     let lines = proto.split(separator: "\n").map(String.init)
     guard lines.count >= 5, lines.contains("|start") else { return }
-    // 同じ内容が保存済みなら二重に作らない
-    if let names = try? FileManager.default.contentsOfDirectory(atPath: logsDirURL.path) {
-        for name in names where name.hasSuffix("_protocol.log") {
-            if let saved = try? String(contentsOf: logsDirURL.appendingPathComponent(name), encoding: .utf8), saved == proto {
-                return
-            }
-        }
-    }
     var stamp = battleStamp()
     if let attrs = try? FileManager.default.attributesOfItem(atPath: protocolLogURL.path),
        let mtime = attrs[.modificationDate] as? Date {
@@ -2728,10 +2722,27 @@ func salvageLeftoverLogs() {
        bid.count == 15, bid.allSatisfy({ $0.isNumber || $0 == "_" }) {
         stamp = bid
     }
+    // その試合の確定版が既に保存済みなら、救済はしない。保存済み
+    // ファイルはヘッダー補完や HP 表記の統一を経た内容で、残留した
+    // 作業ファイル (未補完) とは一致しないため、内容の一致だけで
+    // 判定すると通常どおり保存済みの試合まで二重に救済してしまう
+    // (実例: 2026-11-22 battle_20261122_193243、次回起動時に
+    // battle_..._salvage_final が改めて保存された)
+    if FileManager.default.fileExists(atPath: logsDirURL.appendingPathComponent("battle_\(stamp)_final_protocol.log").path) {
+        return
+    }
+    // 同じ内容が保存済みなら二重に作らない
+    if let names = try? FileManager.default.contentsOfDirectory(atPath: logsDirURL.path) {
+        for name in names where name.hasSuffix("_protocol.log") {
+            if let saved = try? String(contentsOf: logsDirURL.appendingPathComponent(name), encoding: .utf8), saved == proto {
+                return
+            }
+        }
+    }
     let disp = (try? String(contentsOf: battleLogURL, encoding: .utf8)) ?? ""
     let dispLines = disp.isEmpty ? [] : disp.split(separator: "\n").map(String.init)
     archiveBattleLogs(final: lines.contains(where: { $0.hasPrefix("|win|") }),
-                      protocolLines: lines, displayLines: dispLines, id: stamp + "_salvage")
+                      protocolLines: lines, displayLines: dispLines, id: stamp + "_salvage", quiet: true)
 }
 
 func startBattleLog() {
@@ -9677,7 +9688,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2003"
+let readerBuild = "20261122_2010"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
