@@ -9370,6 +9370,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         slotPanels.append([panel.x, panel.y, panel.w, panel.h])
         var types: [String] = []
         var iconCands: [[String]] = []
+        var iconDists: [Double] = []
         var iconDiags: [String] = []
         var unknownPresent = false
         // アイコン位置はパネル相対 (2026-11-20 の実機フレームで再実測:
@@ -9380,16 +9381,38 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         for slot in 0..<2 {
             let ix = panel.x + Int((slot == 0 ? 0.620 : 0.810) * Double(panel.w))
             let iy = panel.y + Int(0.050 * Double(panel.h))
-            let (t, present, diag, _, alt, gap) = pvClassifyIconSearch(buf, ix, iy, iconS)
+            let (t, present, diag, dist, alt, gap) = pvClassifyIconSearch(buf, ix, iy, iconS)
             iconDiags.append(diag)
             if let t {
                 types.append(t)
+                iconDists.append(dist)
                 var cands = [t]
                 // 1 位と 2 位が近接している場合は分類を確定とみなさず、
                 // 両タイプを候補に残してプールを統合する
                 if let alt, gap < pvIconAmbigDelta { cands.append(alt) }
                 iconCands.append(cands)
             } else if present { unknownPresent = true }
+        }
+        // 幻像タイプの棄却: 片方のアイコンが確実に読めている
+        // (距離 0.15 以下) のに、もう片方の距離が 0.30 以上と悪い
+        // 場合、悪い方はアイコンの無い位置の背景 (パネルの地色や
+        // 演出の光の筋) を拾った幻像とみなして捨てる。単タイプの
+        // アイコンは右側の枠だけに出るため、左の空き位置が背景の
+        // 質感で「有り」判定され、別タイプに分類されることがある
+        // (実例: 2026-11-23 battle_20261123_052626 枠3、空き位置の
+        // 背景が Dark=0.350 で分類され、プールが Morpeko 1 種に
+        // なって decisive でロックされた)。両方とも悪い場合は
+        // どちらが幻像か決められないため触らない
+        if iconCands.count == 2 {
+            if iconDists[0] >= 0.30 && iconDists[1] <= 0.15 {
+                types.removeFirst()
+                iconCands.removeFirst()
+                iconDists.removeFirst()
+            } else if iconDists[1] >= 0.30 && iconDists[0] <= 0.15 {
+                types.removeLast()
+                iconCands.removeLast()
+                iconDists.removeLast()
+            }
         }
         slotIconDiags.append(iconDiags)
         slotTypes.append(types)
@@ -10197,6 +10220,25 @@ func runOnce(image: CGImage) {
                     if let locked = previewLocked[i], vetoed[i].contains(locked) {
                         previewLocked[i] = nil
                     }
+                    // 強い rival によるロック解除: ロックは decisive
+                    // (プール 1 種) でも付くため、アイコン誤読で
+                    // プールが 1 種に化けた場合、その種族がそのまま
+                    // ロックされてしまう。テンプレート級 (負値) の
+                    // 最良スコアを持つ rival がいて、ロック種族の
+                    // 最新スコアとの差が展開マージン以上なら、ロック
+                    // を外して通常の暫定 1 位・現行維持に委ねる
+                    // (実例: 2026-11-23 battle_20261123_052626 枠3、
+                    // Morpeko のロックに Raichu の -0.262 が届かなかった)
+                    if let locked = previewLocked[i] {
+                        let lockedScore = previewLatestScore[i][locked]
+                            ?? previewVoteScore[i][locked] ?? 9
+                        let hasStrongRival = previewVotes[i].keys.contains { sp in
+                            sp != locked && !vetoed[i].contains(sp)
+                                && (previewVoteScore[i][sp] ?? 9) < 0
+                                && lockedScore - (previewVoteScore[i][sp] ?? 9) > pvExpandMargin
+                        }
+                        if hasStrongRival { previewLocked[i] = nil }
+                    }
                 }
                 let incumbents = previewBestTeam
                 // 最新試行の一貫性: 現行チームと pick が異なる枠の数。
@@ -10694,7 +10736,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0500"
+let readerBuild = "20261123_0553"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
