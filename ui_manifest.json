@@ -5,7 +5,7 @@
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
   "build_species_gender.py": "36e4d0d6f2cf2125b3e7d575660c25afc9ffaaf7fac45a51738cca99106adaa3",
   "bundle.mjs": "3c8f58a46760761c9aeb71283bb6255084f7f78ba8a9fc4687e745af5b28d1a1",
-  "check/apple_stubs.swift": "b54bf022428e2a6a30a35b206a14e01f276a20866d04376928109e4bcd6da175",
+  "check/apple_stubs.swift": "a3c127deea0c10d74032106ebe47fd9ca14683ea776b36d4353784d998643ddf",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
   "core.mjs": "4a9414d3c792f79375b6ff4661cabc5e5af431070aef19dee0eccdd231c05126",
   "data/base_stats.json": "06a94fa5775d9431412b286abcb7423794f6da3bbd1c10021e3d0cca2ca96aca",
@@ -16,7 +16,7 @@
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
   "data/names_ja.json": "6f900267d7914eef7feacd0487fb0fa354e2cb4cadadbff37e5b6c9a08e2c7bf",
   "data/pokedb_parsed.json": "bba36692be2b33ff42edeb7c62c8d0cd9b9c3cf2c123a7c95e49bec3b7c3fe63",
-  "data/preview_features.json": "49cd02bc6379068508392109eb5dc4f65b197f5bed06fb31e42a1570be8c53c9",
+  "data/preview_features.json": "3654ca888ab8ab524b83fd64c715c856df70f90ede12854d7101e1a8ccfd4590",
   "data/regulation.json": "a3bcac276afae8b0e433bfc3ad50b04ee10fd3dbdb0f5ce640797d73320ea50a",
   "data/spec_patches.json": "c6dc628c70e0078f72ea3891d6bf8c7ced14a1d40c25213cd91f2097f5c53f98",
   "data/species_abilities.json": "2082e1195bfe24a5d6747d99e0bd291419e12d7a0aa7d6eebaaaba993e910547",
@@ -37,7 +37,7 @@
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
-  "reader.swift": "217b02de7741d785d8398af0ce440f88a224fd351992ea4cea53091e039875ae",
+  "reader.swift": "37138f2c82746327158ade37e3625938f746034760a4794261bcfe98e3e833de",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "558a5c3197f65e1c08942308885c639b9d310362f6a0e663b767b6d7d540cf45",
   "start_all.sh": "00e187308c8f5ca940ca244afe12835d637ba10f6c81291baab371d5e85d645f",
@@ -48,5 +48,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_1952"
+ "rev": "20261122_2002"
 }
