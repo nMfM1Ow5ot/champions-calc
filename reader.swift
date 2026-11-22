@@ -1238,6 +1238,10 @@ func parsePlate(image: CGImage, plate: Plate) -> SlotState? {
                     // 現在値の記録がある場合はその読み自体を捨てる
                     if let mx = r.max, let curText = monStates["p1:\(sp.en)"]?.hpText,
                        let cur = Int(curText.split(separator: "/").first ?? ""), mx < cur { continue }
+                    // 既知の最大と大きく食い違う最大値も、数字の連結
+                    // 等の化けとして捨てる (同じ 36 の閾値。実例:
+                    // 2026-11-23 battle_20261123_062508 の 177277)
+                    if let km = knownMax, let mx = r.max, !maxReadPlausible(readMax: mx, knownMax: km) { continue }
                     hp = r.pct; hpCur = r.cur; hpMax = r.max
                     if let mx = r.max { noteBattleMaxRead(speciesEn: sp.en, readMax: mx, registeredMax: knownMax) }
                     break
@@ -1554,7 +1558,7 @@ var logSeenEntries = Set<String>()               // ゲーム内ログ画面エ�
 // 同じ値が 2 回続いて読めてからログに出す (途中値の行が量産されるのを防ぐ)
 var pendingDamagePct: [String: Int] = [:]        // プレート名 -> 確定待ちの HP%
 var lastEmittedPct: [String: Int] = [:]          // プレート名 -> ログ出力済みの HP%
-var suspectJump: [String: (toPct: Int, turn: Int)] = [:]  // プレート名 -> 疑わしい大きな HP 跳びの保留 (誤読の疑い)
+var suspectJump: [String: (toPct: Int, turn: Int, hpText: String)] = [:]  // プレート名 -> 疑わしい大きな HP 跳びの保留 (誤読の疑い)
 var firstEntryPlateHP: [String: String] = [:]  // プレート名 -> 初登場の交代行が示した HP 表記 (同値のダメージ行の重複抑止)
 var sitrusWatch: [String: Int] = [:]  // key -> オボンのみ発動条件 (HP 半分以下) を跨いだ直後の HP% (発動の取りこぼし監視)
 var lastMoveEmitSeq = -1                          // 最後に |move| 行を出した時点の actionSeq
@@ -1749,6 +1753,7 @@ var turnRawFrames = 0                             // プレート生読みで 4 
 var lastMoveLabel = ""                            // 直近の |move| の使用者ラベル (ミスの帰属用)
 var lastMoveName = ""                             // 直近の |move| の技名 (EN, 推定イベント用)
 var lastMoveSeq = -1                              // 直近の |move| が出た actionSeq
+var lastMoveBySlot: [String: (move: String, turn: Int)] = [:]  // 枠ごとの直近の技 (遅れて届く反動の帰属用)
 var battleEvents: [String] = []                   // 推定エンジン用イベント (JSON 断片の配列)
 var entryBatchId = 0                              // 同時入場バッチの通し番号 ('ab' イベント用)
 var entryBatchOpen = false                        // 入場ウィンドウ (|switch| の連続区間) が開いているか
@@ -1776,6 +1781,7 @@ var faintedSpecies: Set<String> = []   // "p2:Sneasler" 形式: ひんし行が�
 var heldEntryBoosts: [(key: String, line: String, at: Date)] = []  // 入場特性 (いかく等) の効果行が原因側の交代行より先に届いた場合の保留
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
+var lastMissKey = ""                              // 外れ行の重複抑止 (行動+使用者+対象)
 var protectMoveTurn: [String: Int] = [:]         // 枠 -> まもる系を使ったターン (activate 行の照合用)
 var protectMoveName: [String: String] = [:]      // 枠 -> 使ったまもる系の技名 (Protect / Detect)
 var effectBySeq: [Int: [String: String]] = [:]    // 行動番号 -> ラベル -> 相性種別 (同じ技での相性の付け替え判定)
@@ -2264,6 +2270,10 @@ func applyEvent(_ line: String) {
         lastMoveEmitSeq = actionSeq
         // まもるの使用ターンを控える (activate 行の同ターン照合用)
         let mf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        // 枠ごとの直近の技も控える (反動行の処理が次の技の告知より
+        // 遅れても帰属が外れないように。実例: 2026-11-23
+        // battle_20261123_062508、ブレイブバードの反動)
+        if mf.count >= 4 { lastMoveBySlot[mf[2]] = (move: mf[3], turn: currentTurn) }
         if mf.count >= 4 && (mf[3] == "Protect" || mf[3] == "Detect") {
             let pslot = mf[2].split(separator: ":").first.map(String.init) ?? ""
             if !pslot.isEmpty { protectMoveTurn[pslot] = currentTurn; protectMoveName[pslot] = mf[3] }
@@ -3089,6 +3099,8 @@ func resetLogState() {
     lastMoveName = ""
     lastMoveSeq = -1
     lastMoveLabel = ""
+    lastMissKey = ""
+    lastMoveBySlot = [:]
     lastMoveMsgAt = Date.distantPast
     lastFallbackText = ""
     lastFallbackAt = Date.distantPast
@@ -3933,8 +3945,23 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             }
             return true
         }
-        if sj.toPct < effFrom, sj.toPct != 0 { clearedDropSuspect = true }
-        suspectJump[plateName] = nil
+        // 保留した値より更に下がった場合は、保留分が実在した裏づけ
+        // (HP は行動の解決中に下がり続ける)。保留分を独立した行と
+        // して先に出し、現在の行は保留値から始めさせる。この場合は
+        // 疑いが「実在した」として解けたので、未分類の再保留
+        // (post_suspect) には回さない (実例: 2026-11-23
+        // battle_20261123_062508、ねっぷうの被ダメが保留と再保留の
+        // 往復で消え、残りが砂嵐の行に吸収された)
+        if toPct < sj.toPct && sj.toPct < effFrom {
+            emitLog("|-damage|\(slot): \(speciesEn)|\(sj.hpText)")
+            lastEmittedPct[plateName] = sj.toPct
+            monStates[key]?.hpPercent = sj.toPct
+            effFrom = sj.toPct
+            suspectJump[plateName] = nil
+        } else {
+            if sj.toPct < effFrom, sj.toPct != 0 { clearedDropSuspect = true }
+            suspectJump[plateName] = nil
+        }
     }
     // ひんし行が出た種族への HP 変動行は出さない。ひんし後に同じ
     // 枠へ残った古い読みが、回復や被ダメとして再演される事故の
@@ -3975,7 +4002,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         if effFrom - toPct > 55, toPct != 0, (monStates[key]?.status ?? "").isEmpty,
            pendingStatusFrom[key] == nil, !moveInFlight,
            lastSwitchEmitSeq >= 0, lastSwitchEmitSeq >= lastMoveEmitSeq {
-            suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
+            suspectJump[plateName] = (toPct: toPct, turn: currentTurn, hpText: hpText)
             lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct])
@@ -4007,6 +4034,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         var line = "|-damage|\(slot): \(speciesEn)|\(hpText)"
         var fromCode: String? = nil
         var selfClassified = false   // 自分の技の反動として分類できたら、推定用イベントも出す
+        var recoilMove = ""          // 反動と分類した技 (遅延帰属では本人の直近の技)
         if let pf = pendingStatusFrom[key], sNow().timeIntervalSince(pf.at) < 5 {
             fromCode = pf.code
             pendingStatusFrom[key] = nil
@@ -4050,6 +4078,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                 } else if recoilMoves.contains(lastMoveName) {
                     fromCode = "move: \(lastMoveName)"
                     selfClassified = true
+                    recoilMove = lastMoveName
                 } else if (11...18).contains(drop) {
                     // 接触した相手の特性・持ち物による反動 (さめはだ/
                     // てつのトゲ = 最大の 1/8、ゴツゴツメット = 1/6)。
@@ -4074,6 +4103,21 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                     }
                 }
             }
+            // 反動の遅延帰属: 反動行の処理が次の技の告知より遅れて
+            // 直近の技が他者になっていても、本人がこのターンに使った
+            // 技が反動技で、現在の行動の被ダメ対象に本人が含まれて
+            // いなければ、反動として分類する (実例: 2026-11-23
+            // battle_20261123_062508、ブレイブバードの反動が
+            // ねっとうの技行の後に素のダメージ行として出た)
+            if fromCode == nil, lastMoveLabel != "\(slot): \(speciesEn)",
+               let own = lastMoveBySlot["\(slot): \(speciesEn)"], own.turn == currentTurn,
+               recoilMoves.contains(own.move),
+               !(damagedBySeq[actionSeq] ?? []).contains("\(slot): \(speciesEn)"),
+               (1...50).contains(effFrom - toPct) {
+                fromCode = "move: \(own.move)"
+                selfClassified = true
+                recoilMove = own.move
+            }
         }
         // 分類できない大きな自己ダメージは、プレート誤読の疑いとして
         // 行を出さずに保留する。自分の技の直後に自分が大きく減る経路は、
@@ -4087,7 +4131,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         if fromCode == nil, lastMoveLabel == "\(slot): \(speciesEn)",
            sNow().timeIntervalSince(lastMoveMsgAt) < 20, effFrom - toPct > 18,
            !["Belly Drum", "Curse", "Pain Split"].contains(lastMoveName) {
-            suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
+            suspectJump[plateName] = (toPct: toPct, turn: currentTurn, hpText: hpText)
             lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "reason": "self_unclassified"])
@@ -4105,7 +4149,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 取り込まれ (冒頭の解消規則)、実値に戻れば何も残らない。
         // 分類できた低下 (状態異常の経過等) は従来どおり出す
         if fromCode == nil, clearedDropSuspect, toPct != 0, effFrom - toPct > 3 {
-            suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
+            suspectJump[plateName] = (toPct: toPct, turn: currentTurn, hpText: hpText)
             lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "reason": "post_suspect_unexplained"])
@@ -4127,7 +4171,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                 if lastSlots.values.contains(where: { $0.speciesEn == sibSpecies }) { siblingIdentical = true; break }
             }
             if siblingIdentical {
-                suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
+                suspectJump[plateName] = (toPct: toPct, turn: currentTurn, hpText: hpText)
                 lastEmittedPct[plateName] = effFrom
                 debugCapture(kind: "hp_drop_suspect", key: "hp_drop_suspect|\(plateName)", rawText: "",
                              detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "reason": "sibling_identical"])
@@ -4141,7 +4185,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         recordDamageEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, hpText: hpText,
                           directMove: fromCode == nil)
         if selfClassified {
-            recordRecoilEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct)
+            recordRecoilEvent(slot: slot, key: key, speciesEn: speciesEn, fromPct: effFrom, toPct: toPct, moveName: recoilMove)
         }
         // 相性行の付け替え判定用に、この行動で被ダメした対象を控える
         damagedBySeq[actionSeq, default: []].insert("\(slot): \(speciesEn)")
@@ -4170,7 +4214,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             // として保留し、次ターンも同じ値なら状態訂正として
             // 取り込む (冒頭の解消規則。実例: 2026-11-21
             // battle_20261121_230402 のサーナイト誤認連鎖)
-            suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
+            suspectJump[plateName] = (toPct: toPct, turn: currentTurn, hpText: hpText)
             lastEmittedPct[plateName] = effFrom
             debugCapture(kind: "hp_jump_rejected", key: "hp_jump|\(key)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "source": "plate"])
@@ -4446,7 +4490,7 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
 // atk と def が同一ラベルの dmg イベント。相手側で低下が 8〜11% の
 // ものが いのちのたま の反動として取り込まれる。技の反動も同じ形で
 // 出すが、割合が一定しないため推定側では取り込まれない)
-func recordRecoilEvent(slot: String, key: String, speciesEn: String, fromPct: Int, toPct: Int) {
+func recordRecoilEvent(slot: String, key: String, speciesEn: String, fromPct: Int, toPct: Int, moveName: String = "") {
     guard battleEvents.count < 600 else { return }
     let label = "\(slot): \(speciesEn)"
     func boostsJson(_ k: String) -> String {
@@ -4463,7 +4507,7 @@ func recordRecoilEvent(slot: String, key: String, speciesEn: String, fromPct: In
     for (slotName, s) in lastSlots where slotName.hasPrefix(sidePrefix) {
         if (monStates["\(side):\(s.speciesEn)"]?.hpPercent ?? s.hpPercent) > 0 { alive += 1 }
     }
-    var ev = "{\"k\":\"dmg\",\"turn\":\(currentTurn),\"atk\":\"\(jsonEscape(label))\",\"def\":\"\(jsonEscape(label))\",\"move\":\"\(jsonEscape(lastMoveName))\",\"crit\":false"
+    var ev = "{\"k\":\"dmg\",\"turn\":\(currentTurn),\"atk\":\"\(jsonEscape(label))\",\"def\":\"\(jsonEscape(label))\",\"move\":\"\(jsonEscape(moveName.isEmpty ? lastMoveName : moveName))\",\"crit\":false"
     ev += ",\"w\":\"\(logFieldWeather)\",\"t\":\"\(logFieldTerrain)\""
     ev += ",\"atkB\":\(boostsJson(key)),\"defB\":\(boostsJson(key))"
     ev += ",\"atkS\":\"\(jsonEscape(monStates[key]?.status ?? ""))\",\"defS\":\"\(jsonEscape(monStates[key]?.status ?? ""))\""
@@ -4654,8 +4698,21 @@ func processPlates(_ hits: [String: SlotState]) {
            let entry = speciesDict.first(where: { $0.en == s.speciesEn }),
            let knownMax = battleKnownMax(speciesEn: s.speciesEn, grp: formeGroup(entry)),
            knownMax > 0, readMax != knownMax {
-            s.hpCur = Int((Double(s.hpPercent) / 100.0 * Double(knownMax)).rounded())
-            s.hpMax = knownMax
+            if !maxReadPlausible(readMax: readMax, knownMax: knownMax), let prevSlot = lastSlots[plate.name],
+               prevSlot.speciesEn == s.speciesEn {
+                // 既知の最大と大きく食い違う読みは、最大値の桁誤読
+                // ではなく数字の連結等の化けで、割合自体が作られて
+                // いる (実例: 2026-11-23 battle_20261123_062508、
+                // 177/177 が「177277」と読まれ 64% の幽霊行が出た)。
+                // このフレームの HP は読めなかったものとして前回
+                // 値を保つ (最大値の採用ゲートと同じ 36 の閾値)
+                let curBar = s.hpBarPct
+                s = prevSlot
+                s.hpBarPct = curBar
+            } else {
+                s.hpCur = Int((Double(s.hpPercent) / 100.0 * Double(knownMax)).rounded())
+                s.hpMax = knownMax
+            }
         }
         let prev = lastSlots[plate.name]
         if prev?.speciesEn != s.speciesEn {
@@ -6524,6 +6581,18 @@ func asciiDigits(_ s: String) -> String {
 // 実機 OCR (2026-11-20 の --debug 実測) では "145/145" が次のように化ける:
 //   "1457145" (スラッシュが 7 に化ける), "177mzr" (スラッシュ以降が文字化け),
 //   "145/145" (正常)。タイマー "06:29" を HP と誤認しないための除外も含む。
+// 読みの最大値が、既知の最大値の桁レベルの誤読としてあり得るか。
+// 先頭桁の脱落 (145 -> 45) は断片読みとして許し、小さな差は桁の
+// 誤読として許す。それ以外の大差は、数字の連結等の化けで割合
+// 自体が作られている疑いが強い (実例: 2026-11-23
+// battle_20261123_062508、177/177 が「177277」と読まれ最大値が
+// 277 になった)
+func maxReadPlausible(readMax: Int, knownMax: Int) -> Bool {
+    if readMax == knownMax { return true }
+    if knownMax >= 100 && readMax == knownMax % 100 { return true }
+    return abs(readMax - knownMax) <= 36
+}
+
 // knownMax: 判明済みの最大HP (対戦中の記録 or チーム登録の実数値)。現在値だけ
 // 読めた場合に割合を復元するために使う。
 func parseMineHPText(_ text: String, knownMax: Int?) -> (pct: Int, cur: Int, max: Int?)? {
@@ -7849,7 +7918,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 天候チップの告知文 (実機文面は「すなあらしが Xを 襲う！」。
     // OCR では「すな砂あらし」と混ざって読まれることがある)
     if t.contains("襲う") || t.contains("おそう") {
-        if t.contains("砂あらし") || t.contains("すなあらし") || t.contains("砂嵐") {
+        if t.contains("砂あらし") || t.contains("すなあらし") || t.contains("砂嵐")
+            || t.contains("砂あら") || t.contains("すなあら") {
             pendingStatusFrom[key] = ("sandstorm", sNow())
             return true
         }
@@ -7934,7 +8004,15 @@ func translateBattleMessage(_ text: String) -> Bool {
                 || (pendingSwitchCandidates[side == "p2" ? "oppA" : "mineA"]?[sp.en] != nil)
                 || (pendingSwitchCandidates[side == "p2" ? "oppB" : "mineB"]?[sp.en] != nil)
             if missConsistent {
-                emitLog("|-miss|\(lastMoveLabel)|\(slot): \(sp.en)")
+                // 同じ外れ文の表記ゆれ再読で二重に出さない (行動+
+                // 使用者+対象が同じものは 1 回だけ。実例:
+                // 2026-11-23 battle_20261123_062508、リーフ
+                // ストームの外れが 2 行出た)
+                let missKey = "\(actionSeq)|\(lastMoveLabel)|\(slot)"
+                if missKey != lastMissKey {
+                    lastMissKey = missKey
+                    emitLog("|-miss|\(lastMoveLabel)|\(slot): \(sp.en)")
+                }
             } else {
                 debugCapture(kind: "move_guard", key: "miss_target:\(slot):\(sp.en):\(currentTurn)", rawText: t,
                              detail: ["reason": "miss_target_inconsistent", "slot": slot, "species": sp.en, "tracked": missTracked ?? "", "turn": currentTurn])
@@ -8340,10 +8418,20 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 被ダメ行・ひんし行が無音で消えた)
         if !faintPn.isEmpty && (lastEmittedPct[faintPn] ?? 1) > 0 {
             heldLine[faintPn] = nil
-            let fhp = monStates[faintKey]?.hpMax.map { "0/\($0)" } ?? "0/100"
+            // 分母は判明している実最大で統一する。monStates の
+            // hpMax は登録済み種族では入らないため battleKnownMax
+            // でも引く (プレート 0% 経路と同じ統一。実例:
+            // 2026-11-23 battle_20261123_062508、コータスだけ
+            // 0/100 になった)
+            var fhp = monStates[faintKey]?.hpMax.map { "0/\($0)" }
+            if fhp == nil, let fe = speciesDict.first(where: { $0.en == faintSp.en }),
+               let km = battleKnownMax(speciesEn: faintSp.en, grp: formeGroup(fe)) {
+                fhp = "0/\(km)"
+            }
+            let fhpText = fhp ?? "0/100"
             _ = emitDamageLine(plateName: faintPn, slot: faintSlot, key: faintKey, speciesEn: faintSp.en,
                                fromPct: lastEmittedPct[faintPn] ?? (monStates[faintKey]?.hpPercent ?? 100),
-                               toPct: 0, hpText: fhp, force: true)
+                               toPct: 0, hpText: fhpText, force: true)
         }
         // HP 0 への反映は被ダメ行 (と後続の ひんし行) の applyEvent が行う
         deferFaint(slot: faintSlot, speciesEn: faintSp.en)
@@ -10949,7 +11037,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0644"
+let readerBuild = "20261123_0707"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
