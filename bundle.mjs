@@ -27476,6 +27476,7 @@ function createEstimator(deps) {
   let infLastMove = null;
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
+  let speCtxSeq = 0, lastSpeAppliedId = 0;
   let pendingOpts = null;
   let teamContextSpecies = null;
   let infLog = [], infLogSeq = 0, infLogTurn = null;
@@ -27765,7 +27766,7 @@ function createEstimator(deps) {
       const ok = trick ? firstIsOpp ? eff <= myEff : eff >= myEff : firstIsOpp ? eff >= myEff : eff <= myEff;
       if (ok) feasible.add(row.nature + "|" + row.sp);
     }
-    lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: effTw("p2"), oppMd, myPrio: myBr.prio };
+    lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: effTw("p2"), oppMd, myPrio: myBr.prio, _id: ++speCtxSeq };
     infIntersect(oppSpecies, "spe", feasible, null);
     return intents;
   }
@@ -28532,6 +28533,10 @@ function createEstimator(deps) {
     if (!ctx || ctx.turn !== ev.turn) return;
     const ent = bayesEntry(ctx.species);
     if (!ent) return;
+    if (ctx._id != null) {
+      if (ctx._id === lastSpeAppliedId) return;
+      lastSpeAppliedId = ctx._id;
+    }
     const panel = io.opp[ctx.species] || null;
     const verdicts = ent.cands.map((c) => {
       const speVal = panel && panel.mega && c.valuesMega ? c.valuesMega.spe : c.values.spe;
@@ -28800,6 +28805,7 @@ function createEstimator(deps) {
     logTrigger = null;
     bayesReset();
     lastSpeCtx = null;
+    lastSpeAppliedId = 0;
   }
   return {
     reset,
