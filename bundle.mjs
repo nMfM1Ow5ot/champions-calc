@@ -27478,6 +27478,7 @@ function createEstimator(deps) {
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
   let speCtxSeq = 0, lastSpeAppliedId = 0;
+  let lastFaintCtx = null, faintCtxSeq = 0, lastFaintAppliedId = 0;
   let pendingOpts = null;
   let teamContextSpecies = null;
   let infLog = [], infLogSeq = 0, infLogTurn = null;
@@ -28675,6 +28676,148 @@ function createEstimator(deps) {
       speFlag: ent.speFlag || null
     });
   }
+  const NEGATIVE_PRIORITY = { "Trick Room": -7, "Dragon Tail": -6, "Circle Throw": -6, "Roar": -6, "Whirlwind": -6, "Teleport": -6 };
+  function bracketOf(md, ability) {
+    const br = moveBracket(md, ability);
+    if (Object.prototype.hasOwnProperty.call(NEGATIVE_PRIORITY, md.name)) {
+      return { prio: NEGATIVE_PRIORITY[md.name] + (ability === "Prankster" && md.category === "Status" ? 1 : 0), last: br.last };
+    }
+    return br;
+  }
+  function faintOrderBuildCtx(ev, io) {
+    if (typeof ev.turn === "number") infLogTurn = ev.turn;
+    const moverSide = labelSide(ev.label);
+    const moverSpecies = labelSpecies(ev.label);
+    const victimSpecies = labelSpecies(ev.victimLabel || "");
+    if (!moverSpecies || !victimSpecies) return null;
+    const firstIsOpp = moverSide === "p2";
+    const oppSpecies = firstIsOpp ? moverSpecies : victimSpecies;
+    const moverSpec = (firstIsOpp ? io.opp[moverSpecies] : io.my[moverSpecies]) || null;
+    const victimSpec = (firstIsOpp ? io.my[victimSpecies] : io.opp[victimSpecies]) || null;
+    const mySpec = firstIsOpp ? victimSpec : moverSpec;
+    if (!moverSpec || !victimSpec || !mySpec) return null;
+    const md = moveData(ev.move);
+    if (!md) return null;
+    const ORDER_ITEMS = ["Quick Claw", "Custap Berry", "Lagging Tail", "Full Incense"];
+    const moverItemKnown = moverSide === "p1" || (moverSpec.corrected || []).includes("\u6301\u3061\u7269");
+    if (moverItemKnown && ORDER_ITEMS.includes(moverSpec.itemLost ? "" : moverSpec.item)) return null;
+    const moverAbKnown = moverSide === "p1" || (moverSpec.corrected || []).includes("\u7279\u6027");
+    const moverBr = bracketOf(md, moverAbKnown ? moverSpec.ability : "");
+    if (moverSide === "p1" && moverBr.last) return null;
+    if (moverAbKnown && moverSpec.ability === "Gale Wings" && md.type === "Flying") return null;
+    if (firstIsOpp && ORDER_ITEMS.includes(mySpec.itemLost ? "" : mySpec.item)) return null;
+    let victimMinPrio = null;
+    if (ev.victimMove) {
+      const vMd = moveData(ev.victimMove);
+      if (!vMd) return null;
+      const vAbKnown = firstIsOpp || (victimSpec.corrected || []).includes("\u7279\u6027");
+      const vBr = bracketOf(vMd, vAbKnown ? victimSpec.ability : "");
+      if (vBr.last) return null;
+      victimMinPrio = vBr.prio;
+    } else if (firstIsOpp) {
+      const moves = victimSpec.moves || [];
+      if (!moves.length) return null;
+      let mn = Infinity;
+      for (const m of moves) {
+        const mData = moveData(m);
+        if (!mData) return null;
+        const br = bracketOf(mData, victimSpec.ability);
+        if (br.last) {
+          mn = -Infinity;
+          break;
+        }
+        if (br.prio < mn) mn = br.prio;
+      }
+      victimMinPrio = mn;
+    }
+    if (victimMinPrio != null && victimMinPrio !== moverBr.prio) return null;
+    const myTable = statTable(effSpecies(mySpec));
+    const myRow = myTable?.spe.find((r) => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
+    if (!myRow) return null;
+    const tw = (s) => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
+    const trick = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+    const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.itemLost ? "" : mySpec.item, mySpec.status, tw("p1"), mySpec.ability, io.field.weather, io.field.terrain, !!mySpec.unburden);
+    return { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw("p2"), oppMd: firstIsOpp ? md : null, myPrio: moverBr.prio, victimMinPrio, _id: ++faintCtxSeq };
+  }
+  function processFaintOrderInf(ev, io) {
+    const ctx = faintOrderBuildCtx(ev, io);
+    lastFaintCtx = ctx;
+    if (!ctx) return;
+    if (ctx.victimMinPrio == null) return;
+    const oppSpec = io.opp[ctx.species] || null;
+    if (!oppSpec) return;
+    const table = statTable(effSpecies(oppSpec));
+    if (!table) return;
+    const itemKnown = (oppSpec.corrected || []).includes("\u6301\u3061\u7269");
+    const abKnown = (oppSpec.corrected || []).includes("\u7279\u6027");
+    const feasible = /* @__PURE__ */ new Set();
+    for (const row of table.spe) {
+      const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? oppSpec.itemLost ? "" : oppSpec.item : "", oppSpec.status, ctx.twP2, abKnown ? oppSpec.ability : "", io.field.weather, io.field.terrain, !!oppSpec.unburden);
+      const ok = ctx.trick ? ctx.firstIsOpp ? eff <= ctx.myEff : eff >= ctx.myEff : ctx.firstIsOpp ? eff >= ctx.myEff : eff <= ctx.myEff;
+      if (ok) feasible.add(row.nature + "|" + row.sp);
+    }
+    infIntersect(ctx.species, "spe", feasible, null);
+  }
+  function processFaintOrderBayes(ev, io) {
+    const ctx = lastFaintCtx;
+    if (!ctx || ctx.turn !== ev.turn) return;
+    const ent = bayesEntry(ctx.species);
+    if (!ent) return;
+    if (ctx._id != null) {
+      if (ctx._id === lastFaintAppliedId) return;
+      lastFaintAppliedId = ctx._id;
+    }
+    const panel = io.opp[ctx.species] || null;
+    const verdicts = ent.cands.map((c) => {
+      const speVal = panel && panel.mega && c.valuesMega ? c.valuesMega.spe : c.values.spe;
+      if (speVal == null) return null;
+      const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
+      const itemForSpe = panel && panel.itemLost ? "" : ent.speFlag || c.item;
+      if (ctx.firstIsOpp) {
+        if (ctx.oppMd) {
+          if (cAb === "Gale Wings" && ctx.oppMd.type === "Flying") return null;
+          const cBr = bracketOf(ctx.oppMd, cAb);
+          if (cBr.last) return !ctx.firstIsOpp;
+          if (cBr.prio !== ctx.myPrio) return cBr.prio > ctx.myPrio === ctx.firstIsOpp;
+        }
+        if (itemForSpe === "Quick Claw" || itemForSpe === "Custap Berry") return null;
+        if (itemForSpe === "Lagging Tail" || itemForSpe === "Full Incense") return !ctx.firstIsOpp;
+      } else {
+        if (ctx.victimMinPrio == null) {
+          const pool = [.../* @__PURE__ */ new Set([...c.moves || [], ...c.movePool || []])];
+          if (!pool.length) return null;
+          let mn = Infinity;
+          for (const m of pool) {
+            const mData = moveData(m);
+            if (!mData) return null;
+            if (cAb === "Gale Wings" && mData.type === "Flying") return null;
+            const br = bracketOf(mData, cAb);
+            if (br.last) return null;
+            if (br.prio < mn) mn = br.prio;
+          }
+          if (mn !== ctx.myPrio) return null;
+        }
+        if (itemForSpe === "Quick Claw" || itemForSpe === "Custap Berry") return null;
+        if (itemForSpe === "Lagging Tail" || itemForSpe === "Full Incense") return true;
+      }
+      const eff = infEffSpe(speVal, panel ? panel.boosts : {}, itemForSpe, panel ? panel.status : "", ctx.twP2, cAb, io.field.weather, io.field.terrain, !!(panel && panel.unburden));
+      if (eff === ctx.myEff) return null;
+      return ctx.trick ? ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff : ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff;
+    });
+    const res = bayesHardSpe(ent, verdicts);
+    if (!res.applied && !ent.speFlag) {
+      ent.speFlag = ctx.firstIsOpp ? ctx.trick ? "Iron Ball" : "Choice Scarf" : ctx.trick ? "Choice Scarf" : "Iron Ball";
+    }
+    logSnapshot(ctx.species, ev.turn, {
+      kind: "faintOrder",
+      move: ev.move || null,
+      firstIsOpp: !!ctx.firstIsOpp,
+      applied: res.applied,
+      excluded: res.excluded,
+      ...res.applied ? {} : { inconsistent: true },
+      speFlag: ent.speFlag || null
+    });
+  }
   function applyRevealed(list) {
     if (!bayes) return;
     syncData();
@@ -28904,6 +29047,8 @@ function createEstimator(deps) {
     bayesReset();
     lastSpeCtx = null;
     lastSpeAppliedId = 0;
+    lastFaintCtx = null;
+    lastFaintAppliedId = 0;
   }
   return {
     reset,
@@ -28919,6 +29064,8 @@ function createEstimator(deps) {
     processDamageBayes,
     processMoveInf,
     processMoveBayes,
+    processFaintOrderInf,
+    processFaintOrderBayes,
     processAbility: infProcessAbility,
     applyRevealed,
     candRanges,
