@@ -652,6 +652,16 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
         try {
           const r = calculate(gen, attackers[i], defenders[j], moveObj, useField);
           const range = r.range();
+          // 乱数幅の内訳 (16 本)。多段技はヒットごとのロールを要素ごとに
+          // 合計して合計ダメージの 16 本にする (range() と一致する)
+          const dm = r.damage;
+          let rolls = null;
+          if (Array.isArray(dm)) {
+            if (Array.isArray(dm[0])) {
+              rolls = new Array(16).fill(0);
+              for (const hit of dm) { if (!Array.isArray(hit)) continue; for (let ri = 0; ri < 16; ri++) rolls[ri] += hit[ri] || 0; }
+            } else rolls = dm.slice();
+          } else if (typeof dm === 'number') rolls = [dm];
           const defMaxHP = defenders[j].maxHP();
           let koText = r.kochance().text;
           let descText = r.desc();
@@ -676,6 +686,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             maxPct: Math.round(range[1] / defMaxHP * 1000) / 10,
             ko: koText,
             desc: descText,
+            rolls,
           });
         } catch (e) {
           row.vs.push({ error: e.message });
