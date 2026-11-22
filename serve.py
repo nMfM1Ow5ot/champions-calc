@@ -63,13 +63,22 @@ _SYNC_RAW_BASE = "https://raw.githubusercontent.com/nMfM1Ow5ot/champions-calc/ma
 _SYNC_REPAIR_EXCLUDE = {"my_team.json", "serve.py"}
 _SYNC_BASE = os.path.dirname(SELF_PATH)
 _last_missing_repair_at = -1e9
+# 自己修復は、実際にサーバーとして起動したプロセスでのみ動く
+# (main() が同期スレッドを始める前に立てる)。テスト等がモジュール
+# を読み込んで sync_loop を回しても、共有ワークスペースの未 push
+# 変更を公開済みの内容で上書きしないためのガード (2026-11-22 に
+# テスト実行中の自己修復が他チャットの未 push 変更を 2 回消した)
+_LIVE_SERVER = False
 
 
 def _repair_missing_synced_files():
     """公開マニフェストにあってローカルで不足しているファイルを補う。
+    実サーバーとして起動したプロセス以外では何もしない。
 
     補った相対パスのリストを返す。ネットワーク失敗時は空リストで、
     例外は外へ出さない (同期スレッドを止めないため)。"""
+    if not _LIVE_SERVER:
+        return []
     repaired = []
     try:
         req = urllib.request.Request(_SYNC_RAW_BASE + "ui_manifest.json",
@@ -1845,6 +1854,7 @@ if __name__ == "__main__":
                   "python3 serve.py --note を実行してください)", flush=True)
     except Exception:
         pass
+    _LIVE_SERVER = True   # 実サーバーとして起動した印 (自己修復のガード用)
     threading.Thread(target=sync_loop, daemon=True).start()
     # バックグラウンドで動くプロセスがターミナル読み取りで止まらない
     # ようにする (start_all.sh では serve.py は裏で動くため、ジョブ制御の
