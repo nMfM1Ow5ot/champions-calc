@@ -131,6 +131,15 @@ for (const [forme, base] of Object.entries(INHERIT_ABILITIES)) {
     fallbackNames.splice(fallbackNames.indexOf(forme), 1);
   }
 }
+// Champions (Z-A) の実装が PokeAPI・calc のデータと異なる特性の上書き。
+// Floette-Eternal は未解禁フォルムとして calc では Flower Veil /
+// Symbiosis だが、実機 (Champions) では Fairy Aura を持つ
+// (実例: 2026-11-22 battle_20261122_201011、特性の告知文で確認。
+// この上書きが無いと reader の特性行ガードが正しい行を弾く)
+const OVERRIDES = {
+  'Floette-Eternal': ['Fairy Aura'],
+};
+for (const [k, v] of Object.entries(OVERRIDES)) out[k] = v;
 console.log(`species abilities: ${ok} ok, ${inherited} inherited, ${fallback} calc fallback, ${missing} missing / ${names.length}`);
 if (fallbackNames.length) console.log(`calc fallback のままの種族: ${fallbackNames.join(', ')}`);
 writeFileSync(new URL('./data/species_abilities.json', import.meta.url), JSON.stringify(out, null, 1));
