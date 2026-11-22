@@ -3423,6 +3423,56 @@ function commitEstStat(side, k, raw) {
   calcAll();
 }
 
+// 自チーム暫定リスト (見せ合い選出画面で検出した自チーム編成) の適用。
+// state の mineTeam が現在のパネルの種族構成と矛盾する場合は、暫定
+// リストで上書きする。暫定リストで不明な型情報 (特性・持ち物・努力値
+// など) は、同種族の既存パネル → 読み込み済みの登録チーム (my_team)
+// → 既定の型 の順で補い、後続の更新が届くまではその値を使う
+function applyMineTeamPreview(list) {
+  const entries = [];
+  for (const en of list) {
+    const raw = typeof en === 'string' ? en : (en && en.species);
+    if (!raw) continue;
+    const sp = resolveSpecies(raw) || raw;
+    if (sp && !entries.some(e => e.species === sp)) entries.push({ species: sp, info: (en && typeof en === 'object') ? en : {} });
+  }
+  if (!entries.length) return false;
+  // 暫定リストで判明している項目をパネルへ反映する (後続の更新で情報が
+  // 増えた場合も、種族構成が同じまま取り込めるようにする)
+  const applyInfo = (spec, info) => {
+    let touched = false;
+    if (info.item) { const v = resolveItem(info.item) || info.item; if (spec.item !== v) { spec.item = v; touched = true; } }
+    if (info.ability) { const v = resolveAbility(info.ability) || info.ability; if (spec.ability !== v) { spec.ability = v; touched = true; } }
+    if (Array.isArray(info.moves) && info.moves.length) {
+      const v = info.moves.map(m => resolveMove(m) || m).filter(Boolean).slice(0, 4);
+      if (v.length && v.join('') !== (spec.moves || []).join('')) { spec.moves = v; touched = true; }
+    }
+    return touched;
+  };
+  const cur = state.mine.map(s => s.species);
+  if (cur.length === entries.length && cur.every((s, i) => s === entries[i].species)) {
+    let touched = false;
+    entries.forEach((e, i) => { if (applyInfo(state.mine[i], e.info)) touched = true; });
+    return touched;
+  }
+  const prevSelSpecies = state.mine[state.sel.mine] && state.mine[state.sel.mine].species;
+  const old = state.mine;
+  state.mine = entries.map(({ species, info }) => {
+    let spec = old.find(s => s.species === species) || null;
+    if (!spec) {
+      const pi = PRESETS.findIndex(p => p && p.species === species);
+      spec = pi >= 0 ? presetSpec(pi) : ownSpeciesSpec(species, 'usage');
+    }
+    applyInfo(spec, info);
+    return spec;
+  });
+  for (const sp of [...faintLock.mine]) if (!entries.some(e => e.species === sp)) faintLock.mine.delete(sp);
+  const si = state.mine.findIndex(s => s.species === prevSelSpecies);
+  state.sel.mine = si >= 0 ? si : 0;
+  lastActiveKey.mine = '';
+  presetApplied.mine = '';
+  return true;
+}
 function applyState(j) {
   if (!j || typeof j !== 'object') return;
   let changed = false;
@@ -3480,6 +3530,9 @@ function applyState(j) {
     // でロックを解除し、パネルは oppTeam 側の差し替えで作り直す
     battleResetPending = true;
     changed = true;
+  }
+  if (Array.isArray(j.mineTeam) && j.mineTeam.length) {
+    if (applyMineTeamPreview(j.mineTeam)) changed = true;
   }
   if (Array.isArray(j.mine)) {
     const idxs = [];
