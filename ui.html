@@ -2919,6 +2919,31 @@ $('applyjson').addEventListener('click', () => {
 
 /* ---------- state.json 連携 ---------- */
 const lastActiveKey = { mine: '', opps: '' };
+// 行動順の証拠は、ペアの最初の技が発動する前 (実質ターン開始時点) の
+// ランク補正で評価する。パネルの現在値は、そのターンの技で変化した
+// 補正 (がんせきふうじの素早さ低下、くだけるよろいの上昇など) を
+// 含みうるため、前回処理時点のパネル補正の控えをターン開始分として
+// 保持し、技イベントの文脈ではそちらを渡す
+// (battle_20261122_171847 seq34/35: 補正後の値で全候補が矛盾し
+// speFlag が誤発火した)
+let turnStartBoosts = {};   // turn -> { 'mine:<species>' | 'opp:<species>': boosts }
+let prevPanelBoosts = null; // 前回の applyState 処理後のパネル補正の控え
+function snapshotPanelBoosts() {
+  const m = {};
+  for (const s of state.mine) if (s) m['mine:' + s.species] = { ...(s.boosts || {}) };
+  for (let pi = 0; pi < state.oppTeam.length; pi++) { const s = state.opps[pi]; if (s) m['opp:' + state.oppTeam[pi]] = { ...(s.boosts || {}) }; }
+  return m;
+}
+// 技イベント用の文脈: パネルのランク補正を、そのターンの開始時点の
+// 控えで置き換えたもの (控えが無いターンは現在値のまま)
+function estCtxAtTurnStart(turn) {
+  const ctx = estCtx();
+  const snap = typeof turn === 'number' ? turnStartBoosts[turn] : null;
+  if (!snap) return ctx;
+  for (const k of Object.keys(ctx.my)) { const b = snap['mine:' + k]; if (b) ctx.my[k] = { ...ctx.my[k], boosts: { ...b } }; }
+  for (const k of Object.keys(ctx.opp)) { const b = snap['opp:' + k]; if (b) ctx.opp[k] = { ...ctx.opp[k], boosts: { ...b } }; }
+  return ctx;
+}
 // フォーカス (選択中の1体) を盤面の読み取りに追随させるか。自分側と
 // 相手側で独立に設定する。'auto' = 交代で入ってきた方へ自動で移す /
 // 'manual' = クリックでのみ変わる
@@ -3011,6 +3036,8 @@ function resetInference() {
   calcLog = calcArchive[inferBucketKey()] || [];
   calcLastSig = '';
   curTurn = null;
+  turnStartBoosts = {};
+  prevPanelBoosts = null;
   // 蓄積は対戦別アーカイブに残る。inferLog は現在の対戦分のアーカイブを
   // 指し続けるため、同一対戦内のリセットで記録が切り捨てられることはない
   inferLog = inferArchive[inferBucketKey()] || [];
@@ -3284,10 +3311,10 @@ function applyEstIntent(it) {
   }
 }
 function infProcessMove(ev) {
-  const intents = estimator.processMoveInf(ev, estCtx());
+  const intents = estimator.processMoveInf(ev, estCtxAtTurnStart(ev.turn));
   for (const it of intents) applyEstIntent(it);
 }
-function bayesProcessMove(ev) { estimator.processMoveBayes(ev, estCtx()); }
+function bayesProcessMove(ev) { estimator.processMoveBayes(ev, estCtxAtTurnStart(ev.turn)); }
 function infProcessDamage(ev) {
   const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
   estimator.processDamageInf(ev, { myAtk: infMySpec(a, ev, true), myDef: infMySpec(d, ev, false), basesAtk: infBases(a, ev, true), basesDef: infBases(d, ev, false) });
@@ -3712,7 +3739,7 @@ function applyState(j) {
     for (let i = estimator.getSeen(); i < j.events.length; i++) {
       const ev = j.events[i];
       if (!ev || typeof ev !== 'object') continue;
-      if (typeof ev.turn === 'number') { expireAutoSide(ev.turn); if (curTurn === null || ev.turn > curTurn) curTurn = ev.turn; }
+      if (typeof ev.turn === 'number') { expireAutoSide(ev.turn); if (curTurn === null || ev.turn > curTurn) curTurn = ev.turn; if (prevPanelBoosts && !turnStartBoosts[ev.turn]) turnStartBoosts[ev.turn] = prevPanelBoosts; }
       if (ev.k === 'mv') { infProcessMove(ev); bayesProcessMove(ev); }
       else if (ev.k === 'dmg') { infProcessDamage(ev); bayesProcessDamage(ev); }
       else if (ev.k === 'ab') { infProcessAbility(ev); }
@@ -3722,6 +3749,7 @@ function applyState(j) {
     syncEstDirty();
     if (infDirty) { infDirty = false; changed = true; }
   }
+  prevPanelBoosts = snapshotPanelBoosts();
   // 判明情報の反映はイベント処理の後に行う。先に反映すると、同じ書き出しで
   // 届いた判明情報のスナップショットが前回分のターンで刻印されてしまう
   // (battle_20261122_054802: ムーンフォースの moveSeen が T3 刻印・実際は T4)
