@@ -3570,6 +3570,41 @@ function commitEstStat(side, k, raw) {
 // リストで上書きする。暫定リストで不明な型情報 (特性・持ち物・努力値
 // など) は、同種族の既存パネル → 読み込み済みの登録チーム (my_team)
 // → 既定の型 の順で補い、後続の更新が届くまではその値を使う
+// 一括再生時の自軍パネルの補完。新しい battle キーを、既に蓄積済みの
+// イベント列とともに初めて適用する場合に限り、state.mine が挙げる種族の
+// うちパネルに無いものを、登録プリセット (あれば) または使用率の型で
+// パネルへ補う。試合中に UI が無処理だった対戦では、パネルが登録チームの
+// まま再生が始まり、参照パネルを自軍に取る証拠処理 (ダメージ・行動順・
+// faintOrder) が全て落ちるため (battle_20261122_192108)。通常の試合中の
+// 適用では呼ばれない
+function supplementMineFromState(j) {
+  if (!Array.isArray(j.mine) || !j.mine.length) return false;
+  const wanted = [];
+  for (const en of j.mine) {
+    if (!en || !en.species) continue;
+    const sp = resolveSpecies(en.species) || en.species;
+    if (sp && !wanted.includes(sp)) wanted.push(sp);
+  }
+  const missing = wanted.filter(sp => !state.mine.some(s => s.species === sp));
+  if (!missing.length) return false;
+  let changed = false;
+  for (const sp of missing) {
+    // 末尾から、state.mine に名前の無い枠 (選択中の枠は除く) を差し替える
+    let idx = -1;
+    for (let i = state.mine.length - 1; i >= 0; i--) {
+      if (!wanted.includes(state.mine[i].species) && i !== state.sel.mine) { idx = i; break; }
+    }
+    if (idx < 0) break;
+    const pi = PRESETS.findIndex(p => p.species === sp);
+    state.mine[idx] = pi >= 0 ? presetSpec(pi) : ownSpeciesSpec(sp, 'usage');
+    changed = true;
+  }
+  if (changed) {
+    for (const sp of [...faintLock.mine]) if (!state.mine.some(s => s.species === sp)) faintLock.mine.delete(sp);
+    presetApplied.mine = '';
+  }
+  return changed;
+}
 function applyMineTeamPreview(list) {
   const entries = [];
   for (const en of list) {
@@ -3631,6 +3666,7 @@ function applyState(j) {
   // ことがある (battle_20261121_132153 の件) ため、ID の変化でも確定させ、
   // サイドコンディションと推定イベントを初期化する (HP 反映より前に行う)
   const bkey = (typeof j.battle === 'string' && j.battle) ? j.battle : null;
+  const isNewBattleKey = !!bkey && bkey !== lastBattleKey;
   if (bkey) {
     if (lastBattleKey && bkey !== lastBattleKey) {
       // 前の対戦は終わっている。保留中の版数リロードがあればここで反映し、
@@ -3683,6 +3719,11 @@ function applyState(j) {
   }
   if (Array.isArray(j.mineTeam) && j.mineTeam.length) {
     if (applyMineTeamPreview(j.mineTeam)) changed = true;
+  }
+  // 一括再生 (新しい battle キーを蓄積済みイベントと初めて適用) のときだけ、
+  // state.mine の種族で自軍パネルを補う。通常の試合中の適用には影響しない
+  if (isNewBattleKey && Array.isArray(j.events) && j.events.length) {
+    if (supplementMineFromState(j)) changed = true;
   }
   if (Array.isArray(j.mine)) {
     const idxs = [];
