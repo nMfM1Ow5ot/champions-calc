@@ -658,6 +658,12 @@ def _is_upload_target(name):
         # ファイル一式の一部として、備考ゲート付きで試合ログと
         # 一緒に送る
         return True
+    if name.endswith("_paddle.jsonl"):
+        # PaddleOCR 補助チャンネルの証拠 (reader がサイドカーの生の
+        # 読みを併記したもの。状態の決定には使われていない)。obs と
+        # 同じく、その試合のファイル一式の一部として、備考ゲート
+        # 付きで試合ログと一緒に送る
+        return True
     return "_debug" in name and (name.endswith(".jpg") or name.endswith(".json"))
 
 
@@ -793,6 +799,8 @@ def _battle_key(name):
         rest = rest[: -len("_states.json")]
     elif rest.endswith("_obs.jsonl"):
         rest = rest[: -len("_obs.jsonl")]
+    elif rest.endswith("_paddle.jsonl"):
+        rest = rest[: -len("_paddle.jsonl")]
     elif rest.endswith(".log"):
         rest = rest[: -len(".log")]
         if rest.endswith("_protocol"):
