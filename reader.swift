@@ -638,6 +638,8 @@ var lastWritten = ""
 var oppTeamSeen: [String] = []
 var headerOppTeam: [String] = []          // ログ開始時にヘッダーへ書いた相手6体 (開始時点の控え)
 var headerIdScores: [String: Double] = [:]   // "p2:種族" -> 見せ合い同定のベストスコア (開始時点の控え。ヘッダー補完の削除候補の優先順位に使う)
+var headerPickByCandidate: [String: String] = [:]   // "p2:候補種族" -> その種族が次点だった枠の pick (開始時点の控え。ヘッダー補完で誤同定の枠を外す証拠)
+var headerSlotMargins: [String: Double] = [:]   // "p2:pick種族" -> その枠での次点とのスコア差 (開始時点の控え)
 var headerMismatchFired: Set<String> = []  // header_mismatch を記録済みの種族
 // 選出同定で入ったが、対戦中にまだ実物が観測されていない種族。
 // 選出の推定 (仮置きはもちろん、タイプで「確定」した枠もアイコン誤読なら
@@ -1967,6 +1969,34 @@ func fieldLineForAbility(_ ability: String) -> String? {
     }
 }
 
+// 特性行がフィールドの開始行より遅れて出た場合に、開始行へ
+// [from] の帰属を付け直す (プロトコル行のみ。表示行には出ない)。
+// 対象は同じターン区間にある帰属なしの開始行だけで、その区間に
+// 同じ天候・地形を呼ぶ技行が先行する場合は技由来とみて付けない
+// (実例: 2026-11-22 battle_20261122_231107、あめふらしの特性行が
+// 雨の開始行より後ろに出て、帰属が付かなかった)
+func annotateFieldLineFromAbility(_ abilityLine: String) {
+    let f = abilityLine.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+    guard f.count >= 4, f[1] == "-ability" else { return }
+    let label = f[2]
+    let ability = f[3]
+    guard let fieldLine = fieldLineForAbility(ability) else { return }
+    let turnIdx = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") }) ?? -1
+    guard turnIdx + 1 <= battleLog.count else { return }
+    let seg = Array(battleLog[(turnIdx + 1)...])
+    guard let rel = seg.lastIndex(of: fieldLine) else { return }
+    let rawName: String
+    if fieldLine.hasPrefix("|-fieldstart|move: ") {
+        rawName = String(fieldLine.dropFirst("|-fieldstart|move: ".count))
+    } else {
+        rawName = String(fieldLine.dropFirst("|-weather|".count))
+    }
+    let moveName = rawName == "Snow" ? "Snowscape" : rawName
+    if seg[..<rel].contains(where: { $0.hasPrefix("|move|") && $0.hasSuffix("|\(moveName)") }) { return }
+    if let swIdx = seg.lastIndex(where: { $0.hasPrefix("|switch|\(label)|") || $0.hasPrefix("|drag|\(label)|") }), swIdx > rel { return }
+    battleLog[turnIdx + 1 + rel] = "\(fieldLine)|[from] ability: \(ability)|[of] \(label)"
+}
+
 func fieldRenderForAbility(_ ability: String) -> String? {
     switch ability {
     case "Drought": return "The sunlight turned harsh!"
@@ -2539,6 +2569,9 @@ func emitLog(_ line: String, applyNow: Bool) {
             }
         }
     }
+    // フィールド開始行への [from] 帰属は、特性行の並び訂正が済んだ
+    // 後に付ける (訂正側は帰属なしの開始行を完全一致で探すため)
+    if line.hasPrefix("|-ability|") { annotateFieldLineFromAbility(line) }
 }
 
 func resetLogState() {
@@ -2567,6 +2600,8 @@ func resetLogState() {
     defaultAttribCount = [:]
     headerOppTeam = []
     headerIdScores = [:]
+    headerPickByCandidate = [:]
+    headerSlotMargins = [:]
     headerMismatchFired = []
     // 相手のランク/レート (画像認識側が oppRank / oppRating に入れる):
     // 見せ合いが直近 (60 秒以内) に目撃されていれば、この対戦の開始
@@ -2710,7 +2745,7 @@ func itemLineImplausible(_ line: String) -> Bool {
 // battle_20261122_050512、Salamence / Rillaboom の宣言が無かった)。
 // 交代行に実際に現れた種族は対戦にいたことが確定しているため、
 // 保存時に限り、現れた順で宣言へ補う (ライブの状態には触れない)
-func completeArchiveHeader(protocolLines: [String], displayLines: [String], idScores: [String: Double] = [:]) -> (protocolLines: [String], displayLines: [String], added: [String], removed: [String]) {
+func completeArchiveHeader(protocolLines: [String], displayLines: [String], idScores: [String: Double] = [:], pickByCandidate: [String: String] = [:], slotMargins: [String: Double] = [:]) -> (protocolLines: [String], displayLines: [String], added: [String], removed: [String]) {
     var proto = protocolLines
     var added: [String] = []
     var removed: [String] = []
@@ -2742,18 +2777,35 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String], idSc
             let unused = declared.filter { d in !appeared.contains { sameSpeciesFamily($0, d) } }
             let removeCount = min(unused.count, declared.count + missing.count - 6)
             if removeCount > 0 {
-                // 削除候補は同定スコアの低い順に選ぶ (スコアが無い
-                // 種族は最後尾扱い、同点は宣言の後ろのものから)。
-                // 位置だけで末尾から落とすと、正しく同定された
-                // 種族が誤同定より先に落ちる (実例: 2026-11-22
-                // battle_20261122_185505、Kommo-o (スコア 0.332) が
-                // 落ち、0.126 の Slowking-Galar が残った)
-                let removing = Array(unused.enumerated().sorted { a, b in
-                    let sa = idScores["\(side):\(a.element)"] ?? .infinity
-                    let sb = idScores["\(side):\(b.element)"] ?? .infinity
-                    if sa != sb { return sa < sb }
-                    return a.offset > b.offset
-                }.prefix(removeCount).map { $0.element })
+                // 削除候補の選定: (1) 実登場した未宣言種族が次点だった
+                // 枠の pick を最優先で落とす (その枠の同定が誤りだった
+                // 直接証拠)。(2) 残りは枠内の優位差 (次点とのスコア差)
+                // が小さい順 (辛勝の枠ほど誤同定の疑いが強い)。
+                // 生スコア順は採らない: スコアは枠ごとの距離であり、
+                // 枠をまたいだ比較は意味を持たない (実例: 2026-11-22
+                // battle_20261122_231107、正しい Sneasler (-0.190) が
+                // 落ち、誤同定の Barbaracle (0.45) が残った。185505
+                // では逆の数値関係で生スコア順が偶然機能していた)
+                var pool = unused
+                var picked: [String] = []
+                for m in missing {
+                    if let pick = pickByCandidate["\(side):\(m)"],
+                       pool.contains(pick), !picked.contains(pick) {
+                        picked.append(pick)
+                        pool.removeAll { $0 == pick }
+                    }
+                    if picked.count >= removeCount { break }
+                }
+                if picked.count < removeCount {
+                    let rest = Array(pool.enumerated().sorted { a, b in
+                        let ma = slotMargins["\(side):\(a.element)"] ?? .infinity
+                        let mb = slotMargins["\(side):\(b.element)"] ?? .infinity
+                        if ma != mb { return ma < mb }
+                        return a.offset > b.offset
+                    }.prefix(removeCount - picked.count).map { $0.element })
+                    picked += rest
+                }
+                let removing = picked
                 let removeSet = Set(removing)
                 proto = proto.filter { line in
                     guard line.hasPrefix("|poke|\(side)|") else { return true }
@@ -2832,7 +2884,7 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String], idSc
 
 func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String, quiet: Bool = false) {
     guard protocolLines.contains("|start") else { return }
-    let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines, idScores: headerIdScores)
+    let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines, idScores: headerIdScores, pickByCandidate: headerPickByCandidate, slotMargins: headerSlotMargins)
     if !completed.added.isEmpty, debugMode {
         print("[log] ヘッダーに宣言の無かった種族を補いました: \(completed.added.joined(separator: ", "))")
         fflush(stdout)
@@ -2987,7 +3039,13 @@ func recordTurnEvidence(turn: Int, path: String, image: CGImage, extra: [String:
     var slots: [String: Any] = [:]
     for name in ["mineA", "mineB", "oppA", "oppB"] {
         if let s = lastSlots[name] {
-            slots[name] = ["species": s.speciesEn, "hp": s.hpPercent] as [String: Any]
+            // HP は枠の読みではなく追跡値 (monStates) を正とする。
+            // 枠の読みが古いと前の占有者の HP が証拠に残る
+            // (実例: 2026-11-22 battle_20261122_231107、turn_decided の
+            // oppB に Pelipper の 35 が残り、追跡値は 90 だった)
+            let side = name.hasPrefix("mine") ? "p1" : "p2"
+            let hp = monStates["\(side):\(s.speciesEn)"]?.hpPercent ?? s.hpPercent
+            slots[name] = ["species": s.speciesEn, "hp": hp] as [String: Any]
         } else {
             slots[name] = ["species": "", "hp": -1] as [String: Any]
         }
@@ -3086,11 +3144,32 @@ func startBattleLog() {
     // 見せ合い同定の票スコアを試合開始時点のまま控える (証拠は
     // 次の試合の同定で上書きされるため、アーカイブ時点では使えない)
     headerIdScores = [:]
+    headerPickByCandidate = [:]
+    headerSlotMargins = [:]
     for slotVotes in previewEvidenceVotes {
         for entry in slotVotes {
             if let sp = entry["species"] as? String, let best = entry["best"] as? Double {
                 let k = "p2:\(sp)"
                 headerIdScores[k] = max(headerIdScores[k] ?? -1, best)
+            }
+        }
+        // 枠内の順位関係も控える: pick (最良) と次点の対応は、後の
+        // ヘッダー補正で「どの枠が誤同定だったか」を決める証拠になる
+        let ranked = slotVotes.compactMap { e -> (String, Double)? in
+            guard let sp = e["species"] as? String, let best = e["best"] as? Double else { return nil }
+            return (sp, best)
+        }.sorted { $0.1 < $1.1 }
+        if let pick = ranked.first {
+            if let runner = ranked.dropFirst().first {
+                headerSlotMargins["p2:\(pick.0)"] = runner.1 - pick.1
+            }
+            for cand in ranked.dropFirst() {
+                let k = "p2:\(cand.0)"
+                if let prev = headerPickByCandidate[k], prev != pick.0 {
+                    headerPickByCandidate[k] = nil   // 複数枠の次点で pick が割れる場合は証拠にしない
+                } else {
+                    headerPickByCandidate[k] = pick.0
+                }
             }
         }
     }
@@ -4142,11 +4221,6 @@ func processPlates(_ hits: [String: SlotState]) {
                     continue
                 }
                 let pendingSwitchAge = pendingSwitchSince[plate.name].map { sNow().timeIntervalSince($0) } ?? 0
-                pendingSwitchSpecies[plate.name] = nil
-                pendingSwitchCount[plate.name] = nil
-                pendingSwitchSince[plate.name] = nil
-                pendingSwitchCandidates[plate.name] = nil
-                if sendOutTextSeen[side]?.species == s.speciesEn { sendOutTextSeen[side] = nil }
                 // 交代要員を選んでいる間は、控え一覧画面のバーが場のプレートと
                 // して読めて、生きている枠にまで交代行が出ることがある
                 // (実例: 2026-11-20、グレンアルマの交代要員選択中に
@@ -4170,6 +4244,30 @@ func processPlates(_ hits: [String: SlotState]) {
                 let replacementBusy = plate.name.hasPrefix("mine") && faintedSlots[slot] == nil
                     && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
                     && pendingSwitchAge < 20
+                if replacementBusy {
+                    // 破棄ではなく保留にする: 候補の蓄積を消すと、要員
+                    // 選択が終わった後に確定する道まで断たれる (実例:
+                    // 2026-11-22 battle_20261122_231107、ターン2頭の
+                    // Charizard→Venusaur の確定試行が Farigiraf の
+                    // ひんし後の選択中に届いて破棄され、交代行が
+                    // ターン末尾へ遅れた)。静定時計を現在へ戻して
+                    // 先送りすれば、選択画面の幻の候補は画面が消えた
+                    // 後に新たな静定を得られず期限で落ち、本物の交代
+                    // だけが場の読みで静定し直して確定する
+                    if var cand = pendingSwitchCandidates[plate.name]?[s.speciesEn] {
+                        cand.firstSeen = sNow()
+                        cand.count = 1
+                        pendingSwitchCandidates[plate.name]?[s.speciesEn] = cand
+                    }
+                    pendingSwitchSince[plate.name] = sNow()
+                    pendingSwitchCount[plate.name] = 1
+                } else {
+                    pendingSwitchSpecies[plate.name] = nil
+                    pendingSwitchCount[plate.name] = nil
+                    pendingSwitchSince[plate.name] = nil
+                    pendingSwitchCandidates[plate.name] = nil
+                    if sendOutTextSeen[side]?.species == s.speciesEn { sendOutTextSeen[side] = nil }
+                }
                 if !replacementBusy {
                     crossCheckPlateSpecies(plateName: plate.name, speciesEn: s.speciesEn)
                     // 前の種族のランク変化・かるわざの解除は、下の |switch| 行の
@@ -7289,6 +7387,11 @@ func translateBattleMessage(_ text: String) -> Bool {
                 // ゴリランダーへのミス文が、旧占有者の記録との不整合
                 // として抑制された)
                 || switchInTurn["\(side):\(sp.en)"] == currentTurn
+                // 繰り出し文の証拠も、プレート経路とは独立に入場を
+                // 裏付ける (実例: 2026-11-22 battle_20261122_231107、
+                // 交代確定が要員選択のガードで落ち、候補も未形成の
+                // 間に来たミス文には文証拠だけが残っていた)
+                || (sendOutTextSeen[side].map { $0.species == sp.en && sNow().timeIntervalSince($0.at) < 20 } ?? false)
                 || (pendingSwitchCandidates[side == "p2" ? "oppA" : "mineA"]?[sp.en] != nil)
                 || (pendingSwitchCandidates[side == "p2" ? "oppB" : "mineB"]?[sp.en] != nil)
             if missConsistent {
@@ -10114,7 +10217,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2338"
+let readerBuild = "20261122_2339"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
