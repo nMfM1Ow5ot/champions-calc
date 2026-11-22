@@ -28748,9 +28748,11 @@ function createEstimator(deps) {
       bayesApply(ent, counts, true);
     }
   }
-  function processCrit(ev) {
+  let pendingCritRec = null;
+  function processCritInf(ev, io) {
     if (!ev || ev.atk == null || ev.def == null || !ev.move) return;
     if (typeof ev.turn === "number") infLogTurn = ev.turn;
+    pendingCritRec = null;
     const key = ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move;
     let rec = null;
     for (let i = dmgRecords.length - 1; i >= 0; i--) {
@@ -28771,23 +28773,35 @@ function createEstimator(deps) {
     rec.patched = true;
     rec.ev.crit = true;
     rec.opts.crit = true;
+    const infCtx2 = rec.ctx || io;
     const collect = [];
-    processDamageInf(rec.ev, rec.ctx, rec.opts, collect);
+    processDamageInf(rec.ev, infCtx2, rec.opts, collect);
     const touched = /* @__PURE__ */ new Set();
     for (const ref of rec.infRefs) {
-      const nc = collect.find((c) => c.species === ref.species && c.statKey === (infHistory[ref.species] && infHistory[ref.species][ref.idx] ? infHistory[ref.species][ref.idx].statKey : null));
-      if (nc && infHistory[ref.species] && infHistory[ref.species][ref.idx]) {
-        infHistory[ref.species][ref.idx] = { statKey: nc.statKey, feasible: nc.feasible ? new Set(nc.feasible) : nc.feasible, hpSps: nc.hpSps ? new Set(nc.hpSps) : null };
+      const hist = infHistory[ref.species];
+      const nc = hist && hist[ref.idx] ? collect.find((c) => c.species === ref.species && c.statKey === hist[ref.idx].statKey) : null;
+      if (nc) {
+        hist[ref.idx] = { statKey: nc.statKey, feasible: nc.feasible ? new Set(nc.feasible) : nc.feasible, hpSps: nc.hpSps ? new Set(nc.hpSps) : null };
         touched.add(ref.species);
       }
     }
     for (const sp of touched) rebuildInfState(sp);
+    pendingCritRec = { rec, key, infTouched: touched.size > 0 };
+  }
+  function processCritBayes(ev, io) {
+    const pc = pendingCritRec;
+    if (!pc || !ev) return;
+    if (ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move !== pc.key) return;
+    pendingCritRec = null;
+    const rec = pc.rec;
+    const logSpecies = rec.by === "opp" ? rec.atkSpecies : rec.defSpecies;
     let flagCleared = null, bayesPatched = false;
     if (rec.bayes) {
       const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
       if (ent && ent.cands.length === rec.bayes.counts.length) {
+        const bayesCtx = rec.bayesCtx || rec.ctx || io;
         const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null };
-        processDamageBayes(rec.ev, rec.bayesCtx || rec.ctx, rec.opts, capture);
+        processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
         if (capture.counts) {
           if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) {
             ent.dmgFlag = null;
@@ -28816,7 +28830,7 @@ function createEstimator(deps) {
         }
       }
     }
-    logSnapshot(logSpecies, ev.turn, { kind: "critPatch", move: ev.move, applied: true, bayes: bayesPatched, inf: touched.size > 0, ...flagCleared ? { flagCleared } : {} });
+    logSnapshot(logSpecies, ev.turn, { kind: "critPatch", move: ev.move, applied: true, bayes: bayesPatched, inf: pc.infTouched, ...flagCleared ? { flagCleared } : {} });
   }
   function processMoveBayes(ev, io) {
     const ctx = lastSpeCtx;
@@ -29230,6 +29244,7 @@ function createEstimator(deps) {
     dmgRecords = [];
     pendingDmgRecord = null;
     infHistory = {};
+    pendingCritRec = null;
     infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
     infLastMove = null;
     dirty = false;
@@ -29260,7 +29275,8 @@ function createEstimator(deps) {
     processMoveBayes,
     processFaintOrderInf,
     processFaintOrderBayes,
-    processCrit,
+    processCritInf,
+    processCritBayes,
     processAbility: infProcessAbility,
     applyRevealed,
     candRanges,
