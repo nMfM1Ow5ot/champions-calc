@@ -9421,7 +9421,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1753"
+let readerBuild = "20261122_1825"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
