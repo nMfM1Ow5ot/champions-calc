@@ -27480,6 +27480,18 @@ function createEstimator(deps) {
   let speCtxSeq = 0, lastSpeAppliedId = 0;
   let lastFaintCtx = null, faintCtxSeq = 0, lastFaintAppliedId = 0;
   let pendingOpts = null;
+  let dmgRecords = [], pendingDmgRecord = null, infHistory = {};
+  const deepCopy = (o) => {
+    try {
+      return structuredClone(o);
+    } catch (e) {
+      try {
+        return JSON.parse(JSON.stringify(o));
+      } catch (e2) {
+        return o;
+      }
+    }
+  };
   let teamContextSpecies = null;
   let infLog = [], infLogSeq = 0, infLogTurn = null;
   let logTrigger = null;
@@ -27564,6 +27576,11 @@ function createEstimator(deps) {
     return out;
   }
   function infIntersect(species, statKey, feasible, hpSps) {
+    if (!infHistory[species]) infHistory[species] = [];
+    const histIdx = infHistory[species].length;
+    infHistory[species].push({ statKey, feasible: feasible ? new Set(feasible) : feasible, hpSps: hpSps ? new Set(hpSps) : null });
+    const openRec = dmgRecords.length ? dmgRecords[dmgRecords.length - 1] : null;
+    if (openRec && openRec.open) openRec.infRefs.push({ species, idx: histIdx });
     if (bayes && bayes.bySpecies[species] === void 0) {
       try {
         bayesEntry(species);
@@ -27597,6 +27614,36 @@ function createEstimator(deps) {
     dirty = true;
     logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: true });
   }
+  function rebuildInfState(species) {
+    const e = infEntry(species);
+    e.pairs = { atk: null, spa: null, def: null, spd: null, spe: null };
+    e.hpSps = null;
+    e.used = 0;
+    e.dropped = 0;
+    for (const h of infHistory[species] || []) {
+      if (!h.feasible || !h.feasible.size) {
+        e.dropped++;
+        continue;
+      }
+      const next = e.pairs[h.statKey] ? new Set([...e.pairs[h.statKey]].filter((x) => h.feasible.has(x))) : new Set(h.feasible);
+      if (!next.size) {
+        e.dropped++;
+        continue;
+      }
+      let nh = null;
+      if (h.hpSps) {
+        nh = e.hpSps ? new Set([...e.hpSps].filter((x) => h.hpSps.has(x))) : new Set(h.hpSps);
+        if (!nh.size) {
+          e.dropped++;
+          continue;
+        }
+      }
+      e.pairs[h.statKey] = next;
+      if (h.hpSps) e.hpSps = nh;
+      e.used++;
+    }
+    dirty = true;
+  }
   function specMaxHP(spec) {
     if (!spec) return null;
     const t = statTable(effSpecies(spec));
@@ -27609,9 +27656,9 @@ function createEstimator(deps) {
     const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
     return [lo, hi];
   }
-  function processDamageInf(ev, ctx) {
+  function processDamageInf(ev, ctx, optsOverride, collect) {
     if (typeof ev.turn === "number") infLogTurn = ev.turn;
-    pendingOpts = null;
+    if (!collect) pendingOpts = null;
     const md = moveData(ev.move);
     if (!md || md.category === "Status" || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
     if (ev.atk && ev.atk === ev.def) return;
@@ -27623,28 +27670,53 @@ function createEstimator(deps) {
     if (target === "allAdjacentFoes") targets = ev.defAlive || 1;
     else if (target === "allAdjacent") targets = (ev.defAlive || 1) + Math.max(0, (ev.atkAlive || 1) - 1);
     const gameType = targets >= 2 ? "Doubles" : "Singles";
-    const conds = infSideConds(ev);
-    const opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
-    pendingOpts = opts;
+    let opts;
+    if (optsOverride) {
+      opts = optsOverride;
+    } else {
+      const conds = infSideConds(ev);
+      opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
+      pendingOpts = opts;
+      if (pendingDmgRecord) pendingDmgRecord.open = false;
+      pendingDmgRecord = {
+        key: ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move,
+        turn: ev.turn,
+        atk: ev.atk,
+        def: ev.def,
+        move: ev.move,
+        by: oppIsAtk ? "opp" : "mine",
+        atkSpecies,
+        defSpecies,
+        ev: deepCopy(ev),
+        ctx: deepCopy(ctx),
+        opts: { ...opts },
+        infRefs: [],
+        bayes: null,
+        patched: false,
+        open: true
+      };
+      dmgRecords.push(pendingDmgRecord);
+      if (dmgRecords.length > 400) dmgRecords.splice(0, dmgRecords.length - 400);
+    }
     if (oppIsAtk) {
       const statKey = md.name === "Body Press" ? "def" : md.category === "Physical" ? "atk" : "spa";
       const defSpec = ctx.myDef;
       const bases = ctx.basesAtk;
       const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
       if (!defSpec || !bases.length || !table) {
-        logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-base" });
+        if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-base" });
         return;
       }
       let inRange;
       if (typeof ev.amt === "number" && ev.amt > 0) inRange = (r) => r === ev.amt;
       else {
         if (typeof ev.pct !== "number" || ev.pct <= 0) {
-          logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
+          if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
           return;
         }
         const M = specMaxHP(defSpec);
         if (!M) {
-          logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
+          if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
           return;
         }
         const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
@@ -27665,7 +27737,8 @@ function createEstimator(deps) {
           if (rolls.some(inRange)) for (const r of rows) feasible.add(r.nature + "|" + r.sp);
         }
       }
-      infIntersect(atkSpecies, statKey, feasible, null);
+      if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
+      else infIntersect(atkSpecies, statKey, feasible, null);
     } else {
       if (typeof ev.pct !== "number" || ev.pct <= 0) return;
       const defKey = md.category === "Physical" ? "def" : "spd";
@@ -27673,7 +27746,7 @@ function createEstimator(deps) {
       const bases = ctx.basesDef;
       const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
       if (!atkSpec || !bases.length || !table) {
-        logSnapshot(defSpecies, ev.turn, { kind: "inf", stat: defKey, applied: false, reason: "no-base" });
+        if (!collect) logSnapshot(defSpecies, ev.turn, { kind: "inf", stat: defKey, applied: false, reason: "no-base" });
         return;
       }
       const hpBySp = /* @__PURE__ */ new Map();
@@ -27698,7 +27771,8 @@ function createEstimator(deps) {
           }
         }
       }
-      infIntersect(defSpecies, defKey, feasPairs, feasHp);
+      if (collect) collect.push({ species: defSpecies, statKey: defKey, feasible: feasPairs, hpSps: feasHp });
+      else infIntersect(defSpecies, defKey, feasPairs, feasHp);
     }
   }
   const WEATHER_SPE = { Chlorophyll: "Sun", "Swift Swim": "Rain", "Sand Rush": "Sand", "Slush Rush": "Snow" };
@@ -27708,7 +27782,7 @@ function createEstimator(deps) {
     v = b >= 0 ? Math.floor(v * (2 + b) / 2) : Math.floor(v * 2 / (2 - b));
     if (item === "Choice Scarf") v = Math.floor(v * 1.5);
     if (item === "Iron Ball") v = Math.floor(v / 2);
-    if (ability && WEATHER_SPE[ability] === weather) v *= 2;
+    if (ability && typeof weather === "string" && WEATHER_SPE[ability] === weather) v *= 2;
     if (ability === "Surge Surfer" && terrain === "Electric") v *= 2;
     if (unburden) v *= 2;
     if (tailwind) v *= 2;
@@ -28534,12 +28608,12 @@ function createEstimator(deps) {
     }
     return void 0;
   }
-  function processDamageBayes(ev, ctx) {
+  function processDamageBayes(ev, ctx, optsOverride, capture) {
     if (ev.atk && ev.atk === ev.def) {
       if (labelSide(ev.atk) === "p2") processRecoilBayes(ev);
       return;
     }
-    const opts = pendingOpts;
+    const opts = optsOverride || pendingOpts;
     if (!opts) return;
     const md = moveData(ev.move);
     if (!md) return;
@@ -28549,15 +28623,17 @@ function createEstimator(deps) {
       const defSpec = ctx.myDef;
       const base = ctx.baseAtk;
       if (!ent || !defSpec || !base) {
-        logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false, reason: "no-base" });
+        if (!capture) logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false, reason: "no-base" });
         return;
       }
+      const flagIn = ent.dmgFlag;
+      let flagWork = capture ? capture.flagIn : flagIn;
       const hasAmt = typeof ev.amt === "number" && ev.amt > 0;
       let amtLo = null, amtHi = null;
       if (!hasAmt) {
         const M = typeof ev.pct === "number" && ev.pct > 0 ? specMaxHP(defSpec) : null;
         if (!M) {
-          logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false, reason: "no-amt" });
+          if (!capture) logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false, reason: "no-amt" });
           return;
         }
         const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
@@ -28578,13 +28654,14 @@ function createEstimator(deps) {
         if (over) {
           trig.dir = "over";
           const want = md.category === "Physical" ? "Choice Band" : md.category === "Special" ? "Choice Specs" : null;
-          if (want && !ent.dmgFlag && !ent.itemKnown) {
-            ent.dmgFlag = want;
+          if (want && !flagWork && !ent.itemKnown) {
+            flagWork = want;
+            if (!capture) ent.dmgFlag = want;
             trig.dmgFlagSet = want;
           }
         }
       }
-      const flag = ent.dmgFlag;
+      const flag = flagWork;
       if (flag === "Choice Band" || flag === "Choice Specs") {
         if (flag === "Choice Band" && md.category === "Physical" || flag === "Choice Specs" && md.category === "Special") {
           counts = ent.cands.map((c) => {
@@ -28596,6 +28673,17 @@ function createEstimator(deps) {
         }
       }
       if (!counts.some((n) => n > 0)) trig.reason = trig.dir === "over" ? "over-max" : "no-match";
+      if (capture) {
+        capture.counts = counts;
+        capture.flagSet = trig.dmgFlagSet || null;
+        capture.trig = trig;
+        return;
+      }
+      if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move) {
+        pendingDmgRecord.bayes = { entSpecies: atkSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some((n) => n > 0) };
+        pendingDmgRecord.bayesCtx = deepCopy(ctx);
+        pendingDmgRecord.open = false;
+      }
       logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     } else {
@@ -28604,9 +28692,11 @@ function createEstimator(deps) {
       const atkSpec = ctx.myAtk;
       const base = ctx.baseDef;
       if (!ent || !atkSpec || !base) {
-        logSnapshot(defSpecies, ev.turn, { kind: "damage", move: md.name, by: "mine", pct: ev.pct, applied: false, reason: "no-base" });
+        if (!capture) logSnapshot(defSpecies, ev.turn, { kind: "damage", move: md.name, by: "mine", pct: ev.pct, applied: false, reason: "no-base" });
         return;
       }
+      const flagIn = ent.dmgFlag;
+      let flagWork = capture ? capture.flagIn : flagIn;
       const pctCounts = (c, rolls) => {
         const hpVal = c.values.hp;
         if (!hpVal || !rolls) return 0;
@@ -28626,13 +28716,14 @@ function createEstimator(deps) {
         });
         if (under) {
           trig.dir = "under";
-          if (md.category === "Special" && !ent.dmgFlag && !ent.itemKnown) {
-            ent.dmgFlag = "Assault Vest";
+          if (md.category === "Special" && !flagWork && !ent.itemKnown) {
+            flagWork = "Assault Vest";
+            if (!capture) ent.dmgFlag = "Assault Vest";
             trig.dmgFlagSet = "Assault Vest";
           }
         }
       }
-      if (ent.dmgFlag === "Assault Vest" && md.category === "Special") {
+      if (flagWork === "Assault Vest" && md.category === "Special") {
         counts = ent.cands.map((c) => {
           if (!c.values.hp) return 0;
           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: "Assault Vest" };
@@ -28642,9 +28733,90 @@ function createEstimator(deps) {
         trig.dmgFlag = "Assault Vest";
       }
       if (!counts.some((n) => n > 0)) trig.reason = trig.dir === "under" ? "under-min" : "no-match";
+      if (capture) {
+        capture.counts = counts;
+        capture.flagSet = trig.dmgFlagSet || null;
+        capture.trig = trig;
+        return;
+      }
+      if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move) {
+        pendingDmgRecord.bayes = { entSpecies: defSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some((n) => n > 0) };
+        pendingDmgRecord.bayesCtx = deepCopy(ctx);
+        pendingDmgRecord.open = false;
+      }
       logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     }
+  }
+  function processCrit(ev) {
+    if (!ev || ev.atk == null || ev.def == null || !ev.move) return;
+    if (typeof ev.turn === "number") infLogTurn = ev.turn;
+    const key = ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move;
+    let rec = null;
+    for (let i = dmgRecords.length - 1; i >= 0; i--) {
+      if (dmgRecords[i].key === key && !dmgRecords[i].patched) {
+        rec = dmgRecords[i];
+        break;
+      }
+    }
+    const logSpecies = rec ? rec.by === "opp" ? rec.atkSpecies : rec.defSpecies : labelSpecies(ev.atk);
+    if (!rec) {
+      logSnapshot(logSpecies, ev.turn, { kind: "critPatch", move: ev.move, applied: false, reason: "no-match" });
+      return;
+    }
+    if (rec.ev.crit) {
+      logSnapshot(logSpecies, ev.turn, { kind: "critPatch", move: ev.move, applied: false, reason: "already-crit" });
+      return;
+    }
+    rec.patched = true;
+    rec.ev.crit = true;
+    rec.opts.crit = true;
+    const collect = [];
+    processDamageInf(rec.ev, rec.ctx, rec.opts, collect);
+    const touched = /* @__PURE__ */ new Set();
+    for (const ref of rec.infRefs) {
+      const nc = collect.find((c) => c.species === ref.species && c.statKey === (infHistory[ref.species] && infHistory[ref.species][ref.idx] ? infHistory[ref.species][ref.idx].statKey : null));
+      if (nc && infHistory[ref.species] && infHistory[ref.species][ref.idx]) {
+        infHistory[ref.species][ref.idx] = { statKey: nc.statKey, feasible: nc.feasible ? new Set(nc.feasible) : nc.feasible, hpSps: nc.hpSps ? new Set(nc.hpSps) : null };
+        touched.add(ref.species);
+      }
+    }
+    for (const sp of touched) rebuildInfState(sp);
+    let flagCleared = null, bayesPatched = false;
+    if (rec.bayes) {
+      const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
+      if (ent && ent.cands.length === rec.bayes.counts.length) {
+        const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null };
+        processDamageBayes(rec.ev, rec.bayesCtx || rec.ctx, rec.opts, capture);
+        if (capture.counts) {
+          if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) {
+            ent.dmgFlag = null;
+            flagCleared = rec.bayes.flagSet;
+          } else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
+          if (rec.bayes.applied) {
+            let tot = 0;
+            ent.cands.forEach((c, i) => {
+              if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR);
+              tot += c.post;
+            });
+            if (tot > 0) for (const c of ent.cands) c.post /= tot;
+          } else if (capture.counts.some((n) => n > 0)) {
+            let tot = 0;
+            ent.cands.forEach((c, i) => {
+              c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR);
+              tot += c.post;
+            });
+            if (tot > 0) {
+              for (const c of ent.cands) c.post /= tot;
+              ent.used++;
+            }
+          }
+          bayesPatched = true;
+          dirty = true;
+        }
+      }
+    }
+    logSnapshot(logSpecies, ev.turn, { kind: "critPatch", move: ev.move, applied: true, bayes: bayesPatched, inf: touched.size > 0, ...flagCleared ? { flagCleared } : {} });
   }
   function processMoveBayes(ev, io) {
     const ctx = lastSpeCtx;
@@ -29055,6 +29227,9 @@ function createEstimator(deps) {
   }
   function reset() {
     inference = { seen: 0, bySpecies: {} };
+    dmgRecords = [];
+    pendingDmgRecord = null;
+    infHistory = {};
     infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
     infLastMove = null;
     dirty = false;
@@ -29085,6 +29260,7 @@ function createEstimator(deps) {
     processMoveBayes,
     processFaintOrderInf,
     processFaintOrderBayes,
+    processCrit,
     processAbility: infProcessAbility,
     applyRevealed,
     candRanges,
