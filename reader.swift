@@ -1109,6 +1109,7 @@ var renderPokeP1: [String] = []
 var renderPokeP2: [String] = []
 var renderWeatherProto = ""                     // 現在の天候 (プロトコル名)
 var renderHold: [String] = []                     // フィールド開始行の保留 (特性行が直後に来たら順序を入れ替える)
+var pendingTurnDisplay: [String] = []             // 表示ログの Turn 行ブロックの保留 (そのターンの最初の出来事が表示されるまで出さない)
 var renderPendingBlank = false                    // 繰り出しブロックの後に空行を入れる予約
 var renderMovesSeen = false                       // このターンで技が既に出たか
 var renderFaintPending = false                    // ひんし後で交代待ちか (繰り出しブロック判定)
@@ -2142,6 +2143,22 @@ func emitLog(_ line: String, applyNow: Bool) {
             if kind == "move" { renderMovesSeen = true }
         }
     }
+    // ターン表示 (Turn N のブロック) は、そのターンが始まった
+    // ことを示す最初の出来事 (特性・持ち物・交代・技など、表示行を
+    // 伴うもの) が来るまで出さない。ターン行だけが先行して表示
+    // されると、始まっていないターンの見出しが残る (実例:
+    // 2026-11-22 battle_20261122_201011、コマンド選択中の投了で
+    // 中身の無い Turn 10 が表示された)。勝敗行が来たら保留は
+    // 破棄する (そのターンは始まらなかった)
+    if kind == "turn" {
+        pendingTurnDisplay = out
+        out = []
+    } else if kind == "win" || kind == "tie" {
+        pendingTurnDisplay = []
+    } else if !out.isEmpty && !pendingTurnDisplay.isEmpty {
+        out = pendingTurnDisplay + out
+        pendingTurnDisplay = []
+    }
     // 表示ログの並び訂正 (プロトコル側の挿入と対): 急所の表示は
     // 同じ対象の ひんし表示より前に、天候・地形特性の表示は対応する
     // フィールド表示より前に割り込ませる。表示ログは逐次構築のため、
@@ -2317,6 +2334,7 @@ func resetLogState() {
     displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
+    pendingTurnDisplay = []
     renderPendingBlank = false
     renderMovesSeen = false
     renderFaintPending = false
@@ -9777,7 +9795,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2120"
+let readerBuild = "20261122_2125"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
