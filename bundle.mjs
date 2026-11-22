@@ -27461,6 +27461,7 @@ function createEstimator(deps) {
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
   let VGC_SETS = null;
   let SPECIES_MOVES = null;
+  let teamFormesCache = null, teamFormesSrc = null;
   function syncData() {
     const d = deps.getData() || {};
     POKEDB_PARSED = d.POKEDB_PARSED ?? null;
@@ -28028,11 +28029,27 @@ function createEstimator(deps) {
     if (entry.forme.includes(entry.species)) return entry.forme;
     return entry.species + "-" + entry.forme;
   }
+  function teamFormesMap() {
+    if (!VGC_SETS || !Array.isArray(VGC_SETS.sets)) return null;
+    if (teamFormesSrc === VGC_SETS) return teamFormesCache;
+    const m = /* @__PURE__ */ new Map();
+    for (const e of VGC_SETS.sets) {
+      if (!e || !e.teamId) continue;
+      const full = metaFormeFullName(e);
+      if (!m.has(e.teamId)) m.set(e.teamId, []);
+      const arr = m.get(e.teamId);
+      if (!arr.includes(full)) arr.push(full);
+    }
+    teamFormesCache = m;
+    teamFormesSrc = VGC_SETS;
+    return m;
+  }
   function bayesCorpusCandidates(species, table, fallback) {
     const corpora = [];
     if (META_SETS && Array.isArray(META_SETS.sets)) corpora.push(...META_SETS.sets);
     if (VGC_SETS && Array.isArray(VGC_SETS.sets)) corpora.push(...VGC_SETS.sets);
     if (!corpora.length) return [];
+    const teamMap = teamFormesMap();
     const sd = gen.species.get(idOf(species));
     const base = sd && sd.baseSpecies || species;
     const out = [];
@@ -28074,6 +28091,9 @@ function createEstimator(deps) {
         megaSpecies: isMega ? full : fallback.megaSpecies,
         moves: (e.moves || []).map((mv) => metaNameEn("move", mv)).filter(Boolean),
         moveExact: true,
+        // 由来チームの種族リスト (チーム条件づけ事前用)。teamId を持たない
+        // コーパス (meta_sets 等) の候補は null = 中立
+        teamFormes: e.teamId && teamMap ? teamMap.get(e.teamId) || null : null,
         values,
         valuesMega,
         post: 0,
@@ -28345,6 +28365,25 @@ function createEstimator(deps) {
   function setTeamContext(list) {
     teamContextSpecies = Array.isArray(list) && list.length ? [...list] : null;
   }
+  const TEAM_COND_EXP = 1.5;
+  function applyTeamCondPrior(cands, selfSpecies) {
+    if (!teamContextSpecies || !teamContextSpecies.length) return false;
+    const others = teamContextSpecies.filter((s) => s !== selfSpecies);
+    if (!others.length) return false;
+    let hit = false, tot = 0;
+    for (const c of cands) {
+      if (c.teamFormes && c.teamFormes.length) {
+        const match = others.filter((f) => c.teamFormes.includes(f)).length;
+        if (match > 0) {
+          c.post *= Math.pow(1 + match, TEAM_COND_EXP);
+          hit = true;
+        }
+      }
+      tot += c.post;
+    }
+    if (hit && tot > 0) for (const c of cands) c.post /= tot;
+    return hit;
+  }
   function bayesEntry(species) {
     syncData();
     if (!bayes) return null;
@@ -28357,8 +28396,9 @@ function createEstimator(deps) {
         return null;
       }
       applyTeamItemBoost(cands, species);
+      const tcHit = applyTeamCondPrior(cands, species);
       bayes.bySpecies[species] = { species, cands, used: 0, revKey: "" };
-      logSnapshot(species, infLogTurn, { kind: "entry" });
+      logSnapshot(species, infLogTurn, tcHit ? { kind: "entry", teamCond: true } : { kind: "entry" });
     }
     return bayes.bySpecies[species];
   }
