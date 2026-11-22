@@ -8862,19 +8862,29 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         slotIconDiags.append(iconDiags)
         slotTypes.append(types)
         var pool: [String] = []
+        // アイコン近接で広げた分を含まない、本来のタイプ組み合わせの
+        // プール (厳密プール)。近接候補の種族が勝つ場合の判定に使う
+        var strictPool: Set<String> = []
         if !iconCands.isEmpty {
             var combos: [Set<String>] = [[]]
             for cands in iconCands {
                 combos = combos.flatMap { base in cands.map { base.union([$0]) } }
             }
+            var strictCombos: [Set<String>] = [[]]
+            for cands in iconCands {
+                strictCombos = strictCombos.flatMap { base in [base.union([cands[0]])] }
+            }
             if unknownPresent {
                 pool = pvSpeciesTypes.filter { sp in combos.contains { Set(sp.value).isSuperset(of: $0) } }.map { $0.key }
+                strictPool = Set(pvSpeciesTypes.filter { sp in strictCombos.contains { Set(sp.value).isSuperset(of: $0) } }.map { $0.key })
             } else {
                 pool = pvSpeciesTypes.filter { combos.contains(Set($0.value)) }.map { $0.key }
+                strictPool = Set(pvSpeciesTypes.filter { strictCombos.contains(Set($0.value)) }.map { $0.key })
             }
         }
         // 見せ合い画面に現れないフォルム (メガ等) は候補から外す
         pool = pool.filter { !pvBattleOnlyFormes.contains($0) }
+        strictPool = strictPool.filter { !pvBattleOnlyFormes.contains($0) }
         var expanded = false
         if pool.isEmpty && !types.isEmpty {
             // 読み取れたタイプの組み合わせを持つ種族が存在しない =
@@ -8910,6 +8920,20 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         if ranked.isEmpty {
             slotRanked.append([]); slotDecisive.append(false); slotPoolCount.append(pool.count); slotMargin.append(0); slotExpanded.append(expanded)
             continue
+        }
+        // アイコン近接で広げたプール側の種族が 1 位の場合、その勝利は
+        // 厳密プール (本来のタイプ読みの組み合わせ) の最良に対して
+        // 展開マージン以上の差があるときだけ認める。近接候補は
+        // 「1 位と僅差だった第 2 のタイプ読み」にすぎず、スコアの
+        // 小差で本来の読みを覆す根拠にはならない (実例: 2026-11-22
+        // battle_20261122_231107 枠4、Ghost の近接候補 Rock から
+        // 入った Barbaracle (0.450) が、本来の Water/Ghost プールの
+        // Basculegion-F (0.591) を小差で抑えた)
+        if !strictPool.isEmpty, !strictPool.contains(ranked[0].0),
+           let strictBest = ranked.first(where: { strictPool.contains($0.0) }),
+           ranked[0].1 > strictBest.1 - pvExpandMargin {
+            ranked.removeAll { $0.0 == strictBest.0 }
+            ranked.insert(strictBest, at: 0)
         }
         var decisive = false
         if pool.count == 1 && !expanded {
@@ -10090,7 +10114,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2227"
+let readerBuild = "20261122_2338"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
