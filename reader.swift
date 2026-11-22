@@ -768,7 +768,8 @@ var prevFieldTerrain = ""        // 上書きされた直前の地形 (同上)
 var prevFieldTerrainSetTurn = 0
 let recoilMoves: Set<String> = ["Double-Edge", "Take Down", "Submission", "Volt Tackle",
                                 "Flare Blitz", "Brave Bird", "Wood Hammer", "Head Smash",
-                                "Wild Charge", "Head Charge", "Struggle"]
+                                "Wild Charge", "Head Charge", "Struggle", "Wave Crash",
+                                "Steel Beam", "Mind Blown", "Chloroblast"]
 var fieldTrickRoomSetTurn = 0
 var sideCondSetTurns: [String: [String: Int]] = [:]  // side -> 状態名(EN) -> 実効開始ターン
 let sideCondDurations: [String: Int] = ["Reflect": 5, "Light Screen": 5, "Aurora Veil": 5, "Tailwind": 4, "Mist": 5, "Safeguard": 5, "Wide Guard": 1]
@@ -889,6 +890,8 @@ var offTeamPlateStreak: [String: Int] = [:]        // "枠|種族" -> 登録外�
 var battleMaxOverride: [String: Int] = [:]         // 種族 -> この試合で採用する最大 HP (登録値と読みが恒常的に食い違う場合)
 var battleMaxCandidate: [String: (max: Int, count: Int)] = [:]  // 種族 -> 採用候補の最大 HP と観測回数
 var barVetoHold: [String: (pct: Int, turn: Int)] = [:]        // プレート -> バー拒否で保留した数字読みとそのターン
+var faintReviveCount: [String: Int] = [:]                     // プレート -> ひんし確定枠で生存読みが続いた回数
+var faintReviveSince: [String: Date] = [:]                    // プレート -> その生存読みの初出
 
 // MARK: - 自チーム暫定リスト (当該試合)
 // 見せ合いで同定された自チームの種族を当該試合の正とし、場の観測・
@@ -2277,7 +2280,7 @@ func resetLogState() {
     suspectJump = [:]; firstEntryPlateHP = [:]; sitrusWatch = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
     fieldSetByMoveTurn = -1; switchInTurn = [:]
     heldWeatherStart = nil; heldTerrainStart = nil; fieldHoldBypass = false
-    battleAdmittedSpecies = []; offTeamPlateStreak = [:]; battleMaxOverride = [:]; battleMaxCandidate = [:]; pendingReturnCount = [:]; barVetoHold = [:]
+    battleAdmittedSpecies = []; offTeamPlateStreak = [:]; battleMaxOverride = [:]; battleMaxCandidate = [:]; pendingReturnCount = [:]; barVetoHold = [:]; faintReviveCount = [:]; faintReviveSince = [:]
     heldTerrainReplace = nil; pivotReturnAt = [:]; sendOutTextSeen = [:]
     wishSetTurn = [:]
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
@@ -2448,7 +2451,15 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (
     if !realMax.isEmpty {
         proto = proto.map { l in
             let f = l.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-            guard f.count >= 5, f[1] == "switch", f[4] == "100/100", let mx = realMax[f[2]] else { return l }
+            guard f.count >= 5, f[1] == "switch", let mx = realMax[f[2]] else { return l }
+            // 満タンで登場した交代行は、後続の行で判明した実数の最大値に
+            // 揃える。対象は % 表記 (100/100) の場合と、最大値の採用前に
+            // 登録値で出た場合 (157/157 のまま残り、後続は /171 で処理
+            // されて 1 つのプロトコル内で表記が割れた。実例: 2026-11-22
+            // battle_20261122_181745、Sneasler)
+            let parts = f[4].split(separator: "/")
+            guard parts.count == 2, let cur = Int(parts[0]), let oldMax = Int(parts[1]),
+                  cur == oldMax, mx != oldMax else { return l }
             var g = f
             g[4] = "\(mx)/\(mx)"
             return g.joined(separator: "|")
@@ -3024,6 +3035,11 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct])
             return true
         }
+        // 低下していない値への被ダメ行はあり得ない。開幕のプレート
+        // 確定時に % 基準 (100) と実数表記がずれて、満タンの被ダメ行
+        // が出た実例への対策 (実例: 2026-11-22
+        // battle_20261122_181745、ターン 1 冒頭の 145/145・161/161)
+        if toPct >= effFrom { return true }
         lastDamageLabel = "\(slot): \(speciesEn)"
         lastDamageAt = Date()
         var line = "|-damage|\(slot): \(speciesEn)|\(hpText)"
@@ -3851,11 +3867,50 @@ func processPlates(_ hits: [String: SlotState]) {
             }
             // ひんし確定済みの枠は、交代が確定するまでプレート読みを無視する
             // (交代要員選択画面で満タンのバーが読めて「全回復」行が出たり、
-            //  0% に戻って ひんし行が二重に出たりした実例: 2026-11-20)
-            if faintedSlots[slot] == s.speciesEn { continue }
+            //  0% に戻って ひんし行が二重に出たりした実例: 2026-11-20)。
+            // ただし生存読みが安定して続く場合は、ひんし自体が誤読
+            // だったとして取り消す (実例: 2026-11-22
+            // battle_20261122_181745、ターン 2 の幻のひんし。バーは
+            // 42% を示していた)。条件は 20% 以上の読みが 3 回・
+            // 1.5 秒以上続き、ひんし行から 3 秒以上経っていること
+            if faintedSlots[slot] == s.speciesEn {
+                var revived = false
+                if s.hpPercent >= 20,
+                   Date().timeIntervalSince(lastDamageTime[plate.name] ?? .distantPast) > 3.0 {
+                    let rc = (faintReviveCount[plate.name] ?? 0) + 1
+                    faintReviveCount[plate.name] = rc
+                    if faintReviveSince[plate.name] == nil { faintReviveSince[plate.name] = Date() }
+                    if rc >= 3, Date().timeIntervalSince(faintReviveSince[plate.name] ?? .distantFuture) >= 1.5 {
+                        faintedSlots.removeValue(forKey: slot)
+                        faintReviveCount[plate.name] = nil
+                        faintReviveSince[plate.name] = nil
+                        lastEmittedPct[plate.name] = s.hpPercent
+                        debugCapture(kind: "faint_guard", key: "faint_revived:\(slot):\(s.speciesEn)", rawText: "",
+                                     detail: ["reason": "revived_baseline", "slot": slot, "species": s.speciesEn, "pct": s.hpPercent, "turn": currentTurn, "readerBuild": readerBuild])
+                        revived = true
+                    }
+                } else {
+                    faintReviveCount[plate.name] = nil
+                    faintReviveSince[plate.name] = nil
+                }
+                if !revived { continue }
+            }
             // 状態 (state.json) は即時更新し、ログ行だけ確定待ちにする
             monStates[key]?.hpPercent = s.hpPercent
             monStates[key]?.hpText = hpTextFor(s)
+            // 排出基準が 0 のまま生存読みが届いた場合は、過去のひんし
+            // 記録が誤りだったとして基準を現在値へ戻す。0 のままだと
+            // 回復が無言で飲み込まれ、本物のひんし (被ダメ行の合成
+            // 条件・ひんし文の確定条件) まで成立しなくなる (実例:
+            // 2026-11-22 battle_20261122_181745、ターン 2 の幻の
+            // ひんしがターン 7 の ほろびのうた の ひんしを消した)
+            if s.hpPercent >= 20, (lastEmittedPct[plate.name] ?? -1) == 0,
+               pendingFaints.allSatisfy({ $0.slot != slot }),
+               Date().timeIntervalSince(lastDamageTime[plate.name] ?? .distantPast) > 3.0 {
+                lastEmittedPct[plate.name] = s.hpPercent
+                debugCapture(kind: "faint_guard", key: "faint_revived:\(slot):\(s.speciesEn)", rawText: "",
+                             detail: ["reason": "revived_baseline", "slot": slot, "species": s.speciesEn, "pct": s.hpPercent, "turn": currentTurn, "readerBuild": readerBuild])
+            }
             let emitted = lastEmittedPct[plate.name] ?? s.hpPercent
             // HP 3系統の照合 (改善計画フェーズ2): 数字 OCR と HP バーの
             // 画素長が大きく食い違う場合は、黙って選ばず証拠として残す
@@ -3911,21 +3966,42 @@ func processPlates(_ hits: [String: SlotState]) {
                         debugCapture(kind: "faint_guard", key: "faint_guard_protected:\(slot):\(currentTurn)", rawText: "",
                                      detail: ["reason": "protected_zero_read", "slot": slot, "species": s.speciesEn, "turn": currentTurn, "readerBuild": readerBuild])
                     } else if n >= 2 {
-                        pendingDamagePct[plate.name] = nil
-                        pendingDamageCount[plate.name] = nil
-                        pendingDamageSince[plate.name] = nil
-                        pendingReturnCount[plate.name] = nil
-                        // バーが半分以上残っているのに数字だけ 0% を言う
-                        // 場合は、数字側の誤読として ひんしにしない
-                        // (バー拒否、フェーズ2 段階2)
-                        if let bar = s.hpBarPct, bar >= 50 {
+                        // バー計測が 0% 読みと明確に食い違う場合は
+                        // ひんしにしない。バーが 25% 以上残っていれば
+                        // 誤読として棄却し、11〜24% では判断を保留して
+                        // 次の読みで再判定する (実例: 2026-11-22
+                        // battle_20261122_181745、Sneasler のバーが
+                        // 42% を示していたのに 0% 読みで幻のひんし行が
+                        // 出て、記録全体が連鎖的に崩れた。従来の棄却
+                        // 条件はバー 50% 以上で、この値に届かなかった)
+                        if let bar = s.hpBarPct, bar >= 25 {
+                            pendingDamagePct[plate.name] = nil
+                            pendingDamageCount[plate.name] = nil
+                            pendingDamageSince[plate.name] = nil
+                            pendingReturnCount[plate.name] = nil
                             debugCapture(kind: "hp_disagree", key: "hp_disagree:\(plate.name):0:\(bar)", rawText: "",
                                          detail: ["slot": slot, "species": s.speciesEn, "ocrPct": 0,
                                                   "barPct": bar, "logPct": emitted, "turn": currentTurn,
                                                   "reason": "bar_veto_zero", "readerBuild": readerBuild])
+                        } else if let bar = s.hpBarPct, bar > 10 {
+                            pendingDamageCount[plate.name] = n
                         } else {
+                            pendingDamagePct[plate.name] = nil
+                            pendingDamageCount[plate.name] = nil
+                            pendingDamageSince[plate.name] = nil
+                            pendingReturnCount[plate.name] = nil
+                            // 自軍の 0% 行の分母は、判明している実数の
+                            // 最大値で統一する (% 読みしかない場合に
+                            // 0/100 へ切り替わって表記が割れた実例:
+                            // 同バトル、Gardevoir の 35/145 → 0/100)
+                            var zeroText = monStates[key]!.hpText
+                            if plate.name.hasPrefix("mine"), s.hpCur == nil,
+                               let e0 = speciesDict.first(where: { $0.en == s.speciesEn }),
+                               let km = battleKnownMax(speciesEn: s.speciesEn, grp: formeGroup(e0)) {
+                                zeroText = "0/\(km)"
+                            }
                             emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
-                                           fromPct: emitted, toPct: 0, hpText: monStates[key]!.hpText)
+                                           fromPct: emitted, toPct: 0, hpText: zeroText)
                         }
                     } else {
                         pendingDamageCount[plate.name] = n
@@ -5932,6 +6008,12 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 照合は空白を除いた形で行う (OCR のボックス分割で空白位置が揺れるため)
     let t = text.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "　", with: "")
     let nt = normalize(t)
+    // ほろびのうたのカウント文と告知文は、場の状態として別途持たない
+    // ため消費のみ (表記ゆれ: 滅び/減び、分割読み「ぼろ滅び」「ほろ
+    // 滅び」は空白除去後の形で判定する。実例: 2026-11-22
+    // battle_20261122_181745、カウント文が |-message| として漏れた)
+    if t.contains("カウントが") && (t.contains("滅び") || t.contains("減び")) { return true }
+    if t.contains("ほろびのうたを") && t.contains("滅びてしまう") { return true }
     // ポケモンの詳細画面 (様子を見る) の文は対戦文ではない。画面内の
     // 設定ラベル「つよさの表示」は対戦文には現れないため、これを含む
     // 文は詳細画面の混入として消費だけする (実例: 2026-11-21
@@ -7033,6 +7115,34 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 末尾の濁点ゆれ (たおれだ) も拾う (実例: 2026-11-22
     // battle_20261122_070237、ひんし文が faint 行と併記で残った)
     if t.contains("たおれた") || foldDakuten(t).contains("たおれた") {
+        // ひんし文の主語は「種族名+は」の形で決める。文にプレートの
+        // 文字など他の種族名が混ざると、本文全体の種族解決 (sp:
+        // 辞書順の最初の一致) が無関係な種族になり、占有でないとして
+        // 文が捨てられる (実例: 2026-11-22 battle_20261122_181745、
+        // Archaludon の ひんし文に オオニューラ のプレート文字が
+        // 混ざり、主語が Sneasler と解決された)
+        var faintSp = sp
+        var faintSlot = slot
+        var faintKey = key
+        let foldedMsg = foldDakuten(t)
+        for cand in findAllSpeciesJa(in: t) where cand.en != sp.en {
+            var isSubject = false
+            for hay in [t, foldedMsg] {
+                var pos = hay.startIndex
+                while let r = hay.range(of: cand.ja, range: pos..<hay.endIndex) {
+                    if hay[r.upperBound...].hasPrefix("は") { isSubject = true; break }
+                    pos = r.upperBound
+                }
+                if isSubject { break }
+            }
+            if isSubject {
+                faintSp = cand
+                let fside = slot.hasPrefix("p1") ? "p1" : "p2"
+                faintSlot = slotFor(side: fside, speciesEn: cand.en)
+                faintKey = "\(fside):\(cand.en)"
+                break
+            }
+        }
         // 場の占有として記録されていない種族の ひんし文では、
         // 被ダメ行の合成も ひんし行も出さない。未登録のまま倒れた
         // 個体の文や枠解決の誤りで、無関係な枠の HP 基準
@@ -7041,13 +7151,13 @@ func translateBattleMessage(_ text: String) -> Bool {
         // battle_20261122_071457、コータスの ひんし文が p1a に
         // 解決され、リキキリンの正しい 65% 読みが棄却された)。
         // 文自体は消費する
-        let faintPn = ["p1a": "mineA", "p1b": "mineB", "p2a": "oppA", "p2b": "oppB"][slot] ?? ""
+        let faintPn = ["p1a": "mineA", "p1b": "mineB", "p2a": "oppA", "p2b": "oppB"][faintSlot] ?? ""
         let faintOccupant = lastSlots[faintPn]?.speciesEn
-        let faintIsOccupant = (faintOccupant.map { sameSpeciesFamily($0, sp.en) } ?? false)
-            || pendingSwitchSpecies[faintPn] == sp.en
+        let faintIsOccupant = (faintOccupant.map { sameSpeciesFamily($0, faintSp.en) } ?? false)
+            || pendingSwitchSpecies[faintPn] == faintSp.en
         if !faintIsOccupant {
-            debugCapture(kind: "faint_guard", key: "faint_guard:untracked:\(slot):\(sp.en)", rawText: t,
-                         detail: ["reason": "faint_text_untracked", "slot": slot, "species": sp.en, "occupant": faintOccupant ?? "", "turn": currentTurn])
+            debugCapture(kind: "faint_guard", key: "faint_guard:untracked:\(faintSlot):\(faintSp.en)", rawText: t,
+                         detail: ["reason": "faint_text_untracked", "slot": faintSlot, "species": faintSp.en, "occupant": faintOccupant ?? "", "turn": currentTurn])
             return true
         }
         // 占有者の ひんし文は確定情報として扱う。プレートが先に 0%
@@ -7059,13 +7169,13 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 被ダメ行・ひんし行が無音で消えた)
         if !faintPn.isEmpty && (lastEmittedPct[faintPn] ?? 1) > 0 {
             heldLine[faintPn] = nil
-            let fhp = monStates[key]?.hpMax.map { "0/\($0)" } ?? "0/100"
-            _ = emitDamageLine(plateName: faintPn, slot: slot, key: key, speciesEn: sp.en,
-                               fromPct: lastEmittedPct[faintPn] ?? (monStates[key]?.hpPercent ?? 100),
+            let fhp = monStates[faintKey]?.hpMax.map { "0/\($0)" } ?? "0/100"
+            _ = emitDamageLine(plateName: faintPn, slot: faintSlot, key: faintKey, speciesEn: faintSp.en,
+                               fromPct: lastEmittedPct[faintPn] ?? (monStates[faintKey]?.hpPercent ?? 100),
                                toPct: 0, hpText: fhp, force: true)
         }
         // HP 0 への反映は被ダメ行 (と後続の ひんし行) の applyEvent が行う
-        deferFaint(slot: slot, speciesEn: sp.en)
+        deferFaint(slot: faintSlot, speciesEn: faintSp.en)
         return true
     }
     checkStatusText(text: t, side: side, speciesEn: sp.en, slot: slot)
@@ -9421,7 +9531,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1825"
+let readerBuild = "20261122_1854"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
