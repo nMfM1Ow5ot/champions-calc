@@ -771,13 +771,18 @@ def _battle_in_progress():
         return False
     if not battle or not _BATTLE_KEY_RE.match(str(battle)):
         return False
-    # その試合のログ (.log) がまだ保存されていなければ対戦中。
-    # デバッグ同梱 (.jpg/.json) は対戦中にも書かれるため対象にしない
+    # その試合の確定ログ (_final 系) がまだ保存されていなければ
+    # 対戦中。デバッグ同梱 (.jpg/.json) は対戦中にも書かれるため
+    # 対象にしない。_interrupted の下書きでは対戦中を外さない:
+    # プレート不在の安全網が対戦中に保存する未確定の下書きが出た
+    # だけで「対戦中でない」と判定され、対戦中に備考プロンプトと
+    # 自動送信が走った (実例: 2026-11-23 battle_20261123_043809)
     try:
         names = os.listdir(LOG_DIR)
     except OSError:
         return False
-    return not any(n.endswith(".log") and _battle_key(n) == battle
+    return not any(n.endswith(("_final.log", "_final_protocol.log"))
+                   and _battle_key(n) == battle
                    for n in names)
 
 
