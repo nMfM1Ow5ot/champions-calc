@@ -933,7 +933,15 @@ func syncMineProvisional() {
     let fresh = minePreviewUpdatedAt.map {
         $0.timeIntervalSince(lastBattleStartedAt ?? .distantPast) > -120
     } ?? false
-    if fresh && minePreviewTeam != minePreviewAppliedCopy {
+    // 空の同定結果では置き換えない。選出セッションのリセットで
+    // minePreviewTeam が空に戻ると、対戦開始直後に暫定リストまで
+    // 消えて、プレート受け入れが 3 回観測の off-team 経路に落ちた
+    // (実例: 2026-11-22 battle_20261122_185505、ヘッダーは暫定
+    // リストで出たのに T1 の Garchomp が off-team 経路を通った)。
+    // 対戦中は、暫定リストがまだ無い場合に限り取り込む
+    let hasIdentified = minePreviewTeam.contains(where: { $0 != nil })
+    if fresh && hasIdentified && minePreviewTeam != minePreviewAppliedCopy
+        && (!logStarted || battleMineTeam.isEmpty) {
         minePreviewAppliedCopy = minePreviewTeam
         battleMineTeam = minePreviewTeam.enumerated().map { (i, sp) -> MineProvisionalEntry? in
             guard let sp else { return nil }
@@ -9614,7 +9622,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1929"
+let readerBuild = "20261122_1934"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
