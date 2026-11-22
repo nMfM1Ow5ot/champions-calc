@@ -100,13 +100,17 @@ function infIntersect(species, statKey, feasible, hpSps) {
   // スナップショットとして記録される)。失敗しても交差処理は続ける
   if (bayes && bayes.bySpecies[species] === undefined) { try { bayesEntry(species); } catch (err) { /* ログ都合で推論を止めない */ } }
   const e = infEntry(species);
-  if (!feasible || !feasible.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false }); return; }
+  // 棄却理由の記録 (Bayes 側 damage 記録の reason と同趣旨。inf 側の棄却が
+  // 推論ログだけで追跡できるようにする。battle_20261122_171847 が発端):
+  // no-match = この観測単独で許す行が無い / contradiction = 蓄積済みの制約と
+  // 矛盾した / hp-contradiction = HP の SP 制約との交差で空になった
+  if (!feasible || !feasible.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-match' }); return; }
   const next = e.pairs[statKey] ? new Set([...e.pairs[statKey]].filter(x => feasible.has(x))) : feasible;
-  if (!next.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false }); return; }
+  if (!next.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false, reason: 'contradiction' }); return; }
   let nh = null;
   if (hpSps) {
     nh = e.hpSps ? new Set([...e.hpSps].filter(x => hpSps.has(x))) : hpSps;
-    if (!nh.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false }); return; }
+    if (!nh.size) { e.dropped++; logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: false, reason: 'hp-contradiction' }); return; }
   }
   e.pairs[statKey] = next;
   if (hpSps) e.hpSps = nh;
@@ -158,7 +162,7 @@ function processDamageInf(ev, ctx) {
     // 実数値と一致させる (メガ進化中はメガ側の表。素の表でグループ化
     // すると、値が衝突する行同士で代表ロールの判定がずれる)
     const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
-    if (!defSpec || !bases.length || !table) return;
+    if (!defSpec || !bases.length || !table) { logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-base' }); return; }
     // 実数 (amt) が無いイベントは、pct と防御側の最大 HP から実数範囲を
     // 導いて照合する。amt は最大 HP の基準が一致する場合だけ付くため、
     // 登録チーム外の編成では自軍の被ダメが全件 pct のみになる
@@ -166,9 +170,9 @@ function processDamageInf(ev, ctx) {
     let inRange;
     if (typeof ev.amt === 'number' && ev.amt > 0) inRange = r => r === ev.amt;
     else {
-      if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
+      if (typeof ev.pct !== 'number' || ev.pct <= 0) { logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-amt' }); return; }
       const M = specMaxHP(defSpec);
-      if (!M) return;
+      if (!M) { logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-amt' }); return; }
       const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
       const [lo, hi] = amtRangeForPct(ev.pct, M, ko);
       inRange = r => r >= lo && r <= hi;
@@ -193,7 +197,7 @@ function processDamageInf(ev, ctx) {
     const bases = ctx.basesDef;
     // 攻撃側と同じく、メガ進化中はメガ側の表で値グループ化する
     const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
-    if (!atkSpec || !bases.length || !table) return;
+    if (!atkSpec || !bases.length || !table) { logSnapshot(defSpecies, ev.turn, { kind: 'inf', stat: defKey, applied: false, reason: 'no-base' }); return; }
     const hpBySp = new Map();
     for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
     const byValue = new Map();
