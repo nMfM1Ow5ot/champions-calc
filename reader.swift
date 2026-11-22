@@ -6290,11 +6290,31 @@ func translateBattleMessage(_ text: String) -> Bool {
             // イベントを是正する (実例: 2026-11-22
             // battle_20261122_070237 ターン2、プロトコルには急所行が
             // あるのにイベントは crit=false だった)
+            var critAtkJson = jsonEscape(lastMoveLabel)
+            var critMoveJson = jsonEscape(lastMoveName)
             if let idx = battleEvents.lastIndex(where: { ev in
                 ev.contains("\"k\":\"dmg\"") && ev.contains("\"def\":\"\(jsonEscape(target))\"")
-                    && !ev.contains("\"atk\":\"\(jsonEscape(target))\"") && ev.contains("\"crit\":false")
+                    && !ev.contains("\"atk\":\"\(jsonEscape(target))\"")
             }) {
-                battleEvents[idx] = battleEvents[idx].replacingOccurrences(of: "\"crit\":false", with: "\"crit\":true")
+                let ev = battleEvents[idx]
+                if let r = ev.range(of: "\"atk\":\""), let e = ev[r.upperBound...].firstIndex(of: "\"") {
+                    critAtkJson = String(ev[r.upperBound..<e])
+                }
+                if let r = ev.range(of: "\"move\":\""), let e = ev[r.upperBound...].firstIndex(of: "\"") {
+                    critMoveJson = String(ev[r.upperBound..<e])
+                }
+                if ev.contains("\"crit\":false") {
+                    battleEvents[idx] = ev.replacingOccurrences(of: "\"crit\":false", with: "\"crit\":true")
+                }
+            }
+            // 急所の確定は独立イベントとしても末尾へ追加する。是正は
+            // 既に消費された写しには届かない (UI はイベント列を
+            // インデックス単位で一度だけ消費する) ため、後付けで
+            // 証拠を届ける経路が要る (実例: 2026-11-22
+            // battle_20261122_201011、急所 2 件とも消費済みで是正が
+            // 届かず、エンジンに急所が伝わらなかった)
+            if battleEvents.count < 600 {
+                battleEvents.append("{\"k\":\"crit\",\"turn\":\(currentTurn),\"atk\":\"\(critAtkJson)\",\"def\":\"\(jsonEscape(target))\",\"move\":\"\(critMoveJson)\"}")
             }
             emitLog("|-crit|\(target)")
         }
@@ -9726,7 +9746,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2100"
+let readerBuild = "20261122_2112"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
