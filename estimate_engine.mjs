@@ -1055,7 +1055,7 @@ function processDamageBayes(ev, ctx) {
     const ent = bayesEntry(atkSpecies);
     const defSpec = ctx.myDef;
     const base = ctx.baseAtk;
-    if (!ent || !defSpec || !base) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false }); return; }
+    if (!ent || !defSpec || !base) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false, reason: 'no-base' }); return; }
     // 実数 (amt) が無いイベントは pct のまま処理する (amt が付かない
     // 理由は processDamageInf 側の注記と同じ)。処理できない場合も、
     // 無言で返さず記録を残す (欠落がログから追えるように)
@@ -1063,7 +1063,7 @@ function processDamageBayes(ev, ctx) {
     let amtLo = null, amtHi = null;
     if (!hasAmt) {
       const M = typeof ev.pct === 'number' && ev.pct > 0 ? specMaxHP(defSpec) : null;
-      if (!M) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false }); return; }
+      if (!M) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false, reason: 'no-amt' }); return; }
       const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
       [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
     }
@@ -1096,6 +1096,9 @@ function processDamageBayes(ev, ctx) {
         trig.dmgFlag = flag;
       }
     }
+    // 棄却理由の記録 (applied=false の内訳を推論ログだけで追えるように。
+    // battle_20261122_160927: 理由の無い applied=false が2件残った)
+    if (!counts.some(n => n > 0)) trig.reason = trig.dir === 'over' ? 'over-max' : 'no-match';
     logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   } else {
@@ -1104,7 +1107,7 @@ function processDamageBayes(ev, ctx) {
     const ent = bayesEntry(defSpecies);
     const atkSpec = ctx.myAtk;
     const base = ctx.baseDef;
-    if (!ent || !atkSpec || !base) return;
+    if (!ent || !atkSpec || !base) { logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, applied: false, reason: 'no-base' }); return; }
     const pctCounts = (c, rolls) => {
       const hpVal = c.values.hp;
       if (!hpVal || !rolls) return 0;
@@ -1143,6 +1146,8 @@ function processDamageBayes(ev, ctx) {
       });
       trig.dmgFlag = 'Assault Vest';
     }
+    // 棄却理由の記録 (by opp 側と同じ)
+    if (!counts.some(n => n > 0)) trig.reason = trig.dir === 'under' ? 'under-min' : 'no-match';
     logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   }
