@@ -3384,6 +3384,25 @@ func checkHeaderMismatch(slot: String, speciesEn: String) {
                           "readerBuild": readerBuild])
 }
 
+// 種族同定の複数系統照合 (改善計画フェーズ4): プレートで確定した種族が
+// 見せ合いの同定結果 (同系統フォルムを除く) と食い違う場合は、黙って
+// 選ばず証拠として残す。状態の決定方法は変えない (フェーズ2の HP と
+// 同じ方針)
+func crossCheckPlateSpecies(slot: String, speciesEn: String) {
+    let list: [String] = slot.hasPrefix("mine")
+        ? minePreviewEvidence.compactMap { $0["species"] as? String }
+        : previewEvidenceTeam.compactMap { $0 }
+    guard list.count >= 4, !list.contains(speciesEn) else { return }
+    if let e = speciesDict.first(where: { $0.en == speciesEn }) {
+        let fam = Set(formeGroup(e).map { $0.en })
+        if !fam.isDisjoint(with: list) { return }
+    }
+    debugCapture(kind: "species_disagree", key: "species_disagree:\(slot):\(speciesEn)",
+                 rawText: "",
+                 detail: ["slot": slot, "species": speciesEn, "preview": list,
+                          "source": "plate", "turn": currentTurn, "readerBuild": readerBuild])
+}
+
 func processPlates(_ hits: [String: SlotState]) {
     // 開始処理を行う条件: (a) まだ開始していない、または (b) 勝敗確定後に
     // 前試合と異なる種族のプレートが現れた (= 次試合の開始証拠なので、
@@ -3559,6 +3578,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
                     && pendingSwitchAge < 20
                 if !replacementBusy {
+                    crossCheckPlateSpecies(slot: slot, speciesEn: s.speciesEn)
                     // 前の種族のランク変化・かるわざの解除は、下の |switch| 行の
                     // applyEvent が行う (交代に伴う状態変化は行から導く)
                     // 入場時点の HP と前回出場時の HP の差は、交代で入った
@@ -7797,6 +7817,7 @@ struct MinePreviewSlot {
     var itemJa: String = ""
     var itemEn: String? = nil
     var nameText: String = ""
+    var stoneFrom: String? = nil // メガストーンで種族を決め直した場合の元の読み
 }
 
 func pvDetectMinePanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int, w: Int, h: Int)] {
@@ -7906,6 +7927,26 @@ func identifyPreviewMine(image: CGImage) -> [MinePreviewSlot]? {
         slot.itemJa = itemBoxes.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
         if !slot.itemJa.isEmpty, let ja = findInDict(in: slot.itemJa, itemDict) {
             slot.itemEn = itemJa2En[ja]
+        }
+        // メガストーンが特定できたら種族をストーンから決め直す
+        // (メガ発表文・ログ画面で確立した規則の見せ合いへの適用。
+        //  名前が読めなかった場合の第2系統にもなる)
+        if let itemEn = slot.itemEn, slot.itemJa.contains("ナイト") {
+            var baseEn = itemEn
+            for suf in ["ite X", "ite Y", "ite Z", "ite"] where baseEn.hasSuffix(suf) {
+                baseEn = String(baseEn.dropLast(suf.count)); break
+            }
+            if let stoneSp = speciesDict.first(where: { $0.en == baseEn }) {
+                if let cur = slot.species {
+                    if stoneSp.en != cur && !formeGroup(stoneSp).contains(where: { $0.en == cur }) {
+                        slot.stoneFrom = cur
+                        slot.species = stoneSp.en
+                    }
+                } else {
+                    slot.stoneFrom = ""
+                    slot.species = stoneSp.en
+                }
+            }
         }
         out.append(slot)
     }
@@ -8805,11 +8846,13 @@ func runOnce(image: CGImage) {
                         }?.key
                         if let leader { minePreviewTeam[i] = leader }
                         if let sp = mine[i].species, sp == minePreviewTeam[i] {
-                            minePreviewDetails[i] = ["species": sp,
-                                                     "gender": mine[i].gender ?? "",
-                                                     "item": mine[i].itemEn ?? "",
-                                                     "itemJa": mine[i].itemJa,
-                                                     "nameText": mine[i].nameText]
+                            var d: [String: Any] = ["species": sp,
+                                                    "gender": mine[i].gender ?? "",
+                                                    "item": mine[i].itemEn ?? "",
+                                                    "itemJa": mine[i].itemJa,
+                                                    "nameText": mine[i].nameText]
+                            if let sf = mine[i].stoneFrom { d["stoneFrom"] = sf }
+                            minePreviewDetails[i] = d
                         }
                     }
                     minePreviewEvidence = minePreviewDetails
@@ -9150,7 +9193,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1358"
+let readerBuild = "20261122_1412"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
