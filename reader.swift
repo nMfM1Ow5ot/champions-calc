@@ -237,6 +237,13 @@ func loadImage(path: String) -> CGImage? {
 
 // MARK: - 空フレーム (暗転・真っ黒・単色) の判定
 
+// 黒画面 (空フレーム) 検知による待機は、ユーザーの指示により一時的に
+// 無効化している (2026-11-23)。再有効化はこの値を true に戻すだけ。
+// 無効化中は、認識経路 (runOnce / runTeamOnce) で黒いフレームも通常の
+// 処理に流れ、待機の遷移通知 ([待機] / [再開]、blank_start /
+// blank_end) も出ない。リクエスト処理 (プレビューテスト、チーム
+// 撮影) での isBlankFrame の利用は待機とは別の用途のため対象外
+var blankStandbyEnabled = false
 var blankFrameActive = false   // 空フレームが続いているか (遷移通知用)
 
 // フレームの平均輝度とばらつきを小さなバッファで測り、「絵が無い」
@@ -10375,8 +10382,8 @@ func runOnce(image: CGImage) {
     obsFrameSeq += 1   // 生観測アーカイブのフレーム参照 (通し番号)
     // 空フレーム (暗転・消灯・切断) はどの判定にも流さず待機する。
     // 対戦終了カウンタ (emptyBattleFrames) や選出の試行回数も進めない
-    if isBlankFrame(image) { noteBlankFrame(true); return }
-    noteBlankFrame(false)
+    if blankStandbyEnabled && isBlankFrame(image) { noteBlankFrame(true); return }
+    if blankStandbyEnabled { noteBlankFrame(false) }
     debugUpdateRing(image)
     // 選出画面はプレート判定より先に判定する。
     // (選出画面の自軍パネルや「0/4」表示をプレートと誤検出しないため)
@@ -11037,7 +11044,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0707"
+let readerBuild = "20261123_0757"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -11263,8 +11270,8 @@ func writeTeamFile() {
 }
 
 func runTeamOnce(image: CGImage) {
-    if isBlankFrame(image) { noteBlankFrame(true); return }
-    noteBlankFrame(false)
+    if blankStandbyEnabled && isBlankFrame(image) { noteBlankFrame(true); return }
+    if blankStandbyEnabled { noteBlankFrame(false) }
     guard let sp = selectedSpecies(image) else {
         print("チーム登録: 選択中のポケモンが特定できません (様子を見る画面ですか？)")
         return
@@ -11995,6 +12002,11 @@ if let tab = teamScreenTab {
 // (この後の処理で battle.log が上書きされる前に logs/ へ逃がす)
 salvageLeftoverLogs()
 cleanupOldDebugShots()
+if !blankStandbyEnabled {
+    print("[blank] 黒画面 (空フレーム) 検知による待機は一時的に無効化されています — 黒いフレームも通常の処理に流れます")
+    fflush(stdout)
+    notePreStartEvent("blank_suspended")
+}
 
 paddleComputeEnabled()
 paddleAdoptAtStartup()
