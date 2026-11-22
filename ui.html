@@ -2948,7 +2948,7 @@ function applyMegaFlag(spec, en) {
 // 型推定エンジン (estimate_engine.mjs)。材料データは getData 経由で渡し、
 // 対戦の証拠は下記のアダプタが画面状態からスナップショットを作って渡す
 const estimator = createEstimator({
-  getData: () => ({ USAGE_SETS, POKEDB_PARSED, META_SETS, META_SETS_LOADED, NAMES, VGC_SETS: VGC_CORPUS }),
+  getData: () => ({ USAGE_SETS, POKEDB_PARSED, META_SETS, META_SETS_LOADED, NAMES, VGC_SETS: VGC_CORPUS, SPECIES_MOVES }),
   effSpecies,
 });
 let infDirty = false;
