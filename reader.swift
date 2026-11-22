@@ -369,6 +369,8 @@ func updateOppTeam() {
 // (実例: 2026-11-22 battle_20261122_103530、登録が別チームのまま対戦が
 //  始まり、イエッサン・オオニューラの交代と被ダメが丸ごと落ちた)
 func minePlateAdmitted(plateKey: String, entry: SpeciesEntry) -> Bool {
+    // 当該試合の暫定リストにある種族は、登録より優先して受け入れる
+    for case let e? in battleMineTeam where sameSpeciesFamily(e.species, entry.en) { return true }
     if teamEntries.isEmpty { return true }
     let grp = formeGroup(entry)
     if grp.contains(where: { teamEntries[$0.en] != nil }) { return true }
@@ -389,6 +391,10 @@ func minePlateAdmitted(plateKey: String, entry: SpeciesEntry) -> Bool {
 // それを最優先し、次にチーム登録の実数値、最後に対戦中の記録を使う
 func battleKnownMax(speciesEn: String, grp: [SpeciesEntry]) -> Int? {
     if let o = battleMaxOverride[speciesEn] { return o }
+    // 暫定リストで実数値が判明している種族はそれを使う (登録より優先)
+    for case let e? in battleMineTeam where e.species == speciesEn {
+        if let m = e.hpMax { return m }
+    }
     for m in grp {
         if let h = (teamEntries[m.en]?["stats"] as? [String: Int])?["hp"] { return h }
     }
@@ -501,11 +507,13 @@ let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppT
 let stateMonKeys: Set<String> = ["species", "curHPPercent", "status", "unburden", "itemLost", "mega", "megaSpecies", "boosts", "revealed"]
 let stateBoostKeys: [String] = ["atk", "def", "spa", "spd", "spe", "acc", "eva"]  // boosts は常時この7能力をそろえて出す
 let stateRevealedKeys: Set<String> = ["moves", "item", "ability"]
+let stateMineTeamKeys: Set<String> = ["species", "source", "ability", "item", "moves", "hpMax", "onField"]  // mineTeam の要素キー
 let stateFieldKeys: Set<String> = ["terrain", "weather", "terrainTurnsLeft", "weatherTurnsLeft", "trickRoomTurnsLeft"]
 // sideConditions は { "p1": { 状態名(EN): 残りターン, ... }, "p2": {...} } の形
 
 func writeState() {
     // state.json はバトルログ由来の状態 (monStates) から生成する
+    syncMineProvisional()
     func slotJSON(_ key: String) -> String? {
         guard let s = lastSlots[key] else { return nil }
         let side = key.hasPrefix("mine") ? "p1" : "p2"
@@ -533,6 +541,7 @@ func writeState() {
     let opps = [slotJSON("oppA"), slotJSON("oppB")].compactMap { $0 }
     if mine.isEmpty && opps.isEmpty { return }
     let team = oppTeamSeen.isEmpty ? "" : ", \"oppTeam\": [\(oppTeamSeen.map { "\"\(jsonEscape($0))\"" }.joined(separator: ", "))]"
+    let mineTeamJson = mineTeamJSON()
     // 判明情報は場に出ていない相手分も含めて全種族分を送る (UI は項目単位で反映する)
     var revAll: [String] = []
     for sp in Set(revealedMoves.keys).union(revealedItems.keys).union(revealedAbilities.keys).sorted() {
@@ -587,7 +596,7 @@ func writeState() {
     // 材料 (前の対戦の自動コンディションが次の対戦に残る事故の対策)
     let battleJson = battleArchiveId.isEmpty ? "" : ", \"battle\": \"\(battleArchiveId)\""
     let eventsJson = ", \"events\": [\(battleEvents.joined(separator: ", "))]"
-    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(revJson)\(trainer)\(rankJson)\(ratingJson)\(battleJson)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
+    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(mineTeamJson)\(revJson)\(trainer)\(rankJson)\(ratingJson)\(battleJson)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
     if json == lastWritten { return }
     lastWritten = json
     try? json.write(to: outURL, atomically: true, encoding: .utf8)
@@ -831,6 +840,128 @@ var battleAdmittedSpecies: Set<String> = []        // この試合で「登録�
 var offTeamPlateStreak: [String: Int] = [:]        // "枠|種族" -> 登録外種族の連続観測回数
 var battleMaxOverride: [String: Int] = [:]         // 種族 -> この試合で採用する最大 HP (登録値と読みが恒常的に食い違う場合)
 var battleMaxCandidate: [String: (max: Int, count: Int)] = [:]  // 種族 -> 採用候補の最大 HP と観測回数
+
+// MARK: - 自チーム暫定リスト (当該試合)
+// 見せ合いで同定された自チームの種族を当該試合の正とし、場の観測・
+// チーム撮影 (ようすをみる画面相当) ・技の判明で随時更新する。登録
+// チーム (teamEntries / teamOrder) と矛盾する場合はこちらを優先する
+// (ユーザーの明示指示 2026-11-22、総合チャット経由)。同定そのものは
+// 画像認識側の担当で、結果は minePreviewTeam / minePreviewDetails で
+// 受け取る。state.json へは mineTeam として出す (UI 側は種族構成が
+// 矛盾すれば暫定リストでパネルを組み直す)
+struct MineProvisionalEntry {
+    var species: String
+    var source: String = "preview"   // 判明経路 (preview / field / detail を "+" で併記)
+    var ability: String? = nil
+    var item: String? = nil
+    var moves: [String] = []
+    var hpMax: Int? = nil
+    var onField: Bool = false
+}
+var battleMineTeam: [MineProvisionalEntry?] = []  // 選出画面の枠順 (未同定は nil)
+var headerMineTeam: [String] = []                  // ヘッダーに書いた自軍の種族
+var minePreviewSeenCopy: [String?] = []            // 変化検出用の控え
+var minePreviewAppliedCopy: [String?] = []         // 暫定リストへ反映済みの控え
+var minePreviewUpdatedAt: Date? = nil              // 同定結果が最後に変わった時刻
+var lastBattleStartedAt: Date? = nil               // 直近の試合開始時刻
+
+func mineProvisionalSpecies() -> [String] {
+    battleMineTeam.compactMap { $0?.species }
+}
+
+// 画像認識側の同定結果を取り込み、場の観測で裏付ける。writeState と
+// startBattleLog から呼ぶ (冪等)
+func syncMineProvisional() {
+    if minePreviewTeam != minePreviewSeenCopy {
+        minePreviewSeenCopy = minePreviewTeam
+        if minePreviewTeam.contains(where: { $0 != nil }) { minePreviewUpdatedAt = Date() }
+    }
+    // 鮮度: 同定の更新が直近の試合開始より 120 秒以上前なら、前の
+    // 試合の同定結果なので使わない
+    let fresh = minePreviewUpdatedAt.map {
+        $0.timeIntervalSince(lastBattleStartedAt ?? .distantPast) > -120
+    } ?? false
+    if fresh && minePreviewTeam != minePreviewAppliedCopy {
+        minePreviewAppliedCopy = minePreviewTeam
+        battleMineTeam = minePreviewTeam.enumerated().map { (i, sp) -> MineProvisionalEntry? in
+            guard let sp else { return nil }
+            var e = MineProvisionalEntry(species: sp)
+            // 選出画面で読めた持ち物は同定の詳細から引き継ぐ
+            if minePreviewDetails.indices.contains(i),
+               let it = minePreviewDetails[i]["item"] as? String, !it.isEmpty {
+                e.item = it
+            }
+            return e
+        }
+    }
+    // 場の観測で裏付ける (登場済みの印と最大 HP)
+    for i in battleMineTeam.indices {
+        guard var e = battleMineTeam[i] else { continue }
+        if !e.onField, fieldSeen["p1"]?.contains(where: { sameSpeciesFamily($0, e.species) }) == true {
+            e.onField = true
+            if !e.source.contains("field") { e.source += "+field" }
+        }
+        if e.hpMax == nil, let m = monStates["p1:\(e.species)"]?.hpMax, m > 0 {
+            e.hpMax = m
+        }
+        battleMineTeam[i] = e
+    }
+}
+
+// state.json の mineTeam 断片 (対戦形)。同定済みの種族だけを枠順に
+// 詰めて出す (未同定の枠は要素を出さない。UI 側は「無い = 居ない」
+// とは解釈せず、6体そろうまでは既存パネルを残す)
+func mineTeamJSON() -> String {
+    var parts: [String] = []
+    for case let e? in battleMineTeam {
+        var s = "{\"species\": \"\(jsonEscape(e.species))\", \"source\": \"\(jsonEscape(e.source))\""
+        if let a = e.ability { s += ", \"ability\": \"\(jsonEscape(a))\"" }
+        if let it = e.item { s += ", \"item\": \"\(jsonEscape(it))\"" }
+        if !e.moves.isEmpty {
+            s += ", \"moves\": [\(e.moves.map { "\"\(jsonEscape($0))\"" }.joined(separator: ", "))]"
+        }
+        if let m = e.hpMax { s += ", \"hpMax\": \(m)" }
+        if e.onField { s += ", \"onField\": true" }
+        parts.append(s + "}")
+    }
+    return parts.isEmpty ? "" : ", \"mineTeam\": [\(parts.joined(separator: ", "))]"
+}
+
+// 自軍の技行から暫定リストへ技を積み上げる (技の判明で更新)
+func noteMineMove(label: String, move: String) {
+    guard label.hasPrefix("p1") else { return }
+    let sp = label.split(separator: ":").last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+    guard !sp.isEmpty else { return }
+    for i in battleMineTeam.indices {
+        guard var e = battleMineTeam[i], sameSpeciesFamily(e.species, sp) else { continue }
+        if !e.moves.contains(move) && e.moves.count < 4 {
+            e.moves.append(move)
+            battleMineTeam[i] = e
+        }
+        return
+    }
+}
+
+// チーム撮影で得た情報 (ようすをみる画面相当の観測) を、種族が一致
+// する暫定リストの要素へ反映する。種族の同一性は暫定リストが正で、
+// ここでは判明項目を埋めるだけ
+func mergeMineDetailFromCapture() {
+    guard !battleMineTeam.isEmpty else { return }
+    for i in battleMineTeam.indices {
+        guard var e = battleMineTeam[i] else { continue }
+        guard let key = teamEntries.keys.first(where: { sameSpeciesFamily($0, e.species) }),
+              let ent = teamEntries[key] else { continue }
+        var changed = false
+        if let ab = ent["ability"] as? String, !ab.isEmpty, e.ability == nil { e.ability = ab; changed = true }
+        if let it = ent["item"] as? String, !it.isEmpty, e.item == nil { e.item = it; changed = true }
+        if let mv = ent["moves"] as? [String], !mv.isEmpty, e.moves.isEmpty { e.moves = Array(mv.prefix(4)); changed = true }
+        if let st = ent["stats"] as? [String: Int], let hp = st["hp"], hp > 0, e.hpMax == nil { e.hpMax = hp; changed = true }
+        if changed {
+            if !e.source.contains("detail") { e.source += "+detail" }
+            battleMineTeam[i] = e
+        }
+    }
+}
 var winLogged = false                             // このバトルで勝敗が確定したか
 var lastLogEventAt = Date.distantPast              // 最後にログ行が出た時刻 (開始直後の監視継続用)
 var lastMoveSigAt: [String: Date] = [:]           // "枠|技EN" -> |move| を出した時刻 (OCR ゆれでの二重出力防止)
@@ -1794,6 +1925,7 @@ func emitLog(_ line: String, applyNow: Bool) {
         if f.count >= 4 && battleEvents.count < 600 {
             battleEvents.append("{\"k\":\"mv\",\"turn\":\(currentTurn),\"label\":\"\(jsonEscape(f[2]))\",\"move\":\"\(jsonEscape(f[3]))\"}")
         }
+        if f.count >= 4 { noteMineMove(label: f[2], move: f[3]) }
     }
     // 推定エンジン用イベント (特性の発動順): |switch| の連続区間を 1 回の同時入場
     // とみなし、その間に入場した個体が発動した特性を発動順のまま 'ab' イベント
@@ -2457,6 +2589,7 @@ func salvageLeftoverLogs() {
 }
 
 func startBattleLog() {
+    lastBattleStartedAt = Date()
     // 前の試合が未保存のまま新しい試合が始まる場合は、先に前試合を残す
     if logStarted && !battleArchived && !battleLog.isEmpty {
         archiveCurrentBattle(final: winLogged)
@@ -2468,7 +2601,17 @@ func startBattleLog() {
     lastArchiveSnapshotCount = -1
     battleLog = []
     emitLog("|gametype|doubles")
-    for sp in teamOrder { emitLog("|poke|p1|\(sp)") }
+    // 自軍ヘッダーは当該試合の暫定リスト (見せ合い同定) を登録より
+    // 優先する。暫定リストが無い試合では従来どおり登録順で出す
+    syncMineProvisional()
+    let mineHeaderSpecies = mineProvisionalSpecies()
+    if !mineHeaderSpecies.isEmpty {
+        for sp in mineHeaderSpecies { emitLog("|poke|p1|\(sp)") }
+        headerMineTeam = mineHeaderSpecies
+    } else {
+        for sp in teamOrder { emitLog("|poke|p1|\(sp)") }
+        headerMineTeam = teamOrder
+    }
     for sp in oppTeamSeen { emitLog("|poke|p2|\(sp)") }
     // ヘッダーに書いた6体を開始時点のまま控える (oppTeamSeen は対戦中
     // に判明した種族で増えていくため、食い違いの照合にはこちらを使う)
@@ -8871,7 +9014,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1202"
+let readerBuild = "20261122_1159"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -9629,6 +9772,7 @@ func captureTeamScreen(image: CGImage, tab: String) -> Int {
         }
     }
     if updated > 0 || pruned { writeTeamFile() }
+    if updated > 0 { mergeMineDetailFromCapture() }
     lastCaptureSpecies = screenSpecies
     return updated
 }
