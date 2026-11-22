@@ -36,6 +36,12 @@ export function createEstimator(deps) {
   let speCtxSeq = 0, lastSpeAppliedId = 0; // 行動順の対判定の文脈の二重適用防止
   let lastFaintCtx = null, faintCtxSeq = 0, lastFaintAppliedId = 0; // faintOrder の文脈と二重適用防止
   let pendingOpts = null; // processDamageInf が計算した場の条件を processDamageBayes が使う
+  // crit 後付け是正 (processCrit) のための記録: 処理済みダメージ証拠の
+  // 入力スナップショットと、inf 交差の全履歴 (種族ごとに適用順)。
+  // 急所の確定がダメージ証拠の処理より後に届いた場合、未是正版の
+  // 寄与を取り除いて急所ありで再評価するために使う
+  let dmgRecords = [], pendingDmgRecord = null, infHistory = {};
+  const deepCopy = o => { try { return structuredClone(o); } catch (e) { try { return JSON.parse(JSON.stringify(o)); } catch (e2) { return o; } } };
   let teamContextSpecies = null; // 相手チームの種族一覧 (UI が setTeamContext で渡す)
   // 推論過程ログ (検証用): 更新のたびにスナップショットをキューへ積み、
   // UI が takeInferenceLog() でまとめて受け取る。読み取りのみで推論には影響しない
@@ -96,6 +102,12 @@ function logSnapshot(species, turn, trigger) {
 function takeInferenceLog() { const out = infLog; infLog = []; return out; }
 // 候補集合への交差適用 (空になるイベントは矛盾として捨てる)
 function infIntersect(species, statKey, feasible, hpSps) {
+  // crit 後付け是正の再構築用に、全ての交差適用を履歴へ残す
+  if (!infHistory[species]) infHistory[species] = [];
+  const histIdx = infHistory[species].length;
+  infHistory[species].push({ statKey, feasible: feasible ? new Set(feasible) : feasible, hpSps: hpSps ? new Set(hpSps) : null });
+  const openRec = dmgRecords.length ? dmgRecords[dmgRecords.length - 1] : null;
+  if (openRec && openRec.open) openRec.infRefs.push({ species, idx: histIdx });
   // 推論ログの時系列で entry より先に inf が記録され、その時点の候補状態が
   // 空になる不整合を防ぐため、未生成なら候補を先に用意する (生成は entry
   // スナップショットとして記録される)。失敗しても交差処理は続ける
@@ -119,6 +131,28 @@ function infIntersect(species, statKey, feasible, hpSps) {
   dirty = true;
   logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: true });
 }
+// inf 状態の再構築 (crit 後付け是正用): 履歴の feasible を1件差し替えた
+// 場合に、その種族の交差状態を最初から再生して作り直す。infIntersect の
+// 状態遷移 (空なら dropped、交差が空になれば不適用) をそのまま再現する
+function rebuildInfState(species) {
+  const e = infEntry(species);
+  e.pairs = { atk: null, spa: null, def: null, spd: null, spe: null };
+  e.hpSps = null; e.used = 0; e.dropped = 0;
+  for (const h of infHistory[species] || []) {
+    if (!h.feasible || !h.feasible.size) { e.dropped++; continue; }
+    const next = e.pairs[h.statKey] ? new Set([...e.pairs[h.statKey]].filter(x => h.feasible.has(x))) : new Set(h.feasible);
+    if (!next.size) { e.dropped++; continue; }
+    let nh = null;
+    if (h.hpSps) {
+      nh = e.hpSps ? new Set([...e.hpSps].filter(x => h.hpSps.has(x))) : new Set(h.hpSps);
+      if (!nh.size) { e.dropped++; continue; }
+    }
+    e.pairs[h.statKey] = next;
+    if (h.hpSps) e.hpSps = nh;
+    e.used++;
+  }
+  dirty = true;
+}
 // 自軍パネルの正確な最大 HP (性格・SP から一意に決まる)
 function specMaxHP(spec) {
   if (!spec) return null;
@@ -135,9 +169,9 @@ function amtRangeForPct(pct, maxHP, ko) {
   const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
   return [lo, hi];
 }
-function processDamageInf(ev, ctx) {
+function processDamageInf(ev, ctx, optsOverride, collect) {
   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
-  pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
+  if (!collect) pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
   const md = moveData(ev.move);
   if (!md || md.category === 'Status' || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
   // 自分自身へのダメージ (反動など) は攻撃として扱わない (ベイズ側は
@@ -151,9 +185,22 @@ function processDamageInf(ev, ctx) {
   if (target === 'allAdjacentFoes') targets = ev.defAlive || 1;
   else if (target === 'allAdjacent') targets = (ev.defAlive || 1) + Math.max(0, (ev.atkAlive || 1) - 1);
   const gameType = targets >= 2 ? 'Doubles' : 'Singles';
-  const conds = infSideConds(ev);
-  const opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
-  pendingOpts = opts; // ベイズ側も同じ場の条件で評価する (てだすけ消費などの副作用を共有するため)
+  let opts;
+  if (optsOverride) {
+    // crit 後付け是正の再計算: 場の条件は記録済みのものをそのまま使う
+    // (infSideConds の消費などの副作用を再発させないため)
+    opts = optsOverride;
+  } else {
+    const conds = infSideConds(ev);
+    opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
+    pendingOpts = opts; // ベイズ側も同じ場の条件で評価する (てだすけ消費などの副作用を共有するため)
+    // crit 後付け是正用に、この証拠の入力スナップショットを記録する
+    if (pendingDmgRecord) pendingDmgRecord.open = false;
+    pendingDmgRecord = { key: ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move, turn: ev.turn, atk: ev.atk, def: ev.def, move: ev.move,
+      by: oppIsAtk ? 'opp' : 'mine', atkSpecies, defSpecies, ev: deepCopy(ev), ctx: deepCopy(ctx), opts: { ...opts }, infRefs: [], bayes: null, patched: false, open: true };
+    dmgRecords.push(pendingDmgRecord);
+    if (dmgRecords.length > 400) dmgRecords.splice(0, dmgRecords.length - 400);
+  }
   if (oppIsAtk) {
     // 相手の攻撃 -> 自分の被ダメ量から相手の攻撃 (or Body Press は防御) を絞る
     const statKey = md.name === 'Body Press' ? 'def' : (md.category === 'Physical' ? 'atk' : 'spa');
@@ -163,7 +210,7 @@ function processDamageInf(ev, ctx) {
     // 実数値と一致させる (メガ進化中はメガ側の表。素の表でグループ化
     // すると、値が衝突する行同士で代表ロールの判定がずれる)
     const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
-    if (!defSpec || !bases.length || !table) { logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-base' }); return; }
+    if (!defSpec || !bases.length || !table) { if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-base' }); return; }
     // 実数 (amt) が無いイベントは、pct と防御側の最大 HP から実数範囲を
     // 導いて照合する。amt は最大 HP の基準が一致する場合だけ付くため、
     // 登録チーム外の編成では自軍の被ダメが全件 pct のみになる
@@ -171,9 +218,9 @@ function processDamageInf(ev, ctx) {
     let inRange;
     if (typeof ev.amt === 'number' && ev.amt > 0) inRange = r => r === ev.amt;
     else {
-      if (typeof ev.pct !== 'number' || ev.pct <= 0) { logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-amt' }); return; }
+      if (typeof ev.pct !== 'number' || ev.pct <= 0) { if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-amt' }); return; }
       const M = specMaxHP(defSpec);
-      if (!M) { logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-amt' }); return; }
+      if (!M) { if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: 'inf', stat: statKey, applied: false, reason: 'no-amt' }); return; }
       const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
       const [lo, hi] = amtRangeForPct(ev.pct, M, ko);
       inRange = r => r >= lo && r <= hi;
@@ -189,7 +236,8 @@ function processDamageInf(ev, ctx) {
         if (rolls.some(inRange)) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
       }
     }
-    infIntersect(atkSpecies, statKey, feasible, null);
+    if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
+    else infIntersect(atkSpecies, statKey, feasible, null);
   } else {
     // 自分の攻撃 -> 相手の HP% の減少から相手の HP と防御 (or 特防) を共同で絞る
     if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
@@ -198,7 +246,7 @@ function processDamageInf(ev, ctx) {
     const bases = ctx.basesDef;
     // 攻撃側と同じく、メガ進化中はメガ側の表で値グループ化する
     const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
-    if (!atkSpec || !bases.length || !table) { logSnapshot(defSpecies, ev.turn, { kind: 'inf', stat: defKey, applied: false, reason: 'no-base' }); return; }
+    if (!atkSpec || !bases.length || !table) { if (!collect) logSnapshot(defSpecies, ev.turn, { kind: 'inf', stat: defKey, applied: false, reason: 'no-base' }); return; }
     const hpBySp = new Map();
     for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
     const byValue = new Map();
@@ -218,7 +266,8 @@ function processDamageInf(ev, ctx) {
         }
       }
     }
-    infIntersect(defSpecies, defKey, feasPairs, feasHp);
+    if (collect) collect.push({ species: defSpecies, statKey: defKey, feasible: feasPairs, hpSps: feasHp });
+    else infIntersect(defSpecies, defKey, feasPairs, feasHp);
   }
 }
 // 【Champions 差分レイヤーの watch 点】ここから moveBracket までの素早さ・
@@ -237,7 +286,7 @@ function infEffSpe(statVal, boosts, item, status, tailwind, ability, weather, te
   v = b >= 0 ? Math.floor(v * (2 + b) / 2) : Math.floor(v * 2 / (2 - b));
   if (item === 'Choice Scarf') v = Math.floor(v * 1.5);
   if (item === 'Iron Ball') v = Math.floor(v / 2);
-  if (ability && WEATHER_SPE[ability] === weather) v *= 2;
+  if (ability && typeof weather === 'string' && WEATHER_SPE[ability] === weather) v *= 2;
   if (ability === 'Surge Surfer' && terrain === 'Electric') v *= 2;
   if (unburden) v *= 2;
   if (tailwind) v *= 2;
@@ -1061,14 +1110,17 @@ function megaStoneTarget(item, species) {
   } catch (e) { /* fallthrough */ }
   return undefined;
 }
-function processDamageBayes(ev, ctx) {
+function processDamageBayes(ev, ctx, optsOverride, capture) {
   // 自分自身へのダメージは攻撃として処理せず、反動の経路へ回す
   if (ev.atk && ev.atk === ev.def) { if (labelSide(ev.atk) === 'p2') processRecoilBayes(ev); return; }
-  const opts = pendingOpts;
+  const opts = optsOverride || pendingOpts;
   if (!opts) return; // 旧エンジンが対象外にした技 (変化・固定ダメ等) は同じく対象外
   const md = moveData(ev.move);
   if (!md) return;
   const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
+  // crit 後付け是正の再計算 (capture 指定時) では、分布もフラグも変更せず、
+  // 急所ありで計算した場合の counts とフラグ判定だけを capture へ返す。
+  // フラグの作業値は capture.flagIn (是正対象イベント適用前の値) から始める
   // ダメージ仮説フラグ (speFlag のダメージ版): 観測が全候補と矛盾する
   // 場合に、発動表示のない持ち物効果を暫定仮説として立てる。対象は
   // 「相手の攻撃が全候補の最大ロール超過」 (物理→こだわりハチマキ、
@@ -1082,7 +1134,9 @@ function processDamageBayes(ev, ctx) {
     const ent = bayesEntry(atkSpecies);
     const defSpec = ctx.myDef;
     const base = ctx.baseAtk;
-    if (!ent || !defSpec || !base) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false, reason: 'no-base' }); return; }
+    if (!ent || !defSpec || !base) { if (!capture) logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false, reason: 'no-base' }); return; }
+    const flagIn = ent.dmgFlag;
+    let flagWork = capture ? capture.flagIn : flagIn;
     // 実数 (amt) が無いイベントは pct のまま処理する (amt が付かない
     // 理由は processDamageInf 側の注記と同じ)。処理できない場合も、
     // 無言で返さず記録を残す (欠落がログから追えるように)
@@ -1090,7 +1144,7 @@ function processDamageBayes(ev, ctx) {
     let amtLo = null, amtHi = null;
     if (!hasAmt) {
       const M = typeof ev.pct === 'number' && ev.pct > 0 ? specMaxHP(defSpec) : null;
-      if (!M) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false, reason: 'no-amt' }); return; }
+      if (!M) { if (!capture) logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false, reason: 'no-amt' }); return; }
       const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
       [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
     }
@@ -1109,10 +1163,10 @@ function processDamageBayes(ev, ctx) {
         trig.dir = 'over';
         const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
         // 持ち物が判明済みの種族に持ち物仮説は立てない
-        if (want && !ent.dmgFlag && !ent.itemKnown) { ent.dmgFlag = want; trig.dmgFlagSet = want; }
+        if (want && !flagWork && !ent.itemKnown) { flagWork = want; if (!capture) ent.dmgFlag = want; trig.dmgFlagSet = want; }
       }
     }
-    const flag = ent.dmgFlag;
+    const flag = flagWork;
     if (flag === 'Choice Band' || flag === 'Choice Specs') {
       if ((flag === 'Choice Band' && md.category === 'Physical') || (flag === 'Choice Specs' && md.category === 'Special')) {
         counts = ent.cands.map(c => {
@@ -1126,6 +1180,12 @@ function processDamageBayes(ev, ctx) {
     // 棄却理由の記録 (applied=false の内訳を推論ログだけで追えるように。
     // battle_20261122_160927: 理由の無い applied=false が2件残った)
     if (!counts.some(n => n > 0)) trig.reason = trig.dir === 'over' ? 'over-max' : 'no-match';
+    if (capture) { capture.counts = counts; capture.flagSet = trig.dmgFlagSet || null; capture.trig = trig; return; }
+    if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) {
+      pendingDmgRecord.bayes = { entSpecies: atkSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some(n => n > 0) };
+      pendingDmgRecord.bayesCtx = deepCopy(ctx); // ベイズ側の文脈は inf 側と形が違うため別に控える
+      pendingDmgRecord.open = false;
+    }
     logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   } else {
@@ -1134,7 +1194,9 @@ function processDamageBayes(ev, ctx) {
     const ent = bayesEntry(defSpecies);
     const atkSpec = ctx.myAtk;
     const base = ctx.baseDef;
-    if (!ent || !atkSpec || !base) { logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, applied: false, reason: 'no-base' }); return; }
+    if (!ent || !atkSpec || !base) { if (!capture) logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, applied: false, reason: 'no-base' }); return; }
+    const flagIn = ent.dmgFlag;
+    let flagWork = capture ? capture.flagIn : flagIn;
     const pctCounts = (c, rolls) => {
       const hpVal = c.values.hp;
       if (!hpVal || !rolls) return 0;
@@ -1161,10 +1223,10 @@ function processDamageBayes(ev, ctx) {
         trig.dir = 'under';
         // 持ち物が判明済みの種族に持ち物仮説は立てない (同 seq34:
         // Eject Button がハード判明済みの Sableye にフラグが立った)
-        if (md.category === 'Special' && !ent.dmgFlag && !ent.itemKnown) { ent.dmgFlag = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
+        if (md.category === 'Special' && !flagWork && !ent.itemKnown) { flagWork = 'Assault Vest'; if (!capture) ent.dmgFlag = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
       }
     }
-    if (ent.dmgFlag === 'Assault Vest' && md.category === 'Special') {
+    if (flagWork === 'Assault Vest' && md.category === 'Special') {
       counts = ent.cands.map(c => {
         if (!c.values.hp) return 0;
         const cc = isMegaStoneItem(c.item) ? c : { ...c, item: 'Assault Vest' };
@@ -1175,9 +1237,72 @@ function processDamageBayes(ev, ctx) {
     }
     // 棄却理由の記録 (by opp 側と同じ)
     if (!counts.some(n => n > 0)) trig.reason = trig.dir === 'under' ? 'under-min' : 'no-match';
+    if (capture) { capture.counts = counts; capture.flagSet = trig.dmgFlagSet || null; capture.trig = trig; return; }
+    if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) {
+      pendingDmgRecord.bayes = { entSpecies: defSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some(n => n > 0) };
+      pendingDmgRecord.bayesCtx = deepCopy(ctx);
+      pendingDmgRecord.open = false;
+    }
     logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   }
+}
+// crit の後付け是正: 急所の確定 (reader の crit イベント) が、対応する
+// ダメージ証拠の処理より後に届いた場合の取り込み口。記録済みの入力
+// スナップショットを使い、(1) inf 側は feasible を急所ありで再計算して
+// 履歴を差し替えた上で交差状態を再構築し、(2) ベイズ側は未是正版の
+// 尤度寄与を割り戻して急所ありの尤度で掛け直す。是正対象イベントが
+// 立てた dmgFlag が急所込みでは立たない場合は下ろす
+// (battle_20261122_201011 seq33: 急所未伝達のまま Choice Band が立った)
+function processCrit(ev) {
+  if (!ev || ev.atk == null || ev.def == null || !ev.move) return;
+  if (typeof ev.turn === 'number') infLogTurn = ev.turn;
+  const key = ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move;
+  let rec = null;
+  for (let i = dmgRecords.length - 1; i >= 0; i--) { if (dmgRecords[i].key === key && !dmgRecords[i].patched) { rec = dmgRecords[i]; break; } }
+  const logSpecies = rec ? (rec.by === 'opp' ? rec.atkSpecies : rec.defSpecies) : labelSpecies(ev.atk);
+  if (!rec) { logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: false, reason: 'no-match' }); return; }
+  if (rec.ev.crit) { logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: false, reason: 'already-crit' }); return; }
+  rec.patched = true;
+  rec.ev.crit = true;
+  rec.opts.crit = true;
+  // (1) inf 側: feasible を再計算して履歴を差し替え、交差状態を再構築する
+  const collect = [];
+  processDamageInf(rec.ev, rec.ctx, rec.opts, collect);
+  const touched = new Set();
+  for (const ref of rec.infRefs) {
+    const nc = collect.find(c => c.species === ref.species && c.statKey === (infHistory[ref.species] && infHistory[ref.species][ref.idx] ? infHistory[ref.species][ref.idx].statKey : null));
+    if (nc && infHistory[ref.species] && infHistory[ref.species][ref.idx]) {
+      infHistory[ref.species][ref.idx] = { statKey: nc.statKey, feasible: nc.feasible ? new Set(nc.feasible) : nc.feasible, hpSps: nc.hpSps ? new Set(nc.hpSps) : null };
+      touched.add(ref.species);
+    }
+  }
+  for (const sp of touched) rebuildInfState(sp);
+  // (2) ベイズ側: 尤度の割り戻しと掛け直し、フラグの整合
+  let flagCleared = null, bayesPatched = false;
+  if (rec.bayes) {
+    const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
+    if (ent && ent.cands.length === rec.bayes.counts.length) {
+      const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null };
+      processDamageBayes(rec.ev, rec.bayesCtx || rec.ctx, rec.opts, capture);
+      if (capture.counts) {
+        if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) { ent.dmgFlag = null; flagCleared = rec.bayes.flagSet; }
+        else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
+        if (rec.bayes.applied) {
+          let tot = 0;
+          ent.cands.forEach((c, i) => { if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+          if (tot > 0) for (const c of ent.cands) c.post /= tot;
+        } else if (capture.counts.some(n => n > 0)) {
+          let tot = 0;
+          ent.cands.forEach((c, i) => { c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+          if (tot > 0) { for (const c of ent.cands) c.post /= tot; ent.used++; }
+        }
+        bayesPatched = true;
+        dirty = true;
+      }
+    }
+  }
+  logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: true, bayes: bayesPatched, inf: touched.size > 0, ...(flagCleared ? { flagCleared } : {}) });
 }
 function processMoveBayes(ev, io) {
   const ctx = lastSpeCtx;
@@ -1635,6 +1760,7 @@ function candRanges(args) {
 
   function reset() {
     inference = { seen: 0, bySpecies: {} };
+    dmgRecords = []; pendingDmgRecord = null; infHistory = {};
     infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
     infLastMove = null;
     dirty = false;
@@ -1657,7 +1783,7 @@ function candRanges(args) {
     applyCounts: bayesApply,
     moveUpdate: bayesMoveUpdate,
     processDamageInf, processDamageBayes, processMoveInf, processMoveBayes,
-    processFaintOrderInf, processFaintOrderBayes,
+    processFaintOrderInf, processFaintOrderBayes, processCrit,
     processAbility: infProcessAbility,
     applyRevealed, candRanges,
     setTeamContext,
