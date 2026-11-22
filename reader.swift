@@ -877,6 +877,7 @@ var lastDamageTurn: [String: Int] = [:]            // プレート名 -> ダメ�
 var lastDamageDir: [String: Int] = [:]             // プレート名 -> 最後に出した行の向き (-1: ダメージ / +1: 回復)
 var lastDamageTime: [String: Date] = [:]           // プレート名 -> 最後にダメージ/回復行を出した時刻
 var lastCritAt: [String: Date] = [:]               // 枠 -> 最後に |-crit| を出した時刻
+var critEventMarks: [String: (turn: Int, atk: String)] = [:]  // 対象ラベル -> 急所が確定した (ターン, 攻撃側ラベル)。dmg イベント生成時の crit 判定に使う (生成が急所文から 6 秒以上遅れても、そのヒットの最終イベントに急所を載せるため)
 var heldLine: [String: (toPct: Int, dir: Int, seq: Int, turn: Int, hpText: String)] = [:]  // プレート名 -> 行動内に保留したダメージ/回復行
 var pendingFaints: [(slot: String, speciesEn: String, at: Date)] = []  // 遅延出力するひんし行 (効果行より後に並べるため)
 var faintedSlots: [String: String] = [:]           // ひんし行を出した枠 -> 種族 (交代が確定するまでプレート読みを無視する)
@@ -2302,6 +2303,7 @@ func resetLogState() {
     lastEffectAt = [:]
     pendingSwitchSpecies = [:]; pendingSwitchCount = [:]; pendingSwitchSince = [:]; pendingSwitchCandidates = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastDamageTime = [:]; lastCritAt = [:]; actionSeq = 0
+    critEventMarks = [:]
     suspectJump = [:]; firstEntryPlateHP = [:]; sitrusWatch = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
     fieldSetByMoveTurn = -1; switchInTurn = [:]
     heldWeatherStart = nil; heldTerrainStart = nil; fieldHoldBypass = false
@@ -3450,7 +3452,8 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
     let atkSpecies = String(atkParts[1]).trimmingCharacters(in: .whitespaces)
     guard !atkSpecies.isEmpty, atkSpecies != speciesEn else { return }
     let atkKey = "\(atkSide):\(atkSpecies)"
-    let crit = lastCritAt["\(slot): \(speciesEn)"].map { Date().timeIntervalSince($0) < 6 } ?? false
+    let crit = (lastCritAt["\(slot): \(speciesEn)"].map { Date().timeIntervalSince($0) < 6 } ?? false)
+        || (critEventMarks["\(slot): \(speciesEn)"].map { $0.turn == currentTurn && $0.atk == lastMoveLabel } ?? false)
     func boostsJson(_ k: String) -> String {
         guard let b = monStates[k]?.boosts, !b.isEmpty else { return "{}" }
         let inner = ["atk", "def", "spa", "spd", "spe"].compactMap { kk -> String? in
@@ -6281,6 +6284,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 同じ急所文の再読で二重に出さない (枠ごとに 6 秒あける)
         if !target.isEmpty && Date().timeIntervalSince(lastCritAt[target] ?? .distantPast) > 6 {
             lastCritAt[target] = Date()
+            critEventMarks[target] = (turn: currentTurn, atk: lastMoveLabel)
             // 急所の告知文は被ダメ行より後に来るため、記録時点では
             // dmg イベントの crit が false のまま残る。対象の直近の
             // イベントを是正する (実例: 2026-11-22
@@ -9722,7 +9726,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2051"
+let readerBuild = "20261122_2100"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
