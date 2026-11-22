@@ -704,6 +704,7 @@ var currentTurn = 0
 var movesSinceTurnLine: Set<String> = []
 var roundEventSeen = false
 var suppressNextDetectorTurn = false
+var lastRoundEventAt: Date? = nil                 // 最後にラウンド行を出した時刻 (ターン検出の静穏判定用、フェーズ4)
 // 最後のターン行以降に交代で入った枠 (ターン行ガードの条件 (c) 用)
 var enteredThisSegment: Set<String> = []
 // 場にいない種族の文が既定枠へ帰属された回数 (側+種族ごと)。
@@ -1816,7 +1817,13 @@ func emitLog(_ line: String, applyNow: Bool) {
                 currentTurn >= 1 && !movesSinceTurnLine.isEmpty && !movesSinceTurnLine.contains(mv)
                     && enteredThisSegment.contains(mv.split(separator: ":").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? "")
             } ?? false
-            if currentTurn == 0 && !roundEventSeen { guardN = 1 }
+            // ターン0 (開幕区間) でターン行を生むのは技行の初出だけに
+            // する: 入場効果のラウンド行 (いかくの低下行・設置行など)
+            // はターン開始の証拠にならない。これらで |turn|1 を先に
+            // 出すと、正規のコマンドフェーズ検出が第1ターンを 2 に
+            // 進めて以後全ターンが +1 になる (実例: 2026-11-22
+            // battle_20261122_091721、debug02 の挿入が発端。フェーズ4)
+            if currentTurn == 0 && mover != nil { guardN = 1 }
             else if let mover, movesSinceTurnLine.contains(mover) || movesSinceTurnLine.count >= 4 { guardN = currentTurn + 1 }
             else if ruleC { guardN = currentTurn + 1 }
             if let n = guardN {
@@ -1858,6 +1865,7 @@ func emitLog(_ line: String, applyNow: Bool) {
                 }
             }
             roundEventSeen = true
+            lastRoundEventAt = Date()
             if let mover { movesSinceTurnLine.insert(mover) }
         }
     }
@@ -5266,9 +5274,22 @@ func parseLogScreen(image: CGImage) -> Bool {
     if !logStarted || winLogged { startBattleLog() }
     scanFieldHeader(boxes)
     if tn > currentTurn {
+        // 文面系統が数え上げより先行 = コマンドフェーズの取りこぼし。
+        // 回復として追随し、不一致は証拠に残す (フェーズ4: 二系統照合)
+        debugCapture(kind: "turn_disagree", key: "turn_disagree:\(tn):\(currentTurn)", rawText: "",
+                     detail: ["textTurn": tn, "countTurn": currentTurn, "direction": "count_behind", "chips": chipHits.count],
+                     image: image)
         currentTurn = tn
         emitLog("|turn|\(tn)")
         recordTurnEvidence(turn: tn, path: "log_screen", image: image, extra: ["chips": chipHits.count])
+    } else if tn < currentTurn && !(tn == currentTurn - 1 && !roundEventSeen) {
+        // 数え上げが文面より先行している疑い。出力済みの行は変えられ
+        // ないため番号は戻さず、証拠だけ残す。コマンドフェーズ中に
+        // 見出しがまだ無いだけの遅れ (tn == currentTurn - 1 かつ
+        // 今ターン未行動) は正常として記録しない
+        debugCapture(kind: "turn_disagree", key: "turn_disagree:\(tn):\(currentTurn)", rawText: "",
+                     detail: ["textTurn": tn, "countTurn": currentTurn, "direction": "count_ahead", "chips": chipHits.count],
+                     image: image)
     }
     let buf = makeFullBuffer(image)
     let chipIdx = Set(chipHits.map { $0.index })
@@ -9091,7 +9112,12 @@ func runOnce(image: CGImage) {
     let platesReady = logStarted && !commandPhaseSeen && !awaiting && expectedPlates >= 2 && presentHits.count == expectedPlates
     let allSettled = presentHits.allSatisfy { lastSlots[$0.key]?.speciesEn == $0.value.speciesEn }
     if platesReady { turnRawFrames += 1 } else { turnRawFrames = 0 }
-    if platesReady && ((expectedPlates >= 4 && allSettled) || turnRawFrames >= 6) {
+    // 即時経路 (プレート確定) は、最後のラウンド行から 2.5 秒以上の
+    // 静穏も条件にする: 解決フェーズの合間の一瞬の揃いで誤発火すると
+    // ターン番号が通しでずれる (フェーズ4)。生フレーム経路は 6 フレーム
+    // 連続の揃い自体が時間の裏付けになるため従来どおり
+    let turnQuietOK = lastRoundEventAt.map { Date().timeIntervalSince($0) >= 2.5 } ?? true
+    if platesReady && ((expectedPlates >= 4 && allSettled && turnQuietOK) || turnRawFrames >= 6) {
         commandPhaseSeen = true
         flushPendingDamage(force: true)
         emitPendingFaints()
@@ -9124,7 +9150,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1218"
+let readerBuild = "20261122_1358"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
