@@ -538,6 +538,8 @@ func recognitionMainLoop() -> Never {
     while true {
         serviceCaptureHeartbeat()
         flushSkippedEvidence()
+        paddlePollResults()
+        paddleSupervise()
         var item: FrameHandoff.Item? = nil
         if !boundaryDrainItems.isEmpty { item = boundaryDrainItems.removeFirst() }
         else { item = frameHandoff.dequeue() }
@@ -605,6 +607,392 @@ func recordObservation(pass: String, region: [Double],
     }
 }
 
+// MARK: - PaddleOCR 補助チャンネル (証拠記録のみ。状態の決定には一切使わない)
+// Mac ローカルの Python サイドカー (paddle_sidecar.py) に、obs に記録が
+// 出たフレームの切り出しだけを渡し、生の読みを battle_<試合>_paddle.jsonl
+// へ併記する。設計と固定事項は PADDLE_DESIGN.md。サイドカーとの受け渡しは
+// ~/champions_paddle/spool/ のファイル経由で、reader はサイドカーを
+// 一切待たない (切り出しと結果の取り込みは専用の直列キューで行う)。
+let paddleHomeURL = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent("champions_paddle")
+let paddleSpoolURL = paddleHomeURL.appendingPathComponent("spool")
+let paddleQueue = DispatchQueue(label: "champions.paddle")
+var paddleEnabled = false            // 起動時にスイッチを確認して確定する
+var paddleSessionActive = false      // 現在の試合のセッションが生きているか
+var paddleBattleKey = ""
+var paddleReqSeq = 0
+var paddleRequested = 0
+var paddleReturned = 0
+var paddleDroppedCount = 0
+var paddleRequests: [Int: [String: Any]] = [:]   // reqid -> 証拠行の組み立て材料
+var paddleResultsOffset = 0
+var paddleLastHash: [String: UInt64] = [:]       // pass|領域 -> 前回送った切り出しのハッシュ
+var paddleLastOfferAt: [String: Date] = [:]      // pass|領域 -> 前回供給した時刻 (供給量の調整用)
+var paddleLastAnyOfferAt = Date(timeIntervalSince1970: 0)   // 全 pass 合計の前回供給時刻 (全体の供給上限用)
+var paddleSidecarPid: Int32 = 0
+var paddleLastDebugFrame = -1                    // デバッグ記録が発火した直近フレーム
+var paddleUnavailable = false
+var paddleUnavailableNotified = false
+var paddleLastLaunchTry = Date(timeIntervalSince1970: 0)
+var paddleLastRelaunch = Date(timeIntervalSince1970: 0)
+var paddleLastSupervise = Date(timeIntervalSince1970: 0)
+var paddleOfferCounter = 0
+
+func paddleComputeEnabled() {
+    if CommandLine.arguments.contains("--no-paddle") { paddleEnabled = false; return }
+    if ProcessInfo.processInfo.environment["CHAMPIONS_PADDLE_OFF"] == "1" { paddleEnabled = false; return }
+    if FileManager.default.fileExists(atPath: paddleHomeURL.appendingPathComponent("DISABLED").path) {
+        paddleEnabled = false; return
+    }
+    paddleEnabled = true
+}
+
+// 心拍が新しく pid が生きていれば、前の reader が残したサイドカーを
+// 引き継ぐ (二重起動の防止。実際の立て直しは次の試合開始時に行う)
+func paddleAdoptAtStartup() {
+    guard paddleEnabled else { return }
+    let hbURL = paddleSpoolURL.appendingPathComponent("heartbeat.json")
+    guard let data = try? Data(contentsOf: hbURL),
+          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let pid = (obj["pid"] as? NSNumber)?.int32Value,
+          let at = (obj["at"] as? NSNumber)?.doubleValue else { return }
+    if Date().timeIntervalSince1970 - at < 20, kill(pid, 0) == 0 {
+        paddleSidecarPid = pid
+    }
+}
+
+// サイドカーのログへ reader 側の出来事も残す (起動・再起動・失敗の
+// 時系列を1か所で追えるようにするため。ベストエフォート)
+func paddleLogLine(_ text: String) {
+    let url = paddleSpoolURL.appendingPathComponent("sidecar.log")
+    let f = ISO8601DateFormatter()
+    f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    let line = "[reader \(f.string(from: Date()))] \(text)\n"
+    guard let data = line.data(using: .utf8) else { return }
+    if !FileManager.default.fileExists(atPath: url.path) {
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+    }
+    if let fh = try? FileHandle(forWritingTo: url) {
+        _ = fh.seekToEndOfFile()
+        fh.write(data)
+        try? fh.close()
+    }
+}
+
+func paddleTerminateSidecar() {
+    if paddleSidecarPid > 0 {
+        // SIGTERM で死なない個体 (ネイティブ側で固まった等) が残ると
+        // 次の起動と競合するため、終了は SIGKILL で保証する。優雅な
+        // 終了は試合終了時のドレイン側で既に済ませてある
+        kill(paddleSidecarPid, SIGKILL)
+        paddleSidecarPid = 0
+    }
+}
+
+// サイドカーの起動 (paddleQueue 上で呼ぶ)。truncate = true は新しい
+// 試合の開始時で、スプールの要求・結果を空にしてから起動する。
+// 再監督での再起動は truncate = false で、サイドカー側の offset から
+// 再開させる (要求の再処理はしない)。
+func paddleLaunchSidecar(truncate: Bool) {
+    paddleTerminateSidecar()
+    paddleLastLaunchTry = Date()
+    let fm = FileManager.default
+    try? fm.createDirectory(at: paddleSpoolURL.appendingPathComponent("crops"),
+                            withIntermediateDirectories: true)
+    if truncate {
+        for name in ["requests.jsonl", "results.jsonl", "offset.txt", "started.jsonl"] {
+            try? fm.removeItem(at: paddleSpoolURL.appendingPathComponent(name))
+        }
+        paddleResultsOffset = 0
+    }
+    let python = paddleHomeURL.appendingPathComponent(".venv/bin/python")
+    guard fm.fileExists(atPath: python.path) else {
+        paddleMarkUnavailable("venv が見つかりません")
+        return
+    }
+    let proc = Process()
+    // サイドカーの標準出力・エラーはスプールのログへ残す (落ちた
+    // ときに Python 側の痕跡を追えるようにするため)
+    let sidecarLogURL = paddleSpoolURL.appendingPathComponent("sidecar.log")
+    if !fm.fileExists(atPath: sidecarLogURL.path) {
+        fm.createFile(atPath: sidecarLogURL.path, contents: nil)
+    }
+    if let logFh = try? FileHandle(forWritingTo: sidecarLogURL) {
+        _ = logFh.seekToEndOfFile()
+        proc.standardOutput = logFh
+        proc.standardError = logFh
+    }
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/nice")
+    proc.arguments = ["-n", "10", python.path,
+                      scriptDir.appendingPathComponent("paddle_sidecar.py").path,
+                      "--spool", paddleSpoolURL.path, "--battle", paddleBattleKey]
+    do {
+        try proc.run()
+        paddleSidecarPid = proc.processIdentifier
+        paddleSessionActive = true
+        paddleLastRelaunch = Date()   // 起動直後は心拍が古くても再起動しない
+        paddleLogLine("サイドカーを起動しました (pid \(proc.processIdentifier), battle \(paddleBattleKey))")
+    } catch {
+        paddleLogLine("サイドカーの起動に失敗しました")
+        paddleMarkUnavailable("サイドカーを起動できませんでした")
+    }
+}
+
+func paddleMarkUnavailable(_ why: String) {
+    paddleUnavailable = true
+    paddleSessionActive = false
+    if !paddleUnavailableNotified {
+        paddleUnavailableNotified = true
+        print("[paddle] 利用できないため証拠記録を無効化します (\(why))")
+    }
+}
+
+func paddleStartBattle() {
+    paddleQueue.async {
+        paddleBattleKey = battleArchiveId
+        paddleReqSeq = 0
+        paddleRequested = 0
+        paddleReturned = 0
+        paddleDroppedCount = 0
+        paddleRequests = [:]
+        paddleLastHash = [:]
+        paddleSessionActive = false
+        guard paddleEnabled, !paddleBattleKey.isEmpty else { return }
+        // 利用不可の環境では再試行の間隔を長く空ける
+        if paddleUnavailable,
+           Date().timeIntervalSince(paddleLastLaunchTry) < 1800 { return }
+        paddleUnavailable = false
+        paddleLaunchSidecar(truncate: true)
+    }
+}
+
+// 切り出しの供給。ocr / ocrBoxes の出口 (obs 記録と同じ箇所) から
+// 呼ばれる。認識スレッドでは依頼を積むだけで、切り出し・書き出し・
+// 重複除去は paddleQueue で行う。
+func paddleOffer(image: CGImage, pass: String, region: [Double]) {
+    guard paddleEnabled, paddleSessionActive, logStarted, !winLogged,
+          !battleArchiveId.isEmpty, region.count == 4 else { return }
+    // 全画面は場面を絞る: デバッグ記録が発火したフレームに限る
+    let isFull = region[0] <= 0.001 && region[1] <= 0.001 && region[2] >= 0.999 && region[3] >= 0.999
+    let priority = (obsFrameSeq == paddleLastDebugFrame)
+    if isFull && !priority { return }
+    // 供給量の調整 (ステップ2の実測で判明): obs の出たフレームごとに
+    // 送ると毎秒6件超になり、サイドカーの処理が追いつかず大半が
+    // 破棄・未処理になった。pass・領域ごとに最小間隔を空ける
+    // (証拠は全フレームではなく第2の読みの見本で足りる。obs 側には
+    // 全フレームが残っている)。デバッグ発火フレームの優先投入は
+    // 間隔の対象外とする。
+    // 未解決の要求が溜まりすぎたら、新規の (優先でない) 供給を止める
+    if !priority, paddleRequested - paddleReturned - paddleDroppedCount >= 150 { return }
+    if !priority {
+        // 全体の供給上限: 領域ごとの間隔だけでは、領域の種類が多い
+        // boxes 系の合計が処理能力を超え得るため、全 pass 合計でも
+        // 最小間隔を課す (自己議論で特定した穴への対応)
+        if sNow().timeIntervalSince(paddleLastAnyOfferAt) < 1.2 { return }
+        let key = pass + "|" + region.map { String(format: "%.3f", $0) }.joined(separator: ",")
+        let interval: Double = pass.hasPrefix("plate:") ? 3.0 : 4.0
+        if let last = paddleLastOfferAt[key], sNow().timeIntervalSince(last) < interval { return }
+        paddleLastOfferAt[key] = sNow()
+        paddleLastAnyOfferAt = sNow()
+    }
+    let frame = obsFrameSeq
+    let at = sNow()
+    let key = battleArchiveId
+    paddleQueue.async {
+        guard paddleSessionActive, paddleBattleKey == key else { return }
+        // 余白 (ステップ0の確定値): プレートは縦 ±0.010 / 横 ±0.006、
+        // メッセージ帯は上側だけ開始を 0.65 まで広げる
+        var crop = region
+        if pass.hasPrefix("plate:") {
+            crop = [region[0] - 0.006, region[1] - 0.010, region[2] + 0.006, region[3] + 0.010]
+        } else if pass == "boxes", region[1] > 0.6, region[1] < 0.7, region[3] >= 0.999 {
+            crop = [region[0], min(region[1], 0.65), region[2], region[3]]
+        }
+        crop = [max(0, crop[0]), max(0, crop[1]), min(1, crop[2]), min(1, crop[3])]
+        let W = image.width, H = image.height
+        let px = Int(crop[0] * Double(W)), py = Int(crop[1] * Double(H))
+        let pw = max(8, Int((crop[2] - crop[0]) * Double(W)))
+        let ph = max(8, Int((crop[3] - crop[1]) * Double(H)))
+        guard let cropped = image.cropping(to: CGRect(x: px, y: py, width: pw, height: ph))
+        else { return }
+        // 全画面の切り出しは長辺 960 まで縮小する (ステップ0で全画面は
+        // 縮小して測っていた前例もある)。アリーナの LED 等の疑似文字で
+        // 検出枠が爆発し、1件の予測が数分固まる事象への対策
+        var finalImage = cropped
+        if isFull {
+            let longSide = max(cropped.width, cropped.height)
+            if longSide > 960 {
+                let scale = 960.0 / Double(longSide)
+                let nw = max(8, Int(Double(cropped.width) * scale))
+                let nh = max(8, Int(Double(cropped.height) * scale))
+                if let ctx = CGContext(data: nil, width: nw, height: nh,
+                                       bitsPerComponent: 8, bytesPerRow: 0,
+                                       space: CGColorSpaceCreateDeviceRGB(),
+                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                    ctx.draw(cropped, in: CGRect(x: 0, y: 0, width: nw, height: nh))
+                    if let scaled = ctx.makeImage() { finalImage = scaled }
+                }
+            }
+        }
+        guard let data = NSBitmapImageRep(cgImage: finalImage)
+                .representation(using: .jpeg, properties: [.compressionFactor: 0.85])
+        else { return }
+        // 重複除去: 同じ pass・領域で前回と同一内容なら送らない
+        var hash: UInt64 = 1469598103934665603
+        for b in data { hash = (hash ^ UInt64(b)) &* 1099511628211 }
+        let dedupeKey = pass + "|" + region.map { String(format: "%.3f", $0) }.joined(separator: ",")
+        if paddleLastHash[dedupeKey] == hash { return }
+        paddleLastHash[dedupeKey] = hash
+        paddleReqSeq += 1
+        let reqid = paddleReqSeq
+        let fileName = "crop_\(reqid).jpg"
+        let cropsURL = paddleSpoolURL.appendingPathComponent("crops")
+        do {
+            try FileManager.default.createDirectory(at: cropsURL, withIntermediateDirectories: true)
+            try data.write(to: cropsURL.appendingPathComponent(fileName))
+            let req: [String: Any] = ["reqid": reqid, "file": fileName,
+                                      "pass": pass, "priority": priority]
+            let line = try JSONSerialization.data(withJSONObject: req, options: [])
+            let reqURL = paddleSpoolURL.appendingPathComponent("requests.jsonl")
+            if !FileManager.default.fileExists(atPath: reqURL.path) {
+                FileManager.default.createFile(atPath: reqURL.path, contents: nil)
+            }
+            let fh = try FileHandle(forWritingTo: reqURL)
+            _ = fh.seekToEndOfFile()
+            fh.write(line)
+            fh.write("\n".data(using: .utf8)!)
+            try fh.close()
+        } catch { return }
+        let f = ISO8601DateFormatter()
+        f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+        paddleRequests[reqid] = ["frame": frame, "at": f.string(from: at),
+                                 "region": pass, "base": region, "crop": crop]
+        paddleRequested += 1
+        // 滞留の上限管理は「供給の一時停止」で行う。切り出しファイルの
+        // 削除はサイドカーだけが行う (reader が処理中のファイルを消すと
+        // サイドカー側の読み取りと競合するため。2026-11-23 の実機で
+        // この競合がサイドカーを終了させた)
+    }
+}
+
+// 結果の取り込み (認識ループから呼ばれる。実作業は paddleQueue)。
+func paddlePollResults() {
+    guard paddleEnabled, paddleSessionActive else { return }
+    let url = paddleSpoolURL.appendingPathComponent("results.jsonl")
+    let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int ?? 0
+    if size > paddleResultsOffset {
+        paddleQueue.async { paddleConsumeResults() }
+    }
+}
+
+// paddleQueue 上で呼ぶ。結果を証拠ファイルへ行として追加する。
+func paddleConsumeResults() {
+    let url = paddleSpoolURL.appendingPathComponent("results.jsonl")
+    guard let fh = try? FileHandle(forReadingFrom: url) else { return }
+    _ = fh.seekToEndOfFile()
+    let fileSize = Int(fh.offsetInFile)
+    if fileSize <= paddleResultsOffset { try? fh.close(); return }
+    fh.seek(toFileOffset: UInt64(paddleResultsOffset))
+    let data = fh.readDataToEndOfFile()
+    try? fh.close()
+    // 完全な行 (末尾の改行まで) だけを処理する。バイト数の数え上げで
+    // オフセットを進める方式は、末尾の空要素で1バイトずれて以降の
+    // 行がすべて読み飛ばされる欠陥があった (ステップ2で判明)。
+    // 処理したバイト数そのもので進める
+    guard let lastNl = data.lastIndex(of: 0x0A) else { return }
+    let complete = data[data.startIndex...lastNl]
+    guard let text = String(data: complete, encoding: .utf8) else { return }
+    for line in text.split(separator: "\n") {
+        guard let ld = String(line).data(using: .utf8),
+              let rec = (try? JSONSerialization.jsonObject(with: ld)) as? [String: Any],
+              let reqid = (rec["reqid"] as? NSNumber)?.intValue,
+              let info = paddleRequests[reqid] else { continue }
+        if (rec["status"] as? String) == "done" {
+            var ev = info
+            ev["model"] = "PP-OCRv6_small"
+            ev["paddleocr"] = "3.7.0"
+            ev["texts"] = rec["texts"] ?? []
+            ev["elapsed_ms"] = rec["elapsed_ms"] ?? 0
+            paddleAppendEvidence(ev)
+            paddleReturned += 1
+        } else {
+            paddleDroppedCount += 1
+        }
+        paddleRequests.removeValue(forKey: reqid)
+    }
+    paddleResultsOffset += complete.count
+}
+
+func paddleAppendEvidence(_ rec: [String: Any]) {
+    guard let data = try? JSONSerialization.data(withJSONObject: rec, options: []),
+          let lineText = String(data: data, encoding: .utf8) else { return }
+    let url = logsDirURL.appendingPathComponent("battle_\(paddleBattleKey)_paddle.jsonl")
+    do {
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        let fh = try FileHandle(forWritingTo: url)
+        _ = fh.seekToEndOfFile()
+        if let d = (lineText + "\n").data(using: .utf8) { fh.write(d) }
+        try fh.close()
+    } catch {
+        // 証拠の記録失敗で対戦処理を止めない
+    }
+}
+
+// 試合終了時の締め (archiveCurrentBattle から呼ばれる)。残りの結果を
+// 最大で約10秒だけ吸い上げ、未処理の件数を締め行に記録して
+// サイドカーを終了する。実作業は paddleQueue で行い、認識ループは
+// ブロックしない。次の試合の開始処理も同じキューに積まれるため、
+// 締め→再起動の順序が保たれる。
+func paddleEndBattle() {
+    paddleQueue.async {
+        guard paddleEnabled, paddleSessionActive else { return }
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            paddleConsumeResults()
+            if paddleReturned + paddleDroppedCount >= paddleRequested { break }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        paddleConsumeResults()
+        let unprocessed = max(0, paddleRequested - paddleReturned - paddleDroppedCount)
+        paddleAppendEvidence(["end": true, "requested": paddleRequested,
+                              "returned": paddleReturned, "dropped": paddleDroppedCount,
+                              "unprocessed": unprocessed, "model": "PP-OCRv6_small"])
+        print("[paddle] 要求 \(paddleRequested) / 返却 \(paddleReturned) / 破棄 \(paddleDroppedCount) / 未処理 \(unprocessed)")
+        paddleTerminateSidecar()
+        paddleSessionActive = false
+    }
+}
+
+// 監督 (認識ループから呼ばれる)。心拍が45秒を超えて古ければ、
+// 間隔を空けて1回だけ再起動を試みる。
+func paddleSupervise() {
+    guard paddleEnabled, paddleSessionActive else { return }
+    if Date().timeIntervalSince(paddleLastSupervise) < 5 { return }
+    paddleLastSupervise = Date()
+    let hbURL = paddleSpoolURL.appendingPathComponent("heartbeat.json")
+    let mtime = (try? FileManager.default.attributesOfItem(atPath: hbURL.path))?[.modificationDate] as? Date
+    let stale = mtime.map { Date().timeIntervalSince($0) > 45 } ?? true
+    // 心拍に unavailable が残っていたら、その試合のセッションは閉じる
+    if let data = try? Data(contentsOf: hbURL),
+       let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+       (obj["status"] as? String) == "unavailable" {
+        paddleQueue.async {
+            if paddleSessionActive { paddleMarkUnavailable("サイドカーが利用不可を報告しました") }
+        }
+        return
+    }
+    if stale, Date().timeIntervalSince(paddleLastRelaunch) > 60 {
+        paddleLastRelaunch = Date()
+        paddleLogLine("心拍が古いためサイドカーを再起動します")
+        paddleQueue.async {
+            guard paddleSessionActive else { return }
+            paddleLaunchSidecar(truncate: false)
+        }
+    }
+}
+
 // MARK: - OCR
 
 func ocr(_ image: CGImage, plate: Plate) -> [String] {
@@ -625,6 +1013,7 @@ func ocr(_ image: CGImage, plate: Plate) -> [String] {
     }
     recordObservation(pass: "plate:\(plate.name)", region: [plate.x0, plate.y0, plate.x1, plate.y1],
                       boxes: found.map { (text: $0.text, x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, conf: $0.conf) })
+    paddleOffer(image: image, pass: "plate:\(plate.name)", region: [plate.x0, plate.y0, plate.x1, plate.y1])
     return found.map { $0.text }
 }
 
@@ -2906,6 +3295,7 @@ func archiveCurrentBattle(final: Bool) {
     guard logStarted, !battleArchived, !battleLog.isEmpty else { return }
     let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
     archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog, id: id)
+    paddleEndBattle()
     battleArchived = true
     battleBoundaryRequested = true
     if final {
@@ -2997,6 +3387,7 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     if cls == 2 && debugEventShots >= debugEventMaxPerBattle { return }
     guard debugShouldCapture(seen: debugSeenEntries, count: debugShotsThisBattle, key: key, cap: debugTotalMaxPerBattle, now: Date()) else { return }
     debugSeenEntries.append((key: key, at: Date()))
+    paddleLastDebugFrame = obsFrameSeq
     debugShotsThisBattle += 1
     if cls == 1 { debugRoutineShots += 1 }
     if cls == 2 { debugEventShots += 1 }
@@ -3121,6 +3512,9 @@ func startBattleLog() {
     resetLogState()
     battleArchiveId = battleStamp()
     flushPendingSkipObs()
+    paddleLastOfferAt = [:]
+    paddleLastAnyOfferAt = Date(timeIntervalSince1970: 0)
+    paddleStartBattle()
     adoptStateSnapshotsForBattle()
     battleArchived = false
     lastArchiveSnapshotCount = -1
@@ -10217,7 +10611,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2339"
+let readerBuild = "20261123_0419"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -10339,6 +10733,7 @@ func ocrBoxes(_ image: CGImage, x0: Double, y0: Double, x1: Double, y1: Double, 
     }
     recordObservation(pass: "boxes", region: [x0, y0, x1, y1],
                       boxes: found.map { (text: $0.text, x0: $0.x0, y0: $0.y0, x1: $0.x1, y1: $0.y1, conf: $0.conf) })
+    paddleOffer(image: image, pass: "boxes", region: [x0, y0, x1, y1])
     return found
 }
 
@@ -11175,6 +11570,8 @@ if let tab = teamScreenTab {
 salvageLeftoverLogs()
 cleanupOldDebugShots()
 
+paddleComputeEnabled()
+paddleAdoptAtStartup()
 startCaptureServer()
 if teamMode {
     print("チーム登録モード開始 (Ctrl+C で終了)。「様子を見る」で1体ずつ選び、能力タブとステータスタブをそれぞれ映してください。")
