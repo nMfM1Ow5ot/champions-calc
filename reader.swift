@@ -326,7 +326,7 @@ func ocr(_ image: CGImage, plate: Plate) -> [String] {
 
 // MARK: - パース
 
-struct SlotState { var speciesEn: String; var hpPercent: Int; var hpCur: Int? = nil; var hpMax: Int? = nil }
+struct SlotState { var speciesEn: String; var hpPercent: Int; var hpCur: Int? = nil; var hpMax: Int? = nil; var hpBarPct: Int? = nil }
 var lastSlots: [String: SlotState] = [:]
 var firstSlotConfirmedAt: Date? = nil   // この試合で最初にプレート枠が確定した時刻 (未確定枠の検出用)
 var lastWritten = ""
@@ -3289,6 +3289,17 @@ func processPlates(_ hits: [String: SlotState]) {
             monStates[key]?.hpPercent = s.hpPercent
             monStates[key]?.hpText = hpTextFor(s)
             let emitted = lastEmittedPct[plate.name] ?? s.hpPercent
+            // HP 3系統の照合 (改善計画フェーズ2): 数字 OCR と HP バーの
+            // 画素長が大きく食い違う場合は、黙って選ばず証拠として残す
+            // (状態への組み込みは従来どおり数字 OCR 優先。ログ確定値が
+            // 第3系統として文脈に併記される)
+            if let bar = s.hpBarPct, abs(bar - s.hpPercent) >= 25 {
+                debugCapture(kind: "hp_disagree", key: "hp_disagree:\(plate.name):\(s.hpPercent):\(bar)",
+                             rawText: "",
+                             detail: ["slot": slot, "species": s.speciesEn, "ocrPct": s.hpPercent,
+                                      "barPct": bar, "logPct": emitted, "turn": currentTurn,
+                                      "readerBuild": readerBuild])
+            }
             if s.hpPercent == emitted {
                 pendingDamagePct[plate.name] = nil
                 pendingDamageCount[plate.name] = nil
@@ -3323,6 +3334,15 @@ func processPlates(_ hits: [String: SlotState]) {
                 let n = (pendingDamageCount[plate.name] ?? 1) + 1
                 let stable = Date().timeIntervalSince(pendingDamageSince[plate.name] ?? .distantPast) >= 2.0
                 if n >= 3 && stable {
+                    // 安定した時点でもバー計測と数字 OCR が食い違う場合は
+                    // 系統間の不一致として証拠に残す (フェーズ2)
+                    if let bar = s.hpBarPct, abs(bar - s.hpPercent) >= 8 {
+                        debugCapture(kind: "hp_disagree", key: "hp_disagree:\(plate.name):\(s.hpPercent):\(bar)",
+                                     rawText: "",
+                                     detail: ["slot": slot, "species": s.speciesEn, "ocrPct": s.hpPercent,
+                                              "barPct": bar, "logPct": emitted, "turn": currentTurn,
+                                              "readerBuild": readerBuild])
+                    }
                     if emitDamageLine(plateName: plate.name, slot: slot, key: key, speciesEn: s.speciesEn,
                                       fromPct: emitted, toPct: s.hpPercent, hpText: monStates[key]!.hpText) {
                         pendingDamagePct[plate.name] = nil
@@ -7552,7 +7572,64 @@ func locatePlates(image: CGImage) -> [String: SlotState] {
     for m in pick(cands.filter { $0.box.cy > 0.66 && $0.box.cx < 0.54 }.sorted { $0.box.cx < $1.box.cx }, mine: true) {
         hits[m.second ? "mineB" : "mineA"] = m.state
     }
+    // HP バーの画素長 (改善計画フェーズ2の第2系統): ヒットした枠について、
+    // プレート固定位置のバー帯から充填率を測り、数字 OCR と併記できる
+    // 形で持つ。状態の決定には使わない (照合と証拠記録のためだけの計測)
+    if !hits.isEmpty {
+        let buf = plateBuf ?? makeFullBuffer(image)
+        if buf.w > 0 {
+            for (slot, st) in hits {
+                if let bar = hpBarFraction(buf: buf, slot: slot) {
+                    var s2 = st
+                    s2.hpBarPct = bar
+                    hits[slot] = s2
+                }
+            }
+        }
+    }
     return hits
+}
+
+// HP バーの充填率を画素から測る (フェーズ2の第2系統)。バーは全枠共通の
+// プレート内レイアウト (左 35% から幅 56%、高さ 55%〜72% の帯) にあり、
+// 充填色 (緑・黄・赤) の右端位置から割合を出す。右端は実測で数% 低く
+// 出るため +3 の補正を入れる。バー帯が見つからない場合は nil
+func hpBarFraction(buf: (data: [UInt8], w: Int, h: Int), slot: String) -> Int? {
+    let plate: (Double, Double, Double, Double)
+    switch slot {
+    case "mineA": plate = (0.012, 0.855, 0.238, 0.972)
+    case "mineB": plate = (0.218, 0.850, 0.442, 0.972)
+    case "oppA": plate = (0.560, 0.025, 0.780, 0.135)
+    default: plate = (0.762, 0.025, 0.988, 0.135)
+    }
+    let W = buf.w, H = buf.h
+    let bx0 = Int((plate.0 + 0.35 * (plate.2 - plate.0)) * Double(W))
+    let bw = Int(0.56 * (plate.2 - plate.0) * Double(W))
+    let by0 = Int((plate.1 + 0.55 * (plate.3 - plate.1)) * Double(H))
+    let by1 = Int((plate.1 + 0.72 * (plate.3 - plate.1)) * Double(H))
+    guard bw > 20, by1 > by0, bx0 >= 0, bx0 + bw <= W, by0 >= 0, by1 <= H else { return nil }
+    func isFill(_ x: Int, _ y: Int) -> Bool {
+        let i = (y * W + x) * 4
+        let r = Int(buf.data[i]), g = Int(buf.data[i + 1]), b = Int(buf.data[i + 2])
+        return (g > 140 && g - r > 55 && g - b > 35)
+            || (r > 170 && g > 140 && b < 130)
+            || (r > 140 && r - g > 55 && r - b > 35)
+    }
+    var fracs: [Double] = []
+    for y in by0..<by1 {
+        var first = -1, last = -1
+        for x in 0..<bw where isFill(bx0 + x, y) {
+            if first < 0 { first = x }
+            last = x
+        }
+        // 充填はバーの左端から始まるはずの行だけを使う (横にいる
+        // ポケモンの体色などを拾った行を除く)
+        if first >= 0 && first <= 8 && last >= 8 { fracs.append(Double(last + 1) / Double(bw)) }
+    }
+    guard fracs.count >= 2 else { return nil }
+    fracs.sort()
+    let med = fracs[fracs.count / 2]
+    return max(0, min(100, Int((med * 100 + 3).rounded())))
 }
 
 var inBattle = false
@@ -8281,7 +8358,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_0945"
+let readerBuild = "20261122_1035"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
