@@ -1037,8 +1037,9 @@ def upload_logs_once(session_only=False):
         # まとめて送る。手動経路 (session_only=False) は従来どおり
         # 即時に送る
         if not _upload_battle_deferred:
+            # 保留の開始表示は出さない (2026-11-22 のユーザー指示)。
+            # 保留の動作そのものは従来どおり
             _upload_battle_deferred = True
-            print("[log] 対戦中のため、試合ログの送信を対戦終了まで保留します", flush=True)
         return
     _upload_battle_deferred = False
     if not _upload_lock.acquire(blocking=False):
