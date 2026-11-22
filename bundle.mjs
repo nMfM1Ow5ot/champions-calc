@@ -28517,7 +28517,7 @@ function createEstimator(deps) {
       const defSpec = ctx.myDef;
       const base = ctx.baseAtk;
       if (!ent || !defSpec || !base) {
-        logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false });
+        logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false, reason: "no-base" });
         return;
       }
       const hasAmt = typeof ev.amt === "number" && ev.amt > 0;
@@ -28525,7 +28525,7 @@ function createEstimator(deps) {
       if (!hasAmt) {
         const M = typeof ev.pct === "number" && ev.pct > 0 ? specMaxHP(defSpec) : null;
         if (!M) {
-          logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false });
+          logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false, reason: "no-amt" });
           return;
         }
         const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
@@ -28563,6 +28563,7 @@ function createEstimator(deps) {
           trig.dmgFlag = flag;
         }
       }
+      if (!counts.some((n) => n > 0)) trig.reason = trig.dir === "over" ? "over-max" : "no-match";
       logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     } else {
@@ -28570,7 +28571,10 @@ function createEstimator(deps) {
       const ent = bayesEntry(defSpecies);
       const atkSpec = ctx.myAtk;
       const base = ctx.baseDef;
-      if (!ent || !atkSpec || !base) return;
+      if (!ent || !atkSpec || !base) {
+        logSnapshot(defSpecies, ev.turn, { kind: "damage", move: md.name, by: "mine", pct: ev.pct, applied: false, reason: "no-base" });
+        return;
+      }
       const pctCounts = (c, rolls) => {
         const hpVal = c.values.hp;
         if (!hpVal || !rolls) return 0;
@@ -28605,6 +28609,7 @@ function createEstimator(deps) {
         });
         trig.dmgFlag = "Assault Vest";
       }
+      if (!counts.some((n) => n > 0)) trig.reason = trig.dir === "under" ? "under-min" : "no-match";
       logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     }
