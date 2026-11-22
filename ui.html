@@ -3701,7 +3701,13 @@ function supplementMineFromState(j) {
   }
   return changed;
 }
+// 自チーム暫定リスト (mineTeam) の適用スイッチ。2026-11-23 から一時
+// 無効化中 (質問・調査チャットからの委任によるユーザーの指示)。
+// 再有効化はこの値を true に戻すだけ。reader 側の state.json への
+// mineTeam 書き出しは対象外で、記録は続く
+let MINE_TEAM_PREVIEW_APPLY = false;
 function applyMineTeamPreview(list) {
+  if (!MINE_TEAM_PREVIEW_APPLY) return false;
   const entries = [];
   for (const en of list) {
     const raw = typeof en === 'string' ? en : (en && en.species);
