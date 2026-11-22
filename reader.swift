@@ -2504,7 +2504,7 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (
 func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String) {
     guard protocolLines.contains("|start") else { return }
     let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines)
-    if !completed.added.isEmpty {
+    if !completed.added.isEmpty, debugMode {
         print("[log] ヘッダーに宣言の無かった種族を補いました: \(completed.added.joined(separator: ", "))")
         fflush(stdout)
     }
@@ -9614,7 +9614,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1926"
+let readerBuild = "20261122_1929"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
