@@ -7583,6 +7583,15 @@ func locatePlates(image: CGImage) -> [String: SlotState] {
                     var s2 = st
                     s2.hpBarPct = bar
                     hits[slot] = s2
+                    // 計測値そのものを生観測アーカイブに残す: 不一致の
+                    // 証拠記録だけでは「計測が動いていたか」を後から
+                    // 検証できないため (2026-11-22 battle_20261122_
+                    // 103530 で、到着物から動作確認できなかった)
+                    let plate = hpBarPlateRect(slot)
+                    recordObservation(pass: "hpbar",
+                                      region: [plate.0, plate.1, plate.2, plate.3],
+                                      boxes: [(text: "\(slot):\(bar)", x0: plate.0, y0: plate.1,
+                                               x1: plate.2, y1: plate.3, conf: 1.0)])
                 }
             }
         }
@@ -7590,18 +7599,22 @@ func locatePlates(image: CGImage) -> [String: SlotState] {
     return hits
 }
 
+// プレートの固定位置 (バー計測の基準)
+func hpBarPlateRect(_ slot: String) -> (Double, Double, Double, Double) {
+    switch slot {
+    case "mineA": return (0.012, 0.855, 0.238, 0.972)
+    case "mineB": return (0.218, 0.850, 0.442, 0.972)
+    case "oppA": return (0.560, 0.025, 0.780, 0.135)
+    default: return (0.762, 0.025, 0.988, 0.135)
+    }
+}
+
 // HP バーの充填率を画素から測る (フェーズ2の第2系統)。バーは全枠共通の
 // プレート内レイアウト (左 35% から幅 56%、高さ 55%〜72% の帯) にあり、
 // 充填色 (緑・黄・赤) の右端位置から割合を出す。右端は実測で数% 低く
 // 出るため +3 の補正を入れる。バー帯が見つからない場合は nil
 func hpBarFraction(buf: (data: [UInt8], w: Int, h: Int), slot: String) -> Int? {
-    let plate: (Double, Double, Double, Double)
-    switch slot {
-    case "mineA": plate = (0.012, 0.855, 0.238, 0.972)
-    case "mineB": plate = (0.218, 0.850, 0.442, 0.972)
-    case "oppA": plate = (0.560, 0.025, 0.780, 0.135)
-    default: plate = (0.762, 0.025, 0.988, 0.135)
-    }
+    let plate = hpBarPlateRect(slot)
     let W = buf.w, H = buf.h
     let bx0 = Int((plate.0 + 0.35 * (plate.2 - plate.0)) * Double(W))
     let bw = Int(0.56 * (plate.2 - plate.0) * Double(W))
@@ -8358,7 +8371,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1035"
+let readerBuild = "20261122_1105"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
