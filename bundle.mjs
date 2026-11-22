@@ -27595,6 +27595,18 @@ function createEstimator(deps) {
     dirty = true;
     logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: true });
   }
+  function specMaxHP(spec) {
+    if (!spec) return null;
+    const t = statTable(effSpecies(spec));
+    if (!t || !t.hp) return null;
+    const row = t.hp.find((r) => r.nature === spec.nature && r.sp === (spec.sp ? spec.sp.hp || 0 : 0));
+    return row ? row.value : null;
+  }
+  function amtRangeForPct(pct, maxHP, ko) {
+    const lo = Math.max(1, Math.ceil((pct - 0.5) * maxHP / 100 - 1e-9));
+    const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
+    return [lo, hi];
+  }
   function processDamageInf(ev, ctx) {
     if (typeof ev.turn === "number") infLogTurn = ev.turn;
     pendingOpts = null;
@@ -27613,12 +27625,21 @@ function createEstimator(deps) {
     const opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
     pendingOpts = opts;
     if (oppIsAtk) {
-      if (typeof ev.amt !== "number" || ev.amt <= 0) return;
       const statKey = md.name === "Body Press" ? "def" : md.category === "Physical" ? "atk" : "spa";
       const defSpec = ctx.myDef;
       const bases = ctx.basesAtk;
       const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
       if (!defSpec || !bases.length || !table) return;
+      let inRange;
+      if (typeof ev.amt === "number" && ev.amt > 0) inRange = (r) => r === ev.amt;
+      else {
+        if (typeof ev.pct !== "number" || ev.pct <= 0) return;
+        const M = specMaxHP(defSpec);
+        if (!M) return;
+        const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
+        const [lo, hi] = amtRangeForPct(ev.pct, M, ko);
+        inRange = (r) => r >= lo && r <= hi;
+      }
       const byValue = /* @__PURE__ */ new Map();
       for (const row of table[statKey]) {
         if (!byValue.has(row.value)) byValue.set(row.value, []);
@@ -27630,7 +27651,7 @@ function createEstimator(deps) {
           const rep = rows[0];
           const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
           const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-          if (rolls.includes(ev.amt)) for (const r of rows) feasible.add(r.nature + "|" + r.sp);
+          if (rolls.some(inRange)) for (const r of rows) feasible.add(r.nature + "|" + r.sp);
         }
       }
       infIntersect(atkSpecies, statKey, feasible, null);
@@ -28452,16 +28473,36 @@ function createEstimator(deps) {
     if (!md) return;
     const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
     if (labelSide(ev.atk) === "p2") {
-      if (typeof ev.amt !== "number" || ev.amt <= 0) return;
       const ent = bayesEntry(atkSpecies);
       const defSpec = ctx.myDef;
       const base = ctx.baseAtk;
-      if (!ent || !defSpec || !base) return;
+      if (!ent || !defSpec || !base) {
+        logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false });
+        return;
+      }
+      const hasAmt = typeof ev.amt === "number" && ev.amt > 0;
+      let amtLo = null, amtHi = null;
+      if (!hasAmt) {
+        const M = typeof ev.pct === "number" && ev.pct > 0 ? specMaxHP(defSpec) : null;
+        if (!M) {
+          logSnapshot(atkSpecies, ev.turn, { kind: "damage", move: md.name, by: "opp", applied: false });
+          return;
+        }
+        const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
+        [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
+      }
+      const matchRoll = hasAmt ? ((r) => r === ev.amt) : ((r) => r >= amtLo && r <= amtHi);
       const rollsList = ent.cands.map((c) => damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts).rolls);
-      let counts = rollsList.map((rolls) => rolls.filter((r) => r === ev.amt).length);
-      const trig = { kind: "damage", move: md.name, by: "opp", amt: ev.amt, crit: !!ev.crit };
+      let counts = rollsList.map((rolls) => rolls.filter(matchRoll).length);
+      const trig = { kind: "damage", move: md.name, by: "opp", crit: !!ev.crit };
+      if (hasAmt) trig.amt = ev.amt;
+      else {
+        trig.pct = ev.pct;
+        trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi];
+      }
       if (!counts.some((n) => n > 0)) {
-        const over = rollsList.every((rolls) => rolls.length && ev.amt > Math.max(...rolls));
+        const obsMin = hasAmt ? ev.amt : amtLo;
+        const over = rollsList.every((rolls) => rolls.length && obsMin > Math.max(...rolls));
         if (over) {
           trig.dir = "over";
           const want = md.category === "Physical" ? "Choice Band" : md.category === "Special" ? "Choice Specs" : null;
@@ -28477,7 +28518,7 @@ function createEstimator(deps) {
           counts = ent.cands.map((c) => {
             const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
             const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
-            return rolls.filter((r) => r === ev.amt).length;
+            return rolls.filter(matchRoll).length;
           });
           trig.dmgFlag = flag;
         }
