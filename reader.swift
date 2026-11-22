@@ -1106,7 +1106,28 @@ func noteBattleMaxRead(speciesEn: String, readMax: Int, registeredMax: Int?) {
     // 繰り返しで誤った最大へ際限なく乗り換えてしまう (実例:
     // 2026-11-22 battle_20261122_160927、171 の正しい採用の後に
     // 271 の融合読みが上書き採用された)
-    if battleMaxOverride[speciesEn] != nil { return }
+    if let ov = battleMaxOverride[speciesEn] {
+        // 採用後に登録値どおりの読みが続けば、採用の方が誤読だった
+        // として取り消す。登録はユーザーが確認した情報であり、離れる
+        // 方向 (採用) は慎重に、戻る方向 (取消し) は速くする
+        // (実例: 2026-11-23 battle_20261123_043809、Sylveon の最大が
+        // 交代直後の誤読 219 で採用され、実値 193 の読みが続いても
+        // 上書きが残り続けた)
+        if let reg = registeredMax, ov != reg, readMax == reg {
+            let n = (battleMaxRevertCount[speciesEn] ?? 0) + 1
+            if n >= 3 {
+                battleMaxOverride[speciesEn] = nil
+                battleMaxRevertCount[speciesEn] = nil
+                debugCapture(kind: "team_max_reverted", key: "team_max_reverted:\(speciesEn)", rawText: "",
+                             detail: ["species": speciesEn, "registeredMax": reg, "revertedMax": ov, "turn": currentTurn, "readerBuild": readerBuild])
+            } else {
+                battleMaxRevertCount[speciesEn] = n
+            }
+        } else if readMax == ov {
+            battleMaxRevertCount[speciesEn] = nil
+        }
+        return
+    }
     if let reg = registeredMax, reg == readMax { battleMaxCandidate[speciesEn] = nil; return }
     // 候補として数える前の妥当性ゲート: 信頼値から 36 を超えて離れた
     // 読みは、努力値の振り幅 (最大でも 32) では説明できず、数字融合
@@ -1125,18 +1146,22 @@ func noteBattleMaxRead(speciesEn: String, readMax: Int, registeredMax: Int?) {
     for (k, st) in monStates where k.hasPrefix("p1:") && k != "p1:\(speciesEn)" {
         if let h = st.hpMax, h == readMax { return }
     }
-    if battleMaxCandidate[speciesEn]?.max == readMax {
-        let n = (battleMaxCandidate[speciesEn]?.count ?? 1) + 1
-        if n >= 2 {
+    if let cand = battleMaxCandidate[speciesEn], cand.max == readMax {
+        let n = cand.count + 1
+        // 採用は、候補の初出から 3 秒以上あいた観測での一致を条件と
+        // する。交代直後などの短い窓では同じ誤読が連続して出るため、
+        // 回数だけでは誤読のバーストを弾けない (実例: 2026-11-23
+        // battle_20261123_043809、Sylveon の 219)
+        if n >= 2 && sNow().timeIntervalSince(cand.firstAt) >= 3.0 {
             battleMaxOverride[speciesEn] = readMax
             battleMaxCandidate[speciesEn] = nil
             debugCapture(kind: "team_max_mismatch", key: "team_max_mismatch:\(speciesEn)", rawText: "",
                          detail: ["species": speciesEn, "registeredMax": registeredMax ?? -1, "readMax": readMax, "turn": currentTurn, "readerBuild": readerBuild])
         } else {
-            battleMaxCandidate[speciesEn] = (max: readMax, count: n)
+            battleMaxCandidate[speciesEn] = (max: readMax, count: n, firstAt: cand.firstAt)
         }
     } else {
-        battleMaxCandidate[speciesEn] = (max: readMax, count: 1)
+        battleMaxCandidate[speciesEn] = (max: readMax, count: 1, firstAt: sNow())
     }
 }
 
@@ -1568,7 +1593,8 @@ var pendingReturnCount: [String: Int] = [:]        // プレート名 -> 保留�
 var battleAdmittedSpecies: Set<String> = []        // この試合で「登録外だが繰り返し読めた」ため受け入れた自軍種族 (フォルム群単位)
 var offTeamPlateStreak: [String: Int] = [:]        // "枠|種族" -> 登録外種族の連続観測回数
 var battleMaxOverride: [String: Int] = [:]         // 種族 -> この試合で採用する最大 HP (登録値と読みが恒常的に食い違う場合)
-var battleMaxCandidate: [String: (max: Int, count: Int)] = [:]  // 種族 -> 採用候補の最大 HP と観測回数
+var battleMaxCandidate: [String: (max: Int, count: Int, firstAt: Date)] = [:]  // 種族 -> 採用候補の最大 HP と観測回数・初出時刻
+var battleMaxRevertCount: [String: Int] = [:]  // 種族 -> 採用後に登録値どおりの読みが続いた回数 (採用取消し用)
 var barVetoHold: [String: (pct: Int, turn: Int)] = [:]        // プレート -> バー拒否で保留した数字読みとそのターン
 var faintReviveCount: [String: Int] = [:]                     // プレート -> ひんし確定枠で生存読みが続いた回数
 var faintReviveSince: [String: Date] = [:]                    // プレート -> その生存読みの初出
@@ -1740,7 +1766,8 @@ var faintedSpecies: Set<String> = []   // "p2:Sneasler" 形式: ひんし行が�
 var heldEntryBoosts: [(key: String, line: String, at: Date)] = []  // 入場特性 (いかく等) の効果行が原因側の交代行より先に届いた場合の保留
 var recentAtkDrops: [String: (at: Date, seq: Int)] = [:]  // "side:Species" -> 攻撃 -1 の適用 (いかく遡及帰属用)
 var lastEffectAt: [String: Date] = [:]            // 相性行の二重出力防止 ("slot|kind")
-var protectMoveTurn: [String: Int] = [:]         // 枠 -> まもるを使ったターン (activate 行の照合用)
+var protectMoveTurn: [String: Int] = [:]         // 枠 -> まもる系を使ったターン (activate 行の照合用)
+var protectMoveName: [String: String] = [:]      // 枠 -> 使ったまもる系の技名 (Protect / Detect)
 var effectBySeq: [Int: [String: String]] = [:]    // 行動番号 -> ラベル -> 相性種別 (同じ技での相性の付け替え判定)
 var damagedBySeq: [Int: Set<String>] = [:]       // 行動番号 -> 被ダメしたラベルの集合 (同上)
 var lastFallbackAt = Date.distantPast
@@ -2036,7 +2063,7 @@ func renderLogLine(_ line: String) -> [String] {
         guard f.count >= 4 else { return [] }
         let (_, side, species) = renderLabelParts(f[2])
         if f[3].contains("Focus Sash") { return ["(\(renderPrefix(side))\(species) held on thanks to its Focus Sash!)"] }
-        if f[3].contains("Protect") { return ["\(renderPrefix(side))\(species) protected itself!"] }
+        if f[3].contains("Protect") || f[3].contains("Detect") { return ["\(renderPrefix(side))\(species) protected itself!"] }
         if f[3].contains("Wide Guard") { return ["\(renderPrefix(side))\(species) was protected by Wide Guard!"] }
         if f[3].contains("Terrain") {
             let tn = f[3].replacingOccurrences(of: "move: ", with: "")
@@ -2227,9 +2254,9 @@ func applyEvent(_ line: String) {
         lastMoveEmitSeq = actionSeq
         // まもるの使用ターンを控える (activate 行の同ターン照合用)
         let mf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-        if mf.count >= 4 && mf[3] == "Protect" {
+        if mf.count >= 4 && (mf[3] == "Protect" || mf[3] == "Detect") {
             let pslot = mf[2].split(separator: ":").first.map(String.init) ?? ""
-            if !pslot.isEmpty { protectMoveTurn[pslot] = currentTurn }
+            if !pslot.isEmpty { protectMoveTurn[pslot] = currentTurn; protectMoveName[pslot] = mf[3] }
         }
         // 相手の技は判明情報として記録する (行は英語名のため和名に戻す)
         let f = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
@@ -3035,7 +3062,7 @@ func resetLogState() {
     suspectJump = [:]; firstEntryPlateHP = [:]; sitrusWatch = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
     fieldSetByMoveTurn = -1; switchInTurn = [:]
     heldWeatherStart = nil; heldTerrainStart = nil; fieldHoldBypass = false
-    battleAdmittedSpecies = []; offTeamPlateStreak = [:]; battleMaxOverride = [:]; battleMaxCandidate = [:]; pendingReturnCount = [:]; barVetoHold = [:]; faintReviveCount = [:]; faintReviveSince = [:]
+    battleAdmittedSpecies = []; offTeamPlateStreak = [:]; battleMaxOverride = [:]; battleMaxCandidate = [:]; battleMaxRevertCount = [:]; pendingReturnCount = [:]; barVetoHold = [:]; faintReviveCount = [:]; faintReviveSince = [:]
     heldTerrainReplace = nil; pivotReturnAt = [:]; sendOutTextSeen = [:]
     wishSetTurn = [:]
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
@@ -3829,7 +3856,14 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             suspectJump[plateName] = nil
             clearedDropSuspect = false
             suspectZeroFallthrough = true
-        } else if toPct == sj.toPct {
+        } else if toPct != 0 && abs(toPct - sj.toPct) <= 3 {
+            // 保留値の ±3 ポイント以内は、読みの揺れの範囲内として
+            // 同じ低下の裏づけとみなす。完全一致に限ると、低 HP での
+            // 揺れ (6% の保留後に 5% や 7% が安定する等) が「別の値」
+            // として疑いを解き、post_suspect の再保留との往復で永久に
+            // 採用されなくなる (実例: 2026-11-23
+            // battle_20261123_043809、Dragonite の 54% -> 6% が最後まで
+            // 取り込まれず、反動行が古い基準から記録された)
             if currentTurn > sj.turn {
                 suspectJump[plateName] = nil
                 lastEmittedPct[plateName] = toPct
@@ -5238,7 +5272,7 @@ func checkStatusText(text: String, side: String, speciesEn: String, slot: String
     else if text.contains("どく") { code = "psn" }
     else if text.contains("やけど") { code = "brn" }
     else if text.contains("まひ") { code = "par" }
-    else if text.contains("ねむ") { code = "slp" }
+    else if text.contains("ねむ") || (text.contains("眠") && !text.contains("眠気")) { code = "slp" }
     else if text.contains("こおり") || text.contains("こおった") { code = "frz" }
     if let code, monStates[key]?.status != code {
         emitLog("|-status|\(slot): \(speciesEn)|\(code)")  // 状態への反映は applyEvent が行う
@@ -6726,7 +6760,7 @@ func salvageStatus(in t: String) -> Bool {
     // 一意なときだけ、正規の状態処理に委ねる。checkStatusText は現在値と
     // 違うときだけ反映・出力するため、二重に効くことはない
     let hasCode = t.contains("もうどく") || t.contains("どく") || t.contains("やけど") || t.contains("まひ")
-        || t.contains("ねむ") || t.contains("こおり") || t.contains("こおった")
+        || t.contains("ねむ") || (t.contains("眠") && !t.contains("眠気")) || t.contains("こおり") || t.contains("こおった")
     let cured = t.contains("なおった") || t.contains("なおつた")
     let cues = ["おかされた", "あびた", "なった", "なつた", "おった", "おつた", "ついた", "しまった", "しまつた", "ねむった", "ねむつた"]
     guard cured || (hasCode && cues.contains(where: { t.contains($0) })) else { return false }
@@ -7984,7 +8018,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         if let at = lastSingleActAt[pk], sNow().timeIntervalSince(at) < 6 { return true }
         lastSingleActAt[pk] = sNow()
         if protectMoveTurn[slot] == currentTurn {
-            emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
+            emitLog("|-activate|\(slot): \(sp.en)|move: \(protectMoveName[slot] ?? "Protect")")
         }
         return true
     }
@@ -8484,6 +8518,7 @@ var previewTeamWritten = false             // このセッションで oppReset 
 // スコアの小さい順) の暫定 1 位を表示する。
 var previewVotes: [[String: Int]] = []          // 枠ごとの種族別投票数
 var previewVoteScore: [[String: Double]] = []   // 枠ごとの種族別ベストスコア
+var previewLatestScore: [[String: Double]] = [] // 枠ごとの種族別・最新試行の候補スコア
 var previewLocked: [String?] = []               // 枠ごとの確定種族 (nil = 未確定)
 // 見せ合い同定の証拠: 同定のたびに最新のフレームと枠情報を保持し、
 // 試合が始まったらその試合のデバッグ同梱として書き出す (runOnce 参照)。
@@ -10087,6 +10122,7 @@ func runOnce(image: CGImage) {
                 previewBestTeam = []
                 previewVotes = []
                 previewVoteScore = []
+                previewLatestScore = []
                 previewLocked = []
                 minePreviewTeam = []
                 minePreviewVotes = []
@@ -10118,6 +10154,7 @@ func runOnce(image: CGImage) {
                     previewBestTeam = Array(repeating: nil, count: r.team.count)
                     previewVotes = Array(repeating: [:], count: r.team.count)
                     previewVoteScore = Array(repeating: [:], count: r.team.count)
+                    previewLatestScore = Array(repeating: [:], count: r.team.count)
                     previewLocked = Array(repeating: nil, count: r.team.count)
                 }
                 for i in r.team.indices {
@@ -10127,6 +10164,14 @@ func runOnce(image: CGImage) {
                     if sc < (previewVoteScore[i][pick] ?? Double.greatestFiniteMagnitude) {
                         previewVoteScore[i][pick] = sc
                     }
+                    // 最新試行の候補スコアも残す: 同じフレーム内で
+                    // 候補同士を比べた記録で、試行をまたいだ最良
+                    // スコア (条件の違うフレーム同士の比較) とは別に
+                    // 持つ。暫定 1 位の同点決着と現行維持の例外で使う
+                    for (sp, csc) in r.slots[i].candidates {
+                        previewLatestScore[i][sp] = csc
+                    }
+                    previewLatestScore[i][pick] = sc
                     if previewLocked[i] == nil
                         && (r.slots[i].decisive || previewVotes[i][pick, default: 0] >= 2) {
                         previewLocked[i] = pick
@@ -10154,20 +10199,38 @@ func runOnce(image: CGImage) {
                     }
                 }
                 let incumbents = previewBestTeam
+                // 最新試行の一貫性: 現行チームと pick が異なる枠の数。
+                // 幾何の崩れた試行 (パネル検出のずれ等) は複数枠が
+                // 同時にずれるのが署名で、1 枠だけの違いは通常の
+                // 読みの揺れとみなす。現行維持の例外 (直接対決で
+                // 負けた現行は守らない) は、一貫した試行でのみ使う
+                let coherentLatest = r.team.indices.filter { j in
+                    incumbents[j] != nil && r.team[j] != nil && incumbents[j]! != r.team[j]!
+                }.count <= 1
                 for i in r.team.indices {
                     if let locked = previewLocked[i] {
                         previewBestTeam[i] = locked
                     } else if !previewVotes[i].isEmpty {
                         // 暫定 1 位: 票数が多い順、同数なら最新の試行の
                         // タイプ読みに完全一致する候補を先にし、次に
-                        // 最良スコアが小さい順、それも同点なら種族名順
+                        // 最新試行の候補スコアが小さい順、それも無い・
+                        // 同点なら最良スコアが小さい順、最後は種族名順
                         // (フレーム間で表示が揺れないよう決定的に選ぶ)。
                         // タイプ完全一致を挟むのは、票もスコアも僅差の
                         // 同点で、最新のアイコン読みと両タイプが合う
                         // 候補が片方だけという場合にそちらを採るため
                         // (実例: 2026-11-22 battle_20261122_185505 枠3、
                         //  Psychic/Normal 読みに対し Indeedee-F と
-                        //  Slowking-Galar が 1 票同点・スコア僅差だった)
+                        //  Slowking-Galar が 1 票同点・スコア僅差だった)。
+                        // スコアは最新試行の候補スコアを最良スコアより
+                        // 先に使う。最良スコアは試行をまたいだ最小値で、
+                        // 照明も切り出し位置も違うフレーム同士の比較に
+                        // なり、1 回の幸運な読みが最新試行での直接対決
+                        // の結果を上書きしてしまう (実例: 2026-11-23
+                        // battle_20261123_043809 枠4、Azumarill の
+                        // 最良 0.086 が、最新試行で Primarina 0.224 対
+                        // Azumarill 0.239 と直接対決で負けていた事実
+                        // を上書きし、正しい pick を覆した)
                         let ltSet = Set(r.slots[i].types)
                         let leader = previewVotes[i].keys.filter { !vetoed[i].contains($0) }.sorted { a, b in
                             let ca = previewVotes[i][a, default: 0], cb = previewVotes[i][b, default: 0]
@@ -10176,6 +10239,12 @@ func runOnce(image: CGImage) {
                                 let fa = Set(pvSpeciesTypes[a] ?? []).isSuperset(of: ltSet)
                                 let fb = Set(pvSpeciesTypes[b] ?? []).isSuperset(of: ltSet)
                                 if fa != fb { return fa }
+                            }
+                            let la = previewLatestScore[i][a], lb = previewLatestScore[i][b]
+                            if la != nil || lb != nil {
+                                if la == nil { return false }
+                                if lb == nil { return true }
+                                if la! != lb! { return la! < lb! }
                             }
                             let sa = previewVoteScore[i][a] ?? 9, sb = previewVoteScore[i][b] ?? 9
                             if sa != sb { return sa < sb }
@@ -10197,9 +10266,21 @@ func runOnce(image: CGImage) {
                             // 理由がない (実例: 2026-11-22
                             // battle_20261122_185505 枠2、Delphox
                             //  0.309 が Armarouge 0.195 を同点で抑えた)
+                            // 例外: 最新試行が一貫しており (上の
+                            // coherentLatest)、その試行の候補内で
+                            // leader が現行を直接対決で破っている
+                            // 場合は維持しない。最良スコアの古い幸運な
+                            // 読みで最新の直接対決を守る理由がない
+                            // (実例: 2026-11-23 battle_20261123_043809
+                            // 枠4)。幾何の崩れた試行では候補内対決
+                            // 自体が信用できないため、例外は使わない
                             if let inc = incumbents[i], inc != leader, !vetoed[i].contains(inc),
                                previewVotes[i][inc, default: 0] >= previewVotes[i][leader, default: 0],
-                               (previewVoteScore[i][inc] ?? 9) <= pvSoftGateScore {
+                               (previewVoteScore[i][inc] ?? 9) <= pvSoftGateScore,
+                               !(leader == r.team[i] && coherentLatest
+                                   && previewLatestScore[i][leader] != nil
+                                   && previewLatestScore[i][inc] != nil
+                                   && previewLatestScore[i][leader]! < previewLatestScore[i][inc]!) {
                                 previewBestTeam[i] = inc
                             } else {
                                 previewBestTeam[i] = leader
@@ -10285,7 +10366,8 @@ func runOnce(image: CGImage) {
                 previewEvidenceVotes = previewVotes.indices.map { i in
                     previewVotes[i].map { (sp, v) in
                         ["species": sp, "votes": v,
-                         "best": ((previewVoteScore[i][sp] ?? 9) * 1000).rounded() / 1000] as [String: Any]
+                         "best": ((previewVoteScore[i][sp] ?? 9) * 1000).rounded() / 1000,
+                         "latest": ((previewLatestScore[i][sp] ?? 9) * 1000).rounded() / 1000] as [String: Any]
                     }.sorted { ($0["votes"] as? Int ?? 0) > ($1["votes"] as? Int ?? 0) }
                 }
                 previewEvidenceAt = sNow()
@@ -10375,6 +10457,7 @@ func runOnce(image: CGImage) {
         previewBestTeam = []
         previewVotes = []
         previewVoteScore = []
+        previewLatestScore = []
         previewLocked = []
         minePreviewTeam = []
         minePreviewVotes = []
@@ -10611,7 +10694,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0419"
+let readerBuild = "20261123_0500"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
