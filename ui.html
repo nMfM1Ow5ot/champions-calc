@@ -516,10 +516,14 @@ function moveOptionsFor(spec) {
   const rest = MOVE_OPTIONS.filter(o => o.v && !used.has(o.v)).sort((a, b) => a.l.localeCompare(b.l, 'ja'));
   return head.concat(rest);
 }
-let _itemJa2en = null;
+let _itemJa2en = null, _itemJa2enSig = '';
 function itemJa2en(jaName) {
-  if (!_itemJa2en) {
-    _itemJa2en = {};
+  // 逆引きの材料 (持ち物名マップと選択肢一覧) は非同期に揃うため、
+  // 材料の状態が変わったらキャッシュを作り直す (途中で作ると
+  // 空のまま固定され、持ち物の使用率が一切出なくなる)
+  const sig = Object.keys(NAMES._itemEn2ja || {}).length + '/' + ITEM_OPTIONS.length;
+  if (!_itemJa2en || _itemJa2enSig !== sig) {
+    _itemJa2en = {}; _itemJa2enSig = sig;
     for (const o of ITEM_OPTIONS) { if (!o.v) continue; const j = (NAMES._itemEn2ja || {})[idOf(o.v)]; if (j) _itemJa2en[z2h(j)] = o.v; }
   }
   return _itemJa2en[jaName] || null;
@@ -732,6 +736,12 @@ function applyItemMaps() {
   NAMES._itemEn2ja = {};
   for (const [jaName, en] of Object.entries(ITEM_MAPS)) NAMES._itemEn2ja[idOf(en)] = jaName;
   for (const [en, jaName] of Object.entries(ITEM_JA_EXTRA)) { const k = idOf(en); if (!(k in NAMES._itemEn2ja)) NAMES._itemEn2ja[k] = jaName; }
+  // itemJa2en の逆引きキャッシュは、このマップが届く前に作られると
+  // 空のまま固定されてしまうため、読み込みのたびに作り直させる
+  _itemJa2en = null;
+  // 到着が初回描画より遅れた場合、再描画しないと使用率のない
+  // 持ち物選択肢が表示され続けるため、描画済みなら描き直す
+  if (document.querySelector('.playercalc')) renderAll();
 }
 function confirmNewBattle() {
   battleResetPending = false;
@@ -3405,10 +3415,11 @@ function bayesView(spec) { return estimator.view(spec); }
 function estView(species) { return estimator.fallbackView(species); }
 
 // 推定セルのツールチップに付ける未判明技の予測 (上位3件、日本語名)
-let _moveEn2ja = null;
+let _moveEn2ja = null, _moveEn2jaSig = -1;
 function movePredTitle(spec) {
   if (!spec.estMovePred || !spec.estMovePred.length) return '';
-  if (!_moveEn2ja) { _moveEn2ja = {}; for (const [ja, en] of Object.entries(NAMES._moveJa2en || {})) _moveEn2ja[en] = ja; }
+  const sig = Object.keys(NAMES._moveJa2en || {}).length;
+  if (!_moveEn2ja || _moveEn2jaSig !== sig) { _moveEn2ja = {}; _moveEn2jaSig = sig; for (const [ja, en] of Object.entries(NAMES._moveJa2en || {})) _moveEn2ja[en] = ja; }
   return '・未判明技の予測 ' + spec.estMovePred.slice(0, 3).map(x => `${_moveEn2ja[x.move] || x.move} ${Math.round(x.prob * 100)}%`).join(' / ');
 }
 // 推定を相手パネルの判明情報として反映する。
@@ -4027,6 +4038,7 @@ const LOADER_POKEDB = regDataLoader('pokedb_parsed', '使用率分布', true, as
         for (const e of NAMES._indexSpecies) { const k = z2h(e.ja); if (!(k in NAMES._ja2en)) NAMES._ja2en[k] = e.en; }
         NAMES._moveJa2en = {};
         for (const [id, jaName] of Object.entries(NAMES.moves)) { const mv = [...gen.moves].find(m => idOf(m.name) === id); if (mv) NAMES._moveJa2en[z2h(jaName)] = mv.name; }
+        _moveFold2en = null; _moveEn2ja = null; // 逆引きキャッシュを作り直させる (itemJa2en と同種の固定化防止)
         NAMES._abilityJa2en = {};
         for (const [id, jaName] of Object.entries(NAMES.abilities)) { const ab = [...gen.abilities].find(a => idOf(a.name) === id); if (ab) NAMES._abilityJa2en[z2h(jaName)] = ab.name; }
         applyItemMaps(); // 持ち物名マップは独立ローダー (LOADER_ITEMS_JA) が読み込む
