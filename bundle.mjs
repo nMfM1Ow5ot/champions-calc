@@ -28070,7 +28070,7 @@ function createEstimator(deps) {
       if (!e || !e.species) continue;
       const full = metaFormeFullName(e);
       const isMega = full.includes("-Mega");
-      if (full !== species && !(species === base && e.species === base && isMega)) continue;
+      if (full !== species && !(species === base && e.species === base && isMega) && full !== fallback.megaSpecies) continue;
       const nature = metaNameEn("nature", e.nature);
       if (!nature) continue;
       const sp = {};
@@ -28201,15 +28201,25 @@ function createEstimator(deps) {
     if (!patterns.length || !natures.length) return bayesGenericCandidates(species, table);
     const topItem = items[0] || { en: "", rate: 0 };
     const topAbility = abilities[0] || { en: u.ability, rate: 0 };
+    let megaSpecies = u.megaSpecies || void 0;
+    if (!megaSpecies) {
+      for (const it of itemsAll) {
+        const target = megaStoneTarget(it.en, species);
+        if (target) {
+          megaSpecies = target;
+          break;
+        }
+      }
+    }
     let megaAbility;
-    if (u.megaSpecies) {
-      const ms = gen.species.get(idOf(u.megaSpecies));
+    if (megaSpecies) {
+      const ms = gen.species.get(idOf(megaSpecies));
       if (ms) megaAbility = Array.isArray(ms.abilities) ? ms.abilities[0] : Object.values(ms.abilities || {})[0];
     }
     const combos = [];
     for (const p of patterns) for (const n of natures) combos.push({ p, n, w: (p.rate + 0.5) * (n.rate + 0.5) });
     combos.sort((a, b) => b.w - a.w);
-    const mtable = u.megaSpecies ? statTable(u.megaSpecies) : null;
+    const mtable = megaSpecies ? statTable(megaSpecies) : null;
     const mk = (combo, item, ability, wMul) => {
       const sp = {};
       for (const k of ["hp", "atk", "def", "spa", "spd", "spe"]) sp[k] = combo.p.sp[k] || 0;
@@ -28255,7 +28265,7 @@ function createEstimator(deps) {
         item: item.en,
         ability: ability.en,
         megaAbility,
-        megaSpecies: u.megaSpecies || void 0,
+        megaSpecies,
         moves: profMoves,
         movePool,
         moveExact: false,
@@ -28326,7 +28336,7 @@ function createEstimator(deps) {
         for (const c of out) c.post /= t2;
       }
     }
-    const corpus = bayesCorpusCandidates(species, table, { topAbility: topAbility.en, megaAbility, megaSpecies: u.megaSpecies || void 0 });
+    const corpus = bayesCorpusCandidates(species, table, { topAbility: topAbility.en, megaAbility, megaSpecies });
     if (!corpus.length) return out.slice(0, 64);
     const keyOf = (c) => c.nature + "|" + JSON.stringify(c.sp) + "|" + c.item + "|" + c.ability + "|" + (c.megaSpecies || "");
     const byKey = new Map(corpus.map((c) => [keyOf(c), c]));
@@ -28514,6 +28524,15 @@ function createEstimator(deps) {
     } catch (e) {
       return false;
     }
+  }
+  function megaStoneTarget(item, species) {
+    if (!item) return void 0;
+    try {
+      const it = gen.items.get(idOf(item));
+      if (it && it.megaStone && typeof it.megaStone === "object") return it.megaStone[species] || void 0;
+    } catch (e) {
+    }
+    return void 0;
   }
   function processDamageBayes(ev, ctx) {
     if (ev.atk && ev.atk === ev.def) {
