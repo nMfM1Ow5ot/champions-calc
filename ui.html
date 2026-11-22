@@ -3385,6 +3385,29 @@ function bayesProcessFaintOrder(ev) {
   if (typeof estimator.processFaintOrderBayes !== 'function') return;
   estimator.processFaintOrderBayes(faintOrderEv(ev), estCtxAtTurnStart(ev.turn));
 }
+// 急所の後付け確定 (reader の crit イベント)。急所文は被ダメ行より後に
+// 来るため dmg イベントは crit:false で消費されがちで、reader 側の既出
+// イベント書き換えは消費済みの UI には届かない。そのため急所の確定は
+// 独立イベントとして末尾に届き、エンジンの後付け取り込み口へ、元の
+// ダメージ処理と同じ文脈で渡す (battle_20261122_201011 の切り分け)
+function infProcessCrit(ev) {
+  if (typeof estimator.processCritInf !== 'function') return;
+  const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const basesAtk = infBases(a, ev, true), basesDef = infBases(d, ev, false);
+  estimator.processCritInf(ev, { myAtk, myDef, basesAtk, basesDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    basesAtkTS: basesAtk.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)), basesDefTS: basesDef.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)) });
+}
+function bayesProcessCrit(ev) {
+  if (typeof estimator.processCritBayes !== 'function') return;
+  const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const baseAtk = infOppBase(a, ev, true), baseDef = infOppBase(d, ev, false);
+  estimator.processCritBayes(ev, { myAtk, myDef, baseAtk, baseDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    baseAtkTS: withTurnStartBoosts(baseAtk, 'opp:', ev.turn), baseDefTS: withTurnStartBoosts(baseDef, 'opp:', ev.turn) });
+}
 // パネルのランク補正を、そのターンの開始時点の控えで置き換えた控えを
 // 返す (控えが無ければ元のまま)。ダメージ計算そのものは現在値が正しい
 // ため、行動順の比較に使う側だけがこちらを使う
@@ -3874,6 +3897,7 @@ function applyState(j) {
       else if (ev.k === 'dmg') { infProcessDamage(ev); bayesProcessDamage(ev); }
       else if (ev.k === 'ab') { infProcessAbility(ev); }
       else if (ev.k === 'spe') { infProcessFaintOrder(ev); bayesProcessFaintOrder(ev); }
+      else if (ev.k === 'crit') { infProcessCrit(ev); bayesProcessCrit(ev); }
     }
     estimator.setSeen(j.events.length);
     lastEventCount = j.events.length;
