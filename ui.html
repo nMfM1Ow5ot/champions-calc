@@ -1287,7 +1287,9 @@ function exportText(spec) {
     head,
     `Ability: ${spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability}`,
     'Level: 50',
-    ...(spec.teraType ? [`Tera Type: ${spec.teraType}`] : []),
+    // M-C はメガ進化のルールでテラスタルが無いため、テラスタイプ行は
+    // 出さない (他のレギュレーションでは従来どおり出す)
+    ...(spec.teraType && currentRegulation() !== 'M-C' ? [`Tera Type: ${spec.teraType}`] : []),
   ];
   const evParts = STATJ.filter(([k]) => (spec.sp[k] || 0) > 0)
     .map(([k]) => `${spec.sp[k]} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
