@@ -804,7 +804,8 @@ var switchInTurn: [String: Int] = [:]             // "side:Species" -> 交代で
 var heldWeatherStart: (ui: String, logName: String, text: String, at: Date)? = nil  // 交代確定待ちで保留した天候開始
 var heldTerrainStart: (ui: String, text: String, at: Date)? = nil                  // 同・地形開始
 var heldTerrainReplace: (ui: String, text: String, at: Date)? = nil  // 出所を確認できない地形の上書き開始の保留
-var pivotReturnAt: [String: Date] = [:]           // side -> 交代技で戻る文を消費した時刻 (後任の交代確定を早める)
+var pivotReturnAt: [String: Date] = [:]
+var sendOutTextSeen: [String: (species: String, at: Date)] = [:]  // side -> 繰り出し文で観測した入場種族 (フェーズ3: 文証拠)           // side -> 交代技で戻る文を消費した時刻 (後任の交代確定を早める)
 var fieldHoldBypass = false                       // 保留した天候・地形を流す際の再保留防止
 var pendingStatusFrom: [String: (code: String, at: Date)] = [:]  // "p1:Species" -> 状態異常ダメージの帰属
 var wishSetTurn: [String: Int] = [:]               // side -> ねがいごとを使ったターン (回復の説明用)
@@ -816,7 +817,8 @@ var lastDamageLabel = ""                          // 直近にダメージを受
 var lastDamageAt = Date.distantPast
 var lastPendingLabel = ""                         // 確定待ちダメージの枠 (急所はダメージ行より先に表示される)
 var pendingSwitchSpecies: [String: String] = [:]  // プレート名 -> 確定待ちの交代先種族
-var pendingSwitchSince: [String: Date] = [:]      // プレート名 -> その種族を最初に検出した時刻
+var pendingSwitchSince: [String: Date] = [:]
+var pendingSwitchCandidates: [String: [String: (count: Int, firstSeen: Date, lastSeen: Date)]] = [:]  // プレート名 -> 候補種族 -> 交代候補の証拠 (フェーズ3: 区間管理。pendingSwitch* はそのリーダー表示)      // プレート名 -> その種族を最初に検出した時刻
 var slotLastHitAt: [String: Date] = [:]           // 枠ごとの最終プレートヒット時刻 (plate_stale 監視用)
 var plateStaleOtherHits: [String: Int] = [:]      // その枠が無ヒットの間に相方枠がヒットしたフレーム数
 var pendingSwitchCount: [String: Int] = [:]       // 同じ種族が連続で見えた回数
@@ -1637,20 +1639,20 @@ func fieldRenderForAbility(_ ability: String) -> String? {
 // ひんし行がある交代 (ひんし交代) は対象にしない。表示側は交代の
 // 描画行を一緒に移す (実例: 2026-11-22 battle_20261122_091721、
 // ゲンガーの交代とメガ進化がターン6の末尾に記録された)
-func pullBackSwitchBlock(label: String) -> (proto: [String], display: [String]) {
-    guard let turnIdx = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") }) else { return ([], []) }
+func pullBackSwitchBlock(label: String, splitMega: Bool = false) -> (proto: [String], display: [String], protoHead: [String], displayHead: [String]) {
+    guard let turnIdx = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") }) else { return ([], [], [], []) }
     var switchIdx: Int? = nil
     for i in (turnIdx + 1)..<battleLog.count {
         let l = battleLog[i]
         let f = l.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         if l.hasPrefix("|switch|"), f.count >= 3, f[2] == label { switchIdx = i }
     }
-    guard let si = switchIdx else { return ([], []) }
+    guard let si = switchIdx else { return ([], [], [], []) }
     let side = String(label.prefix(2))
     for i in (turnIdx + 1)..<si {
         let l = battleLog[i]
         let f = l.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-        if l.hasPrefix("|faint|"), f.count >= 3, f[2].hasPrefix(side) { return ([], []) }
+        if l.hasPrefix("|faint|"), f.count >= 3, f[2].hasPrefix(side) { return ([], [], [], []) }
     }
     var idxs = [si]
     if si + 1 < battleLog.count {
@@ -1667,7 +1669,22 @@ func pullBackSwitchBlock(label: String) -> (proto: [String], display: [String]) 
             else if !passedMove && (l.hasPrefix("|-damage|") || l.hasPrefix("|-heal|")) { idxs.append(j) }
         }
     }
-    let pulled = idxs.map { battleLog[$0] }
+    // メガ進化は、交代で入場したそのターンには起こらない (交代が
+    // そのターンの行動を消費する)。検証済みの実像
+    // (battle_20261122_091721: 交代はターン5頭、メガ行はターン6頭)
+    // に合わせ、splitMega の場合はメガ一式 (石の持ち物行・
+    // detailschange・-mega) を分離して返す。呼び手 (ターン行ガード)
+    // が、交代側を前のターンの頭へ、メガ側を新しいターンの頭へ置く
+    var headIdxs: [Int] = []
+    var restIdxs = idxs
+    if splitMega, let k = idxs.firstIndex(where: { battleLog[$0].hasPrefix("|detailschange|") || battleLog[$0].hasPrefix("|-mega|") }) {
+        var start = k
+        if k > 0, battleLog[idxs[k - 1]].hasPrefix("|-item|") { start = k - 1 }
+        headIdxs = Array(idxs[..<start])
+        restIdxs = Array(idxs[start...])
+    }
+    let pulled = restIdxs.map { battleLog[$0] }
+    let pulledHead = headIdxs.map { battleLog[$0] }
     for i in idxs.reversed() { battleLog.remove(at: i) }
     // 表示側: 交代の描画 (引き戻し行 + 繰り出し行) と石への反応・
     // メガ進化の描画行を、最後のターン見出しより後ろから集める
@@ -1690,9 +1707,19 @@ func pullBackSwitchBlock(label: String) -> (proto: [String], display: [String]) 
             if prev.hasSuffix("come back!") || prev.contains("withdrew") { dispIdxs.insert(first - 1, at: 0) }
         }
     }
-    let pulledDisplay = dispIdxs.map { displayLog[$0] }
+    var dispHeadIdxs: [Int] = []
+    var dispRestIdxs = dispIdxs
+    if !headIdxs.isEmpty {
+        // 表示側も同じ分割にする: 石への反応とメガ進化の描画は新しい
+        // ターン側、それ以外 (引き戻し・繰り出し・補完の被ダメ描画) は
+        // 前のターン側
+        dispRestIdxs = dispIdxs.filter { displayLog[$0].hasSuffix("is reacting to the Key Stone!") || displayLog[$0].contains("has Mega Evolved into") }
+        dispHeadIdxs = dispIdxs.filter { !dispRestIdxs.contains($0) }
+    }
+    let pulledDisplay = dispRestIdxs.map { displayLog[$0] }
+    let pulledDisplayHead = dispHeadIdxs.map { displayLog[$0] }
     for i in dispIdxs.reversed() { displayLog.remove(at: i) }
-    return (pulled, pulledDisplay)
+    return (pulled, pulledDisplay, pulledHead, pulledDisplayHead)
 }
 
 func emitLog(_ line: String) { emitLog(line, applyNow: true) }
@@ -1799,7 +1826,17 @@ func emitLog(_ line: String, applyNow: Bool) {
                 // battle_20261122_091721、ゲンガーの交代とメガ進化)
                 var pulledProto: [String] = []
                 var pulledDisplay: [String] = []
-                if ruleC, let mover { (pulledProto, pulledDisplay) = pullBackSwitchBlock(label: mover) }
+                var pulledProtoHead: [String] = []
+                var pulledDisplayHead: [String] = []
+                if ruleC, let mover {
+                    let pb = pullBackSwitchBlock(label: mover, splitMega: true)
+                    pulledProto = pb.proto
+                    pulledDisplay = pb.display
+                    pulledProtoHead = pb.protoHead
+                    pulledDisplayHead = pb.displayHead
+                }
+                let oldTurnIdx = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") })
+                let oldTurnIdxD = displayLog.lastIndex(where: { $0.hasPrefix("Turn ") })
                 if debugMode { print("[reader] ターン行ガードが発火しました: |turn|\(n) を先に出します (きっかけ: \(line))") }
                 fflush(stdout)
                 debugCapture(kind: "turn_guard", key: "turn_guard:\(n)", rawText: "",
@@ -1807,6 +1844,14 @@ func emitLog(_ line: String, applyNow: Bool) {
                                       "action": "inserted_turn_line"])
                 suppressNextDetectorTurn = true
                 emitLog("|turn|\(n)")   // この呼び出しで追跡状態はリセットされる
+                // 分離した交代側は、前のターンの頭 (直前のターン行の
+                // 直後) へ戻す
+                if !pulledProtoHead.isEmpty, let ti = oldTurnIdx {
+                    battleLog.insert(contentsOf: pulledProtoHead, at: ti + 1)
+                }
+                if !pulledDisplayHead.isEmpty, let ti = oldTurnIdxD {
+                    displayLog.insert(contentsOf: pulledDisplayHead, at: ti + 1)
+                }
                 if !pulledProto.isEmpty {
                     battleLog.append(contentsOf: pulledProto)
                     displayLog.append(contentsOf: pulledDisplay)
@@ -2173,13 +2218,13 @@ func resetLogState() {
     lastBoostApply = [:]
     boostPathAt = [:]
     lastEffectAt = [:]
-    pendingSwitchSpecies = [:]; pendingSwitchCount = [:]; pendingSwitchSince = [:]
+    pendingSwitchSpecies = [:]; pendingSwitchCount = [:]; pendingSwitchSince = [:]; pendingSwitchCandidates = [:]
     lastDamageSeq = [:]; lastDamageTurn = [:]; lastDamageDir = [:]; lastDamageTime = [:]; lastCritAt = [:]; actionSeq = 0
     suspectJump = [:]; firstEntryPlateHP = [:]; sitrusWatch = [:]; lastMoveEmitSeq = -1; lastSwitchEmitSeq = -1
     fieldSetByMoveTurn = -1; switchInTurn = [:]
     heldWeatherStart = nil; heldTerrainStart = nil; fieldHoldBypass = false
     battleAdmittedSpecies = []; offTeamPlateStreak = [:]; battleMaxOverride = [:]; battleMaxCandidate = [:]; pendingReturnCount = [:]
-    heldTerrainReplace = nil; pivotReturnAt = [:]
+    heldTerrainReplace = nil; pivotReturnAt = [:]; sendOutTextSeen = [:]
     wishSetTurn = [:]
     heldLine = [:]; pendingFaints = []; faintedSlots = [:]; grassyHealTurn = [:]; lastSideCondAt = [:]
     faintedSpecies = []; heldEntryBoosts = []
@@ -3407,7 +3452,7 @@ func processPlates(_ hits: [String: SlotState]) {
         let fa = firstEntryPlateHP[a]; firstEntryPlateHP[a] = firstEntryPlateHP[b]; firstEntryPlateHP[b] = fa
         for p in [a, b] {
             pendingDamagePct[p] = nil; pendingDamageCount[p] = nil; pendingDamageSince[p] = nil
-            pendingSwitchSpecies[p] = nil; pendingSwitchCount[p] = nil; pendingSwitchSince[p] = nil
+            pendingSwitchSpecies[p] = nil; pendingSwitchCount[p] = nil; pendingSwitchSince[p] = nil; pendingSwitchCandidates[p] = nil
             heldLine[p] = nil; suspectJump[p] = nil
         }
         debugCapture(kind: "slot_swap", key: "slot_swap:\(sideKey):\(currentTurn)", rawText: "",
@@ -3434,16 +3479,34 @@ func processPlates(_ hits: [String: SlotState]) {
             // 繰り出しアニメーションの途中では一瞬だけ隣の枠で読めることが
             // あり、即時確定すると誤った枠への |switch| と巻き戻しが多発する
             // (実例: 登場直後のグレンアルマが p1a / p1b の両方に記録された)
-            if pendingSwitchSpecies[plate.name] == s.speciesEn {
-                pendingSwitchCount[plate.name] = (pendingSwitchCount[plate.name] ?? 1) + 1
-            } else {
-                pendingSwitchSpecies[plate.name] = s.speciesEn
-                pendingSwitchCount[plate.name] = 1
-                pendingSwitchSince[plate.name] = Date()
+            // 交代候補は区間で管理する (フェーズ3): 候補ごとの証拠
+            // (回数・初出・最終観測) を保持し、別候補や占有者が間に
+            // 読まれても証拠は消えない。最終観測から 3 秒を超えた候補は
+            // 期限切れとして落とす。pendingSwitch* は現在のリーダー
+            // 候補の表示として同期する (既存の読み手はそのまま使う)
+            let psNow = Date()
+            var psCands = pendingSwitchCandidates[plate.name] ?? [:]
+            psCands = psCands.filter { psNow.timeIntervalSince($0.value.lastSeen) <= 3 }
+            var psCand = psCands[s.speciesEn] ?? (count: 0, firstSeen: psNow, lastSeen: psNow)
+            psCand.count += 1
+            psCand.lastSeen = psNow
+            psCands[s.speciesEn] = psCand
+            pendingSwitchCandidates[plate.name] = psCands
+            // リーダーが替わった時だけ開始時刻を取り直す (同じ候補の
+            // 再読みで開始時刻が若返ると、保留の経過時間で見るガード
+            // (同種族ガード・要員待ち) が永遠に解けない)
+            if pendingSwitchSpecies[plate.name] != s.speciesEn || pendingSwitchSince[plate.name] == nil {
+                pendingSwitchSince[plate.name] = psCand.firstSeen
             }
+            pendingSwitchSpecies[plate.name] = s.speciesEn
+            pendingSwitchCount[plate.name] = psCand.count
             // 交代技で戻ることが確定している側は、後任を 1 回の読みで
             // 確定する (戻り文の消費時に pivotReturnAt が立つ)
-            let confirmReads = (pivotReturnAt[side].map { Date().timeIntervalSince($0) < 20 } ?? false) ? 1 : 2
+            // 交代技の戻り消費、または繰り出し文の文証拠がある場合は、
+            // 後任を 1 回の読みで確定する
+            let pivotFast = pivotReturnAt[side].map { Date().timeIntervalSince($0) < 20 } ?? false
+            let textFast = sendOutTextSeen[side].map { $0.species == s.speciesEn && Date().timeIntervalSince($0.at) < 20 } ?? false
+            let confirmReads = (pivotFast || textFast) ? 1 : 2
             if (pendingSwitchCount[plate.name] ?? 0) >= confirmReads {
                 // 同種族が相方枠に在席したままの確定は、同時交代時の
                 // 隣枠への写り込みとして保留する (同一個体が 2 枠に
@@ -3462,6 +3525,8 @@ func processPlates(_ hits: [String: SlotState]) {
                 pendingSwitchSpecies[plate.name] = nil
                 pendingSwitchCount[plate.name] = nil
                 pendingSwitchSince[plate.name] = nil
+                pendingSwitchCandidates[plate.name] = nil
+                if sendOutTextSeen[side]?.species == s.speciesEn { sendOutTextSeen[side] = nil }
                 // 交代要員を選んでいる間は、控え一覧画面のバーが場のプレートと
                 // して読めて、生きている枠にまで交代行が出ることがある
                 // (実例: 2026-11-20、グレンアルマの交代要員選択中に
@@ -3624,9 +3689,28 @@ func processPlates(_ hits: [String: SlotState]) {
                 }
             }
         } else {
-            pendingSwitchSpecies[plate.name] = nil
-            pendingSwitchCount[plate.name] = nil
-            pendingSwitchSince[plate.name] = nil
+            // 占有者の再読みでは交代候補を即消去しない (フェーズ3):
+            // 候補は最終観測からの期限 (3 秒) で自然に落ち、リーダーが
+            // 期限切れになったら残りの最新候補へ表示を引き継ぐ
+            let occNow = Date()
+            if var occCands = pendingSwitchCandidates[plate.name] {
+                occCands = occCands.filter { occNow.timeIntervalSince($0.value.lastSeen) <= 3 }
+                pendingSwitchCandidates[plate.name] = occCands.isEmpty ? nil : occCands
+                if occCands.isEmpty {
+                    pendingSwitchSpecies[plate.name] = nil
+                    pendingSwitchCount[plate.name] = nil
+                    pendingSwitchSince[plate.name] = nil
+                } else if let cur = pendingSwitchSpecies[plate.name], occCands[cur] == nil,
+                          let lead = occCands.max(by: { $0.value.lastSeen < $1.value.lastSeen }) {
+                    pendingSwitchSpecies[plate.name] = lead.key
+                    pendingSwitchCount[plate.name] = lead.value.count
+                    pendingSwitchSince[plate.name] = lead.value.firstSeen
+                }
+            } else {
+                pendingSwitchSpecies[plate.name] = nil
+                pendingSwitchCount[plate.name] = nil
+                pendingSwitchSince[plate.name] = nil
+            }
             // ひんし確定済みの枠は、交代が確定するまでプレート読みを無視する
             // (交代要員選択画面で満タンのバーが読めて「全回復」行が出たり、
             //  0% に戻って ひんし行が二重に出たりした実例: 2026-11-20)
@@ -3842,6 +3926,19 @@ func findInDict(in text: String, _ dict: [String: String]) -> String? {
         if !norm.isEmpty && t.contains(norm) && (best == nil || orig.count > best!.count) { best = orig }
     }
     return best
+}
+
+// 告知文の帰属枠: 場にいればその枠。いない場合は、交代候補として
+// 読まれている枠を既定枠 (a 枠) より優先する (フェーズ3: 候補を保持し、
+// 既定枠への無言の帰属を避ける)
+func announcedSlot(side: String, speciesEn: String) -> String {
+    for (name, s) in lastSlots where (name.hasPrefix("mine") ? "p1" : "p2") == side && s.speciesEn == speciesEn {
+        return slotId(name)
+    }
+    let plates = side == "p1" ? ["mineA", "mineB"] : ["oppA", "oppB"]
+    let candPlates = plates.filter { pendingSwitchCandidates[$0]?[speciesEn] != nil }
+    if candPlates.count == 1 { return slotId(candPlates[0]) }
+    return slotFor(side: side, speciesEn: speciesEn)
 }
 
 func slotFor(side: String, speciesEn: String) -> String {
@@ -5879,7 +5976,20 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 誤登録され、プレート確定の p1b と合わせて "Go! Sneasler!" が
         // 二重に出た)。途中交代はプレート側 (2 フレーム確定) が正しい
         // 枠で記録するため、文は消費するだけにする
-        if lastSlots["mineA"] != nil && lastSlots["mineB"] != nil { return true }
+        if lastSlots["mineA"] != nil && lastSlots["mineB"] != nil {
+            // 途中交代の繰り出し文は、プレート確定を早める文証拠として
+            // 残す (フェーズ3)。枠そのものはプレート読みが決める
+            if let e = findSpeciesJa(in: t) {
+                let inOppOnly = oppTeamSeen.contains(e.en) && teamEntries[e.en] == nil
+                    && !battleMineTeam.contains(where: { $0?.species == e.en })
+                let evSide = inOppOnly ? "p2" : "p1"
+                let onFieldNow = evSide == "p1"
+                    ? (lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en)
+                    : (lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en)
+                if !onFieldNow { sendOutTextSeen[evSide] = (species: e.en, at: Date()) }
+            }
+            return true
+        }
         var found = findAllSpeciesJa(in: t)
         // 性別・リージョンフォルムは登録チームと突き合わせて確定させる
         found = found.map { e in
@@ -6247,7 +6357,7 @@ func translateBattleMessage(_ text: String) -> Bool {
             }
         }
     }
-    let slot = slotFor(side: side, speciesEn: sp.en)
+    let slot = announcedSlot(side: side, speciesEn: sp.en)
     let key = "\(side):\(sp.en)"
     if monStates[key] == nil { monStates[key] = MonState() }
     // ゴツゴツメット: 接触技で攻撃した側が受ける反動ダメージの予告。
@@ -9014,7 +9124,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1159"
+let readerBuild = "20261122_1218"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
