@@ -91,6 +91,10 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .titlebox{display:flex; flex-direction:column}
 .revline{font-size:1.36rem; color:var(--label); line-height:1.3}
 .loadwarn{font-size:1.15rem; color:#d97706; line-height:1.35; cursor:pointer; max-width:36rem}
+.flagbox{display:flex; align-items:center}
+#battleFlagBtn{font-weight:700; font-size:1.05rem; padding:.45rem 1.1rem; background:#4180CB; color:#fff}
+#battleFlagBtn[data-phase="inBattle"]{background:#C0504D}
+#battleFlagBtn:disabled{opacity:.55; cursor:default}
 .topbar .cam{display:flex; align-items:center; gap:.6rem; font-size:1rem; color:var(--dim)}
 .topbar button{font:inherit; font-size:1rem; background:var(--panel); color:var(--ink); border:none; border-radius:.5rem; padding:.4rem .8rem; cursor:pointer; box-shadow:var(--dd-shadow)}
 .topbar button:hover{background:rgba(33,150,243,.15); color:#fff}
@@ -378,6 +382,7 @@ html[data-layout="sp"] .sdd-control .spreadtgl, html[data-layout="sp"] .sdd-cont
 <div class="wrap">
   <div class="topbar">
     <div class="titlebox"><h1>チャンピオンズ ダメージ計算</h1><div class="revline" id="revLine"></div></div>
+    <div class="flagbox"><button type="button" id="battleFlagBtn">試合開始</button></div>
     <div class="loadwarn" id="loadWarn" data-loadretry hidden></div>
     <div class="loadwarn" id="reloadNote" data-reloadnow hidden></div>
     <div class="cam" id="camBox">チーム画面を取り込む
@@ -643,6 +648,35 @@ function errStack(e) { return String((e && e.stack) || '').split('\n').slice(0, 
 // 例外の記録 (後日の成果物で「どこで・なぜ止まったか」を追えるように)。
 // メモリ上に保持してデバッグスナップショットに含めるほか、対戦中は
 // 推論ログのアーカイブにもマーカーとして残す (自動で送られるため)
+// 試合開始／終了ボタン (手動フラグ化)。表示は UI ローカルのトグルでは
+// なく、state.json の battlePhase (reader が権威) から決める。再読み込み
+// しても実状態とずれない。押下は serve.py の POST /battle_flag へ送り、
+// 応答の phase (見込み値) で即時更新する。以後は battlePhase が権威で、
+// reader が取り込めなければ表示はそちらへ戻る
+let flagPhase = 'idle';
+let flagMode = 'manual';
+let flagBusy = false;
+function flagBtnLabel() { return flagPhase === 'inBattle' ? '試合終了' : '試合開始'; }
+function renderFlagBtn() {
+  const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById('battleFlagBtn') : null;
+  if (!el) return;
+  el.textContent = flagBtnLabel();
+  el.dataset.phase = flagPhase;
+  el.disabled = flagBusy;
+}
+async function pressBattleFlag() {
+  if (flagBusy) return;
+  flagBusy = true; renderFlagBtn();
+  try {
+    const action = flagPhase === 'inBattle' ? 'end' : 'start';
+    const res = await fetch('./battle_flag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+    if (res && res.ok) {
+      const j = await res.json().catch(() => null);
+      if (j && (j.phase === 'inBattle' || j.phase === 'idle')) { flagPhase = j.phase; if (j.mode) flagMode = j.mode; }
+    }
+  } catch (e) { /* serve.py 未起動時は何もしない (表示は state.json の到着を待つ) */ }
+  flagBusy = false; renderFlagBtn();
+}
 function recordUiError(rec) {
   const entry = { at: new Date().toISOString(), ...rec };
   uiErrors.push(entry);
@@ -3723,6 +3757,11 @@ function applyMineTeamPreview(list) {
 function applyState(j) {
   if (!j || typeof j !== 'object') return;
   let changed = false;
+  if (j.battlePhase === 'inBattle' || j.battlePhase === 'idle') {
+    flagPhase = j.battlePhase;
+    if (j.flagMode) flagMode = j.flagMode;
+    renderFlagBtn();
+  }
   // 試合 ID (state.json の battle) が変わったら、新しい対戦の開始が確定する。
   // events 列の縮小だけに頼ると検知を外し、前の対戦のおいかぜ等が持ち越される
   // ことがある (battle_20261121_132153 の件) ため、ID の変化でも確定させ、
@@ -4095,6 +4134,8 @@ async function sendDebugSnapshot() {
   }
 }
 document.getElementById('dbgSend')?.addEventListener('click', sendDebugSnapshot);
+document.getElementById('battleFlagBtn')?.addEventListener('click', pressBattleFlag);
+renderFlagBtn();
 // 仕様差分 (バランス調整) の切り替え: 選択は保存し、適用は core の差分レイヤーへ
 function renderSpecSel() {
   const sel = document.getElementById('specSel');
