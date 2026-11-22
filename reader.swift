@@ -6852,7 +6852,7 @@ var previewEvidenceSlots: [PvSlotInfo] = []     // そのフレームの枠ご�
 var previewEvidenceTeam: [String?] = []         // その時点のマージ済み同定結果
 var previewEvidenceVotes: [[[String: Any]]] = []  // その時点のマージ票数 (枠ごと・種族ごと)
 var minePreviewVotes: [[String: Int]] = []        // 自チーム側の見せ合い投票
-var minePreviewBest: [String?] = []               // 自チーム側のマージ結果
+var minePreviewTeam: [String?] = []               // 自チーム側のマージ結果
 var minePreviewDetails: [[String: Any]] = []      // 自チーム側の枠ごとの詳細 (種族・性別・持ち物)
 var minePreviewEvidence: [[String: Any]] = []     // preview_id 証跡用の自チーム詳細控え
 var previewEvidenceAt: Date? = nil
@@ -8380,7 +8380,7 @@ func runOnce(image: CGImage) {
                 previewVotes = []
                 previewVoteScore = []
                 previewLocked = []
-                minePreviewBest = []
+                minePreviewTeam = []
                 minePreviewVotes = []
                 minePreviewDetails = []
                 previewTeamWritten = false
@@ -8515,8 +8515,8 @@ func runOnce(image: CGImage) {
                 // 自チーム側の同定 (名前 OCR が主系統。試行をまたいで
                 // 投票でマージし、詳細は最良種族を読んだ試行のものを保つ)
                 if let mine = identifyPreviewMine(image: image) {
-                    if minePreviewBest.count != 6 {
-                        minePreviewBest = Array(repeating: nil, count: 6)
+                    if minePreviewTeam.count != 6 {
+                        minePreviewTeam = Array(repeating: nil, count: 6)
                         minePreviewVotes = Array(repeating: [:], count: 6)
                         minePreviewDetails = Array(repeating: [:], count: 6)
                     }
@@ -8529,8 +8529,8 @@ func runOnce(image: CGImage) {
                         let leader = minePreviewVotes[i].max { a, b in
                             a.value != b.value ? a.value < b.value : a.key < b.key
                         }?.key
-                        if let leader { minePreviewBest[i] = leader }
-                        if let sp = mine[i].species, sp == minePreviewBest[i] {
+                        if let leader { minePreviewTeam[i] = leader }
+                        if let sp = mine[i].species, sp == minePreviewTeam[i] {
                             minePreviewDetails[i] = ["species": sp,
                                                      "gender": mine[i].gender ?? "",
                                                      "item": mine[i].itemEn ?? "",
@@ -8565,7 +8565,7 @@ func runOnce(image: CGImage) {
                 if !previewTeamWritten { obj["oppReset"] = true }
                 obj["oppPreview"] = true
                 obj["oppTeam"] = previewBestTeam.map { $0 as Any? ?? NSNull() }
-                if minePreviewBest.contains(where: { $0 != nil }) {
+                if minePreviewTeam.contains(where: { $0 != nil }) {
                     obj["minePreview"] = true
                     obj["mineTeam"] = minePreviewDetails.map { d -> Any in d.isEmpty ? NSNull() : d }
                 }
@@ -8644,7 +8644,7 @@ func runOnce(image: CGImage) {
         previewVotes = []
         previewVoteScore = []
         previewLocked = []
-        minePreviewBest = []
+        minePreviewTeam = []
         minePreviewVotes = []
         minePreviewDetails = []
         previewTeamWritten = false
@@ -8871,7 +8871,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1210"
+let readerBuild = "20261122_1202"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
