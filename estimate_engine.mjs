@@ -976,7 +976,8 @@ function processDamageBayes(ev, ctx) {
       if (over) {
         trig.dir = 'over';
         const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
-        if (want && !ent.dmgFlag) { ent.dmgFlag = want; trig.dmgFlagSet = want; }
+        // 持ち物が判明済みの種族に持ち物仮説は立てない
+        if (want && !ent.dmgFlag && !ent.itemKnown) { ent.dmgFlag = want; trig.dmgFlagSet = want; }
       }
     }
     const flag = ent.dmgFlag;
@@ -1010,14 +1011,22 @@ function processDamageBayes(ev, ctx) {
     let counts = ent.cands.map((c, i) => pctCounts(c, rollsList[i]));
     const trig = { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit };
     if (!counts.some(n => n > 0)) {
-      const under = ent.cands.every((c, i) => {
+      // とどめの一撃では観測 pct が残り HP で頭打ちになり、実際のロールは
+      // それ以上だった可能性がある (下限の観測)。「全候補の最小ロール
+      // 未満」の判定が偽陽性になるため、KO の場合は方向判定も仮説も
+      // 行わない (battle_20261122_091721 seq21/seq34: 残り HP そのものの
+      // pct で Assault Vest が誤発火した)
+      const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
+      const under = !ko && ent.cands.every((c, i) => {
         const rolls = rollsList[i];
         if (!rolls || !c.values.hp) return false;
         return ev.pct < Math.min(...rolls.map(r => Math.floor(r / c.values.hp * 100)));
       });
       if (under) {
         trig.dir = 'under';
-        if (md.category === 'Special' && !ent.dmgFlag) { ent.dmgFlag = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
+        // 持ち物が判明済みの種族に持ち物仮説は立てない (同 seq34:
+        // Eject Button がハード判明済みの Sableye にフラグが立った)
+        if (md.category === 'Special' && !ent.dmgFlag && !ent.itemKnown) { ent.dmgFlag = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
       }
     }
     if (ent.dmgFlag === 'Assault Vest' && md.category === 'Special') {
@@ -1099,8 +1108,13 @@ function applyRevealed(list) {
     // 名前マップで正規化してから比較する
     const normItem = v => v == null ? null : ((NAMES._itemJa2en || {})[v] || v);
     const normAbility = v => v == null ? null : ((NAMES._abilityJa2en || {})[v] || v);
-    const item = p.itemLost ? '' : (corr.includes('持ち物') ? normItem(p.item || '') : null);
-    const ability = corr.includes('特性') ? normAbility(p.ability) : null;
+    const itemRaw = p.itemLost ? '' : (corr.includes('持ち物') ? normItem(p.item || '') : null);
+    const abilityRaw = corr.includes('特性') ? normAbility(p.ability) : null;
+    // 空文字列の判明 (きのみ消費のタイミング等で持ち物が '' のまま届く)
+    // は情報として扱わない。空の判明記録が残るのを防ぐ
+    // (battle_20261122_091721 seq41: item='' の revealed が記録された)
+    const item = itemRaw === '' && !p.itemLost ? null : itemRaw;
+    const ability = abilityRaw === '' ? null : abilityRaw;
     const key = (item ?? '?') + '|' + (ability ?? '?');
     if (key === ent.revKey) continue;
     // 判明内容が無い呼び出し (item/ability とも null) は記録しない
@@ -1124,10 +1138,11 @@ function applyRevealed(list) {
     for (const c of ent.cands) { if (matchItem(c) && matchAbility(c)) survivorMass += c.post; else if (c.post > 0) excluded++; }
     const hardMode = (itemHard || ability !== null) && survivorMass > 0;
     let applied = false;
-    // 持ち物が特定できた時点で仮説フラグ (素早さ・ダメージとも) は下ろす。
-    // 候補プールに該当型が無くハード適用できない (hardMode でない) 場合も、
-    // 判明そのものは確定情報なので仮説は維持しない
-    if (itemHard && item) { ent.speFlag = null; ent.dmgFlag = null; }
+    // 持ち物の状態が特定できた (具体的な持ち物、または喪失) 時点で、
+    // 仮説フラグ (素早さ・ダメージとも) は下ろし、以後の持ち物仮説も
+    // 立てない (ent.itemKnown)。候補プールに該当型が無くハード適用
+    // できない場合も、判明そのものは確定情報なので仮説は維持しない
+    if (item !== null) { ent.itemKnown = true; ent.speFlag = null; ent.dmgFlag = null; }
     if (hardMode) {
       if (excluded > 0) {
         for (const c of ent.cands) if (!(matchItem(c) && matchAbility(c))) c.post = 0;
