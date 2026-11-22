@@ -3088,7 +3088,8 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 追記された)。行動中の小さな実ダメージは、直前の行と行動が
         // 近いため、この条件には入らない
         if toPct != 0, effFrom - toPct <= 3, let lt = prevDamageAt, Date().timeIntervalSince(lt) >= 10,
-           prevDamageSeq != actionSeq, Date().timeIntervalSince(lastMoveMsgAt) >= 5 {
+           prevDamageSeq != actionSeq, Date().timeIntervalSince(lastMoveMsgAt) >= 5,
+           pendingStatusFrom[key] == nil {
             debugCapture(kind: "hp_correction", key: "hp_correction|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct])
             return true
@@ -6802,6 +6803,14 @@ func translateBattleMessage(_ text: String) -> Bool {
     }
     // 状態異常などのダメージ予告: ダメージ行に [from] を付けるため記録だけする
     if t.contains("ダメージを受けた") {
+        // 技の反動: 直前の技の使用者自身の文なら、発生源を控えて
+        // 反動の低下行に [from] を付ける (実例: 2026-11-22
+        // battle_20261122_193243、ウッドハンマーの反動文が消費
+        // されるだけで、低下が訂正吸収されて行が残らなかった)
+        if t.contains("反動"), lastMoveLabel == "\(slot): \(sp.en)", !lastMoveName.isEmpty {
+            pendingStatusFrom[key] = ("move: \(lastMoveName)", Date())
+            return true
+        }
         for (ja, code) in [("毒", "psn"), ("やけど", "brn"), ("砂嵐", "sandstorm"), ("あられ", "hail")] where t.contains(ja) {
             pendingStatusFrom[key] = (code, Date())
             break
@@ -6835,7 +6844,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 末尾の相性語から種別が確定し、文が「だ」で終わる形なら同じ
     // 分岐で消費する。バツグン/いまひとつ/ないようだ は対戦中の
     // 告知ではこの文にしか現れないため、誤爆の心配は小さい
-    if t.contains("効果は") || (!kind.isEmpty && (t.hasSuffix("だ！") || t.hasSuffix("だ!") || t.hasSuffix("だ"))) {
+    if t.contains("効果は") || t.contains("こうかは") || (!kind.isEmpty && (t.hasSuffix("だ！") || t.hasSuffix("だ!") || t.hasSuffix("だ") || kind == "immune")) {
         if !kind.isEmpty {
             let ekey = "\(slot)|\(kind)"
             if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
@@ -8462,7 +8471,7 @@ func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots
         if pool.isEmpty && !types.isEmpty {
             // 読み取れたタイプの組み合わせを持つ種族が存在しない =
             // アイコンの読み違いが確実。全種族で再照合する
-            pool = Array(pvFeatures.keys)
+            pool = Array(pvFeatures.keys).filter { !pvBattleOnlyFormes.contains($0) }
             expanded = true
         }
         if let gender {
@@ -9218,12 +9227,25 @@ func runOnce(image: CGImage) {
                     if let locked = previewLocked[i] {
                         previewBestTeam[i] = locked
                     } else if !previewVotes[i].isEmpty {
-                        // 暫定 1 位: 票数が多い順、同数なら最良スコアが
-                        // 小さい順、それも同点なら種族名順 (フレーム間で
-                        // 表示が揺れないよう決定的に選ぶ)
+                        // 暫定 1 位: 票数が多い順、同数なら最新の試行の
+                        // タイプ読みに完全一致する候補を先にし、次に
+                        // 最良スコアが小さい順、それも同点なら種族名順
+                        // (フレーム間で表示が揺れないよう決定的に選ぶ)。
+                        // タイプ完全一致を挟むのは、票もスコアも僅差の
+                        // 同点で、最新のアイコン読みと両タイプが合う
+                        // 候補が片方だけという場合にそちらを採るため
+                        // (実例: 2026-11-22 battle_20261122_185505 枠3、
+                        //  Psychic/Normal 読みに対し Indeedee-F と
+                        //  Slowking-Galar が 1 票同点・スコア僅差だった)
+                        let ltSet = Set(r.slots[i].types)
                         let leader = previewVotes[i].keys.filter { !vetoed[i].contains($0) }.sorted { a, b in
                             let ca = previewVotes[i][a, default: 0], cb = previewVotes[i][b, default: 0]
                             if ca != cb { return ca > cb }
+                            if !ltSet.isEmpty {
+                                let fa = Set(pvSpeciesTypes[a] ?? []).isSuperset(of: ltSet)
+                                let fb = Set(pvSpeciesTypes[b] ?? []).isSuperset(of: ltSet)
+                                if fa != fb { return fa }
+                            }
                             let sa = previewVoteScore[i][a] ?? 9, sb = previewVoteScore[i][b] ?? 9
                             if sa != sb { return sa < sb }
                             return a < b
@@ -9235,9 +9257,18 @@ func runOnce(image: CGImage) {
                             // 正しかった前回の結果を上書きする事故の
                             // 防止 (実例: 2026-11-22
                             // battle_20261122_070237、枠ずれした試行が
-                            // 同点・スコア勝ちで以後の枠をずらした)
+                            // 同点・スコア勝ちで以後の枠をずらした)。
+                            // ただし現行側の最良スコアが信頼範囲 (関門
+                            // pvSoftGateScore) を超えている場合は維持
+                            // しない。その範囲のスコアは同定側でも
+                            // 「候補を広げるべき悪い一致」として扱われ
+                            // ており、悪い一致同士の同点で先着を守る
+                            // 理由がない (実例: 2026-11-22
+                            // battle_20261122_185505 枠2、Delphox
+                            //  0.309 が Armarouge 0.195 を同点で抑えた)
                             if let inc = incumbents[i], inc != leader, !vetoed[i].contains(inc),
-                               previewVotes[i][inc, default: 0] >= previewVotes[i][leader, default: 0] {
+                               previewVotes[i][inc, default: 0] >= previewVotes[i][leader, default: 0],
+                               (previewVoteScore[i][inc] ?? 9) <= pvSoftGateScore {
                                 previewBestTeam[i] = inc
                             } else {
                                 previewBestTeam[i] = leader
@@ -9646,7 +9677,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1940"
+let readerBuild = "20261122_2003"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
