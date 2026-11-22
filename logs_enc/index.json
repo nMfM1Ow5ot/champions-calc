@@ -3832,8 +3832,8 @@
   },
   {
    "name": "battle_20261123_043809_calclog.json",
-   "sha256": "1676c6ddb6e2ec1e267a294c0ef2679f7c488bff7b0ca76490d8c3e1db98b4a4",
-   "uploaded_at": "2026-11-23T04:40:32.461148+09:00"
+   "sha256": "dec9a0997e0e820f4feb6dba83adff983378caab8e0b5d4dd68e640d7a5a8cc3",
+   "uploaded_at": "2026-11-23T04:41:26.919224+09:00"
   },
   {
    "name": "battle_20261123_043809_debug01.jpg",
@@ -3886,9 +3886,29 @@
    "uploaded_at": "2026-11-23T04:40:42.284231+09:00"
   },
   {
+   "name": "battle_20261123_043809_debug06.jpg",
+   "sha256": "482f6cdc8583330c7c7ce17edc2712751154cb7c93cd28ad0748cdee57bca3d9",
+   "uploaded_at": "2026-11-23T04:41:30.216567+09:00"
+  },
+  {
+   "name": "battle_20261123_043809_debug06.json",
+   "sha256": "f99c115896d285566f5e7523a3dced2ef177b1aee042b1581768e4b40db47059",
+   "uploaded_at": "2026-11-23T04:41:31.973058+09:00"
+  },
+  {
+   "name": "battle_20261123_043809_debug07.jpg",
+   "sha256": "f7068b9f90ec5ec6f315bff901d610e25d4ab09d98feb6abd9d89200e421e483",
+   "uploaded_at": "2026-11-23T04:41:35.442459+09:00"
+  },
+  {
+   "name": "battle_20261123_043809_debug07.json",
+   "sha256": "9e466dc29518950a38d389f3fe8b3c069b444cb2184031d3b9e70c21ee7ff819",
+   "uploaded_at": "2026-11-23T04:41:37.299552+09:00"
+  },
+  {
    "name": "battle_20261123_043809_inference.json",
-   "sha256": "8bb8229acbaa8f6a467e650787d29172159a3bc75bb8a9195893294786c8b502",
-   "uploaded_at": "2026-11-23T04:40:44.475324+09:00"
+   "sha256": "185cf5d4b4ef1740ad67b4159767ace0fcd6c63f8c155e338e11d776c7fb6a6e",
+   "uploaded_at": "2026-11-23T04:41:40.086892+09:00"
   },
   {
    "name": "battle_20261123_043809_interrupted.log",
@@ -3907,13 +3927,13 @@
   },
   {
    "name": "battle_20261123_043809_obs.jsonl",
-   "sha256": "359b6b66c0c1855346677c32a9f6a04089edf90a8d196216223b4781c1565fc5",
-   "uploaded_at": "2026-11-23T04:40:49.570489+09:00"
+   "sha256": "957d58243eec63fa87350083d6a0fc6ee37b88b06c64fc91b423d456ed228ba3",
+   "uploaded_at": "2026-11-23T04:41:44.859672+09:00"
   },
   {
    "name": "battle_20261123_043809_paddle.jsonl",
-   "sha256": "18d1def11ea19eefc64f80be08d987e2d0abf97af10484b0b8d62ff954e81b3a",
-   "uploaded_at": "2026-11-23T04:40:51.355797+09:00"
+   "sha256": "d4e0949f80127a9cb631d230d515ecc2ec7b25ee94329bf6875b61932e5d2e0d",
+   "uploaded_at": "2026-11-23T04:41:47.411902+09:00"
   },
   {
    "name": "battle_20261123_043809_states.json",
