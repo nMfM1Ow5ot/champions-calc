@@ -16,6 +16,7 @@ export function createEstimator(deps) {
   // 材料データ (UI 側のグローバルと同名で受ける。候補生成のたびに最新化する)
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
   let VGC_SETS = null; // data/vgc_pastes.json (VGCPastes の実在型。meta_sets と同じ形式で候補コーパスへ統合する。未提供なら従来動作)
+  let SPECIES_MOVES = null; // data/species_moves.json (種族ごとの習得技。未提供なら従来動作)
   function syncData() {
     const d = deps.getData() || {};
     POKEDB_PARSED = d.POKEDB_PARSED ?? null;
@@ -23,6 +24,7 @@ export function createEstimator(deps) {
     META_SETS = d.META_SETS ?? null;
     META_SETS_LOADED = !!d.META_SETS_LOADED;
     VGC_SETS = d.VGC_SETS ?? null;
+    SPECIES_MOVES = d.SPECIES_MOVES ?? null;
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
@@ -507,12 +509,22 @@ function bayesPairFactor(c, a, b, stats) {
 function bayesMoveUpdate(ent, species, moves) {
   if (!ent || !ent.cands) return;
   const stats = bayesMoveStats(species);
-  // その種族の技の世界 (使用率・コーパスの技プールと全候補の技) に一切
-  // 現れない技は、読み取り誤り等の無効な証拠として捨てる。候補の種類で
-  // 係数が違うため、全候補が持たない技でも一様にはならず、事後分布を
-  // 歪める (battle_20261122_050512 の seq18: ひんし済み個体の幻の
-  // Heat Wave が Sneasler の証拠として処理された)
-  const inUniverse = mv => (stats && stats.marg.has(mv)) || ent.cands.some(c => c.moves.includes(mv) || (c.movePool && c.movePool.includes(mv)));
+  // その種族の技の世界に一切現れない技は、読み取り誤り等の無効な証拠
+  // として捨てる。候補の種類で係数が違うため、全候補が持たない技でも
+  // 一様にはならず、事後分布を歪める (battle_20261122_050512 の seq18:
+  // ひんし済み個体の幻の Heat Wave が Sneasler の証拠として処理された)。
+  // ただし世界は「使用率・コーパスの技プールと全候補の技」に、その種族の
+  // 習得技 (species_moves.json) を加えたものとする。使用率上位やコーパス
+  // に無いだけの正規の習得技まで捨てると、実観測の証拠が失われる
+  // (battle_20261122_091721: Clefable の Calm Mind / Draining Kiss が
+  // 使用率 top10 にもコーパスにも無く、moveSeen が無言で落ちた)。
+  // 習得技データが未提供の環境では従来の世界で判定する
+  let learn = null;
+  if (SPECIES_MOVES) {
+    learn = SPECIES_MOVES[species] || null;
+    if (!learn) { try { const bs = gen.species.get(species); if (bs && bs.baseSpecies) learn = SPECIES_MOVES[bs.baseSpecies] || null; } catch (e) { /* 解決できなければ従来判定 */ } }
+  }
+  const inUniverse = mv => (stats && stats.marg.has(mv)) || (learn && learn.includes(mv)) || ent.cands.some(c => c.moves.includes(mv) || (c.movePool && c.movePool.includes(mv)));
   moves = moves.filter(inUniverse);
   const prev = ent.revMoves || [];
   const added = moves.filter(mv => !prev.includes(mv));
