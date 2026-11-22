@@ -286,7 +286,10 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 .dmgbtn{justify-self:center; font:inherit; font-size:1.05rem; background:none; border:none; color:var(--ink); cursor:pointer; text-align:left; padding:.2rem .3rem; border-radius:.4rem; white-space:nowrap; position:relative}
 .rolltip{position:absolute; left:50%; bottom:calc(100% + 7px); transform:translateX(-50%); background:#3a3f4a; color:#fff; font-size:.82rem; font-weight:400; line-height:1.45; padding:.4rem .55rem; border-radius:.45rem; white-space:normal; width:max-content; max-width:24rem; text-align:left; box-shadow:0 4px 14px rgba(0,0,0,.25); opacity:0; visibility:hidden; transition:opacity .12s; z-index:80; pointer-events:none}
 .rolltip::after{content:''; position:absolute; left:50%; top:100%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#3a3f4a; border-bottom:0}
-.dmgbtn:hover .rolltip{opacity:1; visibility:visible}
+.dmgwrap{position:relative}
+.critwrap{position:relative}
+.dmgwrap:hover .rolltip, .critwrap:hover .rolltip{opacity:1; visibility:visible}
+.dmgbtn .critsub{display:block; font-size:.78rem; color:var(--faint); white-space:nowrap}
 .dmgbtn:hover{background:rgba(255,255,255,.06)}
 .dmgbtn.copied{color:var(--green)}
 .dmgbtn .candsub{display:block; font-size:.72rem; color:var(--blue); white-space:nowrap}
@@ -2344,6 +2347,15 @@ function movesBox(side, res) {
       if (!r.immune && r.desc) copyText = r.desc;
       else if (r.immune) copyText = `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: IMMUNE`;
     }
+    // 反対の急所状態の範囲を下に併記する (ポケ徹の表示に倣う)。急所
+    // トグル ON のときは通常分が入る。範囲が本体と同一なら出さない
+    let critSub = '';
+    if (r && !r.status && !r.immune && !r.error && r.alt && (r.alt.min !== r.min || r.alt.max !== r.max)) {
+      const lbl = ui.crit[side] ? '通常' : '急所';
+      const pctTxt = `${fmtPct(r.alt.minPct)} – ${fmtPct(r.alt.maxPct)}%`;
+      const inner = r.alt.rolls && r.alt.rolls.length > 1 ? `<span class="critwrap">${pctTxt}<span class="rolltip">${r.alt.rolls.join(', ')}</span></span>` : pctTxt;
+      critSub = `<span class="critsub">${lbl} ${inner}</span>`;
+    }
     // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す
     let sub = '';
     const cr = lastCalc && lastCalc.candRanges ? lastCalc.candRanges[side][mi] : null;
@@ -2351,7 +2363,7 @@ function movesBox(side, res) {
       sub = `<span class="candsub" title="相手の型候補（事後確率 ${Math.round((lastCalc.candRanges.acc || 0) * 100)}% 分）を通じたダメージ範囲">候補 ${fmtPct(cr.lo)}–${fmtPct(cr.hi)}%</span>`;
     }
     return `<div class="mvcell">${ddHTML(`move:${side}:${mi}`)}${zBtn}</div>
-      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}" title="クリックで計算結果をコピー"` : ''}>${dmg}${sub}</button>
+      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}" title="クリックで計算結果をコピー"` : ''}>${dmg}${critSub}${sub}</button>
       <span class="ko"${koStyle}>${ko}</span>`;
   }).join('');
   return `<div class="movesbox"><div class="movesgrid">${head}${rows}</div></div>`;
