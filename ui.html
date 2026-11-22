@@ -473,7 +473,7 @@ function usageSortOptions(options, rateOf) {
   }
   rated.sort((a, b) => b.r - a.r);
   rest.sort((a, b) => a.l.localeCompare(b.l, 'ja'));
-  return rated.map(({ o, r }) => ({ ...o, extra: (o.extra || '') + ` <span class="ddrate">${r}%</span>` })).concat(rest);
+  return rated.map(({ o, r }) => ({ ...o, rate: r, extra: (o.extra || '') + ` <span class="ddrate">${r}%</span>` })).concat(rest);
 }
 // 特性プルダウンの選択肢: その種族の使用率順 (% 併記)、残りはあいうえお順
 function abilityOptionsFor(spec, abs) {
@@ -502,7 +502,7 @@ function moveOptionsFor(spec) {
       rated.push({ o: byV.get(en), r: e.rate || 0 });
     }
     rated.sort((a, b) => b.r - a.r);
-    for (const { o, r } of rated) head.push({ ...o, extra: ` <span class="ddrate">${r}%</span>` });
+    for (const { o, r } of rated) head.push({ ...o, rate: r, extra: ` <span class="ddrate">${r}%</span>` });
   }
   const rest = MOVE_OPTIONS.filter(o => o.v && !used.has(o.v)).sort((a, b) => a.l.localeCompare(b.l, 'ja'));
   return head.concat(rest);
@@ -527,7 +527,7 @@ function itemOptionsFor(spec) {
       const en = it.name ? itemJa2en(z2h(it.name)) : null;
       if (!en || used.has(en) || !byV.has(en)) continue;
       used.add(en);
-      head.push({ ...byV.get(en), extra: ` <span class="ddrate">${it.rate}%</span>` });
+      head.push({ ...byV.get(en), rate: it.rate, extra: ` <span class="ddrate">${it.rate}%</span>` });
     }
   }
   const rest = ITEM_OPTIONS.filter(o => o.v && !used.has(o.v)).sort((a, b) => a.l.localeCompare(b.l, 'ja'));
@@ -549,7 +549,7 @@ function natureOptionsFor(spec) {
     const marks = natureExtraHTML(n).trim();
     const pct = rates && rates[n] != null ? `<span class="ddrate">${rates[n]}%</span>` : '';
     const extra = [marks, pct].filter(Boolean).join(' ');
-    return { v: n, l: biLabel(NAT_JA[n] || n, n), extra: extra ? ' ' + extra : '' };
+    return { v: n, l: biLabel(NAT_JA[n] || n, n), rate: rates && rates[n] != null ? rates[n] : undefined, extra: extra ? ' ' + extra : '' };
   };
   const byJa = (a, b) => (NAT_JA[a] || a).localeCompare(NAT_JA[b] || b, 'ja');
   if (rates) {
@@ -1589,9 +1589,11 @@ function ddHTML(id) {
   if (!d) return '';
   const opt = d.options.find(o => o.v === d.value);
   const label = d.valueLabel || (opt ? opt.l : '');
+  // 使用率のある選択肢は、閉じた表示にも率を併記する (一覧と同じ % 表示)
+  const rateHtml = opt && opt.rate != null ? ` <span class="ddrate">${opt.rate}%</span>` : '';
   return `<div class="sdd${d.highlight ? ' highlight' : ''}${d.bare ? ' bare' : ''}" data-sdd="${id}">
     <div class="sdd-control" data-ddctl="${id}">
-      <div class="sdd-value${label ? '' : ' ph'}">${esc(label || d.placeholder || '')}</div>
+      <div class="sdd-value${label ? '' : ' ph'}">${esc(label || d.placeholder || '')}${rateHtml}</div>
       ${d.extra || ''}
       ${d.clearable && d.value ? '<span class="sdd-clear" data-ddclear="' + id + '">✕</span>' : ''}
       <span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span>
