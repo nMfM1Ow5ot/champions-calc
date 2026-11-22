@@ -103,10 +103,14 @@ function parseSheet(table) {
       headerIdx = r;
       const labels = table.rows[r].c.map(c => (c && (c.f ?? c.v)) ? String(c.f ?? c.v).trim() : '');
       const find = name => labels.indexOf(name);
+      // レンタルコードの列見出しは "Replica Code\n(Click text for
+      // image)" と改行・注記付きのため、前方一致で探す
+      const findPrefix = prefix => labels.findIndex(l => l.startsWith(prefix));
       col = {
         id: find('Team ID'), desc: find('Team Description'), creator: find('Full Name'),
         paste: find('Pokepaste'), evs: find('EVs'), event: find('Tournament / Event'),
         rank: find('Rank'), source: find('Link to Source'), owner: find('Owner'),
+        code: findPrefix('Replica Code'),
         date: dateCol,
       };
       break;
@@ -134,6 +138,7 @@ function parseSheet(table) {
       event: col.event >= 0 ? cleanOpt(cellText(row, col.event)) : null,
       rank: col.rank >= 0 ? cleanOpt(cellText(row, col.rank)) : null,
       sourceUrl: col.source >= 0 ? cleanOpt(cellText(row, col.source)) : null,
+      rentalCode: col.code >= 0 ? cleanOpt(cellText(row, col.code)) : null,
     });
   }
   return teams;
@@ -376,7 +381,7 @@ function main() {
     teamOut.push({
       teamId: t.teamId, description: t.description, creator: t.creator,
       owner: t.owner, pasteUrl: t.pasteUrl, date: t.date, event: t.event,
-      rank: t.rank, sourceUrl: t.sourceUrl, members,
+      rank: t.rank, sourceUrl: t.sourceUrl, rentalCode: t.rentalCode, members,
     });
   }
 
