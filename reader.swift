@@ -350,6 +350,7 @@ var lastWritten = ""
 // 相手の6体コレクション: 対戦中にプレートで読み取れた相手種族を登場順に蓄積する (見せ合い画面には名前テキストが無いため)
 var oppTeamSeen: [String] = []
 var headerOppTeam: [String] = []          // ログ開始時にヘッダーへ書いた相手6体 (開始時点の控え)
+var headerIdScores: [String: Double] = [:]   // "p2:種族" -> 見せ合い同定のベストスコア (開始時点の控え。ヘッダー補完の削除候補の優先順位に使う)
 var headerMismatchFired: Set<String> = []  // header_mismatch を記録済みの種族
 // 選出同定で入ったが、対戦中にまだ実物が観測されていない種族。
 // 選出の推定 (仮置きはもちろん、タイプで「確定」した枠もアイコン誤読なら
@@ -2260,6 +2261,7 @@ func resetLogState() {
     enteredThisSegment = []
     defaultAttribCount = [:]
     headerOppTeam = []
+    headerIdScores = [:]
     headerMismatchFired = []
     // 相手のランク/レート (画像認識側が oppRank / oppRating に入れる):
     // 見せ合いが直近 (60 秒以内) に目撃されていれば、この対戦の開始
@@ -2400,7 +2402,7 @@ func itemLineImplausible(_ line: String) -> Bool {
 // battle_20261122_050512、Salamence / Rillaboom の宣言が無かった)。
 // 交代行に実際に現れた種族は対戦にいたことが確定しているため、
 // 保存時に限り、現れた順で宣言へ補う (ライブの状態には触れない)
-func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (protocolLines: [String], displayLines: [String], added: [String], removed: [String]) {
+func completeArchiveHeader(protocolLines: [String], displayLines: [String], idScores: [String: Double] = [:]) -> (protocolLines: [String], displayLines: [String], added: [String], removed: [String]) {
     var proto = protocolLines
     var added: [String] = []
     var removed: [String] = []
@@ -2432,7 +2434,18 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (
             let unused = declared.filter { d in !appeared.contains { sameSpeciesFamily($0, d) } }
             let removeCount = min(unused.count, declared.count + missing.count - 6)
             if removeCount > 0 {
-                let removing = Array(unused.suffix(removeCount))
+                // 削除候補は同定スコアの低い順に選ぶ (スコアが無い
+                // 種族は最後尾扱い、同点は宣言の後ろのものから)。
+                // 位置だけで末尾から落とすと、正しく同定された
+                // 種族が誤同定より先に落ちる (実例: 2026-11-22
+                // battle_20261122_185505、Kommo-o (スコア 0.332) が
+                // 落ち、0.126 の Slowking-Galar が残った)
+                let removing = Array(unused.enumerated().sorted { a, b in
+                    let sa = idScores["\(side):\(a.element)"] ?? .infinity
+                    let sb = idScores["\(side):\(b.element)"] ?? .infinity
+                    if sa != sb { return sa < sb }
+                    return a.offset > b.offset
+                }.prefix(removeCount).map { $0.element })
                 let removeSet = Set(removing)
                 proto = proto.filter { line in
                     guard line.hasPrefix("|poke|\(side)|") else { return true }
@@ -2511,7 +2524,7 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String]) -> (
 
 func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String) {
     guard protocolLines.contains("|start") else { return }
-    let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines)
+    let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines, idScores: headerIdScores)
     if !completed.added.isEmpty, debugMode {
         print("[log] ヘッダーに宣言の無かった種族を補いました: \(completed.added.joined(separator: ", "))")
         fflush(stdout)
@@ -2749,6 +2762,17 @@ func startBattleLog() {
     // ヘッダーに書いた6体を開始時点のまま控える (oppTeamSeen は対戦中
     // に判明した種族で増えていくため、食い違いの照合にはこちらを使う)
     headerOppTeam = oppTeamSeen
+    // 見せ合い同定の票スコアを試合開始時点のまま控える (証拠は
+    // 次の試合の同定で上書きされるため、アーカイブ時点では使えない)
+    headerIdScores = [:]
+    for slotVotes in previewEvidenceVotes {
+        for entry in slotVotes {
+            if let sp = entry["species"] as? String, let best = entry["best"] as? Double {
+                let k = "p2:\(sp)"
+                headerIdScores[k] = max(headerIdScores[k] ?? -1, best)
+            }
+        }
+    }
     emitLog("|start")
     logStarted = true
 }
@@ -9622,7 +9646,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1934"
+let readerBuild = "20261122_1940"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
