@@ -296,7 +296,16 @@ for (const [code, d] of Object.entries(parsed)) {
   if (s) sets[s.species.toLowerCase().replace(/[^a-z0-9]/g, '')] = { code, ja: d.ja, ...s };
 }
 writeFileSync(new URL('./data/usage_sets.json', import.meta.url), JSON.stringify({ season: SEASON_LABEL, rule: RULE, source: 'champs.pokedb.tokyo', sets }, null, 1));
-writeFileSync(new URL('./data/regulation.json', import.meta.url), JSON.stringify({ regulation: REG_LABEL, rule: RULE, season: SEASON_LABEL, updated: new Date().toISOString().slice(0, 10) }, null, 1));
+// regulation.json は既存の内容 (実装範囲リスト・specPatch・
+// specialElements 等) を保持して書き直す。これらを落とすと、後段の
+// 再生成で復元できない項目 (特に specialElements は公式の
+// レギュレーション情報が正本で、生成側に復元元が無い) が日次更新の
+// たびに消えてしまう。specialElements はレギュレーション単位の値
+// なので、レギュレーションが変わった場合は引き継がず、公式情報
+// からの再登録に委ねる
+const regOut = { ...REG, regulation: REG_LABEL, rule: RULE, season: SEASON_LABEL, updated: new Date().toISOString().slice(0, 10) };
+if (REG_LABEL !== REG.regulation) delete regOut.specialElements;
+writeFileSync(new URL('./data/regulation.json', import.meta.url), JSON.stringify(regOut, null, 1) + '\n');
 console.log('regulation.json updated:', REG_LABEL, SEASON_LABEL);
 // 既存の items_ja.json を優先してマージする (再取得のたびに、監査等で追加された
 // 項目が消えないように。新規項目だけが生成マップから足される)
