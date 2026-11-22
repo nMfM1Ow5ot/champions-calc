@@ -174,45 +174,51 @@ func noteCaptureOK() {
     lastCaptureOK = true
 }
 
-func captureQuickTime() -> CGImage? {
-    // 最小化・サムネイル化した極小ウィンドウは取り込み対象にしない
+// 撮影だけを行う (通知・表示は一切しない)。成功したら nil、失敗したら
+// 理由を返す。スリープ復帰直後や QuickTime のハングでは screencapture
+// が戻ってこないことがあるため、5 秒で打ち切る守りはここに置く
+// (撮影側の実時間都合)。最小化・サムネイル化した極小ウィンドウは
+// 取り込み対象にしない
+func captureScreenToFile(_ path: String) -> String? {
     guard let win = findQuickTimeWindow(), win.bounds.width >= 200, win.bounds.height >= 200 else {
-        noteCaptureFailed("QuickTime Player のウィンドウが見つかりません")
-        return nil
+        return "QuickTime Player のウィンドウが見つかりません"
     }
-    // 取り込み先は呼び出しごとに変える: メインループと撮影ボタン受付
-    // (localhost:8899) が同時に取り込むと同じファイルを取り合って
-    // 壊れた画像や前回の残り画像を読んでしまう。また起動に失敗した
-    // 場合に前回のファイルが「新しいフレーム」として読まれる事故も防ぐ
-    let tmp = NSTemporaryDirectory() + "champions_capture_\(UUID().uuidString).png"
-    defer { try? FileManager.default.removeItem(atPath: tmp) }
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-    p.arguments = ["-l", "\(win.id)", "-o", "-x", tmp]
+    p.arguments = ["-l", "\(win.id)", "-o", "-x", path]
     do { try p.run() } catch {
-        noteCaptureFailed("画面の取り込みを開始できませんでした")
-        return nil
+        return "画面の取り込みを開始できませんでした"
     }
-    // スリープ復帰直後や QuickTime のハングでは screencapture が戻って
-    // こないことがある。無期限に待つとリーダー全体が固まってしまう
-    // ため、5 秒で打ち切って次の試行に回す
     let done = DispatchSemaphore(value: 0)
     DispatchQueue.global().async { p.waitUntilExit(); done.signal() }
     if done.wait(timeout: .now() + 5) == .timedOut {
         p.terminate()
         _ = done.wait(timeout: .now() + 1)
-        noteCaptureFailed("画面の取り込みがタイムアウトしました")
-        return nil
+        return "画面の取り込みがタイムアウトしました"
     }
     guard p.terminationStatus == 0,
-          let img = NSImage(contentsOfFile: tmp),
+          let img = NSImage(contentsOfFile: path),
           let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
           cg.width >= 50, cg.height >= 50 else {
-        noteCaptureFailed("画面の取り込みに失敗しました")
+        return "画面の取り込みに失敗しました"
+    }
+    return nil
+}
+
+// 単発モード (--debug / --team-screen / --once) 用: 従来どおり撮影して
+// 画像を返し、失敗・復帰の通知も出す。取り込み先は呼び出しごとに変える
+// (前回の残り画像を新しいフレームと読む事故を防ぐ)。継続モードでは
+// 撮影側 (startCaptureProducer) と認識側の心拍サービスが役割を分担
+// するため、こちらは使わない
+func captureQuickTime() -> CGImage? {
+    let tmp = NSTemporaryDirectory() + "champions_capture_\(UUID().uuidString).png"
+    defer { try? FileManager.default.removeItem(atPath: tmp) }
+    if let reason = captureScreenToFile(tmp) {
+        noteCaptureFailed(reason)
         return nil
     }
     noteCaptureOK()
-    return cg
+    return loadImage(path: tmp)
 }
 
 func loadImage(path: String) -> CGImage? {
@@ -266,6 +272,287 @@ var obsFileBytes = 0
 let obsLock = NSLock()
 let obsMaxBytes = 32 * 1024 * 1024
 
+// 撮影と認識の独立 (ステップ1): 処理中フレームの撮影時刻。画面に
+// ついての判定 (静定・失効・静穏・分類窓など画面イベントどうしの
+// 時間関係) はこの時刻を基準にする。処理の滞留で画面上の時間関係
+// が歪まないようにするためで、系統ごとに一括で移行する (半分だけ
+// 移すと異なる時計の差分に遅延が混入する)。処理都合の時刻 (再起
+// 動スロットル、デバッグ発火抑制、ファイルの時刻など) は実時間の
+// まま。単発モード (--image 等) では従来どおり処理時刻が入る
+var frameAt = Date()
+func sNow() -> Date { frameAt }
+
+// MARK: - 撮影と認識の受け渡し (独立化ステップ1・2)
+//
+// 撮影側と認識側が共有するのはこのオブジェクトだけ。列の要素は
+// (画像ファイル・撮影時刻・連番) の 3 つ。心拍は最終試行・最終成功・
+// 最終の失敗 (時刻と理由)。状態更新 (場の状態・デバッグ保持・試合 ID・
+// ログ出力) はすべて認識側が行い、撮影側は一時領域へファイルを書いて
+// 列へ入れることと心拍の更新だけを行う。設計は
+// CAPTURE_DECOUPLING_DESIGN.md
+final class FrameHandoff {
+    struct Item { let file: URL; let capturedAt: Date; let seq: Int }
+    let capacity = 10
+    private let lock = NSLock()
+    private var items: [Item] = []
+    private var droppedItems: [Item] = []
+    private var attemptAt: Date? = nil
+    private var successAt: Date? = nil
+    private var successFile: URL? = nil
+    private var failureAt: Date? = nil
+    private var failureReason = ""
+    func noteAttempt() { lock.lock(); attemptAt = Date(); lock.unlock() }
+    func noteSuccess(file: URL) { lock.lock(); successAt = Date(); successFile = file; lock.unlock() }
+    func noteFailure(_ reason: String) { lock.lock(); failureAt = Date(); failureReason = reason; lock.unlock() }
+    func heartbeat() -> (attempt: Date?, success: Date?, failure: Date?, reason: String) {
+        lock.lock(); defer { lock.unlock() }
+        return (attemptAt, successAt, failureAt, failureReason)
+    }
+    func latestFile() -> URL? { lock.lock(); defer { lock.unlock() }; return successFile }
+    func enqueue(_ item: Item) {
+        lock.lock()
+        if items.count >= capacity { droppedItems.append(items.removeFirst()) }
+        items.append(item)
+        lock.unlock()
+    }
+    func dequeue() -> Item? {
+        lock.lock(); defer { lock.unlock() }
+        return items.isEmpty ? nil : items.removeFirst()
+    }
+    func takeDropped() -> [Item] {
+        lock.lock(); defer { lock.unlock() }
+        let d = droppedItems; droppedItems = []; return d
+    }
+    func drainAll() -> [Item] {
+        lock.lock(); defer { lock.unlock() }
+        let d = items; items = []; return d
+    }
+    func isReferenced(_ url: URL) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if successFile == url { return true }
+        return items.contains { $0.file == url } || droppedItems.contains { $0.file == url }
+    }
+}
+let frameHandoff = FrameHandoff()
+
+// 小さな輝度署名 (58×38)。撮影側の適応間隔と、認識側の安い見分け
+// (前回本処理したフレームと実質同じ画面なら本処理しない) で使う
+func frameSignature(_ image: CGImage) -> [UInt8] {
+    let buf = makePixelBuffer(image)
+    if buf.w <= 0 || buf.h <= 0 { return [] }
+    let gw = 58, gh = 38
+    var sig = [UInt8](repeating: 0, count: gw * gh)
+    for gy in 0..<gh {
+        for gx in 0..<gw {
+            let px = pixelAt(buf, fx: (Double(gx) + 0.5) / Double(gw), fy: (Double(gy) + 0.5) / Double(gh))
+            sig[gy * gw + gx] = UInt8((px.r + px.g + px.b) / 3)
+        }
+    }
+    return sig
+}
+
+func signatureDiff(_ a: [UInt8], _ b: [UInt8]) -> Double {
+    if a.isEmpty || b.isEmpty || a.count != b.count { return 255 }
+    var total = 0
+    for i in 0..<a.count { total += abs(Int(a[i]) - Int(b[i])) }
+    return Double(total) / Double(a.count)
+}
+
+// 撮影側: 独立した直列キューで単一実行する。logs へは直接書かない
+let captureProducerQueue = DispatchQueue(label: "champions.capture")
+let captureRingDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("champions_frames", isDirectory: true)
+var captureSeqCounter = 0
+var captureRingSlot = 0
+var capturePrevSignature: [UInt8]? = nil
+var captureStillStreak = 0
+
+func captureRingFile() -> URL {
+    try? FileManager.default.createDirectory(at: captureRingDir, withIntermediateDirectories: true)
+    for _ in 0..<24 {
+        let url = captureRingDir.appendingPathComponent(String(format: "frame_%02d.png", captureRingSlot))
+        captureRingSlot = (captureRingSlot + 1) % 24
+        if !frameHandoff.isReferenced(url) { return url }
+    }
+    return captureRingDir.appendingPathComponent(String(format: "frame_%02d.png", captureRingSlot))
+}
+
+func startCaptureProducer() {
+    captureProducerQueue.async {
+        while true {
+            frameHandoff.noteAttempt()
+            let file = captureRingFile()
+            let startedAt = Date()
+            var interval = 1.0
+            if let reason = captureScreenToFile(file.path) {
+                frameHandoff.noteFailure(reason)
+                captureStillStreak = 0
+            } else {
+                frameHandoff.noteSuccess(file: file)
+                captureSeqCounter += 1
+                frameHandoff.enqueue(FrameHandoff.Item(file: file, capturedAt: startedAt, seq: captureSeqCounter))
+                if let img = loadImage(path: file.path) {
+                    let sig = frameSignature(img)
+                    if let prev = capturePrevSignature {
+                        let d = signatureDiff(prev, sig)
+                        if d >= 6.0 { interval = 0.5; captureStillStreak = 0 }
+                        else if d >= 1.5 { interval = 1.0; captureStillStreak = 0 }
+                        else { captureStillStreak += 1; interval = captureStillStreak >= 2 ? 2.0 : 1.0 }
+                    }
+                    capturePrevSignature = sig
+                }
+            }
+            Thread.sleep(forTimeInterval: interval)
+        }
+    }
+}
+
+// 認識側: 心拍の遷移で撮影失敗・復帰の通知を出す (表示と記録は認識側
+// だけが行う)。最終成功から 10 秒を超えたら現行の撮影失敗と同じ扱い
+var heartbeatNoticeFailed = false
+func serviceCaptureHeartbeat() {
+    let hb = frameHandoff.heartbeat()
+    let now = Date()
+    if heartbeatNoticeFailed, let s = hb.success, hb.failure == nil || s > hb.failure! {
+        noteCaptureOK()
+        heartbeatNoticeFailed = false
+    }
+    if !heartbeatNoticeFailed {
+        if let f = hb.failure, hb.success == nil || f > hb.success! {
+            noteCaptureFailed(hb.reason.isEmpty ? "画面の取り込みに失敗しました" : hb.reason)
+            heartbeatNoticeFailed = true
+        } else if let s = hb.success, now.timeIntervalSince(s) > 10 {
+            noteCaptureFailed("画面の取り込みが10秒以上成功していません")
+            heartbeatNoticeFailed = true
+        }
+    }
+}
+
+// スキップ証拠 (ステップ2): あふれた画像と破棄された画像を、既存の
+// デバッグ上限 (イベント系 12・全体 19) と重複まとめの対象外として、
+// 専用帯の連番 (31〜60) と専用枠 (1 試合 30 件) で保存する
+var skippedShotsThisBattle = 0
+var pendingSkipObs: [(seq: Int, capturedAt: Date, reason: String)] = []
+let skippedShotAllowance = 30
+
+func recordSkipObservation(seq: Int, capturedAt: Date, reason: String) {
+    recordObservation(pass: "frame_skipped", region: [0, 0, 0, 0],
+                      boxes: [(text: "seq=\(seq)|at=\(Int(capturedAt.timeIntervalSince1970 * 1000))|reason=\(reason)",
+                               x0: 0, y0: 0, x1: 0, y1: 0, conf: 1.0)])
+}
+
+func saveSkippedFrameEvidence(_ item: FrameHandoff.Item, reason: String) {
+    // 対戦中で試合キーが定まっているときだけ画像を保存する。対戦外の
+    // 分は件数だけを数え、次の試合の観測アーカイブへ行として残す
+    guard logStarted, !battleArchiveId.isEmpty else {
+        pendingSkipObs.append((seq: item.seq, capturedAt: item.capturedAt, reason: reason))
+        return
+    }
+    if skippedShotsThisBattle < skippedShotAllowance, let img = loadImage(path: item.file.path) {
+        skippedShotsThisBattle += 1
+        let seqNo = 30 + skippedShotsThisBattle
+        let base = String(format: "battle_%@_debug%02d", battleArchiveId, seqNo)
+        try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+        if let data = NSBitmapImageRep(cgImage: img).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) {
+            try? data.write(to: logsDirURL.appendingPathComponent(base + ".jpg"))
+            let f = ISO8601DateFormatter()
+            f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+            f.formatOptions = [.withInternetDateTime]
+            let ev: [String: Any] = ["battle": battleArchiveId, "seq": seqNo, "kind": "frame_skipped",
+                                     "at": f.string(from: item.capturedAt), "turn": currentTurn, "rawText": "",
+                                     "readerBuild": readerBuild, "state": debugStateExcerpt(),
+                                     "detail": ["queueSeq": item.seq, "reason": reason]]
+            if let d = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
+                try? d.write(to: logsDirURL.appendingPathComponent(base + ".json"), options: .atomic)
+            }
+        }
+    }
+    recordSkipObservation(seq: item.seq, capturedAt: item.capturedAt, reason: reason)
+}
+
+func flushSkippedEvidence() {
+    for item in frameHandoff.takeDropped() {
+        saveSkippedFrameEvidence(item, reason: "queue_overflow")
+        try? FileManager.default.removeItem(at: item.file)
+    }
+}
+
+func flushPendingSkipObs() {
+    let pend = pendingSkipObs
+    pendingSkipObs = []
+    for p in pend { recordSkipObservation(seq: p.seq, capturedAt: p.capturedAt, reason: p.reason) }
+}
+
+// 再起動で列が破棄される前に、残っているフレームを証拠化する
+func noteQueueDiscardBeforeExit() {
+    let rest = frameHandoff.drainAll() + frameHandoff.takeDropped()
+    for item in rest {
+        saveSkippedFrameEvidence(item, reason: "discarded_on_restart")
+        try? FileManager.default.removeItem(at: item.file)
+    }
+}
+
+// 認識側メインループ: 列から古い順に取り出して処理する。確定保存が
+// 起きたら、その時点で列に残っている分を当該試合の残りとして先に
+// 処理する (その間に新しく入った分は対象外)
+var lastProcessedCapturedAt: Date? = nil
+var lastProcessedSignature: [UInt8]? = nil
+var lastFramePlatesMissing = false      // 直近に本処理したフレームがプレート不在だったか (runOnce が更新)
+var lastFramePreviewUnresolved = false  // 直近に本処理したフレームが見せ合い (未確定) だったか (runOnce が更新)
+var battleBoundaryRequested = false
+var boundaryDrainItems: [FrameHandoff.Item] = []
+
+func processHandoffItem(_ item: FrameHandoff.Item) {
+    // 撮影ボタンの取得先 (列の最新画像) は消さずに残す。次の撮影が
+    // 成功した時点で参照が移り、リング側の保護も外れる
+    defer { if item.file != frameHandoff.latestFile() { try? FileManager.default.removeItem(at: item.file) } }
+    // 撮影時刻どうしの間隔でスリープ・停止からの復帰を判定する。
+    // 復帰直後の 1 フレームは画面遷移の途中かもしれないため読み捨てる
+    if let last = lastProcessedCapturedAt, item.capturedAt.timeIntervalSince(last) > 10 {
+        print("[再開] スリープ/停止から復帰したようです。前回の処理から \(Int(item.capturedAt.timeIntervalSince(last))) 秒経過していたため、このフレームは読み捨てます")
+        fflush(stdout)
+        emptyBattleFrames = 0
+        turnRawFrames = 0
+        lastProcessedCapturedAt = item.capturedAt
+        return
+    }
+    guard let image = loadImage(path: item.file.path) else {
+        lastProcessedCapturedAt = item.capturedAt
+        return
+    }
+    let sig = frameSignature(image)
+    // 安い見分け: 前回本処理したフレームと実質同じ画面なら本処理しない。
+    // ただし見せ合い未確定の間と、プレート不在の対戦中 (安全網の時間
+    // 判定が関わる場面) は毎フレーム処理する
+    if let prev = lastProcessedSignature, signatureDiff(prev, sig) < 1.5,
+       !lastFramePreviewUnresolved, !(logStarted && lastFramePlatesMissing) {
+        lastProcessedCapturedAt = item.capturedAt
+        return
+    }
+    frameAt = item.capturedAt
+    if teamMode { runTeamOnce(image: image) } else { runOnce(image: image) }
+    lastProcessedSignature = sig
+    lastProcessedCapturedAt = item.capturedAt
+}
+
+func recognitionMainLoop() -> Never {
+    while true {
+        serviceCaptureHeartbeat()
+        flushSkippedEvidence()
+        var item: FrameHandoff.Item? = nil
+        if !boundaryDrainItems.isEmpty { item = boundaryDrainItems.removeFirst() }
+        else { item = frameHandoff.dequeue() }
+        if let item {
+            processHandoffItem(item)
+        } else {
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        if battleBoundaryRequested {
+            battleBoundaryRequested = false
+            boundaryDrainItems = frameHandoff.drainAll()
+        }
+    }
+}
+
 // MARK: - 復号段の形式化 (改善計画フェーズ5)
 // OCR 崩れの救済は、次の順序で段階的に適用される (各段階は完全一致
 // ではないため、適用が成功した場合は根拠を recordDecode で生観測
@@ -292,7 +579,7 @@ func recordObservation(pass: String, region: [Double],
     if obsFileBytes >= obsMaxBytes { return }
     func r4(_ v: Double) -> Double { (v * 10000).rounded() / 10000 }
     let rec: [String: Any] = [
-        "t": Int(Date().timeIntervalSince1970 * 1000),
+        "t": Int(sNow().timeIntervalSince1970 * 1000),
         "frame": obsFrameSeq,
         "pass": pass,
         "region": region.map(r4),
@@ -483,7 +770,7 @@ func fieldSourceOnField(_ ui: String) -> Bool {
         for (other, pool) in speciesAbilityMap where pool.contains(ab) && sameSpeciesFamily(other, s.speciesEn) { return true }
     }
     // 交代の記録 (文経路) が先行している場合も出所として認める
-    for (key, sw) in lastSwitchIn where Date().timeIntervalSince(sw.at) < 25 {
+    for (key, sw) in lastSwitchIn where sNow().timeIntervalSince(sw.at) < 25 {
         let sp = key.split(separator: ":").last.map(String.init) ?? ""
         if (speciesAbilityMap[sp] ?? []).contains(ab) { return true }
         for (other, pool) in speciesAbilityMap where pool.contains(ab) && sameSpeciesFamily(other, sp) { return true }
@@ -686,7 +973,7 @@ func noteStateWrite(shape: String, json: String, eventsCount: Int) {
     let f = ISO8601DateFormatter()
     f.timeZone = TimeZone(identifier: "Asia/Tokyo")
     f.formatOptions = [.withInternetDateTime]
-    var rec: [String: Any] = ["at": f.string(from: Date()), "shape": shape]
+    var rec: [String: Any] = ["at": f.string(from: sNow()), "shape": shape]
     if let d = json.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: d) {
         rec["state"] = obj
     } else {
@@ -928,7 +1215,7 @@ func mineProvisionalSpecies() -> [String] {
 func syncMineProvisional() {
     if minePreviewTeam != minePreviewSeenCopy {
         minePreviewSeenCopy = minePreviewTeam
-        if minePreviewTeam.contains(where: { $0 != nil }) { minePreviewUpdatedAt = Date() }
+        if minePreviewTeam.contains(where: { $0 != nil }) { minePreviewUpdatedAt = sNow() }
     }
     // 鮮度: 同定の更新が直近の試合開始より 120 秒以上前なら、前の
     // 試合の同定結果なので使わない
@@ -1233,7 +1520,7 @@ func renderLogLine(_ line: String) -> [String] {
             if src.hasPrefix("item: ") { src = String(src.dropFirst("item: ".count)) }
             return ["\(renderPrefix(side))\(species) had its HP restored. (\(src))"]
         }
-        if let b = renderBerryAt[f[2]], Date().timeIntervalSince(b.at) < 6 {
+        if let b = renderBerryAt[f[2]], sNow().timeIntervalSince(b.at) < 6 {
             renderBerryAt[f[2]] = nil
             return ["\(renderPrefix(side))\(species) restored HP using its \(b.item)!"]
         }
@@ -1275,7 +1562,7 @@ func renderLogLine(_ line: String) -> [String] {
             return ["\(name)'s \(item) is reacting to the Key Stone!"]
         }
         if item.hasSuffix("Berry") {
-            renderBerryAt[f[2]] = (item, Date())
+            renderBerryAt[f[2]] = (item, sNow())
             return ["\(name) ate its \(item)!"]
         }
         return ["[\(name)'s \(item)]"]
@@ -1940,7 +2227,7 @@ func emitLog(_ line: String, applyNow: Bool) {
                 }
             }
             roundEventSeen = true
-            lastRoundEventAt = Date()
+            lastRoundEventAt = sNow()
             if let mover { movesSinceTurnLine.insert(mover) }
         }
     }
@@ -2237,7 +2524,7 @@ func emitLog(_ line: String, applyNow: Bool) {
             }
         }
     }
-    lastLogEventAt = Date()
+    lastLogEventAt = sNow()
     // 特性判明によるフォルム訂正 (相手側のみ): プレートの種族同定は
     // 名前テキストの照合のため同名フォルムを区別できない。判明した
     // 特性が現在のフォルムでは持ち得ず、別フォルムのちょうど 1 つだけが
@@ -2288,7 +2575,7 @@ func resetLogState() {
     // 残りなので消す (見せ合いを取り逃した対戦で前対戦のランクが
     // 記録されるのを防ぐ)。新しい見せ合い画面の出現時にも画像認識
     // 側で消去される
-    if Date().timeIntervalSince(lastPreviewSeenAt) >= 60 {
+    if sNow().timeIntervalSince(lastPreviewSeenAt) >= 60 {
         oppRank = ""
         oppRating = ""
         oppRankRecorded = false
@@ -2335,6 +2622,7 @@ func resetLogState() {
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
     pendingTurnDisplay = []
+    skippedShotsThisBattle = 0
     renderPendingBlank = false
     renderMovesSeen = false
     renderFaintPending = false
@@ -2388,7 +2676,7 @@ var battleArchived = false      // 現在の試合を logs/ へ保存済みか
 var lastArchiveSnapshotCount = -1  // 安全網の下書き保存をした時点の battleLog 行数
 let logsDirURL = scriptDir.appendingPathComponent("logs")
 
-func battleStamp(for date: Date = Date()) -> String {
+func battleStamp(for date: Date = sNow()) -> String {
     let f = DateFormatter()
     f.locale = Locale(identifier: "en_US_POSIX")
     f.timeZone = TimeZone(identifier: "Asia/Tokyo")
@@ -2567,6 +2855,7 @@ func archiveCurrentBattle(final: Bool) {
     let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
     archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog, id: id)
     battleArchived = true
+    battleBoundaryRequested = true
     if final {
         // 安全網の下書き (interrupted) が残っていれば取り除く (確定版が正)
         for suffix in ["_interrupted.log", "_interrupted_protocol.log"] {
@@ -2766,13 +3055,14 @@ func salvageLeftoverLogs() {
 }
 
 func startBattleLog() {
-    lastBattleStartedAt = Date()
+    lastBattleStartedAt = sNow()
     // 前の試合が未保存のまま新しい試合が始まる場合は、先に前試合を残す
     if logStarted && !battleArchived && !battleLog.isEmpty {
         archiveCurrentBattle(final: winLogged)
     }
     resetLogState()
     battleArchiveId = battleStamp()
+    flushPendingSkipObs()
     adoptStateSnapshotsForBattle()
     battleArchived = false
     lastArchiveSnapshotCount = -1
@@ -2860,7 +3150,7 @@ func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int,
                                    "Dream Eater", "Bitter Blade", "Matcha Gotcha", "Strength Sap"]
     let mySlot = slotFor(side: key.hasPrefix("p2") ? "p2" : "p1", speciesEn: speciesEn)
     if lastMoveLabel == "\(mySlot): \(speciesEn)", drainMoves.contains(lastMoveName),
-       Date().timeIntervalSince(lastMoveMsgAt) < 20 {
+       sNow().timeIntervalSince(lastMoveMsgAt) < 20 {
         return ("move: \(lastMoveName)", nil)
     }
     // 消費済みの持ち物は二度と発動しない
@@ -3012,7 +3302,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     if toPct != 0, let lp = lastEmittedPct[plateName],
        lastDamageSeq[plateName] == actionSeq, lastDamageTurn[plateName] == currentTurn,
        lastDamageDir[plateName] == dir, toPct != lp,
-       abs(toPct - lp) <= 3 || (abs(toPct - lp) <= 5 && (lastDamageTime[plateName].map { Date().timeIntervalSince($0) <= 3 } ?? false)) {
+       abs(toPct - lp) <= 3 || (abs(toPct - lp) <= 5 && (lastDamageTime[plateName].map { sNow().timeIntervalSince($0) <= 3 } ?? false)) {
         heldLine[plateName] = nil
         lastEmittedPct[plateName] = toPct
         return true
@@ -3031,7 +3321,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     lastDamageSeq[plateName] = actionSeq
     lastDamageTurn[plateName] = currentTurn
     lastDamageDir[plateName] = dir
-    lastDamageTime[plateName] = Date()
+    lastDamageTime[plateName] = sNow()
     lastEmittedPct[plateName] = toPct
     if lastPendingLabel == "\(slot): \(speciesEn)" { lastPendingLabel = "" }
     // 基準値そのものが「疑わしい跳び」として保留中の値か (下の解消で
@@ -3117,7 +3407,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 対象外 (どくの経過は大きくなることがある)。保留した値は
         // 上の解消規則で、持続すれば次のターンに取り込まれる
         let moveInFlight = !lastMoveLabel.isEmpty && lastMoveSeq == actionSeq
-            && (damagedBySeq[actionSeq] ?? []).isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 20
+            && (damagedBySeq[actionSeq] ?? []).isEmpty && sNow().timeIntervalSince(lastMoveMsgAt) < 20
         if effFrom - toPct > 55, toPct != 0, (monStates[key]?.status ?? "").isEmpty,
            pendingStatusFrom[key] == nil, !moveInFlight,
            lastSwitchEmitSeq >= 0, lastSwitchEmitSeq >= lastMoveEmitSeq {
@@ -3136,8 +3426,8 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // 要員選択中に 53% へ訂正され、独立したダメージ行として
         // 追記された)。行動中の小さな実ダメージは、直前の行と行動が
         // 近いため、この条件には入らない
-        if toPct != 0, effFrom - toPct <= 3, let lt = prevDamageAt, Date().timeIntervalSince(lt) >= 10,
-           prevDamageSeq != actionSeq, Date().timeIntervalSince(lastMoveMsgAt) >= 5,
+        if toPct != 0, effFrom - toPct <= 3, let lt = prevDamageAt, sNow().timeIntervalSince(lt) >= 10,
+           prevDamageSeq != actionSeq, sNow().timeIntervalSince(lastMoveMsgAt) >= 5,
            pendingStatusFrom[key] == nil {
             debugCapture(kind: "hp_correction", key: "hp_correction|\(plateName)", rawText: "",
                          detail: ["slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct])
@@ -3149,11 +3439,11 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // battle_20261122_181745、ターン 1 冒頭の 145/145・161/161)
         if toPct >= effFrom { return true }
         lastDamageLabel = "\(slot): \(speciesEn)"
-        lastDamageAt = Date()
+        lastDamageAt = sNow()
         var line = "|-damage|\(slot): \(speciesEn)|\(hpText)"
         var fromCode: String? = nil
         var selfClassified = false   // 自分の技の反動として分類できたら、推定用イベントも出す
-        if let pf = pendingStatusFrom[key], Date().timeIntervalSince(pf.at) < 5 {
+        if let pf = pendingStatusFrom[key], sNow().timeIntervalSince(pf.at) < 5 {
             fromCode = pf.code
             pendingStatusFrom[key] = nil
         }
@@ -3176,7 +3466,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             // いのちのたまの反動 (持ち物の判明としても記録する)、
             // 反動技のそれ以外の自己ダメージは技の反動とする
             if lastMoveLabel == "\(slot): \(speciesEn)",
-               Date().timeIntervalSince(lastMoveMsgAt) < 20 {
+               sNow().timeIntervalSince(lastMoveMsgAt) < 20 {
                 let drop = effFrom - toPct
                 let knownItem = key.hasPrefix("p2") ? revealedItems[speciesEn]
                     : ((teamEntries[speciesEn]?["item"] as? String) ?? revealedItems[speciesEn])
@@ -3231,7 +3521,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         // として記録されたうえ、本来の対象 (イエッサン) の被ダメまで
         // 「技は解決済み」と誤判定されて保留に巻き込まれた)
         if fromCode == nil, lastMoveLabel == "\(slot): \(speciesEn)",
-           Date().timeIntervalSince(lastMoveMsgAt) < 20, effFrom - toPct > 18,
+           sNow().timeIntervalSince(lastMoveMsgAt) < 20, effFrom - toPct > 18,
            !["Belly Drum", "Curse", "Pain Split"].contains(lastMoveName) {
             suspectJump[plateName] = (toPct: toPct, turn: currentTurn)
             lastEmittedPct[plateName] = effFrom
@@ -3431,7 +3721,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
 func deferFaint(slot: String, speciesEn: String) {
     if faintedSlots[slot] == speciesEn { return }  // 既にひんし行を出した枠・種族は再登録しない
     if !pendingFaints.contains(where: { $0.slot == slot }) {
-        pendingFaints.append((slot: slot, speciesEn: speciesEn, at: Date()))
+        pendingFaints.append((slot: slot, speciesEn: speciesEn, at: sNow()))
     }
 }
 
@@ -3492,7 +3782,7 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
     // battle_20261122_070237 ターン1、ユキメノコのふぶきの被ダメ
     // イベントが欠落した)
     guard !lastMoveLabel.isEmpty, actionSeq - lastMoveSeq <= 1,
-          Date().timeIntervalSince(lastMoveMsgAt) < 20 else { return }
+          sNow().timeIntervalSince(lastMoveMsgAt) < 20 else { return }
     let defSide = key.hasPrefix("p1") ? "p1" : "p2"
     let atkSide = lastMoveLabel.hasPrefix("p1") ? "p1" : "p2"
     guard atkSide != defSide else { return }
@@ -3501,7 +3791,7 @@ func recordDamageEvent(slot: String, key: String, speciesEn: String, fromPct: In
     let atkSpecies = String(atkParts[1]).trimmingCharacters(in: .whitespaces)
     guard !atkSpecies.isEmpty, atkSpecies != speciesEn else { return }
     let atkKey = "\(atkSide):\(atkSpecies)"
-    let crit = (lastCritAt["\(slot): \(speciesEn)"].map { Date().timeIntervalSince($0) < 6 } ?? false)
+    let crit = (lastCritAt["\(slot): \(speciesEn)"].map { sNow().timeIntervalSince($0) < 6 } ?? false)
         || (critEventMarks["\(slot): \(speciesEn)"].map { $0.turn == currentTurn && $0.atk == lastMoveLabel } ?? false)
     func boostsJson(_ k: String) -> String {
         guard let b = monStates[k]?.boosts, !b.isEmpty else { return "{}" }
@@ -3631,7 +3921,7 @@ func recordRecoilEvent(slot: String, key: String, speciesEn: String, fromPct: In
 func flushPendingDamage(force: Bool = false) {
     for plate in plates {
         guard let pend = pendingDamagePct[plate.name], let s = lastSlots[plate.name] else { continue }
-        if !force, let since = pendingDamageSince[plate.name], Date().timeIntervalSince(since) < 2.0 { continue }
+        if !force, let since = pendingDamageSince[plate.name], sNow().timeIntervalSince(since) < 2.0 { continue }
         pendingDamagePct[plate.name] = nil
         pendingDamageCount[plate.name] = nil
         pendingDamageSince[plate.name] = nil
@@ -3717,7 +4007,7 @@ func processPlates(_ hits: [String: SlotState]) {
             let leads = ["oppA", "oppB"].compactMap { hits[$0]?.speciesEn }
             print("[log] 対戦開始を取りこぼしたため、プレートから開始状態を復旧しました (相手先発: \(leads.joined(separator: ", ")))")
             fflush(stdout)
-            let startNow = Date()
+            let startNow = sNow()
             debugCapture(kind: "late_start", key: "late_start", rawText: "",
                          detail: ["oppLeads": leads, "note": "preview not captured (screen covered or backgrounded)",
                                   "preStart": preStartEvents.map { "-\(Int(startNow.timeIntervalSince($0.0)))s \($0.1)" },
@@ -3728,7 +4018,7 @@ func processPlates(_ hits: [String: SlotState]) {
     flushHeldBoostsTimeout()
     // 遅延中のひんし行: 文が来なくても 1.5 秒経ったら出す
     if !pendingFaints.isEmpty {
-        let now = Date()
+        let now = sNow()
         let ready = pendingFaints.filter { now.timeIntervalSince($0.at) > 1.5 }
         if !ready.isEmpty {
             pendingFaints.removeAll { now.timeIntervalSince($0.at) > 1.5 }
@@ -3814,7 +4104,7 @@ func processPlates(_ hits: [String: SlotState]) {
             // 読まれても証拠は消えない。最終観測から 3 秒を超えた候補は
             // 期限切れとして落とす。pendingSwitch* は現在のリーダー
             // 候補の表示として同期する (既存の読み手はそのまま使う)
-            let psNow = Date()
+            let psNow = sNow()
             var psCands = pendingSwitchCandidates[plate.name] ?? [:]
             psCands = psCands.filter { psNow.timeIntervalSince($0.value.lastSeen) <= 3 }
             var psCand = psCands[s.speciesEn] ?? (count: 0, firstSeen: psNow, lastSeen: psNow)
@@ -3834,8 +4124,8 @@ func processPlates(_ hits: [String: SlotState]) {
             // 確定する (戻り文の消費時に pivotReturnAt が立つ)
             // 交代技の戻り消費、または繰り出し文の文証拠がある場合は、
             // 後任を 1 回の読みで確定する
-            let pivotFast = pivotReturnAt[side].map { Date().timeIntervalSince($0) < 20 } ?? false
-            let textFast = sendOutTextSeen[side].map { $0.species == s.speciesEn && Date().timeIntervalSince($0.at) < 20 } ?? false
+            let pivotFast = pivotReturnAt[side].map { sNow().timeIntervalSince($0) < 20 } ?? false
+            let textFast = sendOutTextSeen[side].map { $0.species == s.speciesEn && sNow().timeIntervalSince($0.at) < 20 } ?? false
             let confirmReads = (pivotFast || textFast) ? 1 : 2
             if (pendingSwitchCount[plate.name] ?? 0) >= confirmReads {
                 // 同種族が相方枠に在席したままの確定は、同時交代時の
@@ -3846,12 +4136,12 @@ func processPlates(_ hits: [String: SlotState]) {
                 // 保留が 6 秒を超えたら確定に進む
                 let sibPlate = plate.name.hasPrefix("mine") ? (plate.name.hasSuffix("A") ? "mineB" : "mineA") : (plate.name.hasSuffix("A") ? "oppB" : "oppA")
                 if let sib = lastSlots[sibPlate]?.speciesEn, sameSpeciesFamily(sib, s.speciesEn),
-                   Date().timeIntervalSince(pendingSwitchSince[plate.name] ?? Date()) < 6 {
+                   sNow().timeIntervalSince(pendingSwitchSince[plate.name] ?? sNow()) < 6 {
                     debugCapture(kind: "switch_species_dup", key: "switch_species_dup:\(plate.name):\(s.speciesEn):\(currentTurn)", rawText: "",
                                  detail: ["plate": plate.name, "species": s.speciesEn, "sibling": sibPlate, "turn": currentTurn])
                     continue
                 }
-                let pendingSwitchAge = pendingSwitchSince[plate.name].map { Date().timeIntervalSince($0) } ?? 0
+                let pendingSwitchAge = pendingSwitchSince[plate.name].map { sNow().timeIntervalSince($0) } ?? 0
                 pendingSwitchSpecies[plate.name] = nil
                 pendingSwitchCount[plate.name] = nil
                 pendingSwitchSince[plate.name] = nil
@@ -3941,8 +4231,8 @@ func processPlates(_ hits: [String: SlotState]) {
                     // 交代で入った直後の HP 減少は、設置物ダメージとして
                     // 帰属させる (Showdown の [from] 表記)
                     if effPct < prevPct && !adoptFull {
-                        if battleHazards[side]?["Stealth Rock"] != nil { pendingStatusFrom[key] = ("Stealth Rock", Date()) }
-                        else if battleHazards[side]?["Spikes"] != nil { pendingStatusFrom[key] = ("Spikes", Date()) }
+                        if battleHazards[side]?["Stealth Rock"] != nil { pendingStatusFrom[key] = ("Stealth Rock", sNow()) }
+                        else if battleHazards[side]?["Spikes"] != nil { pendingStatusFrom[key] = ("Spikes", sNow()) }
                     }
                     // 初登場でも、入場時点で既に受けていたダメージは
                     // 被ダメ行として 1 回だけ出す。出さないと、ダメージが
@@ -4030,7 +4320,7 @@ func processPlates(_ hits: [String: SlotState]) {
             // 占有者の再読みでは交代候補を即消去しない (フェーズ3):
             // 候補は最終観測からの期限 (3 秒) で自然に落ち、リーダーが
             // 期限切れになったら残りの最新候補へ表示を引き継ぐ
-            let occNow = Date()
+            let occNow = sNow()
             if var occCands = pendingSwitchCandidates[plate.name] {
                 occCands = occCands.filter { occNow.timeIntervalSince($0.value.lastSeen) <= 3 }
                 pendingSwitchCandidates[plate.name] = occCands.isEmpty ? nil : occCands
@@ -4060,11 +4350,11 @@ func processPlates(_ hits: [String: SlotState]) {
             if faintedSlots[slot] == s.speciesEn {
                 var revived = false
                 if s.hpPercent >= 20,
-                   Date().timeIntervalSince(lastDamageTime[plate.name] ?? .distantPast) > 3.0 {
+                   sNow().timeIntervalSince(lastDamageTime[plate.name] ?? .distantPast) > 3.0 {
                     let rc = (faintReviveCount[plate.name] ?? 0) + 1
                     faintReviveCount[plate.name] = rc
-                    if faintReviveSince[plate.name] == nil { faintReviveSince[plate.name] = Date() }
-                    if rc >= 3, Date().timeIntervalSince(faintReviveSince[plate.name] ?? .distantFuture) >= 1.5 {
+                    if faintReviveSince[plate.name] == nil { faintReviveSince[plate.name] = sNow() }
+                    if rc >= 3, sNow().timeIntervalSince(faintReviveSince[plate.name] ?? .distantFuture) >= 1.5 {
                         faintedSlots.removeValue(forKey: slot)
                         faintedSpecies.remove(key)
                         faintReviveCount[plate.name] = nil
@@ -4091,7 +4381,7 @@ func processPlates(_ hits: [String: SlotState]) {
             // ひんしがターン 7 の ほろびのうた の ひんしを消した)
             if s.hpPercent >= 20, (lastEmittedPct[plate.name] ?? -1) == 0,
                pendingFaints.allSatisfy({ $0.slot != slot }),
-               Date().timeIntervalSince(lastDamageTime[plate.name] ?? .distantPast) > 3.0 {
+               sNow().timeIntervalSince(lastDamageTime[plate.name] ?? .distantPast) > 3.0 {
                 lastEmittedPct[plate.name] = s.hpPercent
                 faintedSpecies.remove(key)
                 debugCapture(kind: "faint_guard", key: "faint_revived:\(slot):\(s.speciesEn)", rawText: "",
@@ -4195,7 +4485,7 @@ func processPlates(_ hits: [String: SlotState]) {
                 } else {
                     pendingDamagePct[plate.name] = 0
                     pendingDamageCount[plate.name] = 1
-                    pendingDamageSince[plate.name] = Date()
+                    pendingDamageSince[plate.name] = sNow()
                 }
             } else if pendingDamagePct[plate.name] == s.hpPercent {
                 pendingReturnCount[plate.name] = nil
@@ -4205,7 +4495,7 @@ func processPlates(_ hits: [String: SlotState]) {
                 // 範囲技の 2 体同時被弾では片方のバーがもう片方の演出の間
                 // 止まるため、当初の 1.2 秒では途中値が確定した)
                 let n = (pendingDamageCount[plate.name] ?? 1) + 1
-                let stable = Date().timeIntervalSince(pendingDamageSince[plate.name] ?? .distantPast) >= 2.0
+                let stable = sNow().timeIntervalSince(pendingDamageSince[plate.name] ?? .distantPast) >= 2.0
                 if n >= 3 && stable {
                     // バー計測が数字読みの低下を強く否定する場合は行を
                     // 出さない (フェーズ2 段階2の採用判定: バー拒否)。
@@ -4263,7 +4553,7 @@ func processPlates(_ hits: [String: SlotState]) {
             } else {
                 pendingDamagePct[plate.name] = s.hpPercent
                 pendingDamageCount[plate.name] = 1
-                pendingDamageSince[plate.name] = Date()
+                pendingDamageSince[plate.name] = sNow()
                 pendingReturnCount[plate.name] = nil
                 lastPendingLabel = "\(slot): \(s.speciesEn)"
             }
@@ -4280,7 +4570,7 @@ func processPlates(_ hits: [String: SlotState]) {
         // 要員待ちが続く間は上限を延ばす (要員選択は 6 秒を超えることが
         // 普通にある。要員が登録されれば即座に流れる)
         let awaitingNow = anyAwaitingReplacement()
-        let heldAge = Date().timeIntervalSince((heldWeatherStart?.at ?? heldTerrainStart?.at) ?? .distantPast)
+        let heldAge = sNow().timeIntervalSince((heldWeatherStart?.at ?? heldTerrainStart?.at) ?? .distantPast)
         var ready = (pendingSwitchSpecies.isEmpty && !awaitingNow) || heldAge > (awaitingNow ? 20.0 : 6.0)
         // ターン0 で出所 (サージ・天候特性) が場に確認できない開始は、
         // 出所の交代が確定するまで流さない (上限の強制排出は従来どおり。
@@ -4497,7 +4787,7 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
     // ログ画面のエントリ取り違えで、交代直後の生存枠に幻のひんしが
     // 出た実例があるため (2026-11-20 vs チェイス戦のグレンアルマ)。
     // 本当に倒れていれば実況・プレート側の経路が別途ひんしを出す
-    let justSwitchedIn = lastSwitchIn[key].map { $0.slot == slot && Date().timeIntervalSince($0.at) < 30 } ?? false
+    let justSwitchedIn = lastSwitchIn[key].map { $0.slot == slot && sNow().timeIntervalSince($0.at) < 30 } ?? false
     switch chip {
     case "技":
         if let mvJa = findInDict(in: text, moveNameOrig) {
@@ -4506,7 +4796,7 @@ func translateLogEntry(chip: String, text: String, side: String, turn: Int) {
             let moveEn = moveJa2En[mvJa] ?? mvJa
             let sig = slot + "|" + moveEn + "|t" + String(turn)
             if lastMoveSigAt[sig] != nil { break }
-            lastMoveSigAt[sig] = Date()
+            lastMoveSigAt[sig] = sNow()
             emitLog("|move|\(slot): \(sp.en)|\(moveEn)")  // 判明登録は applyEvent が行う
             applyMoveField(mvJa, side: side)
         } else if debugMode {
@@ -4616,12 +4906,12 @@ func setWeather(_ ui: String, _ logName: String, via text: String = "", stale: B
     if !stale && !text.isEmpty && !fieldHoldBypass && (!pendingSwitchSpecies.isEmpty || anyAwaitingReplacement()
         || (currentTurn == 0 && !lastSlots.isEmpty && logFieldWeather.isEmpty && !fieldSourceOnField(ui))) {
         if heldWeatherStart?.ui != ui {
-            heldWeatherStart = (ui: ui, logName: logName, text: text, at: Date())
+            heldWeatherStart = (ui: ui, logName: logName, text: text, at: sNow())
         }
         return
     }
     let prev = logFieldWeather
-    fieldWeatherSetAt = Date()
+    fieldWeatherSetAt = sNow()
     // この天候が保留中のメガのフィールド特性によるものなら、
     // 天候行より先にメガ完了を補う (順序の保持)
     let weatherAbility: [String: String] = ["Sun": "Drought", "Rain": "Drizzle", "Sand": "Sand Stream", "Snow": "Snow Warning"]
@@ -4649,10 +4939,10 @@ func terrainSourcePlausible(_ ui: String) -> Bool {
     let surge: [String: String] = ["Psychic": "Psychic Surge", "Electric": "Electric Surge", "Grassy": "Grassy Surge", "Misty": "Misty Surge"]
     guard let ab = surge[ui] else { return true }
     // 地形技が直近の技なら、その技からの開始として妥当
-    if lastMoveName == "\(ui) Terrain", Date().timeIntervalSince(lastMoveMsgAt) < 25 { return true }
+    if lastMoveName == "\(ui) Terrain", sNow().timeIntervalSince(lastMoveMsgAt) < 25 { return true }
     // 直近の交代で入った個体が、その特性を持ちうるなら妥当
     // (メガフォルムの特性は別エントリにあるため科単位でも見る)
-    for (key, sw) in lastSwitchIn where Date().timeIntervalSince(sw.at) < 25 {
+    for (key, sw) in lastSwitchIn where sNow().timeIntervalSince(sw.at) < 25 {
         let sp = key.split(separator: ":").last.map(String.init) ?? ""
         if (speciesAbilityMap[sp] ?? []).contains(ab) { return true }
         for (other, pool) in speciesAbilityMap where pool.contains(ab) && sameSpeciesFamily(other, sp) { return true }
@@ -4669,7 +4959,7 @@ func confirmHeldTerrainReplace() {
         fieldHoldBypass = true
         setTerrain(h.ui, via: h.text)
         fieldHoldBypass = false
-    } else if Date().timeIntervalSince(h.at) > 4.0 {
+    } else if sNow().timeIntervalSince(h.at) > 4.0 {
         heldTerrainReplace = nil
         debugCapture(kind: "terrain_change", key: "terrain_change_blocked:\(h.ui)", rawText: h.text,
                      detail: ["from": logFieldTerrain, "to": h.ui, "turn": currentTurn, "blocked": true, "reason": "unconfirmed_replace"])
@@ -4698,7 +4988,7 @@ func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
     if !stale && !text.isEmpty && !fieldHoldBypass && (!pendingSwitchSpecies.isEmpty || anyAwaitingReplacement()
         || (currentTurn == 0 && !lastSlots.isEmpty && logFieldTerrain.isEmpty && !fieldSourceOnField(ui))) {
         if heldTerrainStart?.ui != ui {
-            heldTerrainStart = (ui: ui, text: text, at: Date())
+            heldTerrainStart = (ui: ui, text: text, at: sNow())
         }
         return
     }
@@ -4711,12 +5001,12 @@ func setTerrain(_ ui: String, via text: String = "", stale: Bool = false) {
     // グラスフィールドを上書きした)
     if !logFieldTerrain.isEmpty && !stale && !text.isEmpty && !fieldHoldBypass && !terrainSourcePlausible(ui) {
         if heldTerrainReplace?.ui != ui {
-            heldTerrainReplace = (ui: ui, text: text, at: Date())
+            heldTerrainReplace = (ui: ui, text: text, at: sNow())
         }
         return
     }
     let prev = logFieldTerrain
-    fieldTerrainSetAt = Date()
+    fieldTerrainSetAt = sNow()
     let terrainAbility: [String: String] = ["Psychic": "Psychic Surge", "Electric": "Electric Surge", "Grassy": "Grassy Surge", "Misty": "Misty Surge"]
     if let ab = terrainAbility[ui] { completePendingMegaForField(ability: ab) }
     emitLog("|-fieldstart|move: \(ui) Terrain")  // 状態への反映は applyEvent が行う
@@ -4769,7 +5059,7 @@ func retroSeedCheck(terrain: String) {
 // いかく持ちなら特性として帰属する
 func attributeIntimidate(targetSide: String) {
     let other = targetSide == "p1" ? "p2" : "p1"
-    let now = Date()
+    let now = sNow()
     for (key, sw) in lastSwitchIn where key.hasPrefix("\(other):") {
         if intimidateDone[key] == sw.at { continue }
         guard now.timeIntervalSince(sw.at) < 8 else { continue }
@@ -4787,7 +5077,7 @@ func attributeFieldAbilities() {
     let weatherAb: [String: String] = ["Sun": "Drought", "Rain": "Drizzle", "Sand": "Sand Stream", "Snow": "Snow Warning"]
     let terrainAb: [String: String] = ["Psychic": "Psychic Surge", "Electric": "Electric Surge", "Grassy": "Grassy Surge", "Misty": "Misty Surge"]
     let allField: Set<String> = Set(weatherAb.values).union(terrainAb.values)
-    let now = Date()
+    let now = sNow()
     for (key, sw) in lastSwitchIn {
         if fieldAbilityDone[key] == sw.at { continue }
         let parts = key.split(separator: ":", maxSplits: 1)
@@ -4893,8 +5183,8 @@ func attributeFieldAbilities() {
 // |-ability| の二重出力抑止 (バナー読みとフィールド帰属が同じ特性を二重に出さない)
 func emitAbilityOnce(slot: String, side: String, speciesEn: String, abilityEn: String) {
     let k = "\(side):\(speciesEn):\(abilityEn)"
-    if let at = lastAbilityEmit[k], Date().timeIntervalSince(at) < 10 { return }
-    lastAbilityEmit[k] = Date()
+    if let at = lastAbilityEmit[k], sNow().timeIntervalSince(at) < 10 { return }
+    lastAbilityEmit[k] = sNow()
     emitLog("|-ability|\(slot): \(speciesEn)|\(abilityEn)")
 }
 
@@ -4964,8 +5254,8 @@ var lastItemEmit: [String: Date] = [:]   // "side:Species:ItemJa" -> 最後に |
 // (実例: 2026-11-20 vs Mark 戦、サーナイトナイトの反応行が 2 行連続で出た)
 func emitItemOnce(slot: String, side: String, speciesEn: String, itemJa: String) {
     let k = "\(side):\(speciesEn):\(itemJa)"
-    if let at = lastItemEmit[k], Date().timeIntervalSince(at) < 25 { return }
-    lastItemEmit[k] = Date()
+    if let at = lastItemEmit[k], sNow().timeIntervalSince(at) < 25 { return }
+    lastItemEmit[k] = sNow()
     emitLog("|-item|\(slot): \(speciesEn)|\(itemJa2En[itemJa] ?? itemJa)")
 }
 
@@ -5043,7 +5333,7 @@ func completePendingMegaForField(ability: String) {
 
 // 繰り出しの記録 (天候・フィールド特性の帰属判定に使う)
 func recordSwitchIn(side: String, slot: String, speciesEn: String) {
-    lastSwitchIn["\(side):\(speciesEn)"] = (slot, Date())
+    lastSwitchIn["\(side):\(speciesEn)"] = (slot, sNow())
     switchInTurn["\(side):\(speciesEn)"] = currentTurn
     fieldSeen[side, default: []].insert(speciesEn)
     // この交代が出所になって、地形の上書き保留が採用できることがある
@@ -5056,7 +5346,7 @@ func recordSwitchIn(side: String, slot: String, speciesEn: String) {
     if let sw = lastSwitchIn[key], intimidateDone[key] != sw.at,
        let pool = speciesAbilityMap[speciesEn], pool.contains("Intimidate") {
         let other = side == "p1" ? "p2" : "p1"
-        let now = Date()
+        let now = sNow()
         // seq 一致まで要求すると、確定の遅れの間に他の文が処理された
         // 時点で恒常的に外れ、特性行が丸ごと落ちる (実例: 2026-11-22
         // battle_20261122_071457、特性行が 1 行も出なかった)。攻撃
@@ -5161,7 +5451,7 @@ func clearTerrain(stale: Bool = false) {
 // 設置物の開始/終了行はこの入口に一本化する。本文側の救済
 // (salvageField) とクールダウンキーを共有し、二重に出さない
 func emitHazard(_ side: String, _ hazard: String, start: Bool) {
-    lastSideCondAt["\(side):\(hazard):\(start ? "start" : "end")"] = Date()
+    lastSideCondAt["\(side):\(hazard):\(start ? "start" : "end")"] = sNow()
     emitLog("|-\(start ? "sidestart" : "sideend")|\(side)|move: \(hazard)")
 }
 
@@ -5290,7 +5580,7 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
     // つぼをつく は必ず 2 段階上がる。上昇量の文の「ぐーんと」が
     // 読み落ちて 1 段階として記録されるのを、技の文脈で正す
     // (実例: 2026-11-22 battle_20261122_091721 ターン6)
-    if up && mag == 1 && lastMoveName == "Acupressure" && Date().timeIntervalSince(lastMoveMsgAt) < 20 { mag = 2 }
+    if up && mag == 1 && lastMoveName == "Acupressure" && sNow().timeIntervalSince(lastMoveMsgAt) < 20 { mag = 2 }
     if text.contains("すべての") {
         for (_, code) in stats.prefix(5) { applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag) }
         return
@@ -5334,19 +5624,19 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
     // (実例: アーマーキャノンの自己低下といかくの攻撃低下が 2 重に出た)。
     // 別の技による正当な再変化は |move| を挟むため行動番号が変わり、適用される
     let bk = "\(slot)|\(stat)|\(delta)"
-    if let lb = lastBoostApply[bk], lb.seq == actionSeq && lb.turn == currentTurn && Date().timeIntervalSince(lb.at) < 4 { return }
+    if let lb = lastBoostApply[bk], lb.seq == actionSeq && lb.turn == currentTurn && sNow().timeIntervalSince(lb.at) < 4 { return }
     // 経路をまたぐ二重適用の防止: サルベージ層と正規経路が同じ出来事を
     // 別々に拾った場合、逆経路で 25 秒以内に記録済みの同一変化は捨てる
     // (emitItemOnce の 25 秒ウィンドウと同型)。同経路の再変化は対象外
     let pk = "\(key)|\(stat)|\(delta)"
-    if let prev = boostPathAt[pk], prev.salvage != viaSalvage, Date().timeIntervalSince(prev.at) < 25 { return }
-    lastBoostApply[bk] = (seq: actionSeq, turn: currentTurn, at: Date())
-    boostPathAt[pk] = (at: Date(), salvage: viaSalvage)
+    if let prev = boostPathAt[pk], prev.salvage != viaSalvage, sNow().timeIntervalSince(prev.at) < 25 { return }
+    lastBoostApply[bk] = (seq: actionSeq, turn: currentTurn, at: sNow())
+    boostPathAt[pk] = (at: sNow(), salvage: viaSalvage)
     let cur = monStates[key]?.boosts[stat] ?? 0
     let nv = max(-6, min(6, cur + delta))
     if nv == cur { return }
     boostTouchedStats.insert("\(key)|\(stat)")
-    if stat == "atk" && delta < 0 { recentAtkDrops[key] = (Date(), actionSeq) }
+    if stat == "atk" && delta < 0 { recentAtkDrops[key] = (sNow(), actionSeq) }
     let line = delta > 0 ? "|-boost|\(slot): \(speciesEn)|\(stat)|\(delta)" : "|-unboost|\(slot): \(speciesEn)|\(stat)|\(-delta)"
     // 状態への適用は発生時点で applyEvent が行う。行の表示は交代行の後まで
     // 保留することがあるため、追記時は再適用しない (applyNow: false)
@@ -5359,8 +5649,8 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
         // (読んだ時点では場にいないため slotFor が既定の a 枠を返し、
         //  実際の枠と食い違う。実例: 2026-11-20、オオニューラの
         //  サイコシード発動行が p1a で出た (実際は p1b))
-        heldBoostLines[key, default: []].append((stat, delta, Date()))
-    } else if stat == "atk" && delta < 0 && Date().timeIntervalSince(lastMoveMsgAt) > 3
+        heldBoostLines[key, default: []].append((stat, delta, sNow()))
+    } else if stat == "atk" && delta < 0 && sNow().timeIntervalSince(lastMoveMsgAt) > 3
                 && entryEffectPending(key: key) {
         // 入場特性 (いかく) の効果とみられる攻撃低下が、原因側の
         // 交代確定より先に届いた場合は、行だけを保留して交代行の
@@ -5368,14 +5658,14 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
         // 技の文が直近にある場合は技の効果なので保留しない
         // (実例: 2026-11-22 battle_20261122_050512、ボーマンダの
         //  いかくの低下行が交代行・特性行より前に並んだ)
-        heldEntryBoosts.append((key: key, line: line, at: Date()))
-    } else if heldEntryBoosts.contains(where: { $0.key == key }) && Date().timeIntervalSince(lastMoveMsgAt) > 3 {
+        heldEntryBoosts.append((key: key, line: line, at: sNow()))
+    } else if heldEntryBoosts.contains(where: { $0.key == key }) && sNow().timeIntervalSince(lastMoveMsgAt) > 3 {
         // 入場効果として保留中の個体の後続の変化 (いかくを受けた
         // かちき の特攻上昇など) も、原因の交代行が出るまで一緒に
         // 保留する (片方だけ先に出ると順序が崩れる。実例: 2026-11-22
         // battle_20261122_070237、ミロカロスの攻撃低下と特攻上昇が
         // キュウコンとムクホークの交代行より前に並んだ)
-        heldEntryBoosts.append((key: key, line: line, at: Date()))
+        heldEntryBoosts.append((key: key, line: line, at: sNow()))
     } else {
         emitLog(line, applyNow: false)
     }
@@ -5401,9 +5691,9 @@ func applyBoost(key: String, slot: String, speciesEn: String, stat: String, delt
             // battle_20261122_054802、イエッサンのサイコシードと
             // オオニューラのグラスシード)。自軍の持ち物は登録
             // データで判明しているため、対象は相手のみ
-            let justEntered = lastSwitchIn[key].map { Date().timeIntervalSince($0.at) < 15 } ?? false
-            let terrainFresh = Date().timeIntervalSince(fieldTerrainSetAt) < 15
-            let ownMove = lastMoveLabel == "\(slot): \(speciesEn)" && Date().timeIntervalSince(lastMoveMsgAt) < 20
+            let justEntered = lastSwitchIn[key].map { sNow().timeIntervalSince($0.at) < 15 } ?? false
+            let terrainFresh = sNow().timeIntervalSince(fieldTerrainSetAt) < 15
+            let ownMove = lastMoveLabel == "\(slot): \(speciesEn)" && sNow().timeIntervalSince(lastMoveMsgAt) < 20
             if (justEntered || terrainFresh) && !ownMove {
                 emitItemOnce(slot: slot, side: sdSide, speciesEn: speciesEn, itemJa: sd.item)
                 noteItemLost(slot: slot, side: sdSide, speciesEn: speciesEn)
@@ -5436,9 +5726,9 @@ func flushHeldEntryBoosts() {
 
 func flushHeldBoostsTimeout() {
     let cap: TimeInterval = anyAwaitingReplacement() ? 20 : 6
-    if heldEntryBoosts.contains(where: { Date().timeIntervalSince($0.at) > cap }) { flushHeldEntryBoosts() }
+    if heldEntryBoosts.contains(where: { sNow().timeIntervalSince($0.at) > cap }) { flushHeldEntryBoosts() }
     if heldBoostLines.isEmpty { return }
-    let now = Date()
+    let now = sNow()
     for k in Array(heldBoostLines.keys) {
         guard let arr = heldBoostLines[k] else { continue }
         // 交代確定はアニメーションの都合で 1 ターン分遅れることがある
@@ -5559,7 +5849,7 @@ func scanFieldHeader(_ boxes: [OcrBox]) {
         headerWeatherPending = (ui: "", logName: "", count: 0, lastAt: Date.distantPast)
         return
     }
-    let now = Date()
+    let now = sNow()
     if headerWeatherPending.ui == hit.ui && now.timeIntervalSince(headerWeatherPending.lastAt) <= 10 {
         headerWeatherPending.count += 1
         headerWeatherPending.lastAt = now
@@ -5988,8 +6278,8 @@ func salvageField(in t: String, fromLogScreen: Bool = false) -> Bool {
         let end = t.contains("消え") || t.contains("なくな")
         if start != end {
             let k = "\(scSide):\(hz):\(start ? "start" : "end")"
-            if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
-                lastSideCondAt[k] = Date()
+            if sNow().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+                lastSideCondAt[k] = sNow()
                 emitLog("|-\(start ? "sidestart" : "sideend")|\(scSide)|move: \(hz)")
             }
         }
@@ -6007,8 +6297,8 @@ func salvageField(in t: String, fromLogScreen: Bool = false) -> Bool {
         || t.contains("止ん") || t.contains("やん") || t.contains("終わ")
     guard start != end else { return false }  // 開始か終了か確定しないものは入れない
     let k = "\(scSide):\(cond.1):\(start ? "start" : "end")"
-    if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
-        lastSideCondAt[k] = Date()
+    if sNow().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+        lastSideCondAt[k] = sNow()
         emitLog("|-\(start ? "sidestart" : "sideend")|\(scSide)|move: \(cond.1)")
     }
     return true
@@ -6213,7 +6503,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 1 つだけなら、その枠への外れとして記録する (実例: 2026-11-22
     // battle_20261122_103530、「当たらなかった！」だけが未翻訳で残った)
     if t.contains("当たらなかった") && findSpeciesJa(in: t) == nil
-        && !lastMoveLabel.isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
+        && !lastMoveLabel.isEmpty && sNow().timeIntervalSince(lastMoveMsgAt) < 10 {
         let moverSide = lastMoveLabel.hasPrefix("p1") ? "p1" : "p2"
         let targetPlates = moverSide == "p1" ? ["oppA", "oppB"] : ["mineA", "mineB"]
         var unresolved: [(slot: String, speciesEn: String)] = []
@@ -6328,11 +6618,11 @@ func translateBattleMessage(_ text: String) -> Bool {
         }
         if target.isEmpty {
             target = !lastPendingLabel.isEmpty ? lastPendingLabel
-                : (Date().timeIntervalSince(lastDamageAt) < 6 ? lastDamageLabel : "")
+                : (sNow().timeIntervalSince(lastDamageAt) < 6 ? lastDamageLabel : "")
         }
         // 同じ急所文の再読で二重に出さない (枠ごとに 6 秒あける)
-        if !target.isEmpty && Date().timeIntervalSince(lastCritAt[target] ?? .distantPast) > 6 {
-            lastCritAt[target] = Date()
+        if !target.isEmpty && sNow().timeIntervalSince(lastCritAt[target] ?? .distantPast) > 6 {
+            lastCritAt[target] = sNow()
             critEventMarks[target] = (turn: currentTurn, atk: lastMoveLabel)
             // 急所の告知文は被ダメ行より後に来るため、記録時点では
             // dmg イベントの crit が false のまま残る。対象の直近の
@@ -6374,7 +6664,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 付ける (この文は失敗した行動の直後にしか出ない。実例:
     // 2026-11-21 battle_20261121_230402 ターン5、帰属が逆に読めた)
     if t.contains("うまく決まらなかった") {
-        if !lastMoveLabel.isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 8 {
+        if !lastMoveLabel.isEmpty && sNow().timeIntervalSince(lastMoveMsgAt) < 8 {
             emitLog("|-fail|\(lastMoveLabel)")
         } else {
             emitLog("|-fail|")
@@ -6494,7 +6784,7 @@ func translateBattleMessage(_ text: String) -> Bool {
             // セグメントへずれた)
             if logStarted, oppTeamSeen.contains(e.en),
                lastSlots["oppA"]?.speciesEn != e.en, lastSlots["oppB"]?.speciesEn != e.en {
-                sendOutTextSeen["p2"] = (species: e.en, at: Date())
+                sendOutTextSeen["p2"] = (species: e.en, at: sNow())
             }
         }
         return true
@@ -6519,7 +6809,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                 let onFieldNow = evSide == "p1"
                     ? (lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en)
                     : (lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en)
-                if !onFieldNow { sendOutTextSeen[evSide] = (species: e.en, at: Date()) }
+                if !onFieldNow { sendOutTextSeen[evSide] = (species: e.en, at: sNow()) }
             }
             return true
         }
@@ -6587,16 +6877,16 @@ func translateBattleMessage(_ text: String) -> Bool {
         let scSide = (t.contains("相手") || t.contains("あいて")) ? "p2" : "p1"
         if t.contains("吹き始") || t.contains("ふきはじ") {
             let k = "\(scSide):Tailwind:start"
-            if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
-                lastSideCondAt[k] = Date()
+            if sNow().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+                lastSideCondAt[k] = sNow()
                 emitLog("|-sidestart|\(scSide)|move: Tailwind")
             }
             return true
         }
         if t.contains("止ん") || t.contains("やん") || t.contains("終わ") || t.contains("なくな") {
             let k = "\(scSide):Tailwind:end"
-            if Date().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
-                lastSideCondAt[k] = Date()
+            if sNow().timeIntervalSince(lastSideCondAt[k] ?? .distantPast) > 8 {
+                lastSideCondAt[k] = sNow()
                 emitLog("|-sideend|\(scSide)|move: Tailwind")
             }
             return true
@@ -6768,7 +7058,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // ランク変化文の後半の断片 (主語が無く、上がった/下がっただけの
     // 文): 直前に覚えた断片 (主語+能力名) と結合して適用する
     // (実例: 2026-11-22 battle_20261122_091721 ターン4)
-    if sp == nil, let frag = prevBoostFragment, Date().timeIntervalSince(frag.at) < 6,
+    if sp == nil, let frag = prevBoostFragment, sNow().timeIntervalSince(frag.at) < 6,
        (t.contains("あがった") || t.contains("さがった") || t.contains("上がった") || t.contains("下がった")
         || t.contains("あがつた") || t.contains("さがつた") || t.contains("上がつた") || t.contains("下がつた")) {
         checkBoostText(text: frag.text + t, side: frag.side, speciesEn: frag.speciesEn,
@@ -6900,7 +7190,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // ダメージ行に [from] item: Rocky Helmet を付けるため記録だけする
     // (人間可読ログ側の -damage 描画でも発生源として表示する)
     if t.contains("ゴツゴツメット") && t.contains("ダメージを受けた") {
-        pendingStatusFrom[key] = ("item: Rocky Helmet", Date())
+        pendingStatusFrom[key] = ("item: Rocky Helmet", sNow())
         return true
     }
     // 状態異常などのダメージ予告: ダメージ行に [from] を付けるため記録だけする
@@ -6910,11 +7200,11 @@ func translateBattleMessage(_ text: String) -> Bool {
         // battle_20261122_193243、ウッドハンマーの反動文が消費
         // されるだけで、低下が訂正吸収されて行が残らなかった)
         if t.contains("反動"), lastMoveLabel == "\(slot): \(sp.en)", !lastMoveName.isEmpty {
-            pendingStatusFrom[key] = ("move: \(lastMoveName)", Date())
+            pendingStatusFrom[key] = ("move: \(lastMoveName)", sNow())
             return true
         }
         for (ja, code) in [("毒", "psn"), ("やけど", "brn"), ("砂嵐", "sandstorm"), ("あられ", "hail")] where t.contains(ja) {
-            pendingStatusFrom[key] = (code, Date())
+            pendingStatusFrom[key] = (code, sNow())
             break
         }
         return true
@@ -6923,11 +7213,11 @@ func translateBattleMessage(_ text: String) -> Bool {
     // OCR では「すな砂あらし」と混ざって読まれることがある)
     if t.contains("襲う") || t.contains("おそう") {
         if t.contains("砂あらし") || t.contains("すなあらし") || t.contains("砂嵐") {
-            pendingStatusFrom[key] = ("sandstorm", Date())
+            pendingStatusFrom[key] = ("sandstorm", sNow())
             return true
         }
         if t.contains("あられ") {
-            pendingStatusFrom[key] = ("hail", Date())
+            pendingStatusFrom[key] = ("hail", sNow())
             return true
         }
     }
@@ -6949,8 +7239,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("効果は") || t.contains("こうかは") || (!kind.isEmpty && (t.hasSuffix("だ！") || t.hasSuffix("だ!") || t.hasSuffix("だ") || kind == "immune")) {
         if !kind.isEmpty {
             let ekey = "\(slot)|\(kind)"
-            if let at = lastEffectAt[ekey], Date().timeIntervalSince(at) < 3 { return true }
-            lastEffectAt[ekey] = Date()
+            if let at = lastEffectAt[ekey], sNow().timeIntervalSince(at) < 3 { return true }
+            lastEffectAt[ekey] = sNow()
             var effLabel = "\(slot): \(sp.en)"
             // 同じ技の解決中に、同じ対象へ別の相性の行が来たら、それは
             // 同じ技で被ダメして相性行がまだ無い別の対象の分とみなして
@@ -6982,7 +7272,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     }
     // ミス: 「<対象>には 当たらなかった！」(使用者は直近の |move| の枠)
     if t.contains("当たらなかった") {
-        if !lastMoveLabel.isEmpty && Date().timeIntervalSince(lastMoveMsgAt) < 8 {
+        if !lastMoveLabel.isEmpty && sNow().timeIntervalSince(lastMoveMsgAt) < 8 {
             // 外れの対象 (枠と種族) が場の記録と矛盾する場合は行を
             // 出さない (実例: 2026-11-22 battle_20261122_071457、
             // 場に出ていないガオガエンが p2a の外れ対象になった)。
@@ -7023,8 +7313,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 誤読しないよう、技使用の解析より前にここで処理する
     if t.contains("ワイドガード") && (t.contains("守られ") || t.contains("まもられ")) {
         let pk = slot + "|wideguard"
-        if let at = lastSingleActAt[pk], Date().timeIntervalSince(at) < 6 { return true }
-        lastSingleActAt[pk] = Date()
+        if let at = lastSingleActAt[pk], sNow().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[pk] = sNow()
         emitLog("|-activate|\(slot): \(sp.en)|move: Wide Guard")
         return true
     }
@@ -7131,10 +7421,10 @@ func translateBattleMessage(_ text: String) -> Bool {
                     // 被ダメ行だけが前のターンに付いた)
                     let moverLabel = "\(slot): \(sp.en)"
                     let advanced = actionSeq - (lastMoveSigSeq[sig] ?? 0) >= 2
-                    let waited = Date().timeIntervalSince(lastMoveSigAt[sig]!) >= 10
+                    let waited = sNow().timeIntervalSince(lastMoveSigAt[sig]!) >= 10
                     if !(movesSinceTurnLine.contains(moverLabel) && advanced && waited) { return true }
                 }
-                if let at = lastMoveSigAt[slot + "|" + moveEn], Date().timeIntervalSince(at) < 6 { return true }
+                if let at = lastMoveSigAt[slot + "|" + moveEn], sNow().timeIntervalSince(at) < 6 { return true }
                 // てだすけ (優先度 +5) の告知が、区間に他の技行が既に
                 // ある状態で届くことは実戦ではあり得ない (コマンド画面の
                 // 技表示や過去文の再読が告知として処理されたもの。
@@ -7154,11 +7444,11 @@ func translateBattleMessage(_ text: String) -> Bool {
                         return true
                     }
                 }
-                lastMoveSigAt[sig] = Date()
-                lastMoveSigAt[slot + "|" + moveEn] = Date()
+                lastMoveSigAt[sig] = sNow()
+                lastMoveSigAt[slot + "|" + moveEn] = sNow()
                 lastMoveSigSeq[sig] = actionSeq
                 lastMoveLabel = "\(slot): \(sp.en)"
-                lastMoveMsgAt = Date()
+                lastMoveMsgAt = sNow()
                 lastMoveName = moveEn
                 synthesizeMegaIfPending(side: side, speciesEn: sp.en)
                 emitLog("|move|\(slot): \(sp.en)|\(moveEn)")
@@ -7194,8 +7484,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     if t.contains("身を守った") || t.contains("身を守つた") || t.contains("守りの入った")
         || (t.contains("体勢") && t.contains("守り") && t.contains("入った")) {
         let pk = slot + "|protect"
-        if let at = lastSingleActAt[pk], Date().timeIntervalSince(at) < 6 { return true }
-        lastSingleActAt[pk] = Date()
+        if let at = lastSingleActAt[pk], sNow().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[pk] = sNow()
         if protectMoveTurn[slot] == currentTurn {
             emitLog("|-activate|\(slot): \(sp.en)|move: Protect")
         }
@@ -7213,15 +7503,15 @@ func translateBattleMessage(_ text: String) -> Bool {
         : (t.contains("眠っている") || t.contains("ねむっている")) ? "slp" : ""
     if !cantCode.isEmpty {
         let cantKey = slot + "|cant"
-        if let at = lastSingleActAt[cantKey], Date().timeIntervalSince(at) < 6 { return true }
-        lastSingleActAt[cantKey] = Date()
+        if let at = lastSingleActAt[cantKey], sNow().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[cantKey] = sNow()
         emitLog("|-cant|\(slot): \(sp.en)|\(cantCode)")
         return true
     }
     // このゆびとまれの効果 (OCR ゆれで二重に処理されても 1 回だけ出す)
     if t.contains("注目の的に") && t.contains("なった") {
-        if let at = lastSingleActAt[slot], Date().timeIntervalSince(at) < 6 { return true }
-        lastSingleActAt[slot] = Date()
+        if let at = lastSingleActAt[slot], sNow().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[slot] = sNow()
         emitLog("|-singleactivate|\(slot): \(sp.en)|move: Follow Me")
         return true
     }
@@ -7237,8 +7527,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     // (実例: 2026-11-20 vs Zycloud 戦、グライオンのタスキ発動が日本語のまま漏れた)
     if t.contains("もちこたえた") {
         let sk = slot + "|sash"
-        if let at = lastSingleActAt[sk], Date().timeIntervalSince(at) < 6 { return true }
-        lastSingleActAt[sk] = Date()
+        if let at = lastSingleActAt[sk], sNow().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[sk] = sNow()
         emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "きあいのタスキ")
         emitLog("|-activate|\(slot): \(sp.en)|item: Focus Sash")
         noteItemLost(slot: slot, side: side, speciesEn: sp.en)
@@ -7250,7 +7540,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 誤読で無関係なポケモンに判明が付いた実例がある (2026-11-20、エーフィの
     // 反動がカメックス/イエッサンに付いた)。反動は使用者自身にしか起きない
     if t.contains("命が少し削られた") || (t.contains("削られた") && t.contains("いのち")) {
-        if lastMoveLabel == "\(slot): \(sp.en)" && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
+        if lastMoveLabel == "\(slot): \(sp.en)" && sNow().timeIntervalSince(lastMoveMsgAt) < 10 {
             emitItemOnce(slot: slot, side: side, speciesEn: sp.en, itemJa: "いのちのたま")
         }
         return true
@@ -7282,7 +7572,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         // 読みで確定してよい (通常の 2 回確認だと、相手の交代行や
         // ターン終了時の回復行が先に出て順序がずれる。実例:
         // 2026-11-22 battle_20261122_054802 ターン4)
-        pivotReturnAt[side] = Date()
+        pivotReturnAt[side] = sNow()
         return true
     }
     // せんせいのツメの発動 (実例: 2026-11-20 の対戦で「キュウコンは
@@ -7334,8 +7624,8 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 実例: 2026-11-21 vs Woxofyl 戦、ゲンガーの身代わりへのシャドーボール)
     if t.contains("身代わり") && (t.contains("攻撃を受けた") || t.contains("攻撃をうけた")) {
         let pk = slot + "|subhit"
-        if let at = lastSingleActAt[pk], Date().timeIntervalSince(at) < 6 { return true }
-        lastSingleActAt[pk] = Date()
+        if let at = lastSingleActAt[pk], sNow().timeIntervalSince(at) < 6 { return true }
+        lastSingleActAt[pk] = sNow()
         emitLog("|-activate|\(slot): \(sp.en)|move: Substitute")
         return true
     }
@@ -7444,11 +7734,11 @@ func translateBattleMessage(_ text: String) -> Bool {
                 let mSlot = slotFor(side: mSide, speciesEn: e.en)
                 let mLabel = "\(mSlot): \(e.en)"
                 if !movesSinceTurnLine.contains(mLabel) {
-                    lastMoveSigAt["\(mSlot)|Stockpile|t\(currentTurn)"] = Date()
-                    lastMoveSigAt["\(mSlot)|Stockpile"] = Date()
+                    lastMoveSigAt["\(mSlot)|Stockpile|t\(currentTurn)"] = sNow()
+                    lastMoveSigAt["\(mSlot)|Stockpile"] = sNow()
                     lastMoveSigSeq["\(mSlot)|Stockpile|t\(currentTurn)"] = actionSeq
                     lastMoveLabel = mLabel
-                    lastMoveMsgAt = Date()
+                    lastMoveMsgAt = sNow()
                     lastMoveName = "Stockpile"
                     emitLog("|move|\(mLabel)|Stockpile")
                     lastMoveSeq = actionSeq
@@ -7479,7 +7769,7 @@ func translateBattleMessage(_ text: String) -> Bool {
                 let inOpp = lastSlots["oppA"]?.speciesEn == e.en || lastSlots["oppB"]?.speciesEn == e.en
                 let inMine = lastSlots["mineA"]?.speciesEn == e.en || lastSlots["mineB"]?.speciesEn == e.en
                 let fSide = (t.contains("相手の") || t.contains("あいての")) && inOpp ? "p2" : (inOpp && !inMine ? "p2" : "p1")
-                prevBoostFragment = (text: t, speciesEn: e.en, side: fSide, at: Date())
+                prevBoostFragment = (text: t, speciesEn: e.en, side: fSide, at: sNow())
             }
         }
     }
@@ -7507,7 +7797,7 @@ func translateBattleMessage(_ text: String) -> Bool {
             if (t.contains("相手の") || t.contains("あいての")) && inOpp { return "p2" }
             if t.contains("味方の") && inMine { return "p1" }
             if inOpp && inMine && lastMoveLabel.hasSuffix(": \(e.en)")
-                && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
+                && sNow().timeIntervalSince(lastMoveMsgAt) < 10 {
                 return lastMoveLabel.hasPrefix("p2") ? "p2" : "p1"
             }
             return inOpp && !inMine ? "p2" : "p1"
@@ -7554,7 +7844,7 @@ func translateBattleMessage(_ text: String) -> Bool {
             } else if t.contains("味方の") && inMineF {
                 sSide = "p1"
             } else if inOppF && inMineF && lastMoveLabel.hasSuffix(": \(sp.en)")
-                && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
+                && sNow().timeIntervalSince(lastMoveMsgAt) < 10 {
                 sSide = lastMoveLabel.hasPrefix("p2") ? "p2" : "p1"
             }
             checkBoostText(text: t, side: sSide, speciesEn: sp.en, slot: slotFor(side: sSide, speciesEn: sp.en))
@@ -7633,7 +7923,7 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     if norm.count < 4 { return }
     // 同一文の再処理は 4 秒間だけ抑止する (表示は最長でも約3秒のため。
     // 毒ダメージのように同じ文が後で再表示されたら、それは新しい出来事)
-    let now = Date()
+    let now = sNow()
     if norm == lastMsgNorm && now.timeIntervalSince(lastMsgAt) < 4 { return }
     // コマンド選択中の文 (「〜は どうする？」等) はイベントではない
     if text.contains("どうする") || text.contains("選んでください") || text.contains("選ばれました") { lastMsgNorm = norm; lastMsgAt = now; return }
@@ -7654,7 +7944,7 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     } else if text.hasSuffix("！") || text.hasSuffix("。") || text.hasSuffix("？") || text.hasSuffix("ました") {
         // 翻訳できない文も、完結した文ならそのまま残す。
         // ただし直前の |-message| と似た文は OCR ゆれの再読として 1 件にまとめる
-        if Date().timeIntervalSince(lastFallbackAt) < 6 && textSimilarity(norm, lastFallbackText) >= 0.6 {
+        if sNow().timeIntervalSince(lastFallbackAt) < 6 && textSimilarity(norm, lastFallbackText) >= 0.6 {
             lastMsgNorm = norm; lastMsgAt = now
         } else {
             emitLog("|-message|\(text)")
@@ -9089,7 +9379,7 @@ func updateMatchingDisplay(image: CGImage) {
         return
     }
     if detectMatching(image: image) {
-        let now = Date()
+        let now = sNow()
         notePreStartEvent("matching_seen")
         if !matchingActive {
             matchingActive = true
@@ -9233,6 +9523,7 @@ func maybeRestartForUpdate() {
     let disk = diskReaderBuild() ?? "?"
     print("[sync] reader.swift または data ファイルの更新 (\(disk)) が届いたため再起動します")
     fflush(stdout)
+    noteQueueDiscardBeforeExit()
     exit(42)
 }
 
@@ -9248,13 +9539,14 @@ func runOnce(image: CGImage) {
     let wasPreviewFrame = previewLastFrame
     if detectPreview(image: image) {
         previewFrames += 1
+        lastFramePreviewUnresolved = !previewHandled
         notePreStartEvent("preview_seen")
-        let sinceLastPreview = Date().timeIntervalSince(lastPreviewSeenAt)
-        lastPreviewSeenAt = Date()
+        let sinceLastPreview = sNow().timeIntervalSince(lastPreviewSeenAt)
+        lastPreviewSeenAt = sNow()
         // 見せ合い画面の最終フレームを保持する (同定の成否によらず、
         // 試合開始時に preview_id として書き出すための全試合保証)
         previewLastImage = image
-        previewLastImageAt = Date()
+        previewLastImageAt = sNow()
         if !wasPreviewFrame {
             // 新しい見せ合い画面の出現: preview_id の書き出しを再武装する
             previewIdWritten = false
@@ -9475,7 +9767,7 @@ func runOnce(image: CGImage) {
                          "best": ((previewVoteScore[i][sp] ?? 9) * 1000).rounded() / 1000] as [String: Any]
                     }.sorted { ($0["votes"] as? Int ?? 0) > ($1["votes"] as? Int ?? 0) }
                 }
-                previewEvidenceAt = Date()
+                previewEvidenceAt = sNow()
                 oppUnconfirmed = Set(filled)  // 全枠が推定 = 未確認 (実物で差し替え可)
                 var obj: [String: Any] = [:]
                 obj["mine"] = [Any]()
@@ -9555,7 +9847,7 @@ func runOnce(image: CGImage) {
     // 非選出フレームを挟んで同定がやり直されると、ヘッダーが 2 重に出る
     // (実例: 2026-11-20 vs Benn 戦)。対戦が始まった/終わった、または
     // 選出画面から 10 秒以上離れたら次の同定を許可する
-    if winLogged || inBattle || Date().timeIntervalSince(lastPreviewSeenAt) > 10 {
+    if winLogged || inBattle || sNow().timeIntervalSince(lastPreviewSeenAt) > 10 {
         previewHandled = false
         previewFrames = 0
         previewAttempts = 0
@@ -9580,7 +9872,7 @@ func runOnce(image: CGImage) {
     // 見せ合い後の相手ランク/レート: 選出が確定してから対戦開始までの
     // 短い窓だけを監視する (表示は一瞬しか出ないため)
     if previewHandled, !inBattle, oppRank.isEmpty,
-       Date().timeIntervalSince(lastPreviewSeenAt) < 30 {
+       sNow().timeIntervalSince(lastPreviewSeenAt) < 30 {
         scanOpponentRank(image: image)
     }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
@@ -9590,6 +9882,7 @@ func runOnce(image: CGImage) {
         writeState()
         return
     }
+    lastFramePreviewUnresolved = false
     var hits = locatePlates(image: image)
     if hits.count < 4 {
         for plate in plates where hits[plate.name] == nil {
@@ -9597,6 +9890,7 @@ func runOnce(image: CGImage) {
         }
     }
     if hits.isEmpty {
+        lastFramePlatesMissing = true
         // プレートが無い画面 (マッチング・演出・メニュー等) は
         // エラーにせず静かに待つ (最後の状態を保持)。
         // 対戦中はプレートが隠れる演出・メッセージ表示中こそログの本番なので、
@@ -9606,7 +9900,7 @@ func runOnce(image: CGImage) {
         // 対戦開始直後 (選出で startBattleLog 済み・プレート未出) も監視する:
         // 繰り出し・フィールド開始・いかく等の冒頭の文はプレート初出より前に
         // 表示されるため、勝敗未確定で最終イベントから 2 分以内なら対象とする。
-        let watching = inBattle || (logStarted && !winLogged && Date().timeIntervalSince(lastLogEventAt) < 120)
+        let watching = inBattle || (logStarted && !winLogged && sNow().timeIntervalSince(lastLogEventAt) < 120)
         if watching {
             emptyBattleFrames += 1
             watchBattleMessage(image: image, platesVisible: false)
@@ -9620,7 +9914,7 @@ func runOnce(image: CGImage) {
             // battleArchived は立てず、勝敗が確定すれば final 版が正になる
             if logStarted && !battleArchived && !battleLog.isEmpty && !winLogged
                 && emptyBattleFrames > 30
-                && Date().timeIntervalSince(lastLogEventAt) > 45
+                && sNow().timeIntervalSince(lastLogEventAt) > 45
                 && battleLog.count != lastArchiveSnapshotCount {
                 archiveBattleLogs(final: false, protocolLines: battleLog, displayLines: displayLog,
                                   id: battleArchiveId.isEmpty ? battleStamp() : battleArchiveId)
@@ -9632,6 +9926,7 @@ func runOnce(image: CGImage) {
     }
     emptyBattleFrames = 0
     inBattle = true
+    lastFramePlatesMissing = false
     processPlates(hits)
     // plate_stale 監視: 確定済みの枠だけ長くヒットが無い場合、その時点の
     // フレームと、その枠の固定領域の生 OCR を証拠として残す。他の枠が
@@ -9641,7 +9936,7 @@ func runOnce(image: CGImage) {
     // 取りこぼされたが、コマンドフェーズのフレームが残らず原因を
     // 特定できなかった)。ひんしの枠は対象外 (交代待ちで当然読めない)
     if logStarted && !winLogged {
-        let now = Date()
+        let now = sNow()
         let hitSlots = Set(hits.keys)
         let partnerOf = ["mineA": "mineB", "mineB": "mineA", "oppA": "oppB", "oppB": "oppA"]
         for (slot, info) in lastSlots
@@ -9701,7 +9996,7 @@ func runOnce(image: CGImage) {
     let evImage = previewEvidenceImage ?? previewLastImage
     let evAt = previewEvidenceImage != nil ? previewEvidenceAt : previewLastImageAt
     if !previewIdWritten, let evImage, let evAt,
-       Date().timeIntervalSince(evAt) <= 600 {
+       sNow().timeIntervalSince(evAt) <= 600 {
         previewIdWritten = true
         let slotDetails: [[String: Any]] = previewEvidenceSlots.map { s in
             ["pick": s.pick ?? "", "score": (s.score * 1000).rounded() / 1000,
@@ -9724,9 +10019,9 @@ func runOnce(image: CGImage) {
     // プレートが試合を通じて未確定で、てだすけ等の文の帰属が既定枠に
     // 流れ続けた。従来のデバッグ情報にはプレート側の証拠が残らず、
     // 原因の切り分けができなかった)
-    if firstSlotConfirmedAt == nil && !lastSlots.isEmpty { firstSlotConfirmedAt = Date() }
+    if firstSlotConfirmedAt == nil && !lastSlots.isEmpty { firstSlotConfirmedAt = sNow() }
     if logStarted && !winLogged, let t0 = firstSlotConfirmedAt,
-       Date().timeIntervalSince(t0) >= 25 {
+       sNow().timeIntervalSince(t0) >= 25 {
         let missing = ["mineA", "mineB", "oppA", "oppB"].filter { name in
             guard lastSlots[name] == nil else { return false }
             let partner = String(name.dropLast()) + (name.hasSuffix("A") ? "B" : "A")
@@ -9761,7 +10056,7 @@ func runOnce(image: CGImage) {
     // 静穏も条件にする: 解決フェーズの合間の一瞬の揃いで誤発火すると
     // ターン番号が通しでずれる (フェーズ4)。生フレーム経路は 6 フレーム
     // 連続の揃い自体が時間の裏付けになるため従来どおり
-    let turnQuietOK = lastRoundEventAt.map { Date().timeIntervalSince($0) >= 2.5 } ?? true
+    let turnQuietOK = lastRoundEventAt.map { sNow().timeIntervalSince($0) >= 2.5 } ?? true
     if platesReady && ((expectedPlates >= 4 && allSettled && turnQuietOK) || turnRawFrames >= 6) {
         commandPhaseSeen = true
         flushPendingDamage(force: true)
@@ -9795,7 +10090,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2125"
+let readerBuild = "20261122_2227"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -10586,9 +10881,15 @@ func teamScreenCardCount(image: CGImage) -> Int {
 // 投票・選出セッション・ログ状態には一切触れない。結果 JSON は
 // ログ分析チャットでの精度分析用に、枠ごとの候補・タイプ・スコアを
 // 含む (preview_id の証拠と同じ形)
+// 撮影ボタン用: 列の最新画像 (最後に成功した撮影) を使う
+func latestCapturedImage() -> CGImage? {
+    guard let f = frameHandoff.latestFile() else { return nil }
+    return loadImage(path: f.path)
+}
+
 func handlePreviewTestRequest() -> String {
-    guard let img = captureQuickTime() else {
-        return "{\"ok\":false,\"error\":\"QuickTime の画面を取得できませんでした\"}"
+    guard let img = latestCapturedImage() else {
+        return "{\"ok\":false,\"error\":\"撮影がまだ成功していません（少し待ってからお試しください）\"}"
     }
     if isBlankFrame(img) {
         return "{\"ok\":false,\"error\":\"画面が暗い/真っ黒です（iPad の画面が消えていないか確認してください）\"}"
@@ -10650,7 +10951,7 @@ func startCaptureServer() {
             var tab = "ability"
             if let d = data, let s = String(data: d, encoding: .utf8), s.contains("tab=status") { tab = "status" }
             var body = "{\"ok\":false,\"error\":\"QuickTime の画面を取得できませんでした\"}"
-            if let img = captureQuickTime() {
+            if let img = latestCapturedImage() {
                 if isBlankFrame(img) {
                     body = "{\"ok\":false,\"error\":\"画面が暗い/真っ黒です（iPad の画面が消えていないか確認してください）\"}"
                     let resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
@@ -10751,26 +11052,14 @@ startCaptureServer()
 if teamMode {
     print("チーム登録モード開始 (Ctrl+C で終了)。「様子を見る」で1体ずつ選び、能力タブとステータスタブをそれぞれ映してください。")
 }
-var lastLoopWorkEndAt: Date? = nil
-var discardNextFrame = false   // 復帰直後の 1 フレームは遷移中の可能性があるため読み捨てる
-while true {
-    // 前の周回から大きく時間が空いた = Mac のスリープや長時間の停止
-    // から復帰した可能性が高い。その場合はフレーム数ベースの判定
-    // (対戦終了カウンタ・ターン進行) をリセットし、復帰直後の
-    // 1 フレームは読み捨てて、遷移途中の画面で状態を壊さないようにする
-    if let last = lastLoopWorkEndAt, Date().timeIntervalSince(last) > 10 {
-        print("[再開] スリープ/停止から復帰したようです。読み取りを再開します")
-        fflush(stdout)
-        emptyBattleFrames = 0
-        turnRawFrames = 0
-        discardNextFrame = true
-    }
+if once {
+    // --once は従来どおり 1 回だけ直接撮影して処理する
+    frameAt = Date()
     if let img = captureQuickTime() {
-        if discardNextFrame {
-            discardNextFrame = false
-        } else if teamMode { runTeamOnce(image: img) } else { runOnce(image: img) }
+        if teamMode { runTeamOnce(image: img) } else { runOnce(image: img) }
     }
-    if once { break }
-    lastLoopWorkEndAt = Date()
-    Thread.sleep(forTimeInterval: intervalSec)
+} else {
+    // 継続モード: 撮影側を独立に走らせ、認識側のループで処理する
+    startCaptureProducer()
+    recognitionMainLoop()
 }
