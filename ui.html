@@ -3457,7 +3457,7 @@ function applyMineTeamPreview(list) {
   }
   const prevSelSpecies = state.mine[state.sel.mine] && state.mine[state.sel.mine].species;
   const old = state.mine;
-  state.mine = entries.map(({ species, info }) => {
+  const rebuilt = entries.map(({ species, info }) => {
     let spec = old.find(s => s.species === species) || null;
     if (!spec) {
       const pi = PRESETS.findIndex(p => p && p.species === species);
@@ -3466,7 +3466,15 @@ function applyMineTeamPreview(list) {
     applyInfo(spec, info);
     return spec;
   });
-  for (const sp of [...faintLock.mine]) if (!entries.some(e => e.species === sp)) faintLock.mine.delete(sp);
+  // 暫定リストは同定済みの種族だけが詰めて出されるため、未同定の枠は
+  // 「居ない」ことの主張ではない。同定済みが6体未満の間は、リストに
+  // 無い既存パネルを後ろに残して6体を保つ (同定が進めば順に置き換わる)
+  for (const s of old) {
+    if (rebuilt.length >= 6) break;
+    if (!rebuilt.some(r => r.species === s.species)) rebuilt.push(s);
+  }
+  state.mine = rebuilt;
+  for (const sp of [...faintLock.mine]) if (!rebuilt.some(r => r.species === sp)) faintLock.mine.delete(sp);
   const si = state.mine.findIndex(s => s.species === prevSelSpecies);
   state.sel.mine = si >= 0 ? si : 0;
   lastActiveKey.mine = '';
