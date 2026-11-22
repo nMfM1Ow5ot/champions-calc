@@ -20,6 +20,13 @@ fi
 echo "最新のファイルに同期します..."
 python3 sync_ui.py --force || true
 
+# 起動時点の版番号を表示する (版番号の正本は ui_rev.txt で、
+# 変更検知用の ui_version.txt の指紋とは別物)
+REV=$(cat ui_rev.txt 2>/dev/null | tr -d '[:space:]')
+if [ -n "$REV" ]; then
+  echo "現在の rev: $REV"
+fi
+
 # UI サーバを裏で起動し、終了時に一緒に止める。
 # 備考のターミナル入力が確実に効くよう、標準入力は制御端末 (/dev/tty) に
 # 明示的につなぐ (このスクリプト自体の標準入力がターミナルでない形で
