@@ -2413,6 +2413,38 @@ func annotateFieldLineFromAbility(_ abilityLine: String) {
     battleLog[turnIdx + 1 + rel] = "\(fieldLine)|[from] ability: \(ability)|[of] \(label)"
 }
 
+// 開始行への [from] 帰属 (特性行が先行する配置): 付け直し
+// (annotateFieldLineFromAbility) は開始行が先の配置だけを扱うため、
+// 特性行が既に区間にある状態で裸の開始行が出たら、出力時点で
+// 帰属を付けた形にする (実例: 2026-11-23 battle_20261123_052626
+// ターン1、あまごいの特性行が先行し、間に交代行とダメージ行が
+// 挟まって開始行が遅れた)。技による開始 (区間内に同名の技行) が
+// ある場合は付けない (付け直し側と同じガード)
+func fieldLineWithAttribution(_ line: String) -> String {
+    let bareLines = ["Drought", "Drizzle", "Sand Stream", "Snow Warning",
+                     "Electric Surge", "Grassy Surge", "Misty Surge", "Psychic Surge"]
+        .compactMap { fieldLineForAbility($0) }
+    guard bareLines.contains(line) else { return line }
+    let turnIdx = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") }) ?? -1
+    guard turnIdx + 1 <= battleLog.count else { return line }
+    let seg = Array(battleLog[(turnIdx + 1)...])
+    let rawName: String
+    if line.hasPrefix("|-fieldstart|move: ") {
+        rawName = String(line.dropFirst("|-fieldstart|move: ".count))
+    } else {
+        rawName = String(line.dropFirst("|-weather|".count))
+    }
+    let moveName = rawName == "Snow" ? "Snowscape" : rawName
+    if seg.contains(where: { $0.hasPrefix("|move|") && $0.hasSuffix("|\(moveName)") }) { return line }
+    for l in seg where l.hasPrefix("|-ability|") {
+        let af = l.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if af.count >= 4, fieldLineForAbility(af[3]) == line {
+            return "\(line)|[from] ability: \(af[3])|[of] \(af[2])"
+        }
+    }
+    return line
+}
+
 func fieldRenderForAbility(_ ability: String) -> String? {
     switch ability {
     case "Drought": return "The sunlight turned harsh!"
@@ -2546,6 +2578,9 @@ func emitLog(_ line: String, applyNow: Bool) {
     // startBattleLog 内のヘッダー行は resetLogState で winLogged が
     // 落ちた後に emitLog されるため、ここで再帰はしない
     if winLogged { startBattleLog() }
+    // フィールド開始行は、特性行が先行する配置では出力時点で
+    // [from] 帰属を付けた形にする (fieldLineWithAttribution)
+    let line = fieldLineWithAttribution(line)
     // あり得ない行のガード: 文の取得が崩れて断片が誤帰属された場合、
     // 場の実在と矛盾する特性行・技行は記録しない (証拠は残す)。
     // 実例: 2026-11-22 battle_20261122_050512 のターン3、
@@ -6114,6 +6149,7 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
     // 文中に現れる能力はすべて適用する (たくわえる の 防御+特防 のように
     // 1 文で 2 つ上がる技があるため、最初の 1 つで打ち切らない)。
     // フリガナ+漢字の二重表記は同一コードとして 1 回だけ数える
+    var matched: [(String, Int)] = []
     var applied = Set<String>()
     let foldedText = foldDakuten(text)
     for (ja, code) in stats where !applied.contains(code) {
@@ -6125,7 +6161,23 @@ func checkBoostText(text: String, side: String, speciesEn: String, slot: String)
         // 濁点ゆれ (スパヤサ等) は両辺を畳んだ形でも照合する (検証 R1)
         guard text.contains(ja) || foldedText.contains(foldDakuten(ja)) else { continue }
         applied.insert(code)
-        applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: code, delta: up ? mag : -mag)
+        matched.append((code, up ? mag : -mag))
+    }
+    // じきゅうりょく の帰属: 特性バナーは画面上部の表示で帯の文には
+    // 入らず、帯に届くのは上昇文だけのため、被弾発動の特性行は
+    // 今まで出なかった (実例: 2026-11-23 battle_20261123_052626、
+    // ブリジュラスの防御上昇に特性行が付かなかった)。「相手の技で
+    // 被ダメした直後の 防御 +1 の上昇」で、特性が未判明かつその種族が
+    // 持ち得る場合だけ、上昇の適用前に特性行を出す
+    if up && mag == 1 && matched.contains(where: { $0.0 == "def" })
+        && (damagedBySeq[actionSeq] ?? []).contains("\(slot): \(speciesEn)")
+        && !lastMoveLabel.isEmpty && !lastMoveLabel.hasPrefix(side)
+        && !battleLog.contains(where: { $0.hasPrefix("|-ability|\(slot): \(speciesEn)|") })
+        && (speciesAbilityMap[speciesEn]?.contains("Stamina") ?? false) {
+        emitAbilityOnce(slot: slot, side: side, speciesEn: speciesEn, abilityEn: "Stamina")
+    }
+    for m in matched {
+        applyBoost(key: key, slot: slot, speciesEn: speciesEn, stat: m.0, delta: m.1)
     }
 }
 
@@ -7053,8 +7105,12 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 勝敗: 「<相手>との 勝負に 負けた！/勝った！」
     // (実機ログでは「勝った」が「勝つた」と OCR 崩れしていたため、
     //  小さい「っ」を通常の「つ」に寄せた形でも判定する)
+    // 「勝負」の負が別字に崩れる読み (勝質に 等) でも判定できるよう、
+    // 勝+任意の1字+に の形で見る (実例: 2026-11-23
+    // battle_20261123_052626、帯の読みが「勝質に勝った！」となり
+    // 勝敗が確定せず、完結した試合が interrupted で届いた)
     let tw = t.replacingOccurrences(of: "っ", with: "つ").replacingOccurrences(of: "ッ", with: "ツ")
-    if t.contains("勝負に") && (t.contains("負けた") || tw.contains("勝つた")) {
+    if t.range(of: "勝.に", options: .regularExpression) != nil && (t.contains("負けた") || tw.contains("勝つた")) {
         if winLogged { return true }   // 同じ勝敗文の再読では出さない
         let won = tw.contains("勝つた")
         var oppName = trainerOpp
@@ -8018,6 +8074,11 @@ func translateBattleMessage(_ text: String) -> Bool {
         if let at = lastSingleActAt[pk], sNow().timeIntervalSince(at) < 6 { return true }
         lastSingleActAt[pk] = sNow()
         if protectMoveTurn[slot] == currentTurn {
+            // 防がれた側の block 行も対で出す (今まで reader は
+            // |-block| を一切生成しておらず、技が防がれた記録が
+            // activate 行だけだった。実例: 2026-11-23
+            // battle_20261123_052626、だいちのちからへの block 行欠落)
+            emitLog("|-block|\(slot): \(sp.en)|move: \(protectMoveName[slot] ?? "Protect")")
             emitLog("|-activate|\(slot): \(sp.en)|move: \(protectMoveName[slot] ?? "Protect")")
         }
         return true
@@ -8429,6 +8490,28 @@ func dropRubyBoxes(_ boxes: [OcrBox]) -> [OcrBox] {
     }
 }
 
+// コマンド選択中の技リスト表示が帯の連結文に混ざると、プレート名と
+// 技名が同居して告知と誤認される (実例: 2026-11-23
+// battle_20261123_052626、リキキリンのプレート名と技リストの
+// てだすけ から幽霊の技行が生まれ、ターンまで 1 つ挿入された)。
+// 実文は技名を 1 種しか含まないため、2 種以上の技名を含む文は
+// 技リスト表示とみなす。文中の種族名の部分文字列になる技名
+// (カイリキー中の かいりき) は技名の出現と数えない
+func isMoveListText(_ text: String) -> Bool {
+    let nt = normalize(text)
+    var found = Set<String>()
+    for (norm, _) in moveNameOrig {
+        if norm.isEmpty || norm.count < 2 { continue }
+        guard nt.contains(norm) else { continue }
+        var speciesPart = false
+        for sp in speciesDict where nt.contains(normalize(sp.ja)) {
+            if normalize(sp.ja).contains(norm) { speciesPart = true; break }
+        }
+        if !speciesPart { found.insert(norm) }
+    }
+    return found.count >= 2
+}
+
 func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     let boxes = ocrBoxes(image, x0: 0, y0: 0.66, x1: 1, y1: 1)
     // プレートが見えているとき、その文字だけをメッセージから除く。
@@ -8458,6 +8541,8 @@ func watchBattleMessage(image: CGImage, platesVisible: Bool) {
     if norm == lastMsgNorm && now.timeIntervalSince(lastMsgAt) < 4 { return }
     // コマンド選択中の文 (「〜は どうする？」等) はイベントではない
     if text.contains("どうする") || text.contains("選んでください") || text.contains("選ばれました") { lastMsgNorm = norm; lastMsgAt = now; return }
+    // 技リスト表示 (コマンド選択中) はイベントではない
+    if isMoveListText(text) { lastMsgNorm = norm; lastMsgAt = now; return }
     if translateBattleMessage(text) {
         lastMsgNorm = norm; lastMsgAt = now
     } else if salvageFromText(text) {
@@ -10736,7 +10821,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0553"
+let readerBuild = "20261123_0559"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
