@@ -3354,6 +3354,18 @@ function infProcessMove(ev) {
   for (const it of intents) applyEstIntent(it);
 }
 function bayesProcessMove(ev) { estimator.processMoveBayes(ev, estCtxAtTurnStart(ev.turn)); }
+// 行動前に倒された個体への先行証拠 (reader の spe イベント)。発火条件
+// (ターン開始から場に居続け、そのターン未行動で、この技で倒れた) は
+// reader 側で判定済み。文脈は行動順と同じくターン開始時点のパネル
+function faintOrderEv(ev) { return { turn: ev.turn, label: ev.fast, victimLabel: ev.slow, move: ev.move, victimMove: null }; }
+function infProcessFaintOrder(ev) {
+  if (typeof estimator.processFaintOrderInf !== 'function') return;
+  estimator.processFaintOrderInf(faintOrderEv(ev), estCtxAtTurnStart(ev.turn));
+}
+function bayesProcessFaintOrder(ev) {
+  if (typeof estimator.processFaintOrderBayes !== 'function') return;
+  estimator.processFaintOrderBayes(faintOrderEv(ev), estCtxAtTurnStart(ev.turn));
+}
 // パネルのランク補正を、そのターンの開始時点の控えで置き換えた控えを
 // 返す (控えが無ければ元のまま)。ダメージ計算そのものは現在値が正しい
 // ため、行動順の比較に使う側だけがこちらを使う
@@ -3801,6 +3813,7 @@ function applyState(j) {
       if (ev.k === 'mv') { infProcessMove(ev); bayesProcessMove(ev); }
       else if (ev.k === 'dmg') { infProcessDamage(ev); bayesProcessDamage(ev); }
       else if (ev.k === 'ab') { infProcessAbility(ev); }
+      else if (ev.k === 'spe') { infProcessFaintOrder(ev); bayesProcessFaintOrder(ev); }
     }
     estimator.setSeen(j.events.length);
     lastEventCount = j.events.length;
