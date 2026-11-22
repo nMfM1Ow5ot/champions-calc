@@ -16,7 +16,7 @@
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
   "data/names_ja.json": "6f900267d7914eef7feacd0487fb0fa354e2cb4cadadbff37e5b6c9a08e2c7bf",
   "data/pokedb_parsed.json": "bba36692be2b33ff42edeb7c62c8d0cd9b9c3cf2c123a7c95e49bec3b7c3fe63",
-  "data/preview_features.json": "3654ca888ab8ab524b83fd64c715c856df70f90ede12854d7101e1a8ccfd4590",
+  "data/preview_features.json": "960f640ca4f98bac79e83e949ce94b418bc3029296d64ec291f10a057c34ad33",
   "data/regulation.json": "a3bcac276afae8b0e433bfc3ad50b04ee10fd3dbdb0f5ce640797d73320ea50a",
   "data/spec_patches.json": "c6dc628c70e0078f72ea3891d6bf8c7ced14a1d40c25213cd91f2097f5c53f98",
   "data/species_abilities.json": "60de98a5b4c4294fcbf6b1f7a530a32de31d86f0784f5be492d4ef5f261d49c0",
@@ -37,7 +37,7 @@
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
-  "reader.swift": "6f492c902626eb2d6ee60c8f56cec7b7f26c9d61d8daa032e5500038b3275c4e",
+  "reader.swift": "f02e4e6e68cc82650c806e9a14d0c97cfb9ba891ae3e8bcf3e6ddd777fb93a5a",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "b146867535db8133b27eafdc9e76a928ef5b14b757c6c00cb4c41580e44e38e0",
   "start_all.sh": "00e187308c8f5ca940ca244afe12835d637ba10f6c81291baab371d5e85d645f",
@@ -48,5 +48,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_2301"
+ "rev": "20261122_2333"
 }
