@@ -27460,6 +27460,7 @@ function createEstimator(deps) {
   const effSpecies = deps.effSpecies;
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
   let VGC_SETS = null;
+  let SPECIES_MOVES = null;
   function syncData() {
     const d = deps.getData() || {};
     POKEDB_PARSED = d.POKEDB_PARSED ?? null;
@@ -27467,6 +27468,7 @@ function createEstimator(deps) {
     META_SETS = d.META_SETS ?? null;
     META_SETS_LOADED = !!d.META_SETS_LOADED;
     VGC_SETS = d.VGC_SETS ?? null;
+    SPECIES_MOVES = d.SPECIES_MOVES ?? null;
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
@@ -27951,7 +27953,18 @@ function createEstimator(deps) {
   function bayesMoveUpdate(ent, species, moves) {
     if (!ent || !ent.cands) return;
     const stats = bayesMoveStats(species);
-    const inUniverse = (mv) => stats && stats.marg.has(mv) || ent.cands.some((c) => c.moves.includes(mv) || c.movePool && c.movePool.includes(mv));
+    let learn = null;
+    if (SPECIES_MOVES) {
+      learn = SPECIES_MOVES[species] || null;
+      if (!learn) {
+        try {
+          const bs = gen.species.get(species);
+          if (bs && bs.baseSpecies) learn = SPECIES_MOVES[bs.baseSpecies] || null;
+        } catch (e) {
+        }
+      }
+    }
+    const inUniverse = (mv) => stats && stats.marg.has(mv) || learn && learn.includes(mv) || ent.cands.some((c) => c.moves.includes(mv) || c.movePool && c.movePool.includes(mv));
     moves = moves.filter(inUniverse);
     const prev = ent.revMoves || [];
     const added = moves.filter((mv) => !prev.includes(mv));
