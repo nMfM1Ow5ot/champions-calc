@@ -34,6 +34,7 @@ export function createEstimator(deps) {
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
   let speCtxSeq = 0, lastSpeAppliedId = 0; // 行動順の対判定の文脈の二重適用防止
+  let lastFaintCtx = null, faintCtxSeq = 0, lastFaintAppliedId = 0; // faintOrder の文脈と二重適用防止
   let pendingOpts = null; // processDamageInf が計算した場の条件を processDamageBayes が使う
   let teamContextSpecies = null; // 相手チームの種族一覧 (UI が setTeamContext で渡す)
   // 推論過程ログ (検証用): 更新のたびにスナップショットをキューへ積み、
@@ -1207,6 +1208,171 @@ function processMoveBayes(ev, io) {
   logSnapshot(ctx.species, ev.turn, { kind: 'moveOrder', move: ctx.oppMd ? ctx.oppMd.name : null, firstIsOpp: !!ctx.firstIsOpp,
     applied: res.applied, excluded: res.excluded, ...(res.applied ? {} : { inconsistent: true }), speFlag: ent.speFlag || null });
 }
+/* 行動前に倒されたポケモンに対する先行の証拠 (faintOrder):
+   技を出す前に倒れた個体は、そのターン行動していない。行動順は優先度枠
+   の順に処理されるため、行動しなかった事実から「倒れた側が選んでいた
+   技の枠は、使用者の枠以下だった」と分かる。倒れた側の取りうる枠の
+   最小値が使用者の枠と一致する場合に限り、枠は一致していたと確定でき、
+   順序は素早さで決まったと言える (battle_20261122_181745: Archaludon の
+   Steel Beam で行動前に倒れた自軍 Mega Gardevoir (最速 167) に対し、
+   スカーフなしでは 167 を超える候補が0件だったのに、技行が無いため
+   行動順の証拠が生成されなかった)。
+   発火条件 (そのターン場に出続けていて、まだ技を出しておらず、この技で
+   倒れた) の判定は呼び出し側 (reader/UI) の責務で、エンジンは渡された
+   イベントを証拠として取り込む。イベント形:
+   { turn, label: 使用者のラベル, victimLabel: 倒れた側のラベル,
+     move: 使用者の技, victimMove: 倒れた側が選んでいた技 (判明時のみ) } */
+// 負の優先度は、この環境の moveData (@smogon/calc 由来) では 0 と読めて
+// しまう (Dragon Tail や Trick Room の priority が未定義)。行動順の既存
+// 判定は「観測された技同士」の比較なのでその前提で動いているが、
+// faintOrder の倒れた側の枠の推論は「観測されていない技の可能性」を
+// 扱うため、負の優先度だけは正確な値で補正する (対象は第9世代で
+// 負の優先度を持つ全ての技)
+const NEGATIVE_PRIORITY = { 'Trick Room': -7, 'Dragon Tail': -6, 'Circle Throw': -6, 'Roar': -6, 'Whirlwind': -6, 'Teleport': -6 };
+function bracketOf(md, ability) {
+  const br = moveBracket(md, ability);
+  if (Object.prototype.hasOwnProperty.call(NEGATIVE_PRIORITY, md.name)) {
+    return { prio: NEGATIVE_PRIORITY[md.name] + (ability === 'Prankster' && md.category === 'Status' ? 1 : 0), last: br.last };
+  }
+  return br;
+}
+function faintOrderBuildCtx(ev, io) {
+  if (typeof ev.turn === 'number') infLogTurn = ev.turn;
+  const moverSide = labelSide(ev.label);
+  const moverSpecies = labelSpecies(ev.label);
+  const victimSpecies = labelSpecies(ev.victimLabel || '');
+  if (!moverSpecies || !victimSpecies) return null;
+  const firstIsOpp = moverSide === 'p2';
+  const oppSpecies = firstIsOpp ? moverSpecies : victimSpecies;
+  const moverSpec = (firstIsOpp ? io.opp[moverSpecies] : io.my[moverSpecies]) || null;
+  const victimSpec = (firstIsOpp ? io.my[victimSpecies] : io.opp[victimSpecies]) || null;
+  const mySpec = firstIsOpp ? victimSpec : moverSpec;
+  if (!moverSpec || !victimSpec || !mySpec) return null;
+  const md = moveData(ev.move);
+  if (!md) return null;
+  // 使用者側の適格性 (行動順の既存判定と同じ): 順序を乱す持ち物が判明
+  // している場合は順序から素早さを読めない
+  const ORDER_ITEMS = ['Quick Claw', 'Custap Berry', 'Lagging Tail', 'Full Incense'];
+  const moverItemKnown = moverSide === 'p1' || (moverSpec.corrected || []).includes('持ち物');
+  if (moverItemKnown && ORDER_ITEMS.includes(moverSpec.itemLost ? '' : moverSpec.item)) return null;
+  const moverAbKnown = moverSide === 'p1' || (moverSpec.corrected || []).includes('特性');
+  const moverBr = bracketOf(md, moverAbKnown ? moverSpec.ability : '');
+  if (moverSide === 'p1' && moverBr.last) return null;
+  if (moverAbKnown && moverSpec.ability === 'Gale Wings' && md.type === 'Flying') return null;
+  // 倒れた側が自軍の場合、順序を乱す持ち物を持っていたら対象外 (自軍は
+  // 持ち物が正確に分かる)。行動順の既存判定の自軍側チェックと同じ扱い。
+  // 倒れた側が相手の場合は候補ごとに判定する (ベイズ側)
+  if (firstIsOpp && ORDER_ITEMS.includes(mySpec.itemLost ? '' : mySpec.item)) return null;
+  // 倒れた側の枠の最小値を確定する
+  let victimMinPrio = null; // null = 種族レベルでは確定できない (ベイズ側で候補ごとに判定)
+  if (ev.victimMove) {
+    const vMd = moveData(ev.victimMove);
+    if (!vMd) return null;
+    const vAbKnown = firstIsOpp || (victimSpec.corrected || []).includes('特性');
+    const vBr = bracketOf(vMd, vAbKnown ? victimSpec.ability : '');
+    if (vBr.last) return null;
+    victimMinPrio = vBr.prio;
+  } else if (firstIsOpp) {
+    // 倒れた側が自軍なら技構成が全て分かるため、枠の最小値を確定できる
+    const moves = victimSpec.moves || [];
+    if (!moves.length) return null;
+    let mn = Infinity;
+    for (const m of moves) {
+      const mData = moveData(m);
+      if (!mData) return null; // 名前が解決できない技が混ざる場合は確定できない
+      const br = bracketOf(mData, victimSpec.ability);
+      if (br.last) { mn = -Infinity; break; }
+      if (br.prio < mn) mn = br.prio;
+    }
+    victimMinPrio = mn;
+  }
+  if (victimMinPrio != null && victimMinPrio !== moverBr.prio) return null;
+  // 自軍側の基準素早さ (倒れた側でも使用した側でも、自軍は実値が既知)
+  const myTable = statTable(effSpecies(mySpec));
+  const myRow = myTable?.spe.find(r => r.nature === mySpec.nature && r.sp === (mySpec.sp.spe || 0));
+  if (!myRow) return null;
+  const tw = s => ev.turn - infCtx.tailwindTurn[s] >= 0 && ev.turn - infCtx.tailwindTurn[s] < 4;
+  const trick = ev.turn - infCtx.trickRoomTurn >= 0 && ev.turn - infCtx.trickRoomTurn < 5;
+  const myEff = infEffSpe(myRow.value, mySpec.boosts, mySpec.itemLost ? '' : mySpec.item, mySpec.status, tw('p1'), mySpec.ability, io.field.weather, io.field.terrain, !!mySpec.unburden);
+  return { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: tw('p2'), oppMd: firstIsOpp ? md : null, myPrio: moverBr.prio, victimMinPrio, _id: ++faintCtxSeq };
+}
+function processFaintOrderInf(ev, io) {
+  const ctx = faintOrderBuildCtx(ev, io);
+  lastFaintCtx = ctx;
+  if (!ctx) return;
+  // 倒れた側の枠が種族レベルで確定できない場合 (相手が倒れ、選んでいた
+  // 技も不明) は制約交差では扱わず、候補ごとの判定 (ベイズ側) に委ねる
+  if (ctx.victimMinPrio == null) return;
+  const oppSpec = io.opp[ctx.species] || null;
+  if (!oppSpec) return;
+  const table = statTable(effSpecies(oppSpec));
+  if (!table) return;
+  const itemKnown = (oppSpec.corrected || []).includes('持ち物');
+  const abKnown = (oppSpec.corrected || []).includes('特性');
+  const feasible = new Set();
+  for (const row of table.spe) {
+    const eff = infEffSpe(row.value, oppSpec.boosts, itemKnown ? (oppSpec.itemLost ? '' : oppSpec.item) : '', oppSpec.status, ctx.twP2, abKnown ? oppSpec.ability : '', io.field.weather, io.field.terrain, !!oppSpec.unburden);
+    const ok = ctx.trick ? (ctx.firstIsOpp ? eff <= ctx.myEff : eff >= ctx.myEff) : (ctx.firstIsOpp ? eff >= ctx.myEff : eff <= ctx.myEff);
+    if (ok) feasible.add(row.nature + '|' + row.sp);
+  }
+  infIntersect(ctx.species, 'spe', feasible, null);
+}
+function processFaintOrderBayes(ev, io) {
+  const ctx = lastFaintCtx;
+  if (!ctx || ctx.turn !== ev.turn) return;
+  const ent = bayesEntry(ctx.species);
+  if (!ent) return;
+  if (ctx._id != null) { if (ctx._id === lastFaintAppliedId) return; lastFaintAppliedId = ctx._id; }
+  const panel = io.opp[ctx.species] || null;
+  const verdicts = ent.cands.map(c => {
+    const speVal = (panel && panel.mega && c.valuesMega) ? c.valuesMega.spe : c.values.spe;
+    if (speVal == null) return null;
+    const cAb = panel && panel.mega && c.megaAbility ? c.megaAbility : c.ability;
+    const itemForSpe = panel && panel.itemLost ? '' : (ent.speFlag || c.item);
+    if (ctx.firstIsOpp) {
+      // 使用者が相手: 候補の特性で使用者の技の枠がずれる場合を先に判定
+      if (ctx.oppMd) {
+        if (cAb === 'Gale Wings' && ctx.oppMd.type === 'Flying') return null;
+        const cBr = bracketOf(ctx.oppMd, cAb);
+        if (cBr.last) return !ctx.firstIsOpp;
+        if (cBr.prio !== ctx.myPrio) return (cBr.prio > ctx.myPrio) === ctx.firstIsOpp;
+      }
+      if (itemForSpe === 'Quick Claw' || itemForSpe === 'Custap Berry') return null;
+      if (itemForSpe === 'Lagging Tail' || itemForSpe === 'Full Incense') return !ctx.firstIsOpp;
+    } else {
+      // 倒れた側が相手: 候補の技プールの枠の最小値が使用者の枠と一致する
+      // 候補だけを素早さで判定する (一致しない候補は、より低い優先度の
+      // 技を選んでいた可能性を排除できない)
+      if (ctx.victimMinPrio == null) {
+        const pool = [...new Set([...(c.moves || []), ...(c.movePool || [])])];
+        if (!pool.length) return null;
+        let mn = Infinity;
+        for (const m of pool) {
+          const mData = moveData(m);
+          if (!mData) return null;
+          if (cAb === 'Gale Wings' && mData.type === 'Flying') return null;
+          const br = bracketOf(mData, cAb);
+          if (br.last) return null;
+          if (br.prio < mn) mn = br.prio;
+        }
+        if (mn !== ctx.myPrio) return null;
+      }
+      if (itemForSpe === 'Quick Claw' || itemForSpe === 'Custap Berry') return null;
+      if (itemForSpe === 'Lagging Tail' || itemForSpe === 'Full Incense') return true; // 枠内で最後尾のため後攻は素早さによらない
+    }
+    const eff = infEffSpe(speVal, panel ? panel.boosts : {}, itemForSpe, panel ? panel.status : '', ctx.twP2, cAb, io.field.weather, io.field.terrain, !!(panel && panel.unburden));
+    if (eff === ctx.myEff) return null; // 同速は乱数で決まるため残す
+    return ctx.trick ? (ctx.firstIsOpp ? eff < ctx.myEff : eff > ctx.myEff) : (ctx.firstIsOpp ? eff > ctx.myEff : eff < ctx.myEff);
+  });
+  const res = bayesHardSpe(ent, verdicts);
+  // 全候補と矛盾する場合は、矛盾の方向 (相手が速すぎる/遅すぎる) に
+  // 合わせて持ち物の仮説フラグを立てる (行動順と同じ仕組み)
+  if (!res.applied && !ent.speFlag) {
+    ent.speFlag = ctx.firstIsOpp ? (ctx.trick ? 'Iron Ball' : 'Choice Scarf') : (ctx.trick ? 'Choice Scarf' : 'Iron Ball');
+  }
+  logSnapshot(ctx.species, ev.turn, { kind: 'faintOrder', move: ev.move || null, firstIsOpp: !!ctx.firstIsOpp,
+    applied: res.applied, excluded: res.excluded, ...(res.applied ? {} : { inconsistent: true }), speFlag: ent.speFlag || null });
+}
 // 判明情報 (持ち物・特性) と矛盾する候補の減衰。同じ判明内容では再適用しない。
 // 判明技は bayesMoveUpdate が差分で適用する (技構成からの型予測)。
 // list は UI 側が相手パネルから作るスナップショット
@@ -1455,6 +1621,8 @@ function candRanges(args) {
     bayesReset();
     lastSpeCtx = null;
     lastSpeAppliedId = 0;
+    lastFaintCtx = null;
+    lastFaintAppliedId = 0;
   }
   return {
     reset,
@@ -1467,6 +1635,7 @@ function candRanges(args) {
     applyCounts: bayesApply,
     moveUpdate: bayesMoveUpdate,
     processDamageInf, processDamageBayes, processMoveInf, processMoveBayes,
+    processFaintOrderInf, processFaintOrderBayes,
     processAbility: infProcessAbility,
     applyRevealed, candRanges,
     setTeamContext,
