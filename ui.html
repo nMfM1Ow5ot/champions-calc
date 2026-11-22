@@ -3344,13 +3344,31 @@ function infProcessMove(ev) {
   for (const it of intents) applyEstIntent(it);
 }
 function bayesProcessMove(ev) { estimator.processMoveBayes(ev, estCtxAtTurnStart(ev.turn)); }
+// パネルのランク補正を、そのターンの開始時点の控えで置き換えた控えを
+// 返す (控えが無ければ元のまま)。ダメージ計算そのものは現在値が正しい
+// ため、行動順の比較に使う側だけがこちらを使う
+function withTurnStartBoosts(spec, sideKey, turn) {
+  if (!spec) return spec;
+  const snap = typeof turn === 'number' ? turnStartBoosts[turn] : null;
+  if (!snap) return spec;
+  const b = snap[sideKey + spec.species];
+  return b ? { ...spec, boosts: { ...b } } : spec;
+}
 function infProcessDamage(ev) {
   const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
-  estimator.processDamageInf(ev, { myAtk: infMySpec(a, ev, true), myDef: infMySpec(d, ev, false), basesAtk: infBases(a, ev, true), basesDef: infBases(d, ev, false) });
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const basesAtk = infBases(a, ev, true), basesDef = infBases(d, ev, false);
+  estimator.processDamageInf(ev, { myAtk, myDef, basesAtk, basesDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    basesAtkTS: basesAtk.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)), basesDefTS: basesDef.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)) });
 }
 function bayesProcessDamage(ev) {
   const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
-  estimator.processDamageBayes(ev, { myAtk: infMySpec(a, ev, true), myDef: infMySpec(d, ev, false), baseAtk: infOppBase(a, ev, true), baseDef: infOppBase(d, ev, false) });
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const baseAtk = infOppBase(a, ev, true), baseDef = infOppBase(d, ev, false);
+  estimator.processDamageBayes(ev, { myAtk, myDef, baseAtk, baseDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    baseAtkTS: withTurnStartBoosts(baseAtk, 'opp:', ev.turn), baseDefTS: withTurnStartBoosts(baseDef, 'opp:', ev.turn) });
 }
 function infProcessAbility(ev) { estimator.processAbility(ev, estCtx()); }
 function syncBayesRevealed() {
