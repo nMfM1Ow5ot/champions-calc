@@ -17,6 +17,21 @@ import Network
 // MARK: - 設定
 
 let scriptDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+
+// terminal 表示の限定 (2026-11-23、ユーザーの指示で一時的に有効):
+// 人間可読ログ以外の terminal 表示を出さない。このファイル内の
+// print は下の同名関数に解決され、限定中は握りつぶされる。人間
+// 可読ログの表示箇所だけは Swift.print を直接使って限定を素通り
+// させる。限定の解除は limitTerminalOutput を false に戻すだけ
+// (それ以外の表示経路には手を入れていない)。ファイルへの記録は
+// terminal 表示ではないため対象外
+var limitTerminalOutput = true
+
+func print(_ items: Any..., separator: String = " ", terminator: String = "\n") {
+    if !limitTerminalOutput {
+        Swift.print(items.map { String(describing: $0) }.joined(separator: separator), terminator: terminator)
+    }
+}
 let outURL = scriptDir.appendingPathComponent("state.json")
 let indexURL = scriptDir.appendingPathComponent("data/names_index.json")
 
@@ -3066,11 +3081,11 @@ func emitLog(_ line: String, applyNow: Bool) {
     }
     if let displayInsertAt {
         displayLog.insert(out[0], at: displayInsertAt)
-        print(out[0])
+        Swift.print(out[0])
     } else {
         for l in out {
             displayLog.append(l)
-            print(l)
+            Swift.print(l)
         }
     }
     fflush(stdout)
@@ -3255,6 +3270,21 @@ func resetLogState() {
 var battleArchiveId = ""        // 現在の試合のアーカイブ名 (開始時刻ベース)
 var battleArchived = false      // 現在の試合を logs/ へ保存済みか
 var lastArchiveSnapshotCount = -1  // 安全網の下書き保存をした時点の battleLog 行数
+
+// interrupted 保存 (未確定の試合ログの保存) は、ユーザーの指示
+// により一時的にすべて無効化している (2026-11-23)。対象は、
+// 安全網の検出に基づく下書き保存、次の試合の開始時の後始末と
+// しての保存、起動時の salvage の勝敗行なし側の保存のすべて。
+// 再有効化はこの値を true に戻すだけ。final の確定保存は対象外
+var interruptedSaveEnabled = false
+
+// 安全網の下書き保存が due か (条件は無効化前と同一)
+func safetyNetDraftDue() -> Bool {
+    interruptedSaveEnabled && logStarted && !battleArchived && !battleLog.isEmpty && !winLogged
+        && emptyBattleFrames > 30
+        && sNow().timeIntervalSince(lastLogEventAt) > 45
+        && battleLog.count != lastArchiveSnapshotCount
+}
 let logsDirURL = scriptDir.appendingPathComponent("logs")
 
 func battleStamp(for date: Date = sNow()) -> String {
@@ -3462,7 +3492,10 @@ func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [Stri
 func archiveCurrentBattle(final: Bool) {
     guard logStarted, !battleArchived, !battleLog.isEmpty else { return }
     let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
-    archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog, id: id)
+    // interrupted 無効化中はファイルだけを出さない (後始末は従来どおり)
+    if final || interruptedSaveEnabled {
+        archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog, id: id)
+    }
     paddleEndBattle()
     battleArchived = true
     battleBoundaryRequested = true
@@ -3667,8 +3700,10 @@ func salvageLeftoverLogs() {
     }
     let disp = (try? String(contentsOf: battleLogURL, encoding: .utf8)) ?? ""
     let dispLines = disp.isEmpty ? [] : disp.split(separator: "\n").map(String.init)
-    archiveBattleLogs(final: lines.contains(where: { $0.hasPrefix("|win|") }),
-                      protocolLines: lines, displayLines: dispLines, id: stamp + "_salvage", quiet: true)
+    if lines.contains(where: { $0.hasPrefix("|win|") }) || interruptedSaveEnabled {
+        archiveBattleLogs(final: lines.contains(where: { $0.hasPrefix("|win|") }),
+                          protocolLines: lines, displayLines: dispLines, id: stamp + "_salvage", quiet: true)
+    }
 }
 
 func startBattleLog() {
@@ -10939,10 +10974,7 @@ func runOnce(image: CGImage) {
             // Foxy2905 戦)。プレートが消えて 45 秒イベントが無ければ
             // 未確定の下書きとして保存する。確定保存ではないので
             // battleArchived は立てず、勝敗が確定すれば final 版が正になる
-            if logStarted && !battleArchived && !battleLog.isEmpty && !winLogged
-                && emptyBattleFrames > 30
-                && sNow().timeIntervalSince(lastLogEventAt) > 45
-                && battleLog.count != lastArchiveSnapshotCount {
+            if safetyNetDraftDue() {
                 archiveBattleLogs(final: false, protocolLines: battleLog, displayLines: displayLog,
                                   id: battleArchiveId.isEmpty ? battleStamp() : battleArchiveId)
                 lastArchiveSnapshotCount = battleLog.count
@@ -11117,7 +11149,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0802"
+let readerBuild = "20261123_0841"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
