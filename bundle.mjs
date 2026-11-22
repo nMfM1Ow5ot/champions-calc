@@ -27572,13 +27572,13 @@ function createEstimator(deps) {
     const e = infEntry(species);
     if (!feasible || !feasible.size) {
       e.dropped++;
-      logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false });
+      logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false, reason: "no-match" });
       return;
     }
     const next = e.pairs[statKey] ? new Set([...e.pairs[statKey]].filter((x) => feasible.has(x))) : feasible;
     if (!next.size) {
       e.dropped++;
-      logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false });
+      logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false, reason: "contradiction" });
       return;
     }
     let nh = null;
@@ -27586,7 +27586,7 @@ function createEstimator(deps) {
       nh = e.hpSps ? new Set([...e.hpSps].filter((x) => hpSps.has(x))) : hpSps;
       if (!nh.size) {
         e.dropped++;
-        logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false });
+        logSnapshot(species, infLogTurn, { kind: "inf", stat: statKey, applied: false, reason: "hp-contradiction" });
         return;
       }
     }
@@ -27630,13 +27630,22 @@ function createEstimator(deps) {
       const defSpec = ctx.myDef;
       const bases = ctx.basesAtk;
       const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
-      if (!defSpec || !bases.length || !table) return;
+      if (!defSpec || !bases.length || !table) {
+        logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-base" });
+        return;
+      }
       let inRange;
       if (typeof ev.amt === "number" && ev.amt > 0) inRange = (r) => r === ev.amt;
       else {
-        if (typeof ev.pct !== "number" || ev.pct <= 0) return;
+        if (typeof ev.pct !== "number" || ev.pct <= 0) {
+          logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
+          return;
+        }
         const M = specMaxHP(defSpec);
-        if (!M) return;
+        if (!M) {
+          logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
+          return;
+        }
         const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
         const [lo, hi] = amtRangeForPct(ev.pct, M, ko);
         inRange = (r) => r >= lo && r <= hi;
@@ -27662,7 +27671,10 @@ function createEstimator(deps) {
       const atkSpec = ctx.myAtk;
       const bases = ctx.basesDef;
       const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
-      if (!atkSpec || !bases.length || !table) return;
+      if (!atkSpec || !bases.length || !table) {
+        logSnapshot(defSpecies, ev.turn, { kind: "inf", stat: defKey, applied: false, reason: "no-base" });
+        return;
+      }
       const hpBySp = /* @__PURE__ */ new Map();
       for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
       const byValue = /* @__PURE__ */ new Map();
