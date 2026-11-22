@@ -3367,9 +3367,40 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             // オボンのみは回復と同時に消費される (たべのこしは消費されない)
             if itemJa == "オボンのみ" { noteItemLost(slot: slot, side: srcSide, speciesEn: speciesEn) }
         }
-        var line = "|-heal|\(slot): \(speciesEn)|\(hpText)"
-        if let src { line += "|[from] \(src.label)" }
-        emitLog(line)
+        // オボンと分類された回復にグラッシーフィールドの回復が
+        // 合算されている場合は 2 行に分ける。オボンの回復 (+最大の
+        // 1/4) を超えた分が地形の回復量 (最大の 1/16) に一致し、
+        // このターンの地形回復がまだ記録されていない場合に限る
+        // (実例: 2026-11-22 battle_20261122_201011 ターン7、
+        // 46 -> 96 (オボン) -> 108 (地形) の 2 イベントが +62 の
+        // 1 行に合算された。動画の静定値で分離確認済み)
+        var splitMidText: String? = nil
+        if src?.label == "item: Sitrus Berry",
+           logFieldTerrain == "Grassy",
+           grassyHealTurn[plateName] != currentTurn {
+            let hpParts = hpText.split(separator: "/")
+            if hpParts.count == 2,
+               let curU = Int(hpParts[0].trimmingCharacters(in: .whitespaces)),
+               let maxU = Int(hpParts[1].trimmingCharacters(in: .whitespaces)), maxU > 0 {
+                let fromU = Int((Double(effFrom) / 100.0 * Double(maxU)).rounded())
+                let berryAmt = maxU / 4
+                let terrainAmt = curU - fromU - berryAmt
+                let expectT = maxU / 16
+                let tol = maxU == 100 ? 3 : 2
+                if terrainAmt > 0 && abs(terrainAmt - expectT) <= tol {
+                    splitMidText = "\(fromU + berryAmt)/\(maxU)"
+                }
+            }
+        }
+        if let mid = splitMidText {
+            emitLog("|-heal|\(slot): \(speciesEn)|\(mid)|[from] item: Sitrus Berry")
+            emitLog("|-heal|\(slot): \(speciesEn)|\(hpText)|[from] Grassy Terrain")
+            grassyHealTurn[plateName] = currentTurn
+        } else {
+            var line = "|-heal|\(slot): \(speciesEn)|\(hpText)"
+            if let src { line += "|[from] \(src.label)" }
+            emitLog(line)
+        }
     }
     if toPct == 0 { deferFaint(slot: slot, speciesEn: speciesEn) }
     return true
@@ -9746,7 +9777,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2112"
+let readerBuild = "20261122_2120"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
