@@ -1273,6 +1273,19 @@ function pokeTetsuURL(spec) {
   else if (sp.endsWith('-F') && sd.baseSpecies && sp === sd.baseSpecies + '-F') suf = 'f';
   return `https://yakkun.com/ch/zukan/n${num}${suf}`;
 }
+// pokedb (champs.pokedb.tokyo) の種族ページ。使用率データのコードを
+// 引くため、データに無い種族 (pokedb にページが無い) は null
+function pokedbURL(spec) {
+  if (!USAGE_SETS) return null;
+  const sp = effSpecies(spec);
+  const sets = USAGE_SETS.sets || USAGE_SETS;
+  let u = sets[idOf(sp)];
+  if (!u) { const base = gen.species.get(idOf(sp))?.baseSpecies; if (base && base !== sp) u = sets[idOf(base)]; }
+  if (!u || !u.code) return null;
+  const sm = /(\d+)/.exec((REG && REG.season) || '');
+  const rule = (REG && REG.rule) || 1;
+  return `https://champs.pokedb.tokyo/pokemon/show/${u.code}` + (sm ? `?season=${sm[1]}&rule=${rule}` : '');
+}
 function natureMark(spec, key) {
   const ud = NAT_UPDOWN[spec.nature];
   if (!ud || key === 'hp') return null;
@@ -2124,7 +2137,7 @@ function pokeInfo(side) {
   return `<div class="pokeinfo">
     <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
     <div class="infomain">
-      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><button class="tgl" data-poketetsu="${side}" title="ポケモン徹底攻略 (ポケ徹) でこのポケモンのページを開く">ポケ徹</button></div>
+      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><button class="tgl" data-poketetsu="${side}" title="ポケモン徹底攻略 (ポケ徹) でこのポケモンのページを開く">ポケ徹</button>${pokedbURL(spec) ? `<button class="tgl" data-pokedb="${side}" title="pokedb でこのポケモンのページを開く">pokedb</button>` : ''}</div>
       <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}<button class="tgl${spec.hand ? ' on' : ''}" data-hand="${side}" title="てだすけ (このポケモンの技の威力が1.5倍)">てだすけ</button>${statusDDHTML(side, spec)}</div>
       <div class="secondline">
         <div class="hpbar"><i style="width:${hp}%"></i></div>
@@ -2832,6 +2845,12 @@ document.addEventListener('click', e => {
   if (pt) {
     const url = pokeTetsuURL(DS(pt.dataset.poketetsu));
     if (url) window.open(url, 'poketetsu', 'popup=yes,width=1100,height=800');
+    return;
+  }
+  const pdb = t.closest('[data-pokedb]');
+  if (pdb) {
+    const url = pokedbURL(DS(pdb.dataset.pokedb));
+    if (url) window.open(url, 'pokedb', 'popup=yes,width=1100,height=800');
     return;
   }
   const zb = t.closest('[data-zmove]');
