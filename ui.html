@@ -1272,6 +1272,18 @@ function koFmt(t) {
 }
 
 /* ---------- import / export ---------- */
+// レギュレーションの「特別な要素」(公式サイトのレギュレーション情報に
+// ある項目) によって、メガ進化・テラスタル・Zワザ・ダイマックスの
+// 可否が決まる。M-◯ の M はメガ進化を示す。regulation.json に特別な
+// 要素の情報が載るようになったらそちらを優先し、それまでは内蔵の
+// 判定 (M- で始まるレギュレーションはメガ進化のみ) でまかなう
+function regulationMechanics(reg) {
+  const se = REG && reg === REG.regulation ? (REG.specialElements || REG.mechanics) : null;
+  if (Array.isArray(se)) return { mega: se.includes('mega'), tera: se.includes('tera'), z: se.includes('z'), dynamax: se.includes('dynamax') };
+  if (se && typeof se === 'object') return { mega: !!se.mega, tera: !!se.tera, z: !!se.z, dynamax: !!se.dynamax };
+  if (typeof reg === 'string' && reg.startsWith('M-')) return { mega: true, tera: false, z: false, dynamax: false };
+  return null;
+}
 function exportText(spec) {
   // Showdown の Teams.exportSet (sim/teams.ts) の出力形式に合わせる。
   // ただし努力値は M-C の作法に合わせ、EVs: 行に SP の値をそのまま
@@ -1287,9 +1299,9 @@ function exportText(spec) {
     head,
     `Ability: ${spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability}`,
     'Level: 50',
-    // M-C はメガ進化のルールでテラスタルが無いため、テラスタイプ行は
-    // 出さない (他のレギュレーションでは従来どおり出す)
-    ...(spec.teraType && currentRegulation() !== 'M-C' ? [`Tera Type: ${spec.teraType}`] : []),
+    // テラスタイプ行は、そのレギュレーションの特別な要素にテラスタル
+    // が含まれている場合だけ出す
+    ...(spec.teraType && ((m) => !m || m.tera)(regulationMechanics(currentRegulation())) ? [`Tera Type: ${spec.teraType}`] : []),
   ];
   const evParts = STATJ.filter(([k]) => (spec.sp[k] || 0) > 0)
     .map(([k]) => `${spec.sp[k]} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
