@@ -20,11 +20,24 @@ fi
 echo "最新のファイルに同期します..."
 python3 sync_ui.py --force || true
 
-# 起動時点の版番号を表示する (版番号の正本は ui_rev.txt で、
-# 変更検知用の ui_version.txt の指紋とは別物)
-REV=$(cat ui_rev.txt 2>/dev/null | tr -d '[:space:]')
+# 起動一式の版番号を表示する。表示するのは UI だけの版ではなく、
+# 起動時同期で揃えた同期対象一式 (reader.swift・serve.py・データ等)
+# を代表する版として、公開マニフェスト (ui_manifest.json) の rev を
+# 使う。取得できない場合は手元の ui_rev.txt で代替する (push 時には
+# 両方へ同じ値が書かれるため、通常は一致する)
+REV=$(python3 -c "
+import json, urllib.request
+try:
+    with urllib.request.urlopen('https://raw.githubusercontent.com/nMfM1Ow5ot/champions-calc/main/ui_manifest.json', timeout=5) as r:
+        print(json.load(r).get('rev', ''))
+except Exception:
+    print('')
+" 2>/dev/null | tr -d '[:space:]')
+if [ -z "$REV" ]; then
+  REV=$(cat ui_rev.txt 2>/dev/null | tr -d '[:space:]')
+fi
 if [ -n "$REV" ]; then
-  echo "現在の rev: $REV"
+  echo "現在の rev (同期対象一式): $REV"
 fi
 
 # UI サーバを裏で起動し、終了時に一緒に止める。
