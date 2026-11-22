@@ -28451,7 +28451,7 @@ function createEstimator(deps) {
         if (over) {
           trig.dir = "over";
           const want = md.category === "Physical" ? "Choice Band" : md.category === "Special" ? "Choice Specs" : null;
-          if (want && !ent.dmgFlag) {
+          if (want && !ent.dmgFlag && !ent.itemKnown) {
             ent.dmgFlag = want;
             trig.dmgFlagSet = want;
           }
@@ -28487,14 +28487,15 @@ function createEstimator(deps) {
       let counts = ent.cands.map((c, i) => pctCounts(c, rollsList[i]));
       const trig = { kind: "damage", move: md.name, by: "mine", pct: ev.pct, crit: !!ev.crit };
       if (!counts.some((n) => n > 0)) {
-        const under = ent.cands.every((c, i) => {
+        const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
+        const under = !ko && ent.cands.every((c, i) => {
           const rolls = rollsList[i];
           if (!rolls || !c.values.hp) return false;
           return ev.pct < Math.min(...rolls.map((r) => Math.floor(r / c.values.hp * 100)));
         });
         if (under) {
           trig.dir = "under";
-          if (md.category === "Special" && !ent.dmgFlag) {
+          if (md.category === "Special" && !ent.dmgFlag && !ent.itemKnown) {
             ent.dmgFlag = "Assault Vest";
             trig.dmgFlagSet = "Assault Vest";
           }
@@ -28570,8 +28571,10 @@ function createEstimator(deps) {
       const corr = p.corrected || [];
       const normItem = (v) => v == null ? null : (NAMES._itemJa2en || {})[v] || v;
       const normAbility = (v) => v == null ? null : (NAMES._abilityJa2en || {})[v] || v;
-      const item = p.itemLost ? "" : corr.includes("\u6301\u3061\u7269") ? normItem(p.item || "") : null;
-      const ability = corr.includes("\u7279\u6027") ? normAbility(p.ability) : null;
+      const itemRaw = p.itemLost ? "" : corr.includes("\u6301\u3061\u7269") ? normItem(p.item || "") : null;
+      const abilityRaw = corr.includes("\u7279\u6027") ? normAbility(p.ability) : null;
+      const item = itemRaw === "" && !p.itemLost ? null : itemRaw;
+      const ability = abilityRaw === "" ? null : abilityRaw;
       const key = (item ?? "?") + "|" + (ability ?? "?");
       if (key === ent.revKey) continue;
       if (item === null && ability === null) continue;
@@ -28586,7 +28589,8 @@ function createEstimator(deps) {
       }
       const hardMode = (itemHard || ability !== null) && survivorMass > 0;
       let applied = false;
-      if (itemHard && item) {
+      if (item !== null) {
+        ent.itemKnown = true;
         ent.speFlag = null;
         ent.dmgFlag = null;
       }
