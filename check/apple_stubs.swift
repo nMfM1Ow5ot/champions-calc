@@ -63,6 +63,7 @@ public class VNRequest { public init() {} }
 public enum VNRequestTextRecognitionLevel { case accurate, fast }
 public class VNRecognizedText {
     public var string: String = ""
+    public var confidence: Float = 0
     public init() {}
 }
 public class VNRecognizedTextObservation {
