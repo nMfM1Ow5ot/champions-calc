@@ -32,7 +32,7 @@
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
   "fetch_species_abilities.mjs": "1f1221256a11ead833ec1a18a73e65bdb71c70f651b7bc800ed7d7db7afc1603",
   "fetch_species_moves.mjs": "0c9ee8b701167e5c03fbbe4e2b3693ac33e079cfd386b0cde83af39eee495817",
-  "fetch_usage.mjs": "e6e2df5d0b361c2b78c19a1f9a4ce97f70bc4ef502e898133358f82fe30af44b",
+  "fetch_usage.mjs": "2bfd811b5d6479b6e19d9608e7a2685425131bd2d57cb452e4a53ab021a6485f",
   "fetch_vgcpastes.mjs": "38142ebadf2ec7bb473204e070dfdd388c159548ed47a51e6fb3ab8c6abef75e",
   "my_team.json": "e330417f6b212c50fd6db205301adce41c7a22756602af4724e3a8d2cb6f7bad",
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
@@ -48,5 +48,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261122_1026"
+ "rev": "20261122_1028"
 }
