@@ -1248,15 +1248,20 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
   }
 }
 // crit の後付け是正: 急所の確定 (reader の crit イベント) が、対応する
-// ダメージ証拠の処理より後に届いた場合の取り込み口。記録済みの入力
-// スナップショットを使い、(1) inf 側は feasible を急所ありで再計算して
-// 履歴を差し替えた上で交差状態を再構築し、(2) ベイズ側は未是正版の
-// 尤度寄与を割り戻して急所ありの尤度で掛け直す。是正対象イベントが
-// 立てた dmgFlag が急所込みでは立たない場合は下ろす
+// ダメージ証拠の処理より後に届いた場合の取り込み口 (Inf → Bayes の順)。
+// 再評価の材料は、元の証拠を処理した時点の入力スナップショットを使う
+// (変わる変数が crit だけになることを保証するため。UI から渡される
+// io はスナップショットが欠ける場合の fallback)。
+// processCritInf: inf 側の feasible を急所ありで再計算して履歴を
+// 差し替え、交差状態を再構築する。processCritBayes: ベイズ側の
+// 未是正版の尤度寄与を割り戻して急所ありの尤度で掛け直し、是正対象
+// イベントが立てた dmgFlag が急所込みでは立たない場合は下ろす
 // (battle_20261122_201011 seq33: 急所未伝達のまま Choice Band が立った)
-function processCrit(ev) {
+let pendingCritRec = null;
+function processCritInf(ev, io) {
   if (!ev || ev.atk == null || ev.def == null || !ev.move) return;
   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
+  pendingCritRec = null;
   const key = ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move;
   let rec = null;
   for (let i = dmgRecords.length - 1; i >= 0; i--) { if (dmgRecords[i].key === key && !dmgRecords[i].patched) { rec = dmgRecords[i]; break; } }
@@ -1266,25 +1271,35 @@ function processCrit(ev) {
   rec.patched = true;
   rec.ev.crit = true;
   rec.opts.crit = true;
-  // (1) inf 側: feasible を再計算して履歴を差し替え、交差状態を再構築する
+  const infCtx = rec.ctx || io;
   const collect = [];
-  processDamageInf(rec.ev, rec.ctx, rec.opts, collect);
+  processDamageInf(rec.ev, infCtx, rec.opts, collect);
   const touched = new Set();
   for (const ref of rec.infRefs) {
-    const nc = collect.find(c => c.species === ref.species && c.statKey === (infHistory[ref.species] && infHistory[ref.species][ref.idx] ? infHistory[ref.species][ref.idx].statKey : null));
-    if (nc && infHistory[ref.species] && infHistory[ref.species][ref.idx]) {
-      infHistory[ref.species][ref.idx] = { statKey: nc.statKey, feasible: nc.feasible ? new Set(nc.feasible) : nc.feasible, hpSps: nc.hpSps ? new Set(nc.hpSps) : null };
+    const hist = infHistory[ref.species];
+    const nc = hist && hist[ref.idx] ? collect.find(c => c.species === ref.species && c.statKey === hist[ref.idx].statKey) : null;
+    if (nc) {
+      hist[ref.idx] = { statKey: nc.statKey, feasible: nc.feasible ? new Set(nc.feasible) : nc.feasible, hpSps: nc.hpSps ? new Set(nc.hpSps) : null };
       touched.add(ref.species);
     }
   }
   for (const sp of touched) rebuildInfState(sp);
-  // (2) ベイズ側: 尤度の割り戻しと掛け直し、フラグの整合
+  pendingCritRec = { rec, key, infTouched: touched.size > 0 };
+}
+function processCritBayes(ev, io) {
+  const pc = pendingCritRec;
+  if (!pc || !ev) return;
+  if (ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move !== pc.key) return;
+  pendingCritRec = null;
+  const rec = pc.rec;
+  const logSpecies = rec.by === 'opp' ? rec.atkSpecies : rec.defSpecies;
   let flagCleared = null, bayesPatched = false;
   if (rec.bayes) {
     const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
     if (ent && ent.cands.length === rec.bayes.counts.length) {
+      const bayesCtx = rec.bayesCtx || rec.ctx || io;
       const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null };
-      processDamageBayes(rec.ev, rec.bayesCtx || rec.ctx, rec.opts, capture);
+      processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
       if (capture.counts) {
         if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) { ent.dmgFlag = null; flagCleared = rec.bayes.flagSet; }
         else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
@@ -1302,7 +1317,7 @@ function processCrit(ev) {
       }
     }
   }
-  logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: true, bayes: bayesPatched, inf: touched.size > 0, ...(flagCleared ? { flagCleared } : {}) });
+  logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: true, bayes: bayesPatched, inf: pc.infTouched, ...(flagCleared ? { flagCleared } : {}) });
 }
 function processMoveBayes(ev, io) {
   const ctx = lastSpeCtx;
@@ -1760,7 +1775,7 @@ function candRanges(args) {
 
   function reset() {
     inference = { seen: 0, bySpecies: {} };
-    dmgRecords = []; pendingDmgRecord = null; infHistory = {};
+    dmgRecords = []; pendingDmgRecord = null; infHistory = {}; pendingCritRec = null;
     infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
     infLastMove = null;
     dirty = false;
@@ -1783,7 +1798,7 @@ function candRanges(args) {
     applyCounts: bayesApply,
     moveUpdate: bayesMoveUpdate,
     processDamageInf, processDamageBayes, processMoveInf, processMoveBayes,
-    processFaintOrderInf, processFaintOrderBayes, processCrit,
+    processFaintOrderInf, processFaintOrderBayes, processCritInf, processCritBayes,
     processAbility: infProcessAbility,
     applyRevealed, candRanges,
     setTeamContext,
