@@ -1273,16 +1273,25 @@ function koFmt(t) {
 
 /* ---------- import / export ---------- */
 function exportText(spec) {
-  const spParts = STATJ.filter(([k]) => (spec.sp[k] || 0) > 0)
-    .map(([k, j]) => `${spec.sp[k]} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
+  // Showdown の Teams.exportSet (sim/teams.ts) の出力形式に合わせる。
+  // 努力値は EVs: 行に EV = SP×8 で書く (exportSet は保持値をそのまま
+  // 出力し、読み込み側も丸めない)。以前の SPs: 行は Showdown に無い
+  // フィールドで、読み込み時に無視されて努力値が落ちていた
+  const sp = effSpecies(spec);
+  let head = sp;
+  if (sp.endsWith('-F')) head += ' (F)';
+  else if (gen.species.get(idOf(sp + '-F'))) head += ' (M)';
+  if (spec.item) head += ' @ ' + spec.item;
   const lines = [
-    `${effSpecies(spec)}${spec.item ? ' @ ' + spec.item : ''}`,
+    head,
     `Ability: ${spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability}`,
     'Level: 50',
     ...(spec.teraType ? [`Tera Type: ${spec.teraType}`] : []),
-    `${spec.nature} Nature`,
   ];
-  if (spParts.length) lines.push(`SPs: ${spParts.join(' / ')}`);
+  const evParts = STATJ.filter(([k]) => (spec.sp[k] || 0) > 0)
+    .map(([k]) => `${spec.sp[k] * 8} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
+  if (evParts.length) lines.push(`EVs: ${evParts.join(' / ')}`);
+  lines.push(`${spec.nature} Nature`);
   for (const mv of spec.moves || []) if (mv) lines.push(`- ${mv}`);
   return lines.join('\n');
 }
