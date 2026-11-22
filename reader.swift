@@ -2861,6 +2861,13 @@ func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int,
             grassyHealTurn[plateName] = currentTurn
             return ("Grassy Terrain", nil)
         }
+        // 持ち物が消費済みと判明している個体に、たべのこし はあり
+        // 得ない (実例: 2026-11-22 battle_20261122_201011、T7 に
+        // オボンのみが発動した自軍ガオガエンのグラスフィールド
+        // 回復が、T8 に たべのこし の判明行へ化けた。自軍の判明は
+        // applyEvent が記録しないため knownItem が未判明のままに
+        // なる経路の対策)
+        if itemLostActive.contains(key) { return nil }
         if knownItem == nil || knownItem == "たべのこし" { return ("item: Leftovers", "たべのこし") }
         return nil
     }
@@ -3017,6 +3024,10 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     // この呼び出しで「低下の疑わしさ」が解けたかどうか (下の解消で
     // suspectJump は消えるため、ここで控える)
     var clearedDropSuspect = false
+    // この呼び出しが「疑わしい 0% の保留の解消 (通常処理への落下)」
+    // かどうか。ひんし記録済みでも、この経路の KO 行だけは出す
+    // (下の post-faint 抑制の例外判定に使う)
+    var suspectZeroFallthrough = false
     // 疑わしい大きな跳びの解消: 保留していた値と同じ読みが次のターン
     // でも続くなら、誤読は内部状態の方だったとみなし、行を出さずに
     // 値だけを取り込む (実例: 2026-11-21 battle_20261121_230402、
@@ -3034,6 +3045,7 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
             // post_suspect 保留に再び捕まらないため)
             suspectJump[plateName] = nil
             clearedDropSuspect = false
+            suspectZeroFallthrough = true
         } else if toPct == sj.toPct {
             if currentTurn > sj.turn {
                 suspectJump[plateName] = nil
@@ -3056,7 +3068,13 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
     // 再登場には影響しない。実例: 2026-11-22
     // battle_20261122_185505、ひんし済みの Garchomp に 36/185 の
     // 幻回復が 2 回と、2 回目のひんし行が出た)
-    if faintedSpecies.contains(key) {
+    // ただし、その種族自身の「まだ出ていない ひんしに至る被ダメ行」
+    // は抑制しない。被ダメが疑わしい跳びとして保留されている間に
+    // ひんしが先に記録されると、保留解除後の行まで消えてしまい、
+    // ひんし行だけが残る (実例: 2026-11-22 battle_20261122_201011、
+    // ゴリランダーの 100 -> 0 が post_faint_suppressed で消えた)
+    if faintedSpecies.contains(key),
+       !(toPct == 0 && suspectZeroFallthrough) {
         debugCapture(kind: "faint_guard", key: "post_faint_line:\(key)", rawText: "",
                      detail: ["reason": "post_faint_suppressed", "slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "turn": currentTurn])
         return true
@@ -6902,6 +6920,14 @@ func translateBattleMessage(_ text: String) -> Bool {
             let missConsistent = (missTracked.map { sameSpeciesFamily($0, sp.en) } ?? false)
                 || pendingSwitchSpecies[missPn] == sp.en
                 || lastSwitchIn["\(side):\(sp.en)"]?.slot == slot
+                // 交代直後でプレートの占有記録が追いついていない間は、
+                // このターンの交代記録や交代候補の証拠でも通す
+                // (実例: 2026-11-22 battle_20261122_201011、交代直後の
+                // ゴリランダーへのミス文が、旧占有者の記録との不整合
+                // として抑制された)
+                || switchInTurn["\(side):\(sp.en)"] == currentTurn
+                || (pendingSwitchCandidates[side == "p2" ? "oppA" : "mineA"]?[sp.en] != nil)
+                || (pendingSwitchCandidates[side == "p2" ? "oppB" : "mineB"]?[sp.en] != nil)
             if missConsistent {
                 emitLog("|-miss|\(lastMoveLabel)|\(slot): \(sp.en)")
             } else {
@@ -7446,7 +7472,15 @@ func translateBattleMessage(_ text: String) -> Bool {
             var sSide = side
             let inOppF = lastSlots["oppA"]?.speciesEn == sp.en || lastSlots["oppB"]?.speciesEn == sp.en
             let inMineF = lastSlots["mineA"]?.speciesEn == sp.en || lastSlots["mineB"]?.speciesEn == sp.en
-            if inOppF && inMineF && lastMoveLabel.hasSuffix(": \(sp.en)")
+            if (t.contains("相手の") || t.contains("あいての")) && inOppF {
+                // 文中の明示の側マーカーは使用者の側の推定より優先する
+                // (実例: 2026-11-22 battle_20261122_201011、すてゼリフ
+                // の低下が、使用者と同種族の相手側ガオガエンに入る
+                // ところ、使用者自身へ帰属した)
+                sSide = "p2"
+            } else if t.contains("味方の") && inMineF {
+                sSide = "p1"
+            } else if inOppF && inMineF && lastMoveLabel.hasSuffix(": \(sp.en)")
                 && Date().timeIntervalSince(lastMoveMsgAt) < 10 {
                 sSide = lastMoveLabel.hasPrefix("p2") ? "p2" : "p1"
             }
@@ -9688,7 +9722,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_2010"
+let readerBuild = "20261122_2051"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
