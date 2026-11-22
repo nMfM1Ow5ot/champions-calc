@@ -129,6 +129,15 @@ func matchSpecies(texts: [String]) -> SpeciesEntry? {
         for t in texts {
             let tn = Array(normalize(t))
             if tn.count < 3 || abs(tn.count - n.count) > 2 { continue }
+            // 接頭辞だけの一致は採らない: 読み文字列が種族名の
+            // 先頭部分そのもので 2 文字以上短い場合、OCR の欠け
+            // ではなく、種族名の頭と一致するだけの画面上の語の
+            // 可能性が高い (実例: 対戦前のランク表示の「ランク」
+            // が ランクルス に編集距離の類似度 0.6 で一致し、
+            // 開幕の mineA プレートで毎試合 3 回ずつ幻読された。
+            // 2026-11-23 の 3 試合連続で種族・枠・回数まで同一)
+            if tn.count < n.count && n.count - tn.count >= 2
+                && Array(n.prefix(tn.count)) == tn { continue }
             let d = levenshtein(tn, n)
             let score = 1.0 - Double(d) / Double(max(tn.count, n.count))
             if score > bestScore { bestScore = score; best = e }
@@ -8604,6 +8613,15 @@ var previewTeamWritten = false             // このセッションで oppReset 
 var previewVotes: [[String: Int]] = []          // 枠ごとの種族別投票数
 var previewVoteScore: [[String: Double]] = []   // 枠ごとの種族別ベストスコア
 var previewLatestScore: [[String: Double]] = [] // 枠ごとの種族別・最新試行の候補スコア
+
+// 同じ種族のフォルム同士か (names_index の和名が一致する種族は
+// 同種のフォルム: ギルガルドの shield/blade、バクスレギオンの
+// 雌雄など)。マージの直接対決の例外判定に使う
+func pvSameFamily(_ a: String, _ b: String) -> Bool {
+    if a == b { return true }
+    guard let ja = speciesDict.first(where: { $0.en == a })?.ja, !ja.isEmpty else { return false }
+    return speciesDict.first(where: { $0.en == b })?.ja == ja
+}
 var previewLocked: [String?] = []               // 枠ごとの確定種族 (nil = 未確定)
 // 見せ合い同定の証拠: 同定のたびに最新のフレームと枠情報を保持し、
 // 試合が始まったらその試合のデバッグ同梱として書き出す (runOnce 参照)。
@@ -10294,6 +10312,9 @@ func runOnce(image: CGImage) {
                 // battle_20261121_161334 枠6、Psychic の Espathra が
                 // 最終試行の Grass 読みを押し切った)
                 var vetoed: [Set<String>] = Array(repeating: [], count: r.team.count)
+                // この回でロックが拒否により外れた枠。現行維持の
+                // 拒否免除 (下記) の対象から外すために記録する
+                var lockVetoedSlots: Set<Int> = []
                 for i in r.team.indices {
                     let lt = r.slots[i].types
                     guard !lt.isEmpty else { continue }
@@ -10304,6 +10325,7 @@ func runOnce(image: CGImage) {
                     }
                     if let locked = previewLocked[i], vetoed[i].contains(locked) {
                         previewLocked[i] = nil
+                        lockVetoedSlots.insert(i)
                     }
                     // 強い rival によるロック解除: ロックは decisive
                     // (プール 1 種) でも付くため、アイコン誤読で
@@ -10400,11 +10422,43 @@ func runOnce(image: CGImage) {
                             // 読みで最新の直接対決を守る理由がない
                             // (実例: 2026-11-23 battle_20261123_043809
                             // 枠4)。幾何の崩れた試行では候補内対決
-                            // 自体が信用できないため、例外は使わない
-                            if let inc = incumbents[i], inc != leader, !vetoed[i].contains(inc),
+                            // 自体が信用できないため、例外は使わない。
+                            // ただし leader と現行が同種のフォルム同士
+                            // の場合は、一貫していなくても直接対決を
+                            // 採る。フォルム同士は同じパネルの同じ
+                            // 切り出しへの相対比較であり、切り出しが
+                            // 正しい種族を捉えていること自体は両者の
+                            // スコアの良さで裏付けられる (実例:
+                            // 2026-11-23 battle_20261123_060833 枠5、
+                            // Aegislash-Shield 0.042 が Blade 0.056
+                            // に直接対決で勝ちながら、他の枠の誤読で
+                            // 一貫性が崩れて現行維持された)
+                            // 拒否の免除: 現行が最新試行のタイプ読みと
+                            // 重ならず拒否されていても、現行の最良
+                            // スコアが強く (0.15 以下)、かつ leader の
+                            // 最良より良い場合は、現行維持の判定に
+                            // 限って拒否を免除する。最新のタイプ読み
+                            // 自体が誤読なら、正しく読めた現行を
+                            // 拒否で消す理由がない (実例: 2026-11-23
+                            // battle_20261123_060833 枠6、Fire の
+                            // 単独アイコンを Dark と誤読され Torkoal
+                            // 0.135 が Mabosstiff 0.204 に拒否で
+                            // 負けた)。ただし、この回でロックが拒否
+                            // により外れた枠には使わない。誤った
+                            // ロックを後の正しい読みで覆すのが拒否の
+                            // 本来の役割で (実例: 2026-11-21
+                            // battle_20261121_161334 枠6 の Espathra)、
+                            // ロックされていた現行まで免除すると
+                            // その経路を塞いでしまう。ロックの解除や
+                            // 暫定 1 位の選出にも影響させない
+                            if let inc = incumbents[i], inc != leader,
+                               (!vetoed[i].contains(inc)
+                                   || (!lockVetoedSlots.contains(i)
+                                       && (previewVoteScore[i][inc] ?? 9) <= 0.15
+                                       && (previewVoteScore[i][inc] ?? 9) < (previewVoteScore[i][leader] ?? 9))),
                                previewVotes[i][inc, default: 0] >= previewVotes[i][leader, default: 0],
                                (previewVoteScore[i][inc] ?? 9) <= pvSoftGateScore,
-                               !(leader == r.team[i] && coherentLatest
+                               !(leader == r.team[i] && (coherentLatest || pvSameFamily(leader, inc))
                                    && previewLatestScore[i][leader] != nil
                                    && previewLatestScore[i][inc] != nil
                                    && previewLatestScore[i][leader]! < previewLatestScore[i][inc]!) {
@@ -10821,7 +10875,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0559"
+let readerBuild = "20261123_0634"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
