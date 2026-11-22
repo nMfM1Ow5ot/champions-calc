@@ -6720,8 +6720,10 @@ func translateBattleMessage(_ text: String) -> Bool {
             defaultAttribCount[ckey, default: 0] += 1
             if defaultAttribCount[ckey] == 2 {
                 let names = side == "p1" ? ["mineA", "mineB"] : ["oppA", "oppB"]
-                print("[log] 場にいない種族の文が繰り返し既定枠へ帰属されています: \(sp.en) (\(side)) — 現在の枠状態: \(names.map { "\($0)=\(lastSlots[$0]?.speciesEn ?? "（空き）")" }.joined(separator: ", "))")
-                fflush(stdout)
+                if debugMode {
+                    print("[log] 場にいない種族の文が繰り返し既定枠へ帰属されています: \(sp.en) (\(side)) — 現在の枠状態: \(names.map { "\($0)=\(lastSlots[$0]?.speciesEn ?? "（空き）")" }.joined(separator: ", "))")
+                    fflush(stdout)
+                }
                 debugCapture(kind: "default_attribution", key: "default_attribution:\(side):\(sp.en)", rawText: t,
                              detail: ["species": sp.en, "side": side, "count": 2, "turn": currentTurn,
                                       "slots": names.map { lastSlots[$0]?.speciesEn ?? "" }, "text": t])
@@ -9575,7 +9577,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1902"
+let readerBuild = "20261122_1905"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
