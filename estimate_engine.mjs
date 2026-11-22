@@ -637,7 +637,7 @@ function bayesCorpusCandidates(species, table, fallback) {
     if (!e || !e.species) continue;
     const full = metaFormeFullName(e);
     const isMega = full.includes('-Mega');
-    if (full !== species && !(species === base && e.species === base && isMega)) continue;
+    if (full !== species && !(species === base && e.species === base && isMega) && full !== fallback.megaSpecies) continue;
     const nature = metaNameEn('nature', e.nature);
     if (!nature) continue;
     const sp = {};
@@ -752,15 +752,26 @@ function bayesBuildCandidates(species) {
   if (!patterns.length || !natures.length) return bayesGenericCandidates(species, table);
   const topItem = items[0] || { en: '', rate: 0 };
   const topAbility = abilities[0] || { en: u.ability, rate: 0 };
+  // usage データに megaSpecies が無い場合、その種族が持ちうるメガストーンの
+  // 対応表 (gen のアイテムデータ。megaStone は {種族名: メガ種族名}) から
+  // 導出する。Floette-Eternal のように baseSpecies と種族名がずれるケース
+  // でも、ストーン側の対応キー (正確な種族名) で引くため誤対応は起きない
+  let megaSpecies = u.megaSpecies || undefined;
+  if (!megaSpecies) {
+    for (const it of itemsAll) {
+      const target = megaStoneTarget(it.en, species);
+      if (target) { megaSpecies = target; break; }
+    }
+  }
   let megaAbility;
-  if (u.megaSpecies) {
-    const ms = gen.species.get(idOf(u.megaSpecies));
+  if (megaSpecies) {
+    const ms = gen.species.get(idOf(megaSpecies));
     if (ms) megaAbility = Array.isArray(ms.abilities) ? ms.abilities[0] : Object.values(ms.abilities || {})[0];
   }
   const combos = [];
   for (const p of patterns) for (const n of natures) combos.push({ p, n, w: (p.rate + 0.5) * (n.rate + 0.5) });
   combos.sort((a, b) => b.w - a.w);
-  const mtable = u.megaSpecies ? statTable(u.megaSpecies) : null;
+  const mtable = megaSpecies ? statTable(megaSpecies) : null;
   const mk = (combo, item, ability, wMul) => {
     const sp = {};
     for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) sp[k] = combo.p.sp[k] || 0;
@@ -797,7 +808,7 @@ function bayesBuildCandidates(species) {
     else if (item.en === 'Life Orb') { phys *= 1.1; spec *= 1.1; }
     const profMoves = poolInfo.map(x => ({ en: x.en, s: (x.rate + 2) * (x.cat === '物理' ? phys : x.cat === '特殊' ? spec : statAff) }))
       .sort((a, b) => b.s - a.s).slice(0, 4).map(x => x.en);
-    return { nature: combo.n.en, sp, item: item.en, ability: ability.en, megaAbility, megaSpecies: u.megaSpecies || undefined,
+    return { nature: combo.n.en, sp, item: item.en, ability: ability.en, megaAbility, megaSpecies,
       moves: profMoves, movePool, moveExact: false, values, valuesMega, post: 0, _w: combo.w * Math.max(item.rate, 0.3) * Math.max(ability.rate, 0.3) * wMul * (hpFirstCand({ sp }) ? 1 : HP_FIRST_FACTOR) };
   };
   const raw = [];
@@ -869,7 +880,7 @@ function bayesBuildCandidates(species) {
   // コーパス側 7.5 割 (weight 按分) / pokedb 合成候補側 2.5 割 (使用率積)。
   // pokedb 候補と同一の型がコーパスにある場合は、その質量をコーパス候補へ
   // 寄せて二重計上を避ける。コーパスが無い種族は従来動作のまま
-  const corpus = bayesCorpusCandidates(species, table, { topAbility: topAbility.en, megaAbility, megaSpecies: u.megaSpecies || undefined });
+  const corpus = bayesCorpusCandidates(species, table, { topAbility: topAbility.en, megaAbility, megaSpecies });
   if (!corpus.length) return out.slice(0, 64);
   const keyOf = c => c.nature + '|' + JSON.stringify(c.sp) + '|' + c.item + '|' + c.ability + '|' + (c.megaSpecies || '');
   const byKey = new Map(corpus.map(c => [keyOf(c), c]));
@@ -1038,6 +1049,17 @@ function bayesHardSpe(ent, verdicts) {
 function isMegaStoneItem(item) {
   if (!item) return false;
   try { const it = gen.items.get(idOf(item)); return !!(it && it.megaStone); } catch (e) { return false; }
+}
+// メガストーンの対応表から、その種族のメガ種族名を引く。megaStone は
+// {種族名: メガ種族名} の対応で、キーは正確な種族名 (Floettite なら
+// 'Floette-Eternal': 'Floette-Mega')。対応が無ければ undefined
+function megaStoneTarget(item, species) {
+  if (!item) return undefined;
+  try {
+    const it = gen.items.get(idOf(item));
+    if (it && it.megaStone && typeof it.megaStone === 'object') return it.megaStone[species] || undefined;
+  } catch (e) { /* fallthrough */ }
+  return undefined;
 }
 function processDamageBayes(ev, ctx) {
   // 自分自身へのダメージは攻撃として処理せず、反動の経路へ回す
