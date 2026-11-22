@@ -638,6 +638,20 @@ function dynamicKoText(ctx) {
 }
 
 function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ, koCtx) {
+  // 乱数幅の内訳 (16 本)。多段技はヒットごとのロールを要素ごとに
+  // 合計して合計ダメージの 16 本にする (range() と一致する)
+  const rollsOf = (res) => {
+    const dm = res.damage;
+    if (Array.isArray(dm)) {
+      if (Array.isArray(dm[0])) {
+        const totals = new Array(16).fill(0);
+        for (const hit of dm) { if (!Array.isArray(hit)) continue; for (let ri = 0; ri < 16; ri++) totals[ri] += hit[ri] || 0; }
+        return totals;
+      }
+      return dm.slice();
+    }
+    return typeof dm === 'number' ? [dm] : null;
+  };
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
@@ -652,16 +666,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
         try {
           const r = calculate(gen, attackers[i], defenders[j], moveObj, useField);
           const range = r.range();
-          // 乱数幅の内訳 (16 本)。多段技はヒットごとのロールを要素ごとに
-          // 合計して合計ダメージの 16 本にする (range() と一致する)
-          const dm = r.damage;
-          let rolls = null;
-          if (Array.isArray(dm)) {
-            if (Array.isArray(dm[0])) {
-              rolls = new Array(16).fill(0);
-              for (const hit of dm) { if (!Array.isArray(hit)) continue; for (let ri = 0; ri < 16; ri++) rolls[ri] += hit[ri] || 0; }
-            } else rolls = dm.slice();
-          } else if (typeof dm === 'number') rolls = [dm];
+          const rolls = rollsOf(r);
           const defMaxHP = defenders[j].maxHP();
           let koText = r.kochance().text;
           let descText = r.desc();
@@ -680,6 +685,15 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
               !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[j]));
             if (fb) { koText = fb; descText = descText + ' -- ' + fb; }
           }
+          // 反対の急所状態の範囲 (通常表示の下に急所分を併記するため。
+          // 急所トグルが ON のときは通常分が入る)
+          let alt = null;
+          try {
+            const altMove = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : undefined, !(critFlags && critFlags[i]), !!(moveZ && moveZ[i] && moveZ[i][mv]), spec);
+            const ra = calculate(gen, attackers[i], defenders[j], altMove, useField);
+            const ar = ra.range();
+            alt = { min: ar[0], max: ar[1], minPct: Math.round(ar[0] / defMaxHP * 1000) / 10, maxPct: Math.round(ar[1] / defMaxHP * 1000) / 10, rolls: rollsOf(ra) };
+          } catch (e) { alt = null; }
           row.vs.push({
             min: range[0], max: range[1],
             minPct: Math.round(range[0] / defMaxHP * 1000) / 10,
@@ -687,6 +701,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             ko: koText,
             desc: descText,
             rolls,
+            alt,
           });
         } catch (e) {
           row.vs.push({ error: e.message });
