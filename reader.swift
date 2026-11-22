@@ -556,6 +556,7 @@ func recognitionMainLoop() -> Never {
         flushSkippedEvidence()
         paddlePollResults()
         paddleSupervise()
+        pollFlagControl()
         var item: FrameHandoff.Item? = nil
         if !boundaryDrainItems.isEmpty { item = boundaryDrainItems.removeFirst() }
         else { item = frameHandoff.dequeue() }
@@ -1272,7 +1273,7 @@ func jsonEscape(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: 
 // 追加・変更するときは必ずここを更新すること (ハーネスが、実際に生成
 // した state.json のキーと突き合わせて検証する。aurora/veil のような
 // キー名の食い違いを機械で検出するため)
-let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "hazards", "oppReset", "oppPreview", "battle", "minePreview", "mineTeam"]
+let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "hazards", "oppReset", "oppPreview", "battle", "minePreview", "mineTeam", "battlePhase", "flagMode"]
 let stateMonKeys: Set<String> = ["species", "curHPPercent", "status", "unburden", "itemLost", "mega", "megaSpecies", "boosts", "revealed"]
 let stateBoostKeys: [String] = ["atk", "def", "spa", "spd", "spe", "acc", "eva"]  // boosts は常時この7能力をそろえて出す
 let stateRevealedKeys: Set<String> = ["moves", "item", "ability"]
@@ -1365,7 +1366,8 @@ func writeState() {
     // 材料 (前の対戦の自動コンディションが次の対戦に残る事故の対策)
     let battleJson = battleArchiveId.isEmpty ? "" : ", \"battle\": \"\(battleArchiveId)\""
     let eventsJson = ", \"events\": [\(battleEvents.joined(separator: ", "))]"
-    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(mineTeamJson)\(revJson)\(trainer)\(rankJson)\(ratingJson)\(battleJson)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)}"
+    let flagJson = ", \(flagStateFragment())"
+    let json = "{\"mine\": [\(mine.joined(separator: ", "))], \"opps\": [\(opps.joined(separator: ", "))]\(team)\(mineTeamJson)\(revJson)\(trainer)\(rankJson)\(ratingJson)\(battleJson)\(eventsJson), \"field\": \(field)\(scJson)\(hzJson)\(flagJson)}"
     if json == lastWritten { return }
     lastWritten = json
     try? json.write(to: outURL, atomically: true, encoding: .utf8)
@@ -1750,6 +1752,69 @@ func mergeMineDetailFromCapture() {
     }
 }
 var winLogged = false                             // このバトルで勝敗が確定したか
+// 手動フラグモード: 試合開始・終了のフラグは自動で立てず、ダメ計 UI
+// 上部のボタン (serve.py の POST /battle_flag 経由で flag_control.json
+// に記録される連番つき要求) でのみ立てる。出荷状態は手動モード。
+// mode が auto の間は制御ファイルの要求を無視し、全て従来どおり
+// 自動で立つ (自動経路のコードは削除していない)
+var flagManualMode = true                         // 制御ファイルの mode で決まる (ファイルが無ければ manual)
+var flagStartSeqSeen = 0                          // 取り込み済みの開始要求の連番
+var flagEndSeqSeen = 0                            // 取り込み済みの終了要求の連番
+var flagControlAdopted = false                    // 起動後の最初の取り込みが済んだか (古い要求を再生しない)
+var flagControlExists = false                     // 制御ファイルの有無 (監視用)
+var flagControlMtime: Date? = nil                 // 制御ファイルの更新時刻 (監視用)
+
+func flagPhase() -> String { (logStarted && !winLogged) ? "inBattle" : "idle" }
+func flagModeName() -> String { flagManualMode ? "manual" : "auto" }
+func flagStateFragment() -> String { "\"battlePhase\": \"\(flagPhase())\", \"flagMode\": \"\(flagModeName())\"" }
+
+// 制御ファイルの要求を取り込む。判断部分は applyFlagControl に分けて
+// ある (ハーネスで検証できるように)。起動後の最初の取り込みでは、
+// 連番を「取り込み済み」として採用するだけで要求は実行しない
+func applyFlagControl(mode: String, startSeq: Int, endSeq: Int) {
+    flagManualMode = (mode != "auto")
+    if !flagControlAdopted {
+        flagControlAdopted = true
+        flagStartSeqSeen = startSeq
+        flagEndSeqSeen = endSeq
+        return
+    }
+    if startSeq > flagStartSeqSeen {
+        flagStartSeqSeen = startSeq
+        if flagManualMode && (!logStarted || winLogged) {
+            startBattleLog()
+            inBattle = true
+        }
+    }
+    if endSeq > flagEndSeqSeen {
+        flagEndSeqSeen = endSeq
+        if flagManualMode && logStarted && !winLogged {
+            winLogged = true
+            archiveCurrentBattle(final: true)
+            inBattle = false
+        }
+    }
+}
+
+func pollFlagControl() {
+    let url = scriptDir.appendingPathComponent("flag_control.json")
+    let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+    let mtime = attrs?[.modificationDate] as? Date
+    let exists = attrs != nil
+    if flagControlAdopted && exists == flagControlExists && mtime == flagControlMtime { return }
+    flagControlExists = exists
+    flagControlMtime = mtime
+    var mode = "manual"
+    var startSeq = 0
+    var endSeq = 0
+    if exists, let data = try? Data(contentsOf: url),
+       let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+        if let m = obj["mode"] as? String { mode = m }
+        startSeq = (obj["startSeq"] as? NSNumber)?.intValue ?? 0
+        endSeq = (obj["endSeq"] as? NSNumber)?.intValue ?? 0
+    }
+    applyFlagControl(mode: mode, startSeq: startSeq, endSeq: endSeq)
+}
 var lastLogEventAt = Date.distantPast              // 最後にログ行が出た時刻 (開始直後の監視継続用)
 var lastMoveSigAt: [String: Date] = [:]           // "枠|技EN" -> |move| を出した時刻 (OCR ゆれでの二重出力防止)
 var lastMoveSigSeq: [String: Int] = [:]           // "枠|技EN|tN" -> その技行を出した時点の行動番号 (境界検出の遅れ判定)
@@ -2604,7 +2669,7 @@ func emitLog(_ line: String, applyNow: Bool) {
     // ヘッダーなしで追記され、2 試合が 1 ファイルに連結していた。
     // startBattleLog 内のヘッダー行は resetLogState で winLogged が
     // 落ちた後に emitLog されるため、ここで再帰はしない
-    if winLogged { startBattleLog() }
+    if winLogged && !flagManualMode { startBattleLog() }
     // フィールド開始行は、特性行が先行する配置では出力時点で
     // [from] 帰属を付けた形にする (fieldLineWithAttribution)
     let line = fieldLineWithAttribution(line)
@@ -4603,7 +4668,7 @@ func processPlates(_ hits: [String: SlotState]) {
     // 前試合と異なる種族のプレートが現れた (= 次試合の開始証拠なので、
     // 前試合のログへ連結しないよう先に新しい試合を始める。同試合の余韻で
     // プレートが変わらない間は始め直さない)
-    if !logStarted || (winLogged && hits.contains { (name, s) in lastSlots[name]?.speciesEn != s.speciesEn }) {
+    if !flagManualMode && (!logStarted || (winLogged && hits.contains { (name, s) in lastSlots[name]?.speciesEn != s.speciesEn })) {
         // 選出画面を経ずにプレートから対戦が始まった場合は、開始処理を
         // 取りこぼしている (対戦開始時に画面がキーボード等で覆われていた、
         // アプリが裏画面だった等。2026-11-21 のユーザー報告)。相手の先発は
@@ -6742,7 +6807,7 @@ func parseLogScreen(image: CGImage) -> Bool {
     if debugMode {
         if debugMode { print("ログ画面診断: ターン=\(turnFound.map { "\($0)" } ?? "不明 (\(tn) として処理)") チップ=\(chipHits.count)件") }
     }
-    if !logStarted || winLogged { startBattleLog() }
+    if !flagManualMode && (!logStarted || winLogged) { startBattleLog() }
     scanFieldHeader(boxes)
     if tn > currentTurn {
         // 文面系統が数え上げより先行 = コマンドフェーズの取りこぼし。
@@ -7265,8 +7330,12 @@ func translateBattleMessage(_ text: String) -> Bool {
         if won { emitLog("|win|\(trainerMine.isEmpty ? "p1" : trainerMine)") }
         else { emitLog("|win|\(oppName.isEmpty ? "p2" : oppName)") }
         if !oppName.isEmpty { trainerOpp = oppName }
-        winLogged = true
-        archiveCurrentBattle(final: true)
+        // 手動モードでは勝敗行だけを記録し、フラグと確定保存は
+        // 終了ボタンの押下まで遅らせる
+        if !flagManualMode {
+            winLogged = true
+            archiveCurrentBattle(final: true)
+        }
         return true
     }
     if t.contains("あきらめた") {
@@ -7275,8 +7344,10 @@ func translateBattleMessage(_ text: String) -> Bool {
         forfeitName = oppGaveUp ? (trainerOpp.isEmpty ? "Opponent" : trainerOpp) : (trainerMine.isEmpty ? "You" : trainerMine)
         emitPendingFaints()
         emitLog("|win|\(oppGaveUp ? (trainerMine.isEmpty ? "p1" : trainerMine) : (trainerOpp.isEmpty ? "p2" : trainerOpp))")
-        winLogged = true
-        archiveCurrentBattle(final: true)
+        if !flagManualMode {
+            winLogged = true
+            archiveCurrentBattle(final: true)
+        }
         return true
     }
     // 無操作による対戦終了: 「相手の操作がありませんでした！対戦を終了します！」
@@ -7294,13 +7365,13 @@ func translateBattleMessage(_ text: String) -> Bool {
         if oppIdle && !mineIdle {
             forfeitName = trainerOpp.isEmpty ? "Opponent" : trainerOpp
             emitLog("|win|\(trainerMine.isEmpty ? "p1" : trainerMine)")
-            winLogged = true
+            if !flagManualMode { winLogged = true }
         } else if mineIdle && !oppIdle {
             forfeitName = trainerMine.isEmpty ? "You" : trainerMine
             emitLog("|win|\(trainerOpp.isEmpty ? "p2" : trainerOpp)")
-            winLogged = true
+            if !flagManualMode { winLogged = true }
         }
-        archiveCurrentBattle(final: true)
+        if !flagManualMode { archiveCurrentBattle(final: true) }
         return true
     }
     // 急所: 「(相手の) Xの 急所に 当たった！」
@@ -7482,7 +7553,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     }
     // 繰り出し (相手): 場の左右はプレートが決めるため、ここでは登録だけ行う
     if t.contains("繰り出した") {
-        if !logStarted || winLogged { startBattleLog() }
+        if !flagManualMode && (!logStarted || winLogged) { startBattleLog() }
         if trainerOpp.isEmpty, let r = t.range(of: "は") {
             let name = String(t[..<r.lowerBound])
             if !name.isEmpty && name.count <= 20 { trainerOpp = name }
@@ -7505,7 +7576,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 繰り出し (自分): 「ゆけっ！ A！ B！」の並び順 = 場の左右 (実機で確認)。
     // Vision は小さい「っ」を「つ」と読むことが多いため両方を拾う
     if t.contains("ゆけっ") || t.contains("ゆけつ") {
-        if !logStarted || winLogged { startBattleLog() }
+        if !flagManualMode && (!logStarted || winLogged) { startBattleLog() }
         // 先発の登録は対戦開始時だけ。途中交代の繰り出し文をここで処理すると
         // 「並び順 = 左右」の前提で誤った枠に |switch| を出してしまう
         // (実例: 2026-11-20、イエッサンの交代要員オオニューラが p1a に
@@ -10728,6 +10799,8 @@ func runOnce(image: CGImage) {
                 obj["field"] = [String: Any]()
                 if !previewTeamWritten { obj["oppReset"] = true }
                 obj["oppPreview"] = true
+                obj["battlePhase"] = flagPhase()
+                obj["flagMode"] = flagModeName()
                 obj["oppTeam"] = previewBestTeam.map { $0 as Any? ?? NSNull() }
                 if minePreviewTeam.contains(where: { $0 != nil }) {
                     obj["minePreview"] = true
@@ -10760,7 +10833,7 @@ func runOnce(image: CGImage) {
                     //  preview_id の team が食い違った)。確定前に画面が
                     //  切り替わった場合は、繰り出し文・プレート・ログ
                     //  画面等の従来経路がその時点の最良マージで開始する
-                    if !logStarted || winLogged { startBattleLog() }
+                    if !flagManualMode && (!logStarted || winLogged) { startBattleLog() }
                 }
             } else if previewAttempts >= 4 {
                 // 4 回試みても何も同定できなかった: 従来通りリセットする。
@@ -10775,9 +10848,9 @@ func runOnce(image: CGImage) {
                         // events の蓄積全件を併せる (選出形の書き出し
                         // と同じ手当て)
                         let snapInBattle = logStarted && !winLogged && !battleArchiveId.isEmpty
-                        var json = "{\"mine\": [], \"opps\": [], \"oppTeam\": [], \"oppReset\": true, \"field\": {}}"
+                        var json = "{\"mine\": [], \"opps\": [], \"oppTeam\": [], \"oppReset\": true, \"field\": {}, \"battlePhase\": \"\(flagPhase())\", \"flagMode\": \"\(flagModeName())\"}"
                         if snapInBattle {
-                            let obj: [String: Any] = ["mine": [Any](), "opps": [Any](), "oppTeam": [Any](), "oppReset": true, "field": [String: Any](), "battle": battleArchiveId, "events": battleEventsObjects()]
+                            let obj: [String: Any] = ["mine": [Any](), "opps": [Any](), "oppTeam": [Any](), "oppReset": true, "field": [String: Any](), "battle": battleArchiveId, "events": battleEventsObjects(), "battlePhase": flagPhase(), "flagMode": flagModeName()]
                             if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
                                let s = String(data: data, encoding: .utf8) {
                                 json = s
@@ -10831,7 +10904,7 @@ func runOnce(image: CGImage) {
     }
     // ゲーム内ログ画面が開いていれば、そちらのエントリをログに取り込む
     if parseLogScreen(image: image) {
-        inBattle = true
+        if !flagManualMode { inBattle = true }
         emptyBattleFrames = 0
         writeState()
         return
@@ -10879,7 +10952,7 @@ func runOnce(image: CGImage) {
         return
     }
     emptyBattleFrames = 0
-    inBattle = true
+    if !flagManualMode { inBattle = true }
     lastFramePlatesMissing = false
     processPlates(hits)
     // plate_stale 監視: 確定済みの枠だけ長くヒットが無い場合、その時点の
@@ -11044,7 +11117,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0757"
+let readerBuild = "20261123_0802"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
