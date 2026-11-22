@@ -3290,6 +3290,7 @@ function calcPanelSnap(spec) {
     species: effSpecies(spec), nature: spec.nature || '',
     ability: (spec.mega && spec.megaAbility) ? spec.megaAbility : (spec.ability || ''),
     item: spec.itemLost ? '' : (spec.item || ''),
+    ...(spec.itemLost && spec.item ? { lostItem: spec.item } : {}),
     sp: { ...spec.sp }, boosts: { ...spec.boosts }, status: spec.status || '',
     hp: spec.curHPPercent ?? 100, moves: [...(spec.moves || [])],
   };
@@ -3485,6 +3486,15 @@ function syncBayesRevealed() {
     if ((spec.corrected || []).includes('特性')) prev.ability = spec.ability;
     prev.itemLost = prev.itemLost || !!spec.itemLost;
     prev.mega = prev.mega || !!spec.mega;
+  }
+  // 判明した持ち物の名前がある場合は、消費済み (itemLost) をエンジンへ
+  // 一緒に渡さない。エンジンの applyRevealed は itemLost が立つと名前を
+  // 捨てて「持ち物なし判明」として扱うため、消費と同時に判明した持ち物
+  // (オボンのみ等) が推定へ届かなかった (battle_20261123_062508 の
+  // Milotic: seq46 で item:'' の soft な記録になり、確定情報が落ちた)。
+  // 消費の反映はパネル側の itemLost が担い、計算からは既に外れている
+  for (const e of bySpecies.values()) {
+    if (e.item && (e.corrected || []).includes('持ち物')) e.itemLost = false;
   }
   estimator.applyRevealed([...bySpecies.values()]);
 }
