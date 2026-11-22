@@ -3657,8 +3657,7 @@ async function poll() {
     if (rv.ok) {
       const v = (await rv.text()).trim();
       if (noteVersionChange(v) === 'reload') { location.reload(); return; }
-      const rl = document.getElementById('revLine');
-      if (rl && uiVersionSeen) rl.textContent = 'rev ' + uiVersionSeen;
+      fillRevLine();
     }
   } catch (e) { /* ローカルコピーのみで動作 */ }
   try {
@@ -3767,17 +3766,33 @@ document.getElementById('specSel')?.addEventListener('change', e => {
 });
 
 /* ---------- init ---------- */
-// タイトル下の rev 表示: ui_version.txt が無い環境 (GitHub Pages 等) では
-// ui_rev.txt から一度だけ補う。通常環境では poll が ui_version.txt で埋める
-(async () => {
+// タイトル下の rev 表示は版番号の正本である ui_rev.txt の値を出す。
+// ui_version.txt は同期側が書く変更検知用の指紋 (ハッシュ) で、表示に
+// 使うと版数らしくない文字列になるため、検知 (noteVersionChange) 専用
+// とする。表示は読み込み時点の ui_rev.txt で固定する (新しい版が同期
+// されても、リロードで反映されるまでは実行中の版数を出し続ける)。
+// ui_rev.txt がどうしても読めない場合だけ、最後の手段として指紋を出す
+let uiRevText = '';
+let revFetchTries = 0;
+async function fillRevLine() {
+  if (uiRevText) return;
+  if (revFetchTries >= 300) {
+    const el = document.getElementById('revLine');
+    if (el && !el.textContent && uiVersionSeen) el.textContent = 'rev ' + uiVersionSeen;
+    return;
+  }
+  revFetchTries++;
   try {
     const r = await fetch('./ui_rev.txt', { cache: 'no-store' });
     if (!r.ok) return;
     const t = (await r.text()).trim();
+    if (!t) return;
+    uiRevText = t;
     const el = document.getElementById('revLine');
-    if (el && t && !el.textContent) el.textContent = 'rev ' + t;
+    if (el) el.textContent = 'rev ' + t;
   } catch (e) {}
-})();
+}
+fillRevLine();
 const LOADER_ITEMS_JA = regDataLoader('items_ja', '持ち物名', true, async () => {
   const { json: ij, source } = await fetchCriticalJson('data/items_ja.json');
   if (!ij || typeof ij !== 'object' || !Object.keys(ij).length) throw new Error('items_ja: bad shape');
