@@ -637,6 +637,19 @@ let battleResetPending = false;
 let lastEventCount = 0;
 let lastBattleKey = null;
 let inferLog = [];
+let uiErrors = [];
+function errText(e) { return String((e && e.message) || e); }
+function errStack(e) { return String((e && e.stack) || '').split('\n').slice(0, 4).join(' <- '); }
+// 例外の記録 (後日の成果物で「どこで・なぜ止まったか」を追えるように)。
+// メモリ上に保持してデバッグスナップショットに含めるほか、対戦中は
+// 推論ログのアーカイブにもマーカーとして残す (自動で送られるため)
+function recordUiError(rec) {
+  const entry = { at: new Date().toISOString(), ...rec };
+  uiErrors.push(entry);
+  if (uiErrors.length > 50) uiErrors.splice(0, uiErrors.length - 50);
+  try { console.error('[ui-error]', entry.where, entry.message); } catch (e) {}
+  if (lastBattleKey) inferLog.push({ at: entry.at, battle: lastBattleKey, uiError: entry });
+}
 // 推論過程ログの対戦別アーカイブ (試合キー → 記録配列)。リセットをまたいでも
 // 同一対戦分は蓄積し続け、送信は常に対戦分の全件を送る (リセット後の記録
 // だけでファイルを上書きし、対戦前半の記録が失われる事故の再発防止)
@@ -3905,17 +3918,27 @@ function applyState(j) {
   }
   if (Array.isArray(j.events)) {
     if (j.events.length < estimator.getSeen()) resetInference();
+    // 1件の不良イベントで対戦全体の推論が止まらないよう、取り込みは
+    // 1つずつ例外から守り、ポインタはイベントごとに進める。失敗した
+    // 取り込みは recordUiError で記録に残す (battle_20261123_060833 の
+    // ターン4で Weather Ball 以降の証拠が無音で欠落した件の手当て)
+    const guardEv = (ev, i, fn) => {
+      try { fn(); } catch (e) {
+        recordUiError({ where: 'event', index: i, kind: ev && ev.k, turn: ev && ev.turn, move: (ev && ev.move) || null, message: errText(e), stack: errStack(e) });
+      }
+    };
     for (let i = estimator.getSeen(); i < j.events.length; i++) {
       const ev = j.events[i];
-      if (!ev || typeof ev !== 'object') continue;
-      if (typeof ev.turn === 'number') { expireAutoSide(ev.turn); if (curTurn === null || ev.turn > curTurn) curTurn = ev.turn; if (prevPanelBoosts && !turnStartBoosts[ev.turn]) turnStartBoosts[ev.turn] = prevPanelBoosts; }
-      if (ev.k === 'mv') { infProcessMove(ev); bayesProcessMove(ev); }
-      else if (ev.k === 'dmg') { infProcessDamage(ev); bayesProcessDamage(ev); }
-      else if (ev.k === 'ab') { infProcessAbility(ev); }
-      else if (ev.k === 'spe') { infProcessFaintOrder(ev); bayesProcessFaintOrder(ev); }
-      else if (ev.k === 'crit') { infProcessCrit(ev); bayesProcessCrit(ev); }
+      if (ev && typeof ev === 'object') {
+        if (typeof ev.turn === 'number') { expireAutoSide(ev.turn); if (curTurn === null || ev.turn > curTurn) curTurn = ev.turn; if (prevPanelBoosts && !turnStartBoosts[ev.turn]) turnStartBoosts[ev.turn] = prevPanelBoosts; }
+        if (ev.k === 'mv') { guardEv(ev, i, () => infProcessMove(ev)); guardEv(ev, i, () => bayesProcessMove(ev)); }
+        else if (ev.k === 'dmg') { guardEv(ev, i, () => infProcessDamage(ev)); guardEv(ev, i, () => bayesProcessDamage(ev)); }
+        else if (ev.k === 'ab') { guardEv(ev, i, () => infProcessAbility(ev)); }
+        else if (ev.k === 'spe') { guardEv(ev, i, () => infProcessFaintOrder(ev)); guardEv(ev, i, () => bayesProcessFaintOrder(ev)); }
+        else if (ev.k === 'crit') { guardEv(ev, i, () => infProcessCrit(ev)); guardEv(ev, i, () => bayesProcessCrit(ev)); }
+      }
+      estimator.setSeen(i + 1);
     }
-    estimator.setSeen(j.events.length);
     lastEventCount = j.events.length;
     syncEstDirty();
     if (infDirty) { infDirty = false; changed = true; }
@@ -3977,7 +4000,12 @@ async function poll() {
     const r = await fetch('./state.json', { cache: 'no-store' });
     if (r.ok) {
       const txt = await r.text();
-      if (txt !== lastStateText) { lastStateText = txt; lastStateChangeAt = Date.now(); applyState(JSON.parse(txt)); }
+      if (txt !== lastStateText) {
+        lastStateText = txt; lastStateChangeAt = Date.now();
+        // 例外は外側の catch で静かに飲まず、記録に残す (止まった理由を
+        // 後日の成果物で追えるようにする)
+        try { applyState(JSON.parse(txt)); } catch (e) { recordUiError({ where: 'applyState', message: errText(e), stack: errStack(e) }); }
+      }
     }
   } catch (e) { /* not running under a server */ }
   if (pendingReload && Date.now() - lastStateChangeAt > 10 * 60 * 1000) { location.reload(); return; }
@@ -4003,6 +4031,7 @@ function debugSnapshot() {
     uiState: state,
     uiFlags: ui,
     loadStatus: JSON.parse(JSON.stringify(loadStatus)),
+    uiErrors,
     calc: lastCalc,
     estimator: (() => { try { return estimator._debug(); } catch (e) { return null; } })(),
     inferenceLog: inferLog,
