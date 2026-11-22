@@ -207,9 +207,10 @@ def sync_loop():
                 # 解消するため、保留は最大でもその間だけ
                 pass
             elif _battle_in_progress():
-                if not sync_deferred:
-                    sync_deferred = True
-                    print("[sync] 対戦中のため、同期の反映を対戦終了まで保留します", flush=True)
+                # 保留の開始表示は出さない (2026-11-22 のユーザー
+                # 指示)。保留の動作そのものと、対戦終了時の再開表示
+                # は従来どおり
+                sync_deferred = True
             else:
                 if sync_deferred:
                     sync_deferred = False
@@ -658,7 +659,7 @@ def _save_calc_log(body):
     検証できないものは ValueError を送出する。保存先は
     logs/battle_<キー>_calclog.json で、同じ試合への再送は
     上書きする (UI はその試合の蓄積全件を送る方式のため)。
-    推論過程ログと同水準の検証・同型の受け取り表示にする。
+    推論過程ログと同水準の検証にする (受け取り表示は出さない)。
     """
     try:
         data = json.loads(body)
@@ -675,14 +676,8 @@ def _save_calc_log(body):
     name = f"battle_{battle}_calclog.json"
     with open(os.path.join(LOG_DIR, name), "wb") as f:
         f.write(body)
-    # 推論過程ログと同じく、起動前に終わった試合分は保存だけして
-    # 受け取り表示を出さない (起動時に過去分の処理が走っている
-    # ように見せないため)。判定は対象範囲の判定 (試合の開始時刻
-    # 基準) で行う
-    ended_before_start = not _in_session_scope(_gate_key(battle))
-    if not ended_before_start:
-        _announce_receipt(("calclog", battle), "ダメ計ログ",
-                          name, len(data["entries"]))
+    # ダメ計ログの受け取り表示は出さない (2026-11-22 のユーザー
+    # 指示)。保存は従来どおり毎回行う
     return name
 
 
@@ -838,6 +833,15 @@ def _save_sent_battles(keys):
         pass
 
 
+def _announce_battle_sent(gk):
+    """その試合のログ一式がすべて送信完了したことを 1 行で知らせる
+    (2026-11-22 のユーザー指示)。送信済みの記録への取り込みが
+    完了の判定で、記録された試合につき 1 回だけ出る。対象範囲外の
+    試合 (過去分の取り込み) は静かに記録だけする"""
+    if _in_session_scope(gk):
+        print(f"[log] battle_{gk} の試合ログをすべて送信しました", flush=True)
+
+
 def _update_sent_battles(state, names, known):
     """送信済みとして記録すべき試合を sent_battles.json へ反映する。
 
@@ -869,10 +873,12 @@ def _update_sent_battles(state, names, known):
             if final_known:
                 sent.add(gk)
                 changed = True
+                _announce_battle_sent(gk)
         elif all(state.get(n) == _file_hash(os.path.join(LOG_DIR, n))
                  for n in gnames):
             sent.add(gk)
             changed = True
+            _announce_battle_sent(gk)
     if changed:
         _save_sent_battles(sent)
 
