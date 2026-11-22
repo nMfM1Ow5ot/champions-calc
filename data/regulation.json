@@ -3,8 +3,10 @@
  "rule": 1,
  "season": "M-8",
  "specPatch": null,
- "specialElements": ["mega"],
- "updated": "2026-11-21",
+ "specialElements": [
+  "mega"
+ ],
+ "updated": "2026-11-22",
  "species": [
   "Aerodactyl",
   "Alakazam",
