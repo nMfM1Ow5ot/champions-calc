@@ -275,6 +275,8 @@ let obsMaxBytes = 32 * 1024 * 1024
 //   3. fold: 濁点・半濁点を畳んだ照合 (種族引き)
 //   4. tsu: 畳み + ッ→ツ + 長音落ちの照合 (種族引き。場・チームの裏付け必須)
 //   5. loose: looseText 空間での照合 (持ち物の救済等)
+//   6. glyph: 字形混同 (カタカナ⇔漢字) の 1 文字置換に限る照合
+//      (種族引き。場・チームの裏付け必須。ミロカロス→三ロカロス等)
 func recordDecode(stage: String, raw: String, resolved: String) {
     recordObservation(pass: "decode", region: [0, 0, 0, 0],
                       boxes: [(text: stage + "|" + raw + "|" + resolved,
@@ -3447,8 +3449,11 @@ func checkHeaderMismatch(slot: String, speciesEn: String) {
 // 見せ合いの同定結果 (同系統フォルムを除く) と食い違う場合は、黙って
 // 選ばず証拠として残す。状態の決定方法は変えない (フェーズ2の HP と
 // 同じ方針)
-func crossCheckPlateSpecies(slot: String, speciesEn: String) {
-    let list: [String] = slot.hasPrefix("mine")
+func crossCheckPlateSpecies(plateName: String, speciesEn: String) {
+    // 自他はプレート枠名 (mineA 等) で判定する。プロトコル枠 (p1a 等) で
+    // 判定すると自軍枠が相手の見せ合いリストと照合されて誤発火する
+    // (実例: 2026-11-22 battle_20261122_160927 の debug12)
+    let list: [String] = plateName.hasPrefix("mine")
         ? minePreviewEvidence.compactMap { $0["species"] as? String }
         : previewEvidenceTeam.compactMap { $0 }
     guard list.count >= 4, !list.contains(speciesEn) else { return }
@@ -3456,9 +3461,9 @@ func crossCheckPlateSpecies(slot: String, speciesEn: String) {
         let fam = Set(formeGroup(e).map { $0.en })
         if !fam.isDisjoint(with: list) { return }
     }
-    debugCapture(kind: "species_disagree", key: "species_disagree:\(slot):\(speciesEn)",
+    debugCapture(kind: "species_disagree", key: "species_disagree:\(plateName):\(speciesEn)",
                  rawText: "",
-                 detail: ["slot": slot, "species": speciesEn, "preview": list,
+                 detail: ["slot": plateName, "species": speciesEn, "preview": list,
                           "source": "plate", "turn": currentTurn, "readerBuild": readerBuild])
 }
 
@@ -3637,7 +3642,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     && faintedSlots.keys.contains { $0.hasPrefix(side) } && awaitingReplacement(prefix, side)
                     && pendingSwitchAge < 20
                 if !replacementBusy {
-                    crossCheckPlateSpecies(slot: slot, speciesEn: s.speciesEn)
+                    crossCheckPlateSpecies(plateName: plate.name, speciesEn: s.speciesEn)
                     // 前の種族のランク変化・かるわざの解除は、下の |switch| 行の
                     // applyEvent が行う (交代に伴う状態変化は行から導く)
                     // 入場時点の HP と前回出場時の HP の差は、交代で入った
@@ -4047,6 +4052,44 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
             if backed && (best == nil || e.ja.count > best!.ja.count) { best = e }
         }
         if let b = best { recordDecode(stage: "tsu", raw: text, resolved: b.en) }
+    }
+    // 字形混同 (ミロカロス→三ロカロス のようにカタカナが似た漢字に
+    // 化ける) は上の全段で拾えないため、同長で 1 文字だけ食い違い、
+    // その位置がカタカナと漢字の混同である場合に限る照合を最終段と
+    // して置く (復号段の第6段: glyph)。カタカナ同士の置換まで広げる
+    // と、緩い照合でしか解けない崩れ名で場の登録まで進んでしまう
+    // (ハーネス T89c の否定条件)。tsu 段と同じく、場かチームで
+    // 裏付けが取れた候補だけを採る
+    if best == nil {
+        let tArr = Array(t)
+        func isKana(_ c: Character) -> Bool {
+            c.unicodeScalars.allSatisfy { (0x30A0...0x30FF).contains($0.value) || (0x3040...0x309F).contains($0.value) }
+        }
+        func isKanji(_ c: Character) -> Bool {
+            c.unicodeScalars.allSatisfy { (0x4E00...0x9FFF).contains($0.value) }
+        }
+        for e in speciesDict where !e.ja.isEmpty {
+            let nArr = Array(normalize(e.ja))
+            if nArr.count < 4 || tArr.count < nArr.count { continue }
+            var hit = false
+            outer: for start in 0...(tArr.count - nArr.count) {
+                var diffs = 0
+                for k in 0..<nArr.count {
+                    let a = tArr[start + k], b = nArr[k]
+                    if a == b { continue }
+                    diffs += 1
+                    if diffs > 1 { break }
+                    if !((isKana(a) && isKanji(b)) || (isKanji(a) && isKana(b))) { diffs = 2; break }
+                }
+                if diffs == 1 { hit = true; break outer }
+            }
+            guard hit else { continue }
+            let anch = fieldAnchoredSpecies(e)
+            let backed = lastSlots.values.contains { $0.speciesEn == anch.en }
+                || teamEntries[anch.en] != nil || oppTeamSeen.contains(anch.en)
+            if backed && (best == nil || e.ja.count > best!.ja.count) { best = e }
+        }
+        if let b = best { recordDecode(stage: "glyph", raw: text, resolved: b.en) }
     }
     return best
 }
@@ -8302,11 +8345,30 @@ func plateGender(buf: (data: [UInt8], w: Int, h: Int), nameCx: Double, nameCy: D
     return nil
 }
 
+// プレートの名前ボックスは種族名 (と性別記号・Lv 表記) だけのはずで、
+// 種族名以外の文字が残るボックスは文の断片とみなす
+func isPlateNameText(_ text: String, species: SpeciesEntry) -> Bool {
+    var rest = normalize(text)
+    rest = rest.replacingOccurrences(of: species.norm, with: "")
+    let allowed = CharacterSet(charactersIn: "♂♀・:：Lv.0123456789０１２３４５６７８９ ")
+    return rest.unicodeScalars.allSatisfy { allowed.contains($0) }
+}
+
 func locatePlates(image: CGImage) -> [String: SlotState] {
     let boxes = ocrBoxes(image, x0: 0, y0: 0, x1: 1, y1: 1)
     var cands: [(entry: SpeciesEntry, box: OcrBox)] = []
     for b in boxes {
-        if let sp = matchSpecies(texts: [b.text]) { cands.append((entry: sp, box: b)) }
+        // メッセージ帯 (プレート帯と自軍プレート帯の間) の文はプレート
+        // 候補にしない。登場文「〜は ミロカロスと ライチュウを 繰り出
+        // した！」が自軍候補の位置条件に入り、近傍の実プレートの HP を
+        // 借りて偽候補が成立した (実例: 2026-11-22 battle_20261122_
+        // 160927、off_team_plate が相手種族で発火)
+        if b.cy > 0.60 && b.cy < 0.855 { continue }
+        guard let sp = matchSpecies(texts: [b.text]) else { continue }
+        // 自軍帯では名前の純度も見る: 種族名以外の文字 (助詞等) が残る
+        // ボックスは文の断片なので候補にしない (複数行文の下段対策)
+        if b.cy > 0.66 && !isPlateNameText(b.text, species: sp) { continue }
+        cands.append((entry: sp, box: b))
     }
     // 性別フォルムを持つ候補がいれば、プレートの性別アイコン判定用にバッファを用意する
     let plateBuf: (data: [UInt8], w: Int, h: Int)? =
@@ -9308,7 +9370,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1652"
+let readerBuild = "20261122_1705"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
