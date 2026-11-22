@@ -733,6 +733,7 @@ function applyItemMaps() {
 }
 function confirmNewBattle() {
   battleResetPending = false;
+  tempTrainerSets = {}; // 前の試合の推定型の一時保持はここで終わる
   faintLock.mine.clear();
   faintLock.opps.clear();
   revivalPending.mine = 0;
@@ -889,6 +890,10 @@ let VGC_CORPUS = null;     // data/vgc_pastes.json (VGCPastes 実在型コーパ
 let VGC_TEAMS = null;      // data/vgc_pastes.json (VGCPastes 収集チーム。プリセット欄の一覧用に遅延読み込み)
 let vgcTeamsLoading = false;
 let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
+// 推定・判明で形になった相手の型を、トレーナー名のカスタムとして
+// 一時保持する (種族 -> {trainer, build})。次の試合の開始が確定する
+// まで残り、SET プルダウンの「カスタム」から再適用できる
+let tempTrainerSets = {};
 let USAGE_SEASON = '';
 // 使用率型の解決: フォルム名 (イルカマン(ヒーロー)等) には使用率データが
 // 無いため、ベース種族の型を流用し種族名だけ差し替える
@@ -2010,15 +2015,23 @@ function presetBox(side) {
         { v: 'attacker', l: '火力特化型' },
         { v: 'bulky', l: '耐久型' },
         { v: 'none', l: '素の種族値' },
-        { v: 'custom', l: 'カスタム' },
+        { v: 'custom', l: tempTrainerSets[spec.species] ? tempTrainerSets[spec.species].trainer : 'カスタム' },
         ...vgcOpts,
       ],
       value: spec.kind || 'usage',
-      valueLabel: (spec.corrected && spec.corrected.length && oppTrainerName) ? oppTrainerName : '',
+      valueLabel: (spec.kind === 'custom' && tempTrainerSets[spec.species]) ? tempTrainerSets[spec.species].trainer
+        : (spec.corrected && spec.corrected.length && oppTrainerName) ? oppTrainerName : '',
       onPick: v => {
         const keep = DS('opps');
         if (v.startsWith('vgc:')) { applyVgcBuild('opps', vgcBuildsFor(keep)[+v.slice(4)], v); calcAll(); return; }
-        const ns = oppSpec(keep.species, v);
+        let ns;
+        if (v === 'custom' && tempTrainerSets[keep.species]) {
+          // 一時保持した推定型 (トレーナー名のカスタム) を再適用する
+          ns = specFromPresetBuild(tempTrainerSets[keep.species].build);
+          ns.kind = 'custom';
+        } else {
+          ns = oppSpec(keep.species, v);
+        }
         ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
         state.opps[state.sel.opps] = ns;
         calcAll();
@@ -3758,6 +3771,13 @@ function applyState(j) {
   drainInferenceLog();
   const estSigBefore = state.opps.map(s => s ? JSON.stringify([s.estStat || null, s.estSp || null, s.estMarginal || null]) : '');
   for (const spec of state.opps) if (spec) attachEstimate(spec);
+  // 推定・判明で形になった相手の型を、トレーナー名のカスタムとして
+  // 一時保持する (次の試合の開始が確定するまで SET から再適用できる)
+  if (oppTrainerName) {
+    for (const spec of state.opps) {
+      if (spec && ((spec.corrected && spec.corrected.length) || spec.estSp)) tempTrainerSets[spec.species] = { trainer: oppTrainerName, build: presetBuildOf(spec) };
+    }
+  }
   if (state.opps.some((s, i) => s && JSON.stringify([s.estStat || null, s.estSp || null, s.estMarginal || null]) !== estSigBefore[i])) markCalcSrc('estimate');
   if (changed) calcAll();
 }
