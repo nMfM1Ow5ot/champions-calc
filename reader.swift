@@ -1689,8 +1689,23 @@ func fieldRenderForAbility(_ ability: String) -> String? {
 // ひんし行がある交代 (ひんし交代) は対象にしない。表示側は交代の
 // 描画行を一緒に移す (実例: 2026-11-22 battle_20261122_091721、
 // ゲンガーの交代とメガ進化がターン6の末尾に記録された)
-func pullBackSwitchBlock(label: String, splitMega: Bool = false) -> (proto: [String], display: [String], protoHead: [String], displayHead: [String]) {
+func pullBackSwitchBlock(label: String, splitMega: Bool = false, requireEarlySegment: Bool = false) -> (proto: [String], display: [String], protoHead: [String], displayHead: [String]) {
     guard let turnIdx = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") }) else { return ([], [], [], []) }
+    if requireEarlySegment {
+        // 確定経路からの引き戻しは、そのターンの序盤の区間にだけ
+        // 適用する。ひんし行がある、または技行が 3 件以上ある
+        // 発達した区間では、ターン行の検出遅れで前ターンの区間と
+        // 混ざっている可能性が高く、引き戻すと交代とその後の
+        // 出来事まで前ターン側へ連れていかれる (実例: 2026-11-22
+        // battle_20261122_185505、実ターン 3 の Sylveon の交代と
+        // 被ダメがターン 2 冒頭へ引き戻された)
+        var segMoves = 0, segFaints = 0
+        for l in battleLog[(turnIdx + 1)...] {
+            if l.hasPrefix("|move|") { segMoves += 1 }
+            if l.hasPrefix("|faint|") { segFaints += 1 }
+        }
+        if segFaints >= 1 || segMoves >= 3 { return ([], [], [], []) }
+    }
     var switchIdx: Int? = nil
     for i in (turnIdx + 1)..<battleLog.count {
         let l = battleLog[i]
@@ -2992,6 +3007,17 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         if sj.toPct < effFrom, sj.toPct != 0 { clearedDropSuspect = true }
         suspectJump[plateName] = nil
     }
+    // ひんし行が出た種族への HP 変動行は出さない。ひんし後に同じ
+    // 枠へ残った古い読みが、回復や被ダメとして再演される事故の
+    // 防止 (交代で戻れば faintedSpecies から外れるため、正規の
+    // 再登場には影響しない。実例: 2026-11-22
+    // battle_20261122_185505、ひんし済みの Garchomp に 36/185 の
+    // 幻回復が 2 回と、2 回目のひんし行が出た)
+    if faintedSpecies.contains(key) {
+        debugCapture(kind: "faint_guard", key: "post_faint_line:\(key)", rawText: "",
+                     detail: ["reason": "post_faint_suppressed", "slot": slot, "species": speciesEn, "fromPct": effFrom, "toPct": toPct, "turn": currentTurn])
+        return true
+    }
     if toPct < effFrom {
         // 直前の技も交代も無い状況での 55 ポイント超の低下は、1 回の
         // 出来事では起こり得ない (設置物は最大でも 25%、反動も技が
@@ -3853,7 +3879,7 @@ func processPlates(_ hits: [String: SlotState]) {
                             return f.count >= 3 && f[2] == outLabel
                         }
                         if segHasMove && !outActed {
-                            let pulled = pullBackSwitchBlock(label: "\(slot): \(s.speciesEn)")
+                            let pulled = pullBackSwitchBlock(label: "\(slot): \(s.speciesEn)", requireEarlySegment: true)
                             if !pulled.proto.isEmpty {
                                 if let ti = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") }) {
                                     battleLog.insert(contentsOf: pulled.proto, at: ti + 1)
@@ -3926,6 +3952,7 @@ func processPlates(_ hits: [String: SlotState]) {
                     if faintReviveSince[plate.name] == nil { faintReviveSince[plate.name] = Date() }
                     if rc >= 3, Date().timeIntervalSince(faintReviveSince[plate.name] ?? .distantFuture) >= 1.5 {
                         faintedSlots.removeValue(forKey: slot)
+                        faintedSpecies.remove(key)
                         faintReviveCount[plate.name] = nil
                         faintReviveSince[plate.name] = nil
                         lastEmittedPct[plate.name] = s.hpPercent
@@ -3952,6 +3979,7 @@ func processPlates(_ hits: [String: SlotState]) {
                pendingFaints.allSatisfy({ $0.slot != slot }),
                Date().timeIntervalSince(lastDamageTime[plate.name] ?? .distantPast) > 3.0 {
                 lastEmittedPct[plate.name] = s.hpPercent
+                faintedSpecies.remove(key)
                 debugCapture(kind: "faint_guard", key: "faint_revived:\(slot):\(s.speciesEn)", rawText: "",
                              detail: ["reason": "revived_baseline", "slot": slot, "species": s.speciesEn, "pct": s.hpPercent, "turn": currentTurn, "readerBuild": readerBuild])
             }
@@ -6861,32 +6889,40 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 技の使用: 「(相手の) <種族>の <技>！」— <技> は種族名の直後から文末までと完全一致
     // 「たおれた」を含む文は技の告知ではあり得ない (ひんし文を技と誤読する
     // 事故の防止。検証 R5: カイリキーのひんし文から かいりき を誤検出)
-    if (t.hasSuffix("！") || t.hasSuffix("!")) && !t.contains("たおれた") && !foldDakuten(t).contains("たおれた") {
+    if let bangIdx = t.firstIndex(where: { $0 == "！" || $0 == "!" }),
+       !String(t[...bangIdx]).contains("たおれた"), !foldDakuten(String(t[...bangIdx])).contains("たおれた") {
+        // 告知文は最初の「！」までで切って扱う。文の後ろに録画表示
+        // などの別要素の文字が続いた delivery では、末尾チェックが
+        // 外れて技行が丸ごと落ちた (実例: 2026-11-22
+        // battle_20261122_185505、「ムービー収録 リザードンの
+        // ねっぷう！ 0 KB」で Charizard の Heat Wave が欠落)
+        let at = String(t[...bangIdx])
+        let ant = normalize(at)
         var cand: String? = nil
         // 長音落ちまで畳んだ変換 (種族名・技名とも全件衝突なしを確認済み)
         let deepFold: (String) -> String = { foldDakuten($0.replacingOccurrences(of: "ッ", with: "ツ").replacingOccurrences(of: "っ", with: "つ")).replacingOccurrences(of: "ー", with: "") }
-        if let r = nt.range(of: normalize(sp.ja + "の")) {
-            cand = String(nt[r.upperBound...])
-        } else if let r = foldDakuten(nt).range(of: foldDakuten(normalize(sp.ja + "の"))) {
+        if let r = ant.range(of: normalize(sp.ja + "の")) {
+            cand = String(ant[r.upperBound...])
+        } else if let r = foldDakuten(ant).range(of: foldDakuten(normalize(sp.ja + "の"))) {
             // 種族名が濁点ゆれで解決された場合 (アヤシシ→アヤシジ等) は、
             // 畳んだ形で位置を求めて元の文から切り出す (検証 R3 #35)
-            let fnt = foldDakuten(nt)
+            let fnt = foldDakuten(ant)
             let off = fnt.distance(from: fnt.startIndex, to: r.upperBound)
-            cand = String(nt[nt.index(nt.startIndex, offsetBy: off)...])
-        } else if let r = deepFold(nt).range(of: deepFold(normalize(sp.ja + "の"))) {
+            cand = String(ant[ant.index(ant.startIndex, offsetBy: off)...])
+        } else if let r = deepFold(ant).range(of: deepFold(normalize(sp.ja + "の"))) {
             // 種族名の長音落ちまで重なった場合 (サーナイト→サナイト) は
             // 変換空間で切り出し、そのまま渡す (moveNameLoose 第3パスが
             // 同じ空間で照合する。検証 最終監査 seed32 vhard:
             // かみなりパンチ→かみなり の誤読対策)
-            cand = String(deepFold(nt)[r.upperBound...])
+            cand = String(deepFold(ant)[r.upperBound...])
         } else if let ms = looseMoveStart {
             // 種族名が OCR で崩れている場合は、緩い照合で得た位置から切り出す
-            let chars = Array(nt)
+            let chars = Array(ant)
             if ms <= chars.count { cand = String(chars[ms...]) }
         }
         var mvJaFound: String? = nil
         if let cand {
-            let c = cand.trimmingCharacters(in: CharacterSet(charactersIn: "！!"))
+            let c = cand.trimmingCharacters(in: CharacterSet(charactersIn: "！!・"))
             mvJaFound = moveNameOrig[c] ?? moveNameLoose(c)
         }
         if mvJaFound == nil {
@@ -6896,31 +6932,32 @@ func translateBattleMessage(_ text: String) -> Bool {
             //  誤爆を避けるため、場にいる種族の文だけを対象にする)
             let onField = lastSlots.values.contains { $0.speciesEn == sp.en }
                 || formeGroup(sp).contains { g in lastSlots.values.contains { $0.speciesEn == g.en } }
+                || (fieldSeen[side]?.contains { sameSpeciesFamily($0, sp.en) } ?? false)
             if onField {
                 // 種族名そのものと重なる技名は拾わない (カイリキー vs かいりき
                 // のような種族名=技名の衝突。検証 R5 で検出)。技名は種族名の
                 // 出現位置より後ろにあるものだけを候補にする
                 var spEnd = 0
-                if let r = nt.range(of: normalize(sp.ja)) {
-                    spEnd = nt.distance(from: nt.startIndex, to: r.upperBound)
-                } else if let r = foldDakuten(nt).range(of: foldDakuten(normalize(sp.ja))) {
-                    let fnt = foldDakuten(nt)
+                if let r = ant.range(of: normalize(sp.ja)) {
+                    spEnd = ant.distance(from: ant.startIndex, to: r.upperBound)
+                } else if let r = foldDakuten(ant).range(of: foldDakuten(normalize(sp.ja))) {
+                    let fnt = foldDakuten(ant)
                     spEnd = fnt.distance(from: fnt.startIndex, to: r.upperBound)
                 }
                 let hit = moveNameOrig.keys.filter { key in
-                    guard let kr = nt.range(of: key) else { return false }
-                    return nt.distance(from: nt.startIndex, to: kr.lowerBound) >= spEnd
+                    guard let kr = ant.range(of: key) else { return false }
+                    return ant.distance(from: ant.startIndex, to: kr.lowerBound) >= spEnd
                 }.max(by: { $0.count < $1.count })
                 if let hit { mvJaFound = moveNameOrig[hit] }
             }
-            if mvJaFound == nil && onField, let lr = nt.range(of: "ノ", options: .backwards) {
+            if mvJaFound == nil && onField, let lr = ant.range(of: "ノ", options: .backwards) {
                 // 最後の「の」以降を技名候補として緩く照合する (濁点・半濁点の
                 // OCR ゆれ対策。実例: 「あいて相手のゾロアークのハイパーポイス！」
                 // = ハイパーボイス が日本語のまま漏れた、2026-11-20 vs Foxy2905 戦)
-                // ※ nt は正規化済みで「の」は「ノ」になっている。従来は「の」で
+                // ※ ant は正規化済みで「の」は「ノ」になっている。従来は「の」で
                 // 探していたためこのフォールバックは一度も発火していなかった
                 // (検証 R3 で検出)
-                let tail = String(nt[lr.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "！!"))
+                let tail = String(ant[lr.upperBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "！!"))
                 if tail.count >= 3 { mvJaFound = moveNameLoose(tail) }
             }
         }
@@ -9577,7 +9614,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1905"
+let readerBuild = "20261122_1926"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
