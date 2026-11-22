@@ -266,6 +266,21 @@ var obsFileBytes = 0
 let obsLock = NSLock()
 let obsMaxBytes = 32 * 1024 * 1024
 
+// MARK: - 復号段の形式化 (改善計画フェーズ5)
+// OCR 崩れの救済は、次の順序で段階的に適用される (各段階は完全一致
+// ではないため、適用が成功した場合は根拠を recordDecode で生観測
+// アーカイブへ残す。記録は観測専用で、照合の挙動には影響しない)。
+//   1. exact: 正規化した文字列での辞書照合
+//   2. meka: 「メカ」→「メガ」の修復照合 (種族引き)
+//   3. fold: 濁点・半濁点を畳んだ照合 (種族引き)
+//   4. tsu: 畳み + ッ→ツ + 長音落ちの照合 (種族引き。場・チームの裏付け必須)
+//   5. loose: looseText 空間での照合 (持ち物の救済等)
+func recordDecode(stage: String, raw: String, resolved: String) {
+    recordObservation(pass: "decode", region: [0, 0, 0, 0],
+                      boxes: [(text: stage + "|" + raw + "|" + resolved,
+                               x0: 0, y0: 0, x1: 0, y1: 0, conf: 1.0)])
+}
+
 func recordObservation(pass: String, region: [Double],
                        boxes: [(text: String, x0: Double, y0: Double, x1: Double, y1: Double, conf: Double)]) {
     guard logStarted, !winLogged, !battleArchiveId.isEmpty, !boxes.isEmpty else { return }
@@ -3911,11 +3926,13 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
     }
     // 「メガ」が「メカ」に崩れると基本フォルムに落ちて状態の記録先キーが
     // ずれるため、メカ→メガに直した文でも照合する (検証 R1 #83 で検出)
+    let exactBest = best
     if t.contains("メカ") {
         let t2 = t.replacingOccurrences(of: "メカ", with: "メガ")
         for e in speciesDict where !e.ja.isEmpty {
             if t2.contains(normalize(e.ja)) && (best == nil || e.ja.count > best!.ja.count) { best = e }
         }
+        if exactBest == nil, let b = best { recordDecode(stage: "meka", raw: text, resolved: b.en) }
     }
     // 濁点ゆれで名前が崩れた場合 (サーナイト→ザーナイト、ドラパルト→
     // ドラパルド等) は、両辺の濁点を畳んだ形でも照合する。通常照合で
@@ -3925,6 +3942,7 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
         for e in speciesDict where !e.ja.isEmpty {
             if ft.contains(foldDakuten(normalize(e.ja))) && (best == nil || e.ja.count > best!.ja.count) { best = e }
         }
+        if let b = best { recordDecode(stage: "fold", raw: text, resolved: b.en) }
     }
     // さらに「ー」落ちまで重なった場合 (サーナイト→ザナイト) は、長音も
     // 落として照合する。カラカラ/ガラガラ のような衝突があるため、場か
@@ -3943,6 +3961,7 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
                 || teamEntries[anch.en] != nil || oppTeamSeen.contains(anch.en)
             if backed && (best == nil || e.ja.count > best!.ja.count) { best = e }
         }
+        if let b = best { recordDecode(stage: "tsu", raw: text, resolved: b.en) }
     }
     return best
 }
@@ -6173,6 +6192,7 @@ func translateBattleMessage(_ text: String) -> Bool {
             if let it = bestIt,
                let ow = speciesDict.first(where: { !$0.ja.isEmpty && lt.contains(looseText("\($0.ja)の\(it)")) }) {
                 itemOwner = (it, ow)
+                recordDecode(stage: "loose", raw: t, resolved: it)
             }
         }
         if let (itJa, owner) = itemOwner {
@@ -9193,7 +9213,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1412"
+let readerBuild = "20261122_1545"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
