@@ -497,7 +497,7 @@ func jsonEscape(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: 
 // 追加・変更するときは必ずここを更新すること (ハーネスが、実際に生成
 // した state.json のキーと突き合わせて検証する。aurora/veil のような
 // キー名の食い違いを機械で検出するため)
-let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "hazards", "oppReset", "oppPreview", "battle"]
+let stateTopKeys: Set<String> = ["mine", "opps", "oppTeam", "oppRevealed", "oppTrainer", "events", "field", "sideConditions", "hazards", "oppReset", "oppPreview", "battle", "minePreview", "mineTeam"]
 let stateMonKeys: Set<String> = ["species", "curHPPercent", "status", "unburden", "itemLost", "mega", "megaSpecies", "boosts", "revealed"]
 let stateBoostKeys: [String] = ["atk", "def", "spa", "spd", "spe", "acc", "eva"]  // boosts は常時この7能力をそろえて出す
 let stateRevealedKeys: Set<String> = ["moves", "item", "ability"]
@@ -6851,6 +6851,10 @@ var previewEvidenceImage: CGImage? = nil        // 最後に同定を試みた�
 var previewEvidenceSlots: [PvSlotInfo] = []     // そのフレームの枠ごとの同定情報
 var previewEvidenceTeam: [String?] = []         // その時点のマージ済み同定結果
 var previewEvidenceVotes: [[[String: Any]]] = []  // その時点のマージ票数 (枠ごと・種族ごと)
+var minePreviewVotes: [[String: Int]] = []        // 自チーム側の見せ合い投票
+var minePreviewBest: [String?] = []               // 自チーム側のマージ結果
+var minePreviewDetails: [[String: Any]] = []      // 自チーム側の枠ごとの詳細 (種族・性別・持ち物)
+var minePreviewEvidence: [[String: Any]] = []     // preview_id 証跡用の自チーム詳細控え
 var previewEvidenceAt: Date? = nil
 // 見せ合い画面の最終フレーム (同定が走らなかった・失敗した試合でも
 // 画面自体は証拠として残すための保持。preview_id の全試合保証用)
@@ -7509,6 +7513,131 @@ func pvBestScore(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Do
 // 組み合わせ自体が実在しない場合も同じ扱いにする。タイプで 1 種に
 // 定まる「確定」枠も、照合スコアが悪い場合は確定扱いを取り消して
 // 再照合する (読み違いアイコンによる誤確定の防止)。
+// MARK: - 自チーム側の見せ合い同定 (2026-11-22、総合チャットからの実装指示)
+// 自チームのパネルは青紫で、種族名と持ち物名がテキストで表示される。
+// 名前 OCR を主系統とし、性別アイコンの色と持ち物テキストを併記する。
+// 結果は state.json の mineTeam と preview_id の証跡で状態側へ渡す
+struct MinePreviewSlot {
+    var species: String? = nil
+    var gender: String? = nil    // "M" / "F"
+    var itemJa: String = ""
+    var itemEn: String? = nil
+    var nameText: String = ""
+}
+
+func pvDetectMinePanels(_ buf: (data: [UInt8], w: Int, h: Int)) -> [(x: Int, y: Int, w: Int, h: Int)] {
+    let W = buf.w, H = buf.h
+    guard W > 50, H > 50 else { return [] }
+    func isBlue(_ x: Int, _ y: Int) -> Bool {
+        let i = (y * W + x) * 4
+        let r = Int(buf.data[i]), g = Int(buf.data[i + 1]), b = Int(buf.data[i + 2])
+        return b > 110 && b - r > 35 && b - g > 5 && r > 40
+    }
+    let xa = Int(0.02 * Double(W)), xb = Int(0.36 * Double(W))
+    var bands: [(Int, Int)] = []
+    var start = -1
+    for y in 0..<H {
+        var c = 0
+        var x = xa
+        while x < xb {
+            if isBlue(x, y) { c += 1 }
+            x += 2
+        }
+        if c > 30 && start < 0 { start = y }
+        if c <= 30 && start >= 0 {
+            if y - start >= Int(0.04 * Double(H)) { bands.append((start, y - 1)) }
+            start = -1
+        }
+    }
+    if start >= 0 && H - start >= Int(0.04 * Double(H)) { bands.append((start, H - 1)) }
+    guard bands.count == 6 else {
+        // 固定位置へのフォールバック (実フレームで全件一致した配置)
+        let ys = [0.180, 0.279, 0.378, 0.477, 0.577, 0.676]
+        return ys.map { (Int(0.0426 * Double(W)), Int($0 * Double(H)), Int(0.2722 * Double(W)), Int(0.087 * Double(H))) }
+    }
+    return bands.map { (y0, y1) in
+        var lo = Int.max, hi = Int.min
+        for y in stride(from: y0, to: y1, by: 3) {
+            var x = xa
+            while x < xb {
+                if isBlue(x, y) { lo = min(lo, x); hi = max(hi, x) }
+                x += 2
+            }
+        }
+        if lo == Int.max { lo = Int(0.0426 * Double(W)); hi = Int(0.3148 * Double(W)) }
+        return (lo, y0, max(10, hi - lo), y1 - y0)
+    }
+}
+
+func pvMineGender(_ buf: (data: [UInt8], w: Int, h: Int), panel: (x: Int, y: Int, w: Int, h: Int)) -> String? {
+    let W = buf.w
+    let cx = panel.x + Int(0.713 * Double(panel.w))
+    let cy = panel.y + Int(0.29 * Double(panel.h))
+    let rad = max(5, W / 180)
+    var sr = 0, sg = 0, sb = 0, n = 0
+    for y in (cy - rad)...(cy + rad) {
+        for x in (cx - rad)...(cx + rad) {
+            guard x >= 0, y >= 0, x < buf.w, y < buf.h else { continue }
+            let i = (y * W + x) * 4
+            sr += Int(buf.data[i]); sg += Int(buf.data[i + 1]); sb += Int(buf.data[i + 2]); n += 1
+        }
+    }
+    guard n > 0 else { return nil }
+    let r = sr / n, g = sg / n, b = sb / n
+    if r - b > 60 { return "F" }
+    if g > 95 && b > 180 { return "M" }
+    return nil
+}
+
+func identifyPreviewMine(image: CGImage) -> [MinePreviewSlot]? {
+    let buf = makeFullBuffer(image)
+    guard buf.w > 0 else { return nil }
+    let panels = pvDetectMinePanels(buf)
+    guard panels.count == 6 else { return nil }
+    let W = Double(buf.w), H = Double(buf.h)
+    var out: [MinePreviewSlot] = []
+    for p in panels {
+        var slot = MinePreviewSlot()
+        // 名前領域 (パネル左上) を OCR して種族を引く
+        let nameBoxes = ocrBoxes(image,
+                                 x0: (Double(p.x) + 0.03 * Double(p.w)) / W,
+                                 y0: (Double(p.y) + 0.05 * Double(p.h)) / H,
+                                 x1: (Double(p.x) + 0.68 * Double(p.w)) / W,
+                                 y1: (Double(p.y) + 0.55 * Double(p.h)) / H)
+        slot.nameText = nameBoxes.map { $0.text }.joined(separator: " ")
+        var entry: SpeciesEntry? = nil
+        for b in nameBoxes {
+            if let e = matchSpecies(texts: [b.text]) { entry = e; break }
+        }
+        if entry == nil, !slot.nameText.isEmpty { entry = findSpeciesJa(in: slot.nameText) }
+        slot.gender = pvMineGender(buf, panel: p)
+        if var e = entry {
+            // 性別フォルムの解決 (プレートと同じ規則)
+            let grp = formeGroup(e)
+            if grp.count > 1, let g = slot.gender {
+                if g == "F", let f = grp.first(where: { $0.en.hasSuffix("-F") }) { e = f }
+                if g == "M" {
+                    if let m = grp.first(where: { $0.en.hasSuffix("-M") }) { e = m }
+                    else if let base = grp.first(where: { !$0.en.hasSuffix("-F") && !$0.en.hasSuffix("-M") }) { e = base }
+                }
+            }
+            slot.species = e.en
+        }
+        // 持ち物領域 (パネル左下) のテキスト
+        let itemBoxes = ocrBoxes(image,
+                                 x0: (Double(p.x) + 0.10 * Double(p.w)) / W,
+                                 y0: (Double(p.y) + 0.52 * Double(p.h)) / H,
+                                 x1: (Double(p.x) + 0.88 * Double(p.w)) / W,
+                                 y1: (Double(p.y) + 0.97 * Double(p.h)) / H)
+        slot.itemJa = itemBoxes.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        if !slot.itemJa.isEmpty, let ja = findInDict(in: slot.itemJa, itemDict) {
+            slot.itemEn = itemJa2En[ja]
+        }
+        out.append(slot)
+    }
+    return out
+}
+
 func identifyPreview(image: CGImage) -> (team: [String?], notes: [String], slots: [PvSlotInfo])? {
     let buf = makeFullBuffer(image)
     let panels = pvDetectPanels(buf)
@@ -8251,6 +8380,9 @@ func runOnce(image: CGImage) {
                 previewVotes = []
                 previewVoteScore = []
                 previewLocked = []
+                minePreviewBest = []
+                minePreviewVotes = []
+                minePreviewDetails = []
                 previewTeamWritten = false
                 print("[preview] 見せ合い画面の再出現を検出したため、選出セッションをリセットして同定をやり直します")
                 fflush(stdout)
@@ -8380,6 +8512,34 @@ func runOnce(image: CGImage) {
                     previewBestTeam[i] = replacement
                     if let replacement { claimed.insert(replacement) }
                 }
+                // 自チーム側の同定 (名前 OCR が主系統。試行をまたいで
+                // 投票でマージし、詳細は最良種族を読んだ試行のものを保つ)
+                if let mine = identifyPreviewMine(image: image) {
+                    if minePreviewBest.count != 6 {
+                        minePreviewBest = Array(repeating: nil, count: 6)
+                        minePreviewVotes = Array(repeating: [:], count: 6)
+                        minePreviewDetails = Array(repeating: [:], count: 6)
+                    }
+                    for i in 0..<6 {
+                        if let sp = mine[i].species {
+                            minePreviewVotes[i][sp, default: 0] += 1
+                        }
+                    }
+                    for i in 0..<6 {
+                        let leader = minePreviewVotes[i].max { a, b in
+                            a.value != b.value ? a.value < b.value : a.key < b.key
+                        }?.key
+                        if let leader { minePreviewBest[i] = leader }
+                        if let sp = mine[i].species, sp == minePreviewBest[i] {
+                            minePreviewDetails[i] = ["species": sp,
+                                                     "gender": mine[i].gender ?? "",
+                                                     "item": mine[i].itemEn ?? "",
+                                                     "itemJa": mine[i].itemJa,
+                                                     "nameText": mine[i].nameText]
+                        }
+                    }
+                    minePreviewEvidence = minePreviewDetails
+                }
                 let filled = previewBestTeam.compactMap { $0 }
                 oppTeamSeen = filled
                 // 同定の証拠を保持する (試合開始後にデバッグ同梱で書き出す)
@@ -8405,6 +8565,10 @@ func runOnce(image: CGImage) {
                 if !previewTeamWritten { obj["oppReset"] = true }
                 obj["oppPreview"] = true
                 obj["oppTeam"] = previewBestTeam.map { $0 as Any? ?? NSNull() }
+                if minePreviewBest.contains(where: { $0 != nil }) {
+                    obj["minePreview"] = true
+                    obj["mineTeam"] = minePreviewDetails.map { d -> Any in d.isEmpty ? NSNull() : d }
+                }
                 // 対戦中に割り込んだ書き出しでは、現在の試合 ID と
                 // events の蓄積全件を併せる。対戦中に観測されうる
                 // state.json が常に完全なイベント列を持つようにする
@@ -8480,6 +8644,9 @@ func runOnce(image: CGImage) {
         previewVotes = []
         previewVoteScore = []
         previewLocked = []
+        minePreviewBest = []
+        minePreviewVotes = []
+        minePreviewDetails = []
         previewTeamWritten = false
         // 同定の証拠 (previewEvidence*) はここでは消さない: 選出確定から
         // 対戦開始 (プレート出現) までは読み込み・入場演出で 10 秒を
@@ -8627,6 +8794,7 @@ func runOnce(image: CGImage) {
                      detail: ["team": previewEvidenceTeam.map { $0 ?? "" },
                               "slots": slotDetails, "readerBuild": readerBuild,
                               "votes": previewEvidenceVotes,
+                              "mineTeam": minePreviewEvidence,
                               "identified": previewEvidenceImage != nil],
                      image: evImage)
     }
@@ -8703,7 +8871,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261122_1121"
+let readerBuild = "20261122_1210"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
