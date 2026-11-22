@@ -113,6 +113,22 @@ function infIntersect(species, statKey, feasible, hpSps) {
   dirty = true;
   logSnapshot(species, infLogTurn, { kind: 'inf', stat: statKey, applied: true });
 }
+// 自軍パネルの正確な最大 HP (性格・SP から一意に決まる)
+function specMaxHP(spec) {
+  if (!spec) return null;
+  const t = statTable(effSpecies(spec));
+  if (!t || !t.hp) return null;
+  const row = t.hp.find(r => r.nature === spec.nature && r.sp === (spec.sp ? (spec.sp.hp || 0) : 0));
+  return row ? row.value : null;
+}
+// pct (切り捨て/四捨五入の両対応) と整合する被ダメ実数の範囲 [lo, hi]。
+// とどめの一撃では観測が残り HP で頭打ちになる (下限の観測) ため、
+// KO 時は hi を無限大とする
+function amtRangeForPct(pct, maxHP, ko) {
+  const lo = Math.max(1, Math.ceil((pct - 0.5) * maxHP / 100 - 1e-9));
+  const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
+  return [lo, hi];
+}
 function processDamageInf(ev, ctx) {
   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
   pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
@@ -133,8 +149,7 @@ function processDamageInf(ev, ctx) {
   const opts = { weather: ev.w, terrain: ev.t, gameType, crit: ev.crit, atkSide: conds.atkSide, defSide: conds.defSide };
   pendingOpts = opts; // ベイズ側も同じ場の条件で評価する (てだすけ消費などの副作用を共有するため)
   if (oppIsAtk) {
-    // 相手の攻撃 -> 自分の正確な被ダメ量から相手の攻撃 (or Body Press は防御) を絞る
-    if (typeof ev.amt !== 'number' || ev.amt <= 0) return;
+    // 相手の攻撃 -> 自分の被ダメ量から相手の攻撃 (or Body Press は防御) を絞る
     const statKey = md.name === 'Body Press' ? 'def' : (md.category === 'Physical' ? 'atk' : 'spa');
     const defSpec = ctx.myDef;
     const bases = ctx.basesAtk;
@@ -143,6 +158,20 @@ function processDamageInf(ev, ctx) {
     // すると、値が衝突する行同士で代表ロールの判定がずれる)
     const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
     if (!defSpec || !bases.length || !table) return;
+    // 実数 (amt) が無いイベントは、pct と防御側の最大 HP から実数範囲を
+    // 導いて照合する。amt は最大 HP の基準が一致する場合だけ付くため、
+    // 登録チーム外の編成では自軍の被ダメが全件 pct のみになる
+    // (battle_20261122_091721: by opp の証拠が対戦まるごと欠落した)
+    let inRange;
+    if (typeof ev.amt === 'number' && ev.amt > 0) inRange = r => r === ev.amt;
+    else {
+      if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
+      const M = specMaxHP(defSpec);
+      if (!M) return;
+      const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
+      const [lo, hi] = amtRangeForPct(ev.pct, M, ko);
+      inRange = r => r >= lo && r <= hi;
+    }
     const byValue = new Map();
     for (const row of table[statKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
     const feasible = new Set();
@@ -151,7 +180,7 @@ function processDamageInf(ev, ctx) {
         const rep = rows[0];
         const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
         const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-        if (rolls.includes(ev.amt)) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
+        if (rolls.some(inRange)) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
       }
     }
     infIntersect(atkSpecies, statKey, feasible, null);
@@ -975,17 +1004,33 @@ function processDamageBayes(ev, ctx) {
   // フラグが立っている間は当該方向の尤度を仮説持ち物前提で計算し、
   // 持ち物が判明したら下ろす (applyRevealed)
   if (labelSide(ev.atk) === 'p2') {
-    // 相手の攻撃: 自分の正確な被ダメ量と両立するロールの割合が尤度
-    if (typeof ev.amt !== 'number' || ev.amt <= 0) return;
+    // 相手の攻撃: 自分の被ダメと両立するロールの割合が尤度
     const ent = bayesEntry(atkSpecies);
     const defSpec = ctx.myDef;
     const base = ctx.baseAtk;
-    if (!ent || !defSpec || !base) return;
+    if (!ent || !defSpec || !base) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false }); return; }
+    // 実数 (amt) が無いイベントは pct のまま処理する (amt が付かない
+    // 理由は processDamageInf 側の注記と同じ)。処理できない場合も、
+    // 無言で返さず記録を残す (欠落がログから追えるように)
+    const hasAmt = typeof ev.amt === 'number' && ev.amt > 0;
+    let amtLo = null, amtHi = null;
+    if (!hasAmt) {
+      const M = typeof ev.pct === 'number' && ev.pct > 0 ? specMaxHP(defSpec) : null;
+      if (!M) { logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false }); return; }
+      const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
+      [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
+    }
+    const matchRoll = hasAmt ? (r => r === ev.amt) : (r => r >= amtLo && r <= amtHi);
     const rollsList = ent.cands.map(c => damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts).rolls);
-    let counts = rollsList.map(rolls => rolls.filter(r => r === ev.amt).length);
-    const trig = { kind: 'damage', move: md.name, by: 'opp', amt: ev.amt, crit: !!ev.crit };
+    let counts = rollsList.map(rolls => rolls.filter(matchRoll).length);
+    const trig = { kind: 'damage', move: md.name, by: 'opp', crit: !!ev.crit };
+    if (hasAmt) trig.amt = ev.amt;
+    else { trig.pct = ev.pct; trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi]; }
     if (!counts.some(n => n > 0)) {
-      const over = rollsList.every(rolls => rolls.length && ev.amt > Math.max(...rolls));
+      // 最大超過の判定は、観測と整合する最小の実数で行う (pct のみの
+      // 観測や、とどめの一撃で切り捨てられた観測でも偽陽性にならない)
+      const obsMin = hasAmt ? ev.amt : amtLo;
+      const over = rollsList.every(rolls => rolls.length && obsMin > Math.max(...rolls));
       if (over) {
         trig.dir = 'over';
         const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
@@ -999,7 +1044,7 @@ function processDamageBayes(ev, ctx) {
         counts = ent.cands.map(c => {
           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
           const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
-          return rolls.filter(r => r === ev.amt).length;
+          return rolls.filter(matchRoll).length;
         });
         trig.dmgFlag = flag;
       }
