@@ -17,6 +17,7 @@ export function createEstimator(deps) {
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
   let VGC_SETS = null; // data/vgc_pastes.json (VGCPastes の実在型。meta_sets と同じ形式で候補コーパスへ統合する。未提供なら従来動作)
   let SPECIES_MOVES = null; // data/species_moves.json (種族ごとの習得技。未提供なら従来動作)
+  let teamFormesCache = null, teamFormesSrc = null; // teamId -> 由来チームの種族リスト (VGC_SETS から構築、参照が変わったら再構築)
   function syncData() {
     const d = deps.getData() || {};
     POKEDB_PARSED = d.POKEDB_PARSED ?? null;
@@ -601,11 +602,29 @@ function metaFormeFullName(entry) {
 // 対象は「その種族自身の型」と「ベース種族パネルに対する、そのメガ型」。
 // メガ型の特性はメガ側の特性なので megaAbility に入れ、ベース特性は使用率
 // 1位の特性 (fallback.topAbility) を仮置きする (pokedb 候補と同じ扱い)
+// 由来チーム (teamId) ごとの種族リスト。候補の発生元と同じ VGC_SETS
+// から引くため、真値チームが除外されたコーパス (LOTO) ではそのチームの
+// 情報も存在しない (所属情報の漏れ経路を作らない)
+function teamFormesMap() {
+  if (!VGC_SETS || !Array.isArray(VGC_SETS.sets)) return null;
+  if (teamFormesSrc === VGC_SETS) return teamFormesCache;
+  const m = new Map();
+  for (const e of VGC_SETS.sets) {
+    if (!e || !e.teamId) continue;
+    const full = metaFormeFullName(e);
+    if (!m.has(e.teamId)) m.set(e.teamId, []);
+    const arr = m.get(e.teamId);
+    if (!arr.includes(full)) arr.push(full);
+  }
+  teamFormesCache = m; teamFormesSrc = VGC_SETS;
+  return m;
+}
 function bayesCorpusCandidates(species, table, fallback) {
   const corpora = [];
   if (META_SETS && Array.isArray(META_SETS.sets)) corpora.push(...META_SETS.sets);
   if (VGC_SETS && Array.isArray(VGC_SETS.sets)) corpora.push(...VGC_SETS.sets);
   if (!corpora.length) return [];
+  const teamMap = teamFormesMap();
   const sd = gen.species.get(idOf(species));
   const base = (sd && sd.baseSpecies) || species;
   const out = [];
@@ -648,6 +667,9 @@ function bayesCorpusCandidates(species, table, fallback) {
       megaSpecies: isMega ? full : fallback.megaSpecies,
       moves: (e.moves || []).map(mv => metaNameEn('move', mv)).filter(Boolean),
       moveExact: true,
+      // 由来チームの種族リスト (チーム条件づけ事前用)。teamId を持たない
+      // コーパス (meta_sets 等) の候補は null = 中立
+      teamFormes: e.teamId && teamMap ? (teamMap.get(e.teamId) || null) : null,
       values, valuesMega, post: 0, corpus: true, _w: Math.max(e.weight || 0, 0.01),
     });
   }
@@ -890,6 +912,30 @@ function applyTeamItemBoost(cands, selfSpecies) {
 function setTeamContext(list) {
   teamContextSpecies = Array.isArray(list) && list.length ? [...list] : null;
 }
+// チーム条件づけ事前 (PBS プロトタイプの測定に基づく。DESIGN.md §4/§12):
+// コーパス候補の由来チームが、相手の他の種族を何体含むかで事前を補正する。
+// 「その種族と一緒に使われるチームに載っている型」ほど、観測した編成の
+// 下ではあり得る、という共起の条件づけで、頻度そのものの付け替え
+// (過去に却下されたアーキタイプ頻度較正) とは別物。補正は
+// (1 + 一致数) ^ 1.5 倍 (指数は測定値そのまま)。由来チームを持たない
+// 候補 (合成候補・meta_sets 由来) は ×1 で中立。地形シード補正
+// (applyTeamItemBoost) とは独立に追加で掛かる
+const TEAM_COND_EXP = 1.5;
+function applyTeamCondPrior(cands, selfSpecies) {
+  if (!teamContextSpecies || !teamContextSpecies.length) return false;
+  const others = teamContextSpecies.filter(s => s !== selfSpecies);
+  if (!others.length) return false;
+  let hit = false, tot = 0;
+  for (const c of cands) {
+    if (c.teamFormes && c.teamFormes.length) {
+      const match = others.filter(f => c.teamFormes.includes(f)).length;
+      if (match > 0) { c.post *= Math.pow(1 + match, TEAM_COND_EXP); hit = true; }
+    }
+    tot += c.post;
+  }
+  if (hit && tot > 0) for (const c of cands) c.post /= tot;
+  return hit;
+}
 function bayesEntry(species) {
   syncData();
   if (!bayes) return null;
@@ -904,8 +950,9 @@ function bayesEntry(species) {
     const cands = bayesBuildCandidates(species);
     if (!cands || !cands.length) { bayes.bySpecies[species] = null; return null; }
     applyTeamItemBoost(cands, species);
+    const tcHit = applyTeamCondPrior(cands, species);
     bayes.bySpecies[species] = { species, cands, used: 0, revKey: '' };
-    logSnapshot(species, infLogTurn, { kind: 'entry' });
+    logSnapshot(species, infLogTurn, tcHit ? { kind: 'entry', teamCond: true } : { kind: 'entry' });
   }
   return bayes.bySpecies[species];
 }
