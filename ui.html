@@ -1787,7 +1787,7 @@ function playerBar(side) {
       <div class="username">${isOpp ? '相手' : '自分'}</div>
       <div class="playeractions"><button class="tgl on" data-noop="1">AUTO</button></div>
     </div>
-    <div class="rack"><span class="presetwrap"><button class="presetbtn" data-presetbtn="${side}" title="${esc(presetApplied[side] || 'プリセット')}"><span class="presetbtn-label">${esc(presetApplied[side] || 'プリセット')}</span><span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span></button>${ui.presetPop === side ? presetPopHTML(side) : ''}</span>${isOpp ? '' : `<span class="focuswrap"><span class="focuslab">フォーカス</span><span class="focussw" role="group" aria-label="フォーカス切り替え"><button type="button" data-focuspick="auto"${focusMode === 'auto' ? ' class="on"' : ''}>自動</button><button type="button" data-focuspick="manual"${focusMode === 'manual' ? ' class="on"' : ''}>手動</button></span></span>`}${rack}</div>
+    <div class="rack"><span class="presetwrap"><button class="presetbtn" data-presetbtn="${side}" title="${esc(presetApplied[side] || 'プリセット')}"><span class="presetbtn-label">${esc(presetApplied[side] || 'プリセット')}</span><span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span></button>${ui.presetPop === side ? presetPopHTML(side) : ''}</span>${`<span class="focuswrap"><span class="focuslab">フォーカス</span><span class="focussw" role="group" aria-label="フォーカス切り替え"><button type="button" data-focuspick="${side}:auto"${focusModeFor(side) === 'auto' ? ' class="on"' : ''}>自動</button><button type="button" data-focuspick="${side}:manual"${focusModeFor(side) === 'manual' ? ' class="on"' : ''}>手動</button></span></span>`}${rack}</div>
   </div>`;
 }
 /* ---------- チームプリセット (サイドごとの構成の保存/切替/削除) ---------- */
@@ -2626,7 +2626,7 @@ document.addEventListener('click', e => {
   const icon = t.closest('[data-icon]');
   if (icon) { const [side, i] = icon.dataset.icon.split(':'); state.sel[side] = +i; applySetterAbility(state[side][+i]); calcAll(); return; }
   const fpick = t.closest('[data-focuspick]');
-  if (fpick) { setFocusMode(fpick.dataset.focuspick); renderAll(); return; }
+  if (fpick) { const [fside, fmode] = fpick.dataset.focuspick.split(':'); setFocusMode(fside, fmode); renderAll(); return; }
   const cap = t.closest('[data-capture]');
   if (cap) { captureTeam(cap.dataset.capture); return; }
   const act = t.closest('[data-act]');
@@ -2919,14 +2919,20 @@ $('applyjson').addEventListener('click', () => {
 
 /* ---------- state.json 連携 ---------- */
 const lastActiveKey = { mine: '', opps: '' };
-// 自軍のフォーカス (選択中の1体) を盤面の読み取りに追随させるか。
-// 'auto' = 交代で入ってきた方へ自動で移す / 'manual' = クリックでのみ変わる
-let focusMode = 'manual';
-try { const v = localStorage.getItem('champions-calc-focus'); if (v === 'auto' || v === 'manual') focusMode = v; } catch (e) {}
-function setFocusMode(m) {
+// フォーカス (選択中の1体) を盤面の読み取りに追随させるか。自分側と
+// 相手側で独立に設定する。'auto' = 交代で入ってきた方へ自動で移す /
+// 'manual' = クリックでのみ変わる
+const focusModes = { mine: 'manual', opps: 'manual' };
+try {
+  const raw = localStorage.getItem('champions-calc-focus');
+  if (raw === 'auto' || raw === 'manual') focusModes.mine = raw; // 旧形式 (自分側のみ) の移行
+  else if (raw) { const o = JSON.parse(raw); for (const s of ['mine', 'opps']) if (o && (o[s] === 'auto' || o[s] === 'manual')) focusModes[s] = o[s]; }
+} catch (e) {}
+function focusModeFor(side) { return focusModes[side] || 'manual'; }
+function setFocusMode(side, m) {
   if (m !== 'auto' && m !== 'manual') return;
-  focusMode = m;
-  try { localStorage.setItem('champions-calc-focus', m); } catch (e) {}
+  focusModes[side] = m;
+  try { localStorage.setItem('champions-calc-focus', JSON.stringify(focusModes)); } catch (e) {}
 }
 function applyRevealedPreserving(spec, rev) {
   let fresh = oppSpec(spec.species, 'usage');
@@ -3594,7 +3600,7 @@ function applyState(j) {
         state.active.mine = idxs.slice(0, 2);
         // フォーカス自動: 新しく場に出た (交代で入った) 方があれば、その
         // うちアイコン列で最も左の1体へフォーカスを移す。手動では移さない
-        if (focusMode === 'auto') {
+        if (focusModeFor('mine') === 'auto') {
           const entered = idxs.filter(i => !prevActive.includes(i));
           if (entered.length) state.sel.mine = Math.min(...entered);
         }
@@ -3663,7 +3669,17 @@ function applyState(j) {
     state.opps.forEach((s, i) => { if (!idxs.includes(i)) s.unburden = false; });
     if (idxs.length) {
       const key = idxs.join(',');
-      if (key !== lastActiveKey.opps) { state.active.opps = idxs.slice(0, 2); state.sel.opps = idxs[0]; lastActiveKey.opps = key; }
+      if (key !== lastActiveKey.opps) {
+        const prevActive = state.active.opps || [];
+        state.active.opps = idxs.slice(0, 2);
+        // 自分側と同規則: フォーカス自動のときだけ、新しく場に出た方の
+        // うち最も左の1体へフォーカスを移す
+        if (focusModeFor('opps') === 'auto') {
+          const entered = idxs.filter(i => !prevActive.includes(i));
+          if (entered.length) state.sel.opps = Math.min(...entered);
+        }
+        lastActiveKey.opps = key;
+      }
     }
   }
   if (j.oppRevealed && typeof j.oppRevealed === 'object') {
