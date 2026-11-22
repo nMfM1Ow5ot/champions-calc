@@ -32,6 +32,7 @@ export function createEstimator(deps) {
   let infLastMove = null;
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
+  let speCtxSeq = 0, lastSpeAppliedId = 0; // 行動順の対判定の文脈の二重適用防止
   let pendingOpts = null; // processDamageInf が計算した場の条件を processDamageBayes が使う
   let teamContextSpecies = null; // 相手チームの種族一覧 (UI が setTeamContext で渡す)
   // 推論過程ログ (検証用): 更新のたびにスナップショットをキューへ積み、
@@ -308,7 +309,7 @@ function processMoveInf(ev, io) {
     const ok = trick ? (firstIsOpp ? eff <= myEff : eff >= myEff) : (firstIsOpp ? eff >= myEff : eff <= myEff);
     if (ok) feasible.add(row.nature + '|' + row.sp);
   }
-  lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: effTw('p2'), oppMd, myPrio: myBr.prio };
+  lastSpeCtx = { species: oppSpecies, turn: ev.turn, myEff, trick, firstIsOpp, twP2: effTw('p2'), oppMd, myPrio: myBr.prio, _id: ++speCtxSeq };
   infIntersect(oppSpecies, 'spe', feasible, null);
   return intents;
 }
@@ -1059,6 +1060,12 @@ function processMoveBayes(ev, io) {
   if (!ctx || ctx.turn !== ev.turn) return;
   const ent = bayesEntry(ctx.species);
   if (!ent) return;
+  // 同じ対判定の文脈は一度だけ適用する。文脈が消費されずに残ると、
+  // 同ターンの後続イベントでも processMoveBayes が呼ばれて同じ判定が
+  // 再発火し、記録の重複と used の二重加算が起きる
+  // (battle_20261122_091721 seq51/seq52: Overqwil の Acupressure の
+  // moveOrder が別バッチで2件記録された)
+  if (ctx._id != null) { if (ctx._id === lastSpeAppliedId) return; lastSpeAppliedId = ctx._id; }
   const panel = io.opp[ctx.species] || null;
   // 行動順はハード制約として適用する (bayesHardSpe)。候補ごとの判定:
   // 優先度枠で順序が決まる候補は枠で判定し、確率発動の順序変更持ち物
@@ -1346,6 +1353,7 @@ function candRanges(args) {
     infLog = []; infLogSeq = 0; infLogTurn = null; logTrigger = null;
     bayesReset();
     lastSpeCtx = null;
+    lastSpeAppliedId = 0;
   }
   return {
     reset,
