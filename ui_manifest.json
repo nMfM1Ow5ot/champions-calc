@@ -38,9 +38,9 @@
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "paddle_sidecar.py": "672fbbf032652bbe385d5960a96b713d4544abc6b40f93d3c14afd378dd437bf",
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
-  "reader.swift": "1d9501ad59938b86747f9002e0d9559be662e2238b559de94e2e79e597802388",
+  "reader.swift": "9221ffbe16da70ac0d3225f7db110bce9af791d4666e3559eef1bf4e415cc78b",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
-  "serve.py": "d35f5c621f292b4229b0168d565a31eaa38b12f109986cc20c25e8844c7ba07b",
+  "serve.py": "5a72b79015e6da067760f345c8eb7ce6fe95529741211d6b215733afcbceeec3",
   "start_all.sh": "00e187308c8f5ca940ca244afe12835d637ba10f6c81291baab371d5e85d645f",
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
   "tests/bayes_equiv_golden.json": "144de6d910c9a3d7ce4ea384e2d54f7b05efd604a2119c9d0205f2164bb4ab6e",
@@ -49,5 +49,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261123_0805"
+ "rev": "20261123_0848"
 }
