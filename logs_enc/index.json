@@ -3832,8 +3832,8 @@
   },
   {
    "name": "battle_20261123_043809_calclog.json",
-   "sha256": "5c73170cdca66e3e4786a6f27e71aacede3c2f2639f5c26de19884280ded34b2",
-   "uploaded_at": "2026-11-23T04:47:08.082633+09:00"
+   "sha256": "a29a3e5140d6f14a832794f09710628cd862887a800120a41eb252fd7b097a4a",
+   "uploaded_at": "2026-11-23T04:47:58.739914+09:00"
   },
   {
    "name": "battle_20261123_043809_debug01.jpg",
@@ -3996,9 +3996,19 @@
    "uploaded_at": "2026-11-23T04:44:40.886130+09:00"
   },
   {
+   "name": "battle_20261123_043809_final.log",
+   "sha256": "15a151a69f2f163641b0373057f754ec4b493dc4190dc03a0876ed4d3c7bcd9c",
+   "uploaded_at": "2026-11-23T04:48:00.482799+09:00"
+  },
+  {
+   "name": "battle_20261123_043809_final_protocol.log",
+   "sha256": "9abe4accd9b4175ee5555542322cdfe72def189c55b12785776bbc2de77ead87",
+   "uploaded_at": "2026-11-23T04:48:02.209020+09:00"
+  },
+  {
    "name": "battle_20261123_043809_inference.json",
-   "sha256": "fdabbe4177ef2d4e2186cbe3d0ff3523c3a1d53eb3c68fec4a4cecd2b501fab4",
-   "uploaded_at": "2026-11-23T04:47:12.161328+09:00"
+   "sha256": "58c03a00102897029a4ccd654ac58e423cd45b6090ed7effb83b6078a88d744d",
+   "uploaded_at": "2026-11-23T04:48:06.097004+09:00"
   },
   {
    "name": "battle_20261123_043809_interrupted.log",
@@ -4017,13 +4027,13 @@
   },
   {
    "name": "battle_20261123_043809_obs.jsonl",
-   "sha256": "a52d86074a650c2e824eba36439d6d63cbab42e5604dd43a39ca7417cc7d7f01",
-   "uploaded_at": "2026-11-23T04:47:18.960568+09:00"
+   "sha256": "b949a937d2998bde8d2d355b39914b18c32f1791db7096e77cd4f3a9fdf36f07",
+   "uploaded_at": "2026-11-23T04:48:12.854313+09:00"
   },
   {
    "name": "battle_20261123_043809_paddle.jsonl",
-   "sha256": "f7eea10e0efe4787a6458487bc165728ad7c9ec029c2e92603edf8eccdb73f7f",
-   "uploaded_at": "2026-11-23T04:47:21.543048+09:00"
+   "sha256": "d810c2eea376caf1197eac431febbe9b947bdf8d66387a4549936e2a63cad639",
+   "uploaded_at": "2026-11-23T04:48:15.711306+09:00"
   },
   {
    "name": "battle_20261123_043809_states.json",
