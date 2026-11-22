@@ -890,7 +890,7 @@ def _announce_battle_sent(gk):
     完了の判定で、記録された試合につき 1 回だけ出る。対象範囲外の
     試合 (過去分の取り込み) は静かに記録だけする"""
     if _in_session_scope(gk):
-        print(f"[log] battle_{gk} の試合ログをすべて送信しました", flush=True)
+        print(f"[log] battle_{gk} の試合ログをすべて送信しました（{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}）", flush=True)
 
 
 def _update_sent_battles(state, names, known):
