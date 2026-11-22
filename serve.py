@@ -208,13 +208,12 @@ def sync_loop():
                 pass
             elif _battle_in_progress():
                 # 保留の開始表示は出さない (2026-11-22 のユーザー
-                # 指示)。保留の動作そのものと、対戦終了時の再開表示
-                # は従来どおり
+                # 指示)。保留の動作そのものは従来どおり
                 sync_deferred = True
             else:
                 if sync_deferred:
+                    # 再開表示も出さない (2026-11-22 のユーザー指示)
                     sync_deferred = False
-                    print("[sync] 対戦が終了したため、同期を再開します", flush=True)
                 run_sync(False)
                 try:
                     maybe_restart_self()
@@ -602,20 +601,6 @@ def _is_upload_target(name):
     return "_debug" in name and (name.endswith(".jpg") or name.endswith(".json"))
 
 
-_receipt_printed = set()
-
-
-def _announce_receipt(tag, label, name, count):
-    """受け取り表示は、同じ試合・同じ種類につきプロセス内で 1 回
-    だけ出す。UI は蓄積全件を数秒おきに再送するため、毎回出すと
-    対戦中のターミナルに送信が行われているかのような表示が並ぶ
-    (2026-11-22 のユーザー指摘)。保存そのものは毎回行う"""
-    if tag in _receipt_printed:
-        return
-    _receipt_printed.add(tag)
-    print(f"[log] {label}を受け取りました: {name} ({count} 件)", flush=True)
-
-
 def _save_inference_log(body):
     """推論過程ログ (UI からの POST /inference_log) を保存する。
 
@@ -640,14 +625,8 @@ def _save_inference_log(body):
     name = f"battle_{battle}_inference.json"
     with open(os.path.join(LOG_DIR, name), "wb") as f:
         f.write(body)
-    # 起動前に終わった試合の推論過程ログが、UI の再送で起動時に
-    # 届くことがある。保存はするが、起動時に過去分の処理が走って
-    # いるように見える表示は出さない (2026-11-21 のユーザー指示)。
-    # 判定は対象範囲の判定 (試合の開始時刻基準) で行う
-    ended_before_start = not _in_session_scope(_gate_key(battle))
-    if not ended_before_start:
-        _announce_receipt(("inference", battle), "推論過程ログ",
-                          name, len(data["entries"]))
+    # 推論過程ログの受け取り表示は出さない (2026-11-22 のユーザー
+    # 指示)。保存は従来どおり毎回行う
     return name
 
 
