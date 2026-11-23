@@ -16,7 +16,7 @@
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
   "data/names_ja.json": "6f900267d7914eef7feacd0487fb0fa354e2cb4cadadbff37e5b6c9a08e2c7bf",
   "data/pokedb_parsed.json": "dc2c788242d90aca38fcae22f5cf35a52094f2332b0682f45da7b5805d42d89f",
-  "data/preview_features.json": "304de2d53e912142a30d195a8e8c053605f8d74e8d6f6c7d767caa24378c0c4a",
+  "data/preview_features.json": "14d14b960ffd12ca27d3a32947c4d78eb6c13dfd2b88fea06016e3a53160088c",
   "data/regulation.json": "c4cc9f38546836a29734d04493959706726da54b274136987db3b2a80023d65a",
   "data/spec_patches.json": "c6dc628c70e0078f72ea3891d6bf8c7ced14a1d40c25213cd91f2097f5c53f98",
   "data/species_abilities.json": "60de98a5b4c4294fcbf6b1f7a530a32de31d86f0784f5be492d4ef5f261d49c0",
@@ -49,5 +49,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261123_0930"
+ "rev": "20261123_0933"
 }
