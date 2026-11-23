@@ -1095,10 +1095,10 @@ function applyVgcBuild(side, entry, kindValue) {
 function ensureVgcTeams() {
   if (VGC_TEAMS || vgcTeamsLoading) return;
   vgcTeamsLoading = true;
-  fetch('./data/vgc_pastes.json').then(r => r.json()).then(d => { if (d && Array.isArray(d.teams)) VGC_TEAMS = d; }).catch(() => { /* optional */ }).finally(() => { vgcTeamsLoading = false; if (ui.presetPop) renderAll(); });
+  fetch('./data/vgc_pastes.json').then(r => r.json()).then(d => { if (d && Array.isArray(d.teams)) VGC_TEAMS = d; }).catch(() => { /* optional */ }).finally(() => { vgcTeamsLoading = false; if (ui.presetPop) renderAll(); applyLastUsedStartup(); });
 }
 // 収集チームをそのサイドへ丸ごと読み込む
-function applyVgcTeam(side, teamId) {
+function applyVgcTeam(side, teamId, opts) {
   markCalcSrc('preset');
   if (!VGC_TEAMS) return;
   const t = VGC_TEAMS.teams.find(x => x.teamId === teamId);
@@ -1116,6 +1116,7 @@ function applyVgcTeam(side, teamId) {
   ui.presetPop = null; ui.presetRename = null;
   presetApplied[side] = t.description || t.teamId || '';
   presetRental[side] = t.rentalCode || t.code || '';
+  if (!opts || opts.record !== false) recordLastUsed(side, { kind: 'vgc', teamId: String(t.teamId), label: t.description || String(t.teamId) });
   applySetterAbility(specs[0]);
   calcAll();
 }
@@ -1894,12 +1895,24 @@ function unifyPresetLists(s) {
   s.mine = out; s.opps = out;
   return s;
 }
+// プリセットの使用履歴 (lastUsed) の形を整える。不正な値は null に落とす
+function normLastUsedEntry(e) {
+  if (!e || typeof e !== 'object') return null;
+  if (e.kind === 'preset' && typeof e.name === 'string' && e.name) return { kind: 'preset', name: e.name };
+  if (e.kind === 'vgc' && e.teamId !== undefined && e.teamId !== null && String(e.teamId)) return { kind: 'vgc', teamId: String(e.teamId), label: typeof e.label === 'string' ? e.label : '' };
+  return null;
+}
+function normLastUsed(s) {
+  const lu = (s && s.lastUsed) || {};
+  return { mine: normLastUsedEntry(lu.mine), opps: normLastUsedEntry(lu.opps) };
+}
 function loadPresetStore() {
-  try { const s = JSON.parse(localStorage.getItem(PRESET_STORE_KEY) || 'null'); if (s && Array.isArray(s.mine) && Array.isArray(s.opps)) return unifyPresetLists(s); } catch (e) { /* ignore */ }
-  return { mine: [], opps: [] };
+  try { const s = JSON.parse(localStorage.getItem(PRESET_STORE_KEY) || 'null'); if (s && Array.isArray(s.mine) && Array.isArray(s.opps)) { unifyPresetLists(s); s.lastUsed = normLastUsed(s); return s; } } catch (e) { /* ignore */ }
+  return { mine: [], opps: [], lastUsed: { mine: null, opps: null } };
 }
 function savePresetStore(s, fromRemote) {
   unifyPresetLists(s);
+  s.lastUsed = normLastUsed(s);
   if (!fromRemote) s.updatedAt = new Date().toISOString();
   try { localStorage.setItem(PRESET_STORE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
   if (!fromRemote) schedulePresetPush();
@@ -1922,7 +1935,7 @@ function schedulePresetPush() {
 }
 async function pushPresets() {
   const s = loadPresetStore();
-  const body = JSON.stringify({ v: 1, updatedAt: s.updatedAt || null, mine: s.mine, opps: s.opps });
+  const body = JSON.stringify({ v: 1, updatedAt: s.updatedAt || null, mine: s.mine, opps: s.opps, lastUsed: s.lastUsed || { mine: null, opps: null } });
   if (isLocalOrigin()) {
     const r = await fetch('./presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
     presetSyncMsg = r.ok ? '共有済み' : '共有に失敗しました';
@@ -1946,7 +1959,7 @@ async function syncPresetsFromRemote() {
     if (!remote || !Array.isArray(remote.mine) || !Array.isArray(remote.opps)) return;
     const rt = Date.parse(remote.updatedAt || '') || 0;
     const lt = Date.parse(local.updatedAt || '') || 0;
-    if (rt > lt) savePresetStore({ mine: remote.mine, opps: remote.opps, updatedAt: remote.updatedAt }, true);
+    if (rt > lt) savePresetStore({ mine: remote.mine, opps: remote.opps, updatedAt: remote.updatedAt, lastUsed: remote.lastUsed }, true);
     else if (lt > rt && (local.mine.length || local.opps.length)) schedulePresetPush();
   } catch (e) { /* オフライン等では何もしない */ }
 }
@@ -1998,6 +2011,10 @@ function renamePreset(side, idx, name) {
   if (!store[side][idx]) return false;
   const old = store[side][idx].name;
   store[side][idx].name = nm;
+  for (const sd of ['mine', 'opps']) {
+    const lu = store.lastUsed && store.lastUsed[sd];
+    if (lu && lu.kind === 'preset' && lu.name === old) lu.name = nm;
+  }
   savePresetStore(store);
   if (presetApplied[side] === old) presetApplied[side] = nm;
   return true;
@@ -2006,10 +2023,46 @@ function deletePreset(side, idx) {
   const store = loadPresetStore();
   if (idx < 0 || idx >= store[side].length) return;
   const [gone] = store[side].splice(idx, 1);
+  if (gone) for (const sd of ['mine', 'opps']) {
+    const lu = store.lastUsed && store.lastUsed[sd];
+    if (lu && lu.kind === 'preset' && lu.name === gone.name) store.lastUsed[sd] = null;
+  }
   savePresetStore(store);
   if (gone && presetApplied[side] === gone.name) presetApplied[side] = '';
 }
-function applyPreset(side, idx) {
+// プリセット適用の使用履歴を記録する (保存済みプリセットと VGCPastes
+// チームの適用だけが対象。インポートや単体ビルド適用は記録しない)
+function recordLastUsed(side, entry) {
+  const store = loadPresetStore();
+  store.lastUsed[side] = entry;
+  savePresetStore(store);
+}
+// 起動時の lastUsed 適用の状態。boardSeen は、このセッションで
+// state.json 由来の盤面が既に適用されたことを示す (その場合は上書きしない)
+const lastUsedStartup = { done: { mine: false, opps: false }, boardSeen: false };
+let initTeamReady = false;
+// ストアが最初に利用可能になった時点で1回だけ、履歴のプリセットを
+// 初期チームにする。以後の同期で履歴が変わっても再適用はしない
+function applyLastUsedStartup() {
+  if (!initTeamReady) return;
+  const store = loadPresetStore();
+  for (const side of ['mine', 'opps']) {
+    if (lastUsedStartup.done[side]) continue;
+    const lu = store.lastUsed ? store.lastUsed[side] : null;
+    if (!lu) { lastUsedStartup.done[side] = true; continue; }
+    if (lu.kind === 'vgc' && !VGC_TEAMS) { ensureVgcTeams(); continue; } // 判定は読み込み完了後 (ensureVgcTeams の完了時に再訪する)
+    lastUsedStartup.done[side] = true;
+    if (lastUsedStartup.boardSeen) continue; // state.json 由来の盤面が既に適用されている場合は上書きしない
+    if (lu.kind === 'preset') {
+      const idx = store[side].findIndex(p => p.name === lu.name);
+      if (idx >= 0) applyPreset(side, idx, { record: false });
+    } else if (lu.kind === 'vgc') {
+      applyVgcTeam(side, lu.teamId, { record: false });
+    }
+    // 参照先が存在しない場合は現行の初期状態のままとし、履歴は変更しない
+  }
+}
+function applyPreset(side, idx, opts) {
   markCalcSrc('preset');
   const store = loadPresetStore();
   const p = store[side][idx];
@@ -2028,6 +2081,7 @@ function applyPreset(side, idx) {
   ui.presetRename = null;
   presetApplied[side] = p.name || '';
   presetRental[side] = ''; // 自前プリセットにはレンタルコードは無い
+  if (!opts || opts.record !== false) recordLastUsed(side, { kind: 'preset', name: p.name || '' });
   applySetterAbility(specs[0]);
   calcAll();
 }
@@ -3769,6 +3823,7 @@ function applyMineTeamPreview(list) {
 function applyState(j) {
   if (!j || typeof j !== 'object') return;
   let changed = false;
+  if (j.battle) lastUsedStartup.boardSeen = true;
   if (j.battlePhase === 'inBattle' || j.battlePhase === 'idle') {
     flagPhase = j.battlePhase;
     flagSeen = true;
@@ -4229,7 +4284,7 @@ const LOADER_POKEDB = regDataLoader('pokedb_parsed', '使用率分布', true, as
   // (選出画面・試合開始直後の反映を速くするため)
   poll();
   setInterval(poll, 200);
-  syncPresetsFromRemote();
+  syncPresetsFromRemote().then(() => applyLastUsedStartup());
   // データファイル群は並列に読み込む (逐次読みだと全て揃うまで時間がかかるため)
   await Promise.all([
     (async () => { try {
@@ -4348,6 +4403,8 @@ const LOADER_POKEDB = regDataLoader('pokedb_parsed', '使用率分布', true, as
     .filter(Boolean)
     .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
   await loadMyTeam();
+  initTeamReady = true;
+  applyLastUsedStartup();
   calcAll();
   // データが揃った状態で最新の state.json を反映し直す
   lastStateText = '';
