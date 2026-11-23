@@ -790,6 +790,20 @@ def _apply_battle_flag(body):
         ctrl["endSeq"] += 1
         _write_flag_control(ctrl)
         return 200, _flag_response("idle")
+    if action == "toggle":
+        # 作用は UI 側の値では決めず、reader が state.json に報告
+        # する権威ある battlePhase で決める (総合で確定した契約)。
+        # phase が不明な場合は連番を一切増やさず 409 を返す
+        phase = _reported_flag_phase()
+        if phase is None:
+            return 409, {"ok": False, "error": "phase_unknown"}
+        if phase == "inBattle":
+            ctrl["endSeq"] += 1
+            _write_flag_control(ctrl)
+            return 200, _flag_response("idle")
+        ctrl["startSeq"] += 1
+        _write_flag_control(ctrl)
+        return 200, _flag_response("inBattle")
     if action == "mode":
         mode = obj.get("mode")
         if mode not in ("manual", "auto"):
