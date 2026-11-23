@@ -10972,7 +10972,18 @@ func runOnce(image: CGImage) {
                         // battle_20261123_043809 枠4、Azumarill の
                         // 最良 0.086 が、最新試行で Primarina 0.224 対
                         // Azumarill 0.239 と直接対決で負けていた事実
-                        // を上書きし、正しい pick を覆した)
+                        // を上書きし、正しい pick を覆した)。
+                        // ただし例外として、最良スコアの差が決定的な
+                        // 大きさ (展開マージン pvExpandMargin と同じ
+                        // 0.20) を超える場合は、最良スコアを先に使う。
+                        // 最新試行の僅差 (測定ノイズの水準) が、別試行で
+                        // 出た大差の証拠を覆すのは不合理なため (実例:
+                        // 2026-11-23 battle_20261123_230349 枠5、
+                        // Delphox の最新 0.335 が Armarouge の最新
+                        // 0.341 に 0.006 差で勝ち、Armarouge の最良
+                        // 0.021 との大差 0.314 が無視された)。
+                        // 043809 の件は最良の差が 0.138 と基準未満の
+                        // ため、従来どおり最新試行が決める
                         let ltSet = Set(r.slots[i].types)
                         let leader = previewVotes[i].keys.filter { !vetoed[i].contains($0) }.sorted { a, b in
                             let ca = previewVotes[i][a, default: 0], cb = previewVotes[i][b, default: 0]
@@ -10982,6 +10993,8 @@ func runOnce(image: CGImage) {
                                 let fb = Set(pvSpeciesTypes[b] ?? []).isSuperset(of: ltSet)
                                 if fa != fb { return fa }
                             }
+                            let ba = previewVoteScore[i][a] ?? 9, bb = previewVoteScore[i][b] ?? 9
+                            if abs(ba - bb) > pvExpandMargin { return ba < bb }
                             let la = previewLatestScore[i][a], lb = previewLatestScore[i][b]
                             if la != nil || lb != nil {
                                 if la == nil { return false }
@@ -11470,7 +11483,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_1146"
+let readerBuild = "20261123_2331"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
