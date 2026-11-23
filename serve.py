@@ -424,7 +424,7 @@ def _unsent_ready_battle_keys():
         if not os.path.isdir(LOG_DIR):
             return []
         groups = {}
-        for name in sorted(os.listdir(LOG_DIR)):
+        for name in sorted(_log_file_map()):
             if not _is_upload_target(name):
                 continue
             bk = _battle_key(name)
@@ -706,9 +706,10 @@ def _save_inference_log(body):
         raise ValueError("inference log has no valid battle key")
     if not isinstance(data.get("entries"), list):
         raise ValueError("inference log has no entries list")
-    os.makedirs(LOG_DIR, exist_ok=True)
+    folder = _battle_folder_path(battle)
+    os.makedirs(folder, exist_ok=True)
     name = f"battle_{battle}_inference.json"
-    with open(os.path.join(LOG_DIR, name), "wb") as f:
+    with open(os.path.join(folder, name), "wb") as f:
         f.write(body)
     # 推論過程ログの受け取り表示は出さない (2026-11-22 のユーザー
     # 指示)。保存は従来どおり毎回行う
@@ -820,9 +821,10 @@ def _save_calc_log(body):
         raise ValueError("calc log has no valid battle key")
     if not isinstance(data.get("entries"), list):
         raise ValueError("calc log has no entries list")
-    os.makedirs(LOG_DIR, exist_ok=True)
+    folder = _battle_folder_path(battle)
+    os.makedirs(folder, exist_ok=True)
     name = f"battle_{battle}_calclog.json"
-    with open(os.path.join(LOG_DIR, name), "wb") as f:
+    with open(os.path.join(folder, name), "wb") as f:
         f.write(body)
     # ダメ計ログの受け取り表示は出さない (2026-11-22 のユーザー
     # 指示)。保存は従来どおり毎回行う
@@ -894,7 +896,7 @@ def _battle_in_progress():
     # だけで「対戦中でない」と判定され、対戦中に備考プロンプトと
     # 自動送信が走った (実例: 2026-11-23 battle_20261123_043809)
     try:
-        names = os.listdir(LOG_DIR)
+        names = list(_log_file_map())
     except OSError:
         return False
     return not any(n.endswith(("_final.log", "_final_protocol.log"))
@@ -935,12 +937,78 @@ def _battle_key(name):
     return rest if _BATTLE_KEY_RE.match(rest) else None
 
 
+def _battle_folder_path(key):
+    """その試合のフォルダ (logs/battle_<key>/)。"""
+    return os.path.join(LOG_DIR, f"battle_{key}")
+
+
+def _log_file_map():
+    """ファイル名 (平坦名) → 実パスの対応。試合フォルダ内を正とし、
+    直下に残った従来配置も拾う (移行中の読み取り互換のため)。"""
+    found = {}
+    if not os.path.isdir(LOG_DIR):
+        return found
+    for name in sorted(os.listdir(LOG_DIR)):
+        path = os.path.join(LOG_DIR, name)
+        if os.path.isdir(path):
+            for sub in sorted(os.listdir(path)):
+                sub_path = os.path.join(path, sub)
+                if os.path.isfile(sub_path):
+                    found[sub] = sub_path
+    for name in sorted(os.listdir(LOG_DIR)):
+        path = os.path.join(LOG_DIR, name)
+        if os.path.isfile(path):
+            found.setdefault(name, path)
+    return found
+
+
+def _path_of(paths, name):
+    return paths.get(name) or os.path.join(LOG_DIR, name)
+
+
+def _folder_name_for(name):
+    """直下のファイルが属するフォルダ名 (属さなければ None)。"""
+    if name.startswith("preview_test_"):
+        stem = name[len("preview_test_"):].rsplit(".", 1)[0]
+        return f"preview_test_{stem}"
+    bk = _battle_key(name)
+    if bk is None:
+        return None
+    return f"battle_{bk}"
+
+
+def _migrate_logs_into_folders():
+    """直下に残った試合ファイルを試合フォルダへ寄せる (起動時)。
+    移動のみで削除はしない。同名が既にフォルダ内にあれば、直下の
+    分はそのまま残す (読み取りは両配置に対応する)。"""
+    if not os.path.isdir(LOG_DIR):
+        return
+    for name in sorted(os.listdir(LOG_DIR)):
+        src_path = os.path.join(LOG_DIR, name)
+        if not os.path.isfile(src_path):
+            continue
+        folder = _folder_name_for(name)
+        if folder is None:
+            continue
+        dest_dir = os.path.join(LOG_DIR, folder)
+        dest = os.path.join(dest_dir, name)
+        if os.path.exists(dest):
+            continue
+        try:
+            os.makedirs(dest_dir, exist_ok=True)
+            os.replace(src_path, dest)
+        except OSError:
+            continue
+
+
 def _note_name(key):
     return f"battle_{key}_note.txt"
 
 
 def _note_exists(key):
-    return os.path.exists(os.path.join(LOG_DIR, _note_name(key)))
+    return (os.path.exists(os.path.join(_battle_folder_path(key),
+                                        _note_name(key)))
+            or os.path.exists(os.path.join(LOG_DIR, _note_name(key))))
 
 
 def _gate_key(key):
@@ -1091,6 +1159,7 @@ def _update_sent_battles(state, names, known):
     試合 (中断のみ) は、このサイクルの終了時点で未送信ファイルが
     残っていない場合に記録する。"""
     sent = _load_sent_battles()
+    paths = _log_file_map()
     by_key = {}
     for n in names:
         key = _battle_key(n)
@@ -1108,13 +1177,13 @@ def _update_sent_battles(state, names, known):
                 and known.get(n) is not None
                 and (known.get(n) == state.get(n)
                      or known.get(n) == _file_hash(
-                         os.path.join(LOG_DIR, n)))
+                         _path_of(paths, n)))
                 for n in gnames)
             if final_known:
                 sent.add(gk)
                 changed = True
                 _announce_battle_sent(gk)
-        elif all(state.get(n) == _file_hash(os.path.join(LOG_DIR, n))
+        elif all(state.get(n) == _file_hash(_path_of(paths, n))
                  for n in gnames):
             sent.add(gk)
             changed = True
@@ -1139,8 +1208,9 @@ def list_pending_log_notes():
     if not os.path.isdir(LOG_DIR):
         return []
     state = _load_upload_state()
+    paths = _log_file_map()
     groups = {}
-    for name in sorted(os.listdir(LOG_DIR)):
+    for name in sorted(paths):
         if not _is_upload_target(name):
             continue
         key = _battle_key(name)
@@ -1168,7 +1238,7 @@ def list_pending_log_notes():
         mtime = 0.0
         for n in names:
             try:
-                mtime = max(mtime, os.path.getmtime(os.path.join(LOG_DIR, n)))
+                mtime = max(mtime, os.path.getmtime(_path_of(paths, n)))
             except OSError:
                 pass
         log_names = [n for n in names if n.endswith(".log")]
@@ -1176,7 +1246,7 @@ def list_pending_log_notes():
             # ログが全て送信済みなら、備考待ちではない (備考機能より前に
             # 送信された試合や、送信後に残ったデバッグ一式だけの状態)
             unsent = [n for n in log_names
-                      if state.get(n) != _file_hash(os.path.join(LOG_DIR, n))]
+                      if state.get(n) != _file_hash(_path_of(paths, n))]
             if not unsent:
                 continue
         else:
@@ -1186,7 +1256,7 @@ def list_pending_log_notes():
             # 10 分経っていれば備考待ちに数える (対戦中の試合は
             # ファイルが新しいため対象にならない)
             unsent = [n for n in names
-                      if state.get(n) != _file_hash(os.path.join(LOG_DIR, n))]
+                      if state.get(n) != _file_hash(_path_of(paths, n))]
             if not unsent:
                 continue
             if not mtime or time.time() - mtime < 600:
@@ -1197,7 +1267,7 @@ def list_pending_log_notes():
             if "_protocol" in n:
                 continue
             try:
-                text = open(os.path.join(LOG_DIR, n), encoding="utf-8").read()
+                text = open(_path_of(paths, n), encoding="utf-8").read()
             except OSError:
                 continue
             m = re.search(r"Battle started between .+? and (.+?)!", text)
@@ -1225,8 +1295,9 @@ def save_log_note(key, note):
     if not isinstance(note, str):
         note = ""
     note = note[:8000]
-    os.makedirs(LOG_DIR, exist_ok=True)
-    path = os.path.join(LOG_DIR, _note_name(key))
+    folder = _battle_folder_path(key)
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, _note_name(key))
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(note)
@@ -1283,7 +1354,8 @@ def _upload_logs_once_locked(session_only=False):
         # 報告)。回答が終わると prompt_for_pending_notes が改めて送信
         # を呼ぶため、保留されていた分はそこでまとめて送られる
         return
-    names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
+    paths = _log_file_map()
+    names = sorted(n for n in paths if _is_upload_target(n))
     if not names:
         return
     state = _load_upload_state()
@@ -1306,7 +1378,7 @@ def _upload_logs_once_locked(session_only=False):
                 # Mac 側にそのまま残し、手動の --note 経路でだけ扱う)
                 continue
         try:
-            data = open(os.path.join(LOG_DIR, n), "rb").read()
+            data = open(_path_of(paths, n), "rb").read()
         except OSError:
             continue
         h = hashlib.sha256(data).hexdigest()
@@ -1405,7 +1477,7 @@ def _upload_logs_once_locked(session_only=False):
             h = state.get(n)
             if h is None or known.get(n) == h:
                 continue
-            if _file_hash(os.path.join(LOG_DIR, n)) != h:
+            if _file_hash(_path_of(paths, n)) != h:
                 continue
             entry = {"name": n, "sha256": h,
                      "uploaded_at": datetime.now(JST).isoformat()}
@@ -1485,8 +1557,9 @@ def _report_upload_completion(state, session_only=False):
     # 備考待ち以外の未送信が残っている場合は何も出さない。
     # 自動送信 (session_only) では、起動前から残っている試合 (滞留分)
     # は数えない (自動処理の対象外のため、入力待ちとは表示しない)
+    paths = _log_file_map()
     try:
-        names = sorted(n for n in os.listdir(LOG_DIR) if _is_upload_target(n))
+        names = sorted(n for n in paths if _is_upload_target(n))
     except OSError:
         return
     held = set()
@@ -1497,7 +1570,7 @@ def _report_upload_completion(state, session_only=False):
                 and not _in_session_scope(_gate_key(key))):
             continue
         try:
-            data = open(os.path.join(LOG_DIR, n), "rb").read()
+            data = open(_path_of(paths, n), "rb").read()
         except OSError:
             continue
         if state.get(n) == hashlib.sha256(data).hexdigest():
@@ -2050,6 +2123,11 @@ if __name__ == "__main__":
         # 備考ゲートの無効化中は働かない
         raise SystemExit(cli_send_notes() if _NOTE_GATE_ENABLED else 0)
     check_log_token()
+    # 直下に残った試合ファイルを試合フォルダへ寄せる (配置の移行)
+    try:
+        _migrate_logs_into_folders()
+    except Exception:
+        pass
     # 起動前から残っている備考待ち (滞留分) は、この起動では処理
     # しない。その旨だけを 1 行知らせる (2026-11-21 のユーザー指示)
     try:
