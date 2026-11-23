@@ -1912,6 +1912,7 @@ func loadSpeciesMoves() {
 // 内部イベント (プロトコル形式) は battle_protocol.log に残し、ターミナルと
 // battle.log には人間可読な Showdown 風テキストを出す
 var displayLog: [String] = []
+var displayPrintedCount = 0               // 可読ログのうち terminal へ印刷済みの行数 (遅延印刷の管理)
 let protocolLogURL = scriptDir.appendingPathComponent("battle_protocol.log")
 var renderSlotSpecies: [String: String] = [:]   // 枠 ("p1a") -> 現在の種族
 var renderFainted: Set<String> = []              // ひんしになった枠 (交代が引き戻しかの判定)
@@ -2691,6 +2692,34 @@ func pullBackSwitchBlock(label: String, splitMega: Bool = false, requireEarlySeg
     return (pulled, pulledDisplay, pulledHead, pulledDisplayHead)
 }
 
+// 可読ログの遅延印刷 (案2): terminal には、もう並べ替え・差し込み・
+// 削除が起きない範囲 (確定範囲) だけを displayLog の順序どおりに
+// 印刷する。確定範囲は「最後の『Turn 』見出しより前」までとする。
+// 根拠: 差し込み (displayInsertAt) の走査は見出しで止まり遡行も
+// 最大 60 行、交代の引き戻しの収集・挿入も最後の見出し以降が範囲、
+// ターン行ガードが書き換えるのは見出しが載る直前の最後の区間
+// だけであり、見出しが載った後の区間へ到達する機構は無い。
+// 試合終了時 (final のアーカイブ時) は未印刷分をすべて印刷し、
+// terminal 上のログが battle.log と一致した状態で締める
+func confirmedDisplayCount(isFinal: Bool) -> Int {
+    if isFinal { return displayLog.count }
+    return displayLog.lastIndex(where: { $0.hasPrefix("Turn ") }) ?? 0
+}
+
+func takeDisplayPrintLines(isFinal: Bool) -> [String] {
+    let target = confirmedDisplayCount(isFinal: isFinal)
+    guard target > displayPrintedCount else { return [] }
+    let lines = Array(displayLog[displayPrintedCount..<target])
+    displayPrintedCount = target
+    return lines
+}
+
+func flushDisplayPrint(isFinal: Bool = false) {
+    let lines = takeDisplayPrintLines(isFinal: isFinal)
+    for l in lines { Swift.print(l) }
+    if !lines.isEmpty { fflush(stdout) }
+}
+
 func emitLog(_ line: String) { emitLog(line, applyNow: true) }
 
 // applyNow=false は「状態への適用は発生時点で済んでいる」行の追記専用
@@ -3102,14 +3131,14 @@ func emitLog(_ line: String, applyNow: Bool) {
     }
     if let displayInsertAt {
         displayLog.insert(out[0], at: displayInsertAt)
-        Swift.print(out[0])
     } else {
         for l in out {
             displayLog.append(l)
-            Swift.print(l)
         }
     }
-    fflush(stdout)
+    // 可読ログの terminal 印刷は印刷管理に一元化する (確定した
+    // 範囲だけを遅れて印刷する。案2)
+    flushDisplayPrint()
     try? (displayLog.joined(separator: "\n") + "\n").write(to: battleLogURL, atomically: true, encoding: .utf8)
     // 行動が起きたらコマンド選択フェーズは終わっている (ターン数えのリセット)
     if line.hasPrefix("|move|") || line.hasPrefix("|switch|") || line.hasPrefix("|faint|") {
@@ -3236,7 +3265,7 @@ func resetLogState() {
     faintedSpecies = []; heldEntryBoosts = []
     battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
     debugShotsThisBattle = 0; debugRoutineShots = 0; debugEventShots = 0; debugSeenEntries = []; debugFrameRing = []
-    displayLog = []; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
+    displayLog = []; displayPrintedCount = 0; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
     pendingTurnDisplay = []
@@ -3572,6 +3601,9 @@ func archiveCurrentBattle(final: Bool) {
     let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
     // interrupted 無効化中はファイルだけを出さない (後始末は従来どおり)
     if final || interruptedSaveEnabled {
+        // 試合終了時は未印刷分をすべて印刷し、terminal のログを
+        // battle.log と一致させて締める (遅延印刷・案2)
+        if final { flushDisplayPrint(isFinal: true) }
         archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog, id: id)
     }
     paddleEndBattle()
@@ -11313,7 +11345,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0948"
+let readerBuild = "20261123_1007"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
