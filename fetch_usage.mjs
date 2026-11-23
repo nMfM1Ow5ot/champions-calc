@@ -49,15 +49,22 @@ const ITEM_JA2EN = {
   'ふしぎのプレート': 'Mind Plate', 'かみなりのプレート': 'Zap Plate', 'りゅうのプレート': 'Draco Plate', 'こわもてプレート': 'Dread Plate',
   'こうてつプレート': 'Iron Plate', 'たまごプレート': 'Stone Plate', 'ゆきのプレート': 'Icicle Plate', 'ひのたまプレート': 'Flame Plate',
   'しずくのプレート': 'Splash Plate', 'もののけプレート': 'Spooky Plate', 'ラムのみ': 'Lum Berry', 'チイラのみ': 'Liechi Berry',
-  'リュガのみ': 'Ganlon Berry', 'ヤタピのみ': 'Petaya Berry', 'ズアのみ': 'Micle Berry', 'カムラのみ': 'Jaboca Berry',
-  'タラプのみ': 'Rowap Berry', 'バコウのみ': 'Wacan Berry', 'ヨロギのみ': 'Tanga Berry', 'ソクノのみ': 'Kasib Berry',
-  'リンドのみ': 'Rindo Berry', 'ヤチェのみ': 'Yache Berry', 'ヨプのみ': 'Payapa Berry', 'シュカのみ': 'Shuca Berry',
-  'バンジのみ': 'Babiri Berry', 'ナモのみ': 'Passho Berry', 'モモンのみ': 'Pecha Berry', 'クラボのみ': 'Cheri Berry',
-  'チーゴのみ': 'Chesto Berry', 'ナナシのみ': 'Rawst Berry', 'レンブのみ': 'Persim Berry', 'ヒメリのみ': 'Leppa Berry',
-  'オレンのみ': 'Oran Berry', 'カゴのみ': 'Aspear Berry', 'ウイのみ': 'Wiki Berry', 'マゴのみ': 'Mago Berry',
-  'バンジロのみ': 'Aguav Berry', 'イアのみ': 'Iapapa Berry', 'フィラのみ': 'Figy Berry', 'ゴールドスプレー': 'Gold Bottle Cap',
+  'リュガのみ': 'Ganlon Berry', 'ヤタピのみ': 'Petaya Berry', 'ズアのみ': 'Apicot Berry', 'カムラのみ': 'Salac Berry',
+  'タラプのみ': 'Maranga Berry', 'バコウのみ': 'Coba Berry', 'ヨロギのみ': 'Charti Berry', 'ソクノのみ': 'Wacan Berry',
+  'リンドのみ': 'Rindo Berry', 'ヤチェのみ': 'Yache Berry', 'ヨプのみ': 'Chople Berry', 'シュカのみ': 'Shuca Berry',
+  'バンジのみ': 'Aguav Berry', 'ナモのみ': 'Colbur Berry', 'モモンのみ': 'Pecha Berry', 'クラボのみ': 'Cheri Berry',
+  'チーゴのみ': 'Rawst Berry', 'ナナシのみ': 'Aspear Berry', 'レンブのみ': 'Rowap Berry', 'ヒメリのみ': 'Leppa Berry',
+  'オレンのみ': 'Oran Berry', 'カゴのみ': 'Chesto Berry', 'ウイのみ': 'Wiki Berry', 'マゴのみ': 'Mago Berry',
+  'イトケのみ': 'Passho Berry', 'ウタンのみ': 'Payapa Berry', 'タンガのみ': 'Tanga Berry', 'カシブのみ': 'Kasib Berry',
+  'リリバのみ': 'Babiri Berry', 'ホズのみ': 'Chilan Berry', 'キーのみ': 'Persim Berry', 'ミクルのみ': 'Micle Berry',
+  'ジャポのみ': 'Jaboca Berry', 'サンのみ': 'Lansat Berry', 'スターのみ': 'Starf Berry', 'ナゾのみ': 'Enigma Berry',
+  'イバンのみ': 'Custap Berry', 'アッキのみ': 'Kee Berry', 'ビアーのみ': 'Kebia Berry',
+  'こぶしのプレート': 'Fist Plate', 'つららのプレート': 'Icicle Plate', 'みどりのプレート': 'Meadow Plate',
+  'せいれいプレート': 'Pixie Plate', 'がんせきプレート': 'Stone Plate', 'もうどくプレート': 'Toxic Plate',
+  'いかずちプレート': 'Zap Plate', 'しずくプレート': 'Splash Plate', 'さざなみのおこう': 'Wave Incense',
+  'バンジロのみ': 'Aguav Berry', 'イアのみ': 'Iapapa Berry', 'フィラのみ': 'Figy Berry', 'きんのおうかん': 'Gold Bottle Cap',
   'ぼうじんゴーグル': 'Safety Goggles', 'だっしゅつパック': 'Eject Pack', 'ルームサービス': 'Room Service',
-  'グランドコート': 'Grand Court', 'クリアチャーム': 'Clear Amulet', 'ミラーコート': 'Mirror Herb', 'おんみつマント': 'Covert Cloak',
+  'グランドコート': 'Grand Court', 'クリアチャーム': 'Clear Amulet', 'ものまねハーブ': 'Mirror Herb', 'おんみつマント': 'Covert Cloak',
   'せんせいのツメ': 'Quick Claw', 'しめつけバンド': 'Binding Band', 'とけないこおり': 'Never-Melt Ice', 'するどいくちばし': 'Sharp Beak',
   'いかさまダイス': 'Loaded Dice', 'ブーストエナジー': 'Booster Energy', 'あつぞこブーツ': 'Heavy-Duty Boots',
   'くちたけん': 'Rusted Sword', 'くちたたて': 'Rusted Shield', 'でんきだま': 'Light Ball', 'ふといホネ': 'Thick Club',
@@ -78,9 +85,14 @@ for (const item of gen.items) {
     if (jaBase) megaStoneByJa[jaBase.replace(/ー$/, '').replace(/ン$/, '') + 'ナイト' + suffix] = it.name;
   }
 }
+// 既存の items_ja.json (監査済みの正本) を先に読み、mapItem ではこちらを
+// 優先する。手書き表 ITEM_JA2EN は新規項目の補完用 (過去に実の名前の
+// 取り違えが混入したため、正本と食い違う場合は正本を正とする)
+let existingItems = {};
+try { existingItems = JSON.parse(readFileSync(new URL('./data/items_ja.json', import.meta.url), 'utf8')); } catch (e) { /* 既定値 */ }
 function mapItem(jaName) {
   const n = z2h(jaName.trim());
-  return ITEM_JA2EN[n] || megaStoneByJa[n] || null;
+  return existingItems[n] || ITEM_JA2EN[n] || megaStoneByJa[n] || null;
 }
 
 /* ---------- ranking list ---------- */
@@ -308,9 +320,8 @@ if (REG_LABEL !== REG.regulation) delete regOut.specialElements;
 writeFileSync(new URL('./data/regulation.json', import.meta.url), JSON.stringify(regOut, null, 1) + '\n');
 console.log('regulation.json updated:', REG_LABEL, SEASON_LABEL);
 // 既存の items_ja.json を優先してマージする (再取得のたびに、監査等で追加された
-// 項目が消えないように。新規項目だけが生成マップから足される)
-let existingItems = {};
-try { existingItems = JSON.parse(readFileSync(new URL('./data/items_ja.json', import.meta.url), 'utf8')); } catch (e) { /* 既定値 */ }
+// 項目が消えないように。新規項目だけが生成マップから足される)。
+// existingItems は mapItem の直前で読み込み済み
 writeFileSync(new URL('./data/items_ja.json', import.meta.url), JSON.stringify({ ...ITEM_JA2EN, ...megaStoneByJa, ...existingItems }, null, 1));
 console.log('sets built:', Object.keys(sets).length);
 console.log('unmapped items:', [...unmapped.items].slice(0, 30));
