@@ -9299,7 +9299,7 @@ var pvFeatures: [String: (hash: [UInt8], hue: [Double], aspect: Double, density:
 // preview_features.json の各エントリの "templates" に同梱される
 // (build_frame_templates.py が登録する)。種族のスコアは本参照と
 // テンプレート群の最小を取る (pvBestScore)
-var pvTemplateFeatures: [String: [(hash: [UInt8], hue: [Double], aspect: Double, density: Double, gender: String)]] = [:]
+var pvTemplateFeatures: [String: [(hash: [UInt8], hue: [Double], aspect: Double, density: Double, gender: String, tag: String)]] = [:]
 var pvTypeIcons: [String: (rgb: [Double], glyph: [Double])] = [:]
 var pvDataLoaded = false
 
@@ -9349,7 +9349,7 @@ func loadPreviewData() {
                             (d["aspect"] as? NSNumber)?.doubleValue ?? 1,
                             (d["density"] as? NSNumber)?.doubleValue ?? 0)
         if let tlist = d["templates"] as? [[String: Any]] {
-            var tpls: [(hash: [UInt8], hue: [Double], aspect: Double, density: Double, gender: String)] = []
+            var tpls: [(hash: [UInt8], hue: [Double], aspect: Double, density: Double, gender: String, tag: String)] = []
             for t in tlist {
                 guard let thex = t["hash"] as? String else { continue }
                 var tbytes: [UInt8] = []
@@ -9362,7 +9362,8 @@ func loadPreviewData() {
                 tpls.append((tbytes, pvNumArray(t["hue"]),
                              (t["aspect"] as? NSNumber)?.doubleValue ?? 1,
                              (t["density"] as? NSNumber)?.doubleValue ?? 0,
-                             t["gender"] as? String ?? ""))
+                             t["gender"] as? String ?? "",
+                             t["tag"] as? String ?? ""))
             }
             if !tpls.isEmpty { pvTemplateFeatures[name] = tpls }
         }
@@ -9865,7 +9866,9 @@ let pvGenderDimorphic: Set<String> = ["Hippowdon", "Pyroar", "Pikachu", "Scizor"
 func pvBestScore(_ f: (hash: [UInt8], hue: [Double], aspect: Double, density: Double),
                  _ name: String, _ gender: String?) -> Double? {
     var best = pvFeatures[name].map { pvScore(f, $0) }
-    var tpls = pvTemplateFeatures[name] ?? []
+    // 色違い個体のテンプレートは通常照合に使わない (色相特徴が通常個体と
+    // 異なり、通常側の照合を汚染するため。2026-11-24 の恒常ルール)
+    var tpls = (pvTemplateFeatures[name] ?? []).filter { $0.tag != "shiny" }
     if let gender, pvGenderDimorphic.contains(name) {
         let genders = Set(tpls.map { $0.gender }.filter { !$0.isEmpty })
         if genders.contains(gender) && genders.count >= 2 {
@@ -11483,7 +11486,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261124_0105"
+let readerBuild = "20261124_0118"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
