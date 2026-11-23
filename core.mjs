@@ -652,6 +652,29 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
     }
     return typeof dm === 'number' ? [dm] : null;
   };
+  // 確定数と説明文の組み立て (カスタム回復層と 9HKO 超の補完を含む)。
+  // コピー文章用に防御側を満タンへ差し替えた再計算でも同じ組み立てを使う
+  const koAndDesc = (r, defPoke, defSpec, i, j, moveObj, useField) => {
+    const range = r.range();
+    let koText = r.kochance().text;
+    let descText = r.desc();
+    const customKo = recoveryKoText(attackers[i], defPoke, moveObj, useField, r, koCtx, j, atkSpecs[i], defSpec);
+    if (customKo !== null) {
+      koText = customKo;
+      if (customKo) {
+        const libKo = r.kochance().text;
+        if (libKo && descText.endsWith(libKo)) descText = descText.slice(0, descText.length - libKo.length) + customKo;
+        else if (!libKo) descText = descText + ' -- ' + customKo;
+      }
+    }
+    if (!koText && customKo === null && range[1] > 0) {
+      const fb = fallbackKoText(attackers[i], defPoke, moveObj, useField, range[1],
+        !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[j]),
+        !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[j]));
+      if (fb) { koText = fb; descText = descText + ' -- ' + fb; }
+    }
+    return { ko: koText, desc: descText };
+  };
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
@@ -668,22 +691,17 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
           const range = r.range();
           const rolls = rollsOf(r);
           const defMaxHP = defenders[j].maxHP();
-          let koText = r.kochance().text;
-          let descText = r.desc();
-          const customKo = recoveryKoText(attackers[i], defenders[j], moveObj, useField, r, koCtx, j, atkSpecs[i], defSpecs[j]);
-          if (customKo !== null) {
-            koText = customKo;
-            if (customKo) {
-              const libKo = r.kochance().text;
-              if (libKo && descText.endsWith(libKo)) descText = descText.slice(0, descText.length - libKo.length) + customKo;
-              else if (!libKo) descText = descText + ' -- ' + customKo;
-            }
-          }
-          if (!koText && customKo === null && range[1] > 0) {
-            const fb = fallbackKoText(attackers[i], defenders[j], moveObj, useField, range[1],
-              !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[j]),
-              !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[j]));
-            if (fb) { koText = fb; descText = descText + ' -- ' + fb; }
+          const { ko: koText, desc: descText } = koAndDesc(r, defenders[j], defSpecs[j], i, j, moveObj, useField);
+          // コピー文章専用: 防御側の HP が削れている場合だけ、満タン前提で
+          // 組み立て直した desc を併記する (画面表示の確定数は現在 HP 前提)
+          let descFull = null;
+          if (defenders[j].curHP() < defMaxHP) {
+            try {
+              const fullSpec = { ...defSpecs[j], curHP: undefined, curHPPercent: 100 };
+              const defFull = toPokemon(fullSpec);
+              const rF = calculate(gen, attackers[i], defFull, moveObj, useField);
+              descFull = koAndDesc(rF, defFull, fullSpec, i, j, moveObj, useField).desc;
+            } catch (e) { descFull = null; }
           }
           // 反対の急所状態の範囲 (通常表示の下に急所分を併記するため。
           // 急所トグルが ON のときは通常分が入る)
@@ -700,6 +718,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             maxPct: Math.round(range[1] / defMaxHP * 1000) / 10,
             ko: koText,
             desc: descText,
+            descFull,
             rolls,
             alt,
           });
