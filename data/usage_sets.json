@@ -118,7 +118,7 @@
    "megaSpecies": null,
    "ability": "Defiant",
    "nature": "Adamant",
-   "item": "Payapa Berry",
+   "item": "Chople Berry",
    "sp": {
     "hp": 32,
     "atk": 32,
@@ -2608,7 +2608,7 @@
    "megaSpecies": null,
    "ability": "Competitive",
    "nature": "Modest",
-   "item": "Payapa Berry",
+   "item": "Chople Berry",
    "sp": {
     "hp": 32,
     "def": 2,
