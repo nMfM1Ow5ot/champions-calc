@@ -4,11 +4,21 @@
 # 引数はリーダーへそのまま渡る (例: bash start_all.sh --debug)
 cd "$(dirname "$0")"
 
+# 通常系の表示 (起動の進行・案内など) の抑止スイッチ。true の間は
+# 通常系の echo を出さない。異常系の警告 (起動直後の繰り返し終了・
+# 予期せぬ終了) は常に出す。表示を戻すには false に変える
+LIMIT_TERMINAL_OUTPUT=true
+echo_info() {
+  if [ "$LIMIT_TERMINAL_OUTPUT" != "true" ]; then
+    echo "$@"
+  fi
+}
+
 # 前のフォルダで起動したままの旧サーバがポート 8765 を掴んでいると
 # 新しいサーバが起動できないので、先に止める
 OLD=$(lsof -ti tcp:8765 2>/dev/null)
 if [ -n "$OLD" ]; then
-  echo "起動中の旧サーバを停止します (PID: $OLD)"
+  echo_info "起動中の旧サーバを停止します (PID: $OLD)"
   kill $OLD 2>/dev/null
   sleep 1
 fi
@@ -17,7 +27,7 @@ fi
 # ディスクにあると、並行起動では同期が届く前に落ちて修正版が永遠に
 # 届かなくなる (2026-11-20 の実例)。先に同期すれば、起動するリーダーは
 # 常に最新の状態になる。--force で版の記録と無関係に全ファイルを照合する。
-echo "最新のファイルに同期します..."
+echo_info "最新のファイルに同期します..."
 python3 sync_ui.py --force || true
 
 # 起動一式の版番号を表示する。表示するのは UI だけの版ではなく、
@@ -37,7 +47,7 @@ if [ -z "$REV" ]; then
   REV=$(cat ui_rev.txt 2>/dev/null | tr -d '[:space:]')
 fi
 if [ -n "$REV" ]; then
-  echo "現在の rev (同期対象一式): $REV"
+  echo_info "現在の rev (同期対象一式): $REV"
 fi
 
 # UI サーバを裏で起動し、終了時に一緒に止める。
@@ -54,8 +64,8 @@ SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null' EXIT INT TERM
 
 sleep 1
-echo "UI はブラウザで http://localhost:8765/ui.html を開いてください (自動では開きません)"
-echo "リーダーを起動します (終了は Ctrl+C で両方止まります)"
+echo_info "UI はブラウザで http://localhost:8765/ui.html を開いてください (自動では開きません)"
+echo_info "リーダーを起動します (終了は Ctrl+C で両方止まります)"
 
 # リーダーは表で起動
 # 終了コード 42 (新しいリーダーが同期で届いた合図) のときは再起動する。
@@ -68,7 +78,7 @@ while true; do
   swift reader.swift "$@"
   code=$?
   if [ $code -eq 42 ]; then
-    echo "リーダーを再起動します"
+    echo_info "リーダーを再起動します"
     CRASHES=0
     continue
   fi
