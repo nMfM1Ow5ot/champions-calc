@@ -9301,6 +9301,10 @@ var pvFeatures: [String: (hash: [UInt8], hue: [Double], aspect: Double, density:
 // テンプレート群の最小を取る (pvBestScore)
 var pvTemplateFeatures: [String: [(hash: [UInt8], hue: [Double], aspect: Double, density: Double, gender: String, tag: String)]] = [:]
 var pvTypeIcons: [String: (rgb: [Double], glyph: [Double])] = [:]
+// タイプアイコンの実フレームサンプル (テンプレート照合用、2026-11-24)。
+// type_icons.json の各タイプの "samples" を読み込む。採取は
+// build_icon_templates.py (正解確定フレーム・真実ラベルのみ)。
+var pvTypeIconSamples: [String: [(rgb: [Double], glyph: [Double])]] = [:]
 var pvDataLoaded = false
 
 func pvJa(_ en: String) -> String { speciesDict.first { $0.en == en }?.ja ?? en }
@@ -9369,7 +9373,12 @@ func loadPreviewData() {
         }
     }
     for (name, v) in iobj {
-        if let d = v as? [String: Any] { pvTypeIcons[name] = (pvNumArray(d["rgb"]), pvNumArray(d["glyph"])) }
+        if let d = v as? [String: Any] {
+            pvTypeIcons[name] = (pvNumArray(d["rgb"]), pvNumArray(d["glyph"]))
+            if let sarr = d["samples"] as? [[String: Any]] {
+                pvTypeIconSamples[name] = sarr.map { (pvNumArray($0["rgb"]), pvNumArray($0["glyph"])) }
+            }
+        }
     }
     pvDataLoaded = !pvSpeciesTypes.isEmpty && !pvFeatures.isEmpty && !pvTypeIcons.isEmpty
 }
@@ -9644,13 +9653,24 @@ func pvClassifyIcon(_ buf: (data: [UInt8], w: Int, h: Int), _ x0in: Int, _ y0in:
                 0.05 + cd * 0.3, nil, 999)
     }
     let grid = pvResizeGray(gray, s, s, 12, 12)
+    func iconDist(_ crgb: [Double], _ glyph: [Double]) -> Double {
+        let corr = pvPearson(grid, glyph)
+        let cd = sqrt((rgb[0] - crgb[0]) * (rgb[0] - crgb[0])
+                    + (rgb[1] - crgb[1]) * (rgb[1] - crgb[1])
+                    + (rgb[2] - crgb[2]) * (rgb[2] - crgb[2])) / 441.7
+        return ((1 - corr) / 2) * 0.7 + cd * 0.3
+    }
     var scored: [(String, Double)] = []
     for (t, tp) in pvTypeIcons where tp.rgb.count >= 3 && tp.glyph.count == 144 {
-        let corr = pvPearson(grid, tp.glyph)
-        let cd = sqrt((rgb[0] - tp.rgb[0]) * (rgb[0] - tp.rgb[0])
-                    + (rgb[1] - tp.rgb[1]) * (rgb[1] - tp.rgb[1])
-                    + (rgb[2] - tp.rgb[2]) * (rgb[2] - tp.rgb[2])) / 441.7
-        scored.append((t, ((1 - corr) / 2) * 0.7 + cd * 0.3))
+        // テンプレート照合 (2026-11-24): タイプの距離は単一参照と
+        // 実フレームサンプル群の最小値。特徴量と複合距離の構造は不変更。
+        // アイコン単体の物差し (tests/icon_eval.py) で現行 0.921 →
+        // テンプレート方式 0.972、悪化したタイプなしを確認して導入。
+        var td = iconDist(tp.rgb, tp.glyph)
+        for smp in pvTypeIconSamples[t] ?? [] where smp.rgb.count >= 3 && smp.glyph.count == 144 {
+            td = min(td, iconDist(smp.rgb, smp.glyph))
+        }
+        scored.append((t, td))
     }
     scored.sort { $0.1 < $1.1 }
     let best = scored.first?.0
@@ -11486,7 +11506,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261124_0118"
+let readerBuild = "20261124_0241"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
