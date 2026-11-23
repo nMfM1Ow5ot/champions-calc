@@ -650,26 +650,32 @@ function errStack(e) { return String((e && e.stack) || '').split('\n').slice(0, 
 // 推論ログのアーカイブにもマーカーとして残す (自動で送られるため)
 // 試合開始／終了ボタン (手動フラグ化)。表示は UI ローカルのトグルでは
 // なく、state.json の battlePhase (reader が権威) から決める。再読み込み
-// しても実状態とずれない。押下は serve.py の POST /battle_flag へ送り、
-// 応答の phase (見込み値) で即時更新する。以後は battlePhase が権威で、
-// reader が取り込めなければ表示はそちらへ戻る
+// しても実状態とずれない。押下は serve.py の POST /battle_flag へ
+// {"action": "toggle"} だけを送り、開始か終了かは serve.py が権威ある
+// battlePhase で判断する (UI 側の phase では決めない)。応答が ok の
+// 場合は応答の phase で表示を即時更新し、失敗時 (409 含む) は UI 側の
+// phase を変更しない (ポーリングの追従に委ねる)。
+// ボタンは読み込み直後は無効で、最初の state.json 適用で有効な
+// battlePhase が得られた時点で有効化する。一度有効化した後は、取得が
+// 一時的に失敗しても無効化には戻さない
 let flagPhase = 'idle';
 let flagMode = 'manual';
 let flagBusy = false;
+let flagSeen = false;
 function flagBtnLabel() { return flagPhase === 'inBattle' ? '試合終了' : '試合開始'; }
+function flagBtnDisabled() { return flagBusy || !flagSeen; }
 function renderFlagBtn() {
   const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById('battleFlagBtn') : null;
   if (!el) return;
   el.textContent = flagBtnLabel();
   el.dataset.phase = flagPhase;
-  el.disabled = flagBusy;
+  el.disabled = flagBtnDisabled();
 }
 async function pressBattleFlag() {
   if (flagBusy) return;
   flagBusy = true; renderFlagBtn();
   try {
-    const action = flagPhase === 'inBattle' ? 'end' : 'start';
-    const res = await fetch('./battle_flag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+    const res = await fetch('./battle_flag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'toggle' }) });
     if (res && res.ok) {
       const j = await res.json().catch(() => null);
       if (j && (j.phase === 'inBattle' || j.phase === 'idle')) { flagPhase = j.phase; if (j.mode) flagMode = j.mode; }
@@ -3765,6 +3771,7 @@ function applyState(j) {
   let changed = false;
   if (j.battlePhase === 'inBattle' || j.battlePhase === 'idle') {
     flagPhase = j.battlePhase;
+    flagSeen = true;
     if (j.flagMode) flagMode = j.flagMode;
     renderFlagBtn();
   }
