@@ -2467,10 +2467,12 @@ function movesBox(side, res) {
     const foe = DS(side === 'mine' ? 'opps' : 'mine');
     const mvName = spec.moves[mi];
     // コピー内容は Showdown 公式計算機と同じ詳細説明文 (desc) を使う。
+    // 防御側の HP が削れている場合は、確定数だけ満タン前提で組み直した
+    // descFull を使う (画面表示の確定数は現在 HP 前提のまま)。
     // 無効のときは desc が無いので短い形式でコピーできるようにする
     let copyText = '';
     if (r && !r.status && mvName) {
-      if (!r.immune && r.desc) copyText = r.desc;
+      if (!r.immune && r.desc) copyText = r.descFull || r.desc;
       else if (r.immune) copyText = `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: IMMUNE`;
     }
     // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す
@@ -2788,7 +2790,7 @@ document.addEventListener('mousedown', e => {
   const ctl = e.target.closest('[data-ddctl]');
   if (ctl) {
     const id = ctl.dataset.ddctl;
-    if (openDDId === id) { /* already open */ const inp = ctl.querySelector('.sdd-input'); if (inp && e.target === inp && document.activeElement === inp) { e.preventDefault(); closeDD(); } else if (inp && e.target !== inp) { e.preventDefault(); inp.focus(); } }
+    if (openDDId === id) { /* already open */ const inp = ctl.querySelector('.sdd-input'); if (e.target.closest && e.target.closest('.sdd-chev')) { e.preventDefault(); closeDD(); } else if (inp && e.target === inp && document.activeElement === inp) { e.preventDefault(); closeDD(); } else if (inp && e.target !== inp) { e.preventDefault(); inp.focus(); } }
     else { e.preventDefault(); openDD(id); }
     return;
   }
