@@ -482,9 +482,9 @@ func saveSkippedFrameEvidence(_ item: FrameHandoff.Item, reason: String) {
         skippedShotsThisBattle += 1
         let seqNo = 30 + skippedShotsThisBattle
         let base = String(format: "battle_%@_debug%02d", battleArchiveId, seqNo)
-        try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+        let dir = battleDirURL(battleArchiveId)
         if let data = NSBitmapImageRep(cgImage: img).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) {
-            try? data.write(to: logsDirURL.appendingPathComponent(base + ".jpg"))
+            try? data.write(to: dir.appendingPathComponent(base + ".jpg"))
             let f = ISO8601DateFormatter()
             f.timeZone = TimeZone(identifier: "Asia/Tokyo")
             f.formatOptions = [.withInternetDateTime]
@@ -493,7 +493,7 @@ func saveSkippedFrameEvidence(_ item: FrameHandoff.Item, reason: String) {
                                      "readerBuild": readerBuild, "state": debugStateExcerpt(),
                                      "detail": ["queueSeq": item.seq, "reason": reason]]
             if let d = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
-                try? d.write(to: logsDirURL.appendingPathComponent(base + ".json"), options: .atomic)
+                try? d.write(to: dir.appendingPathComponent(base + ".json"), options: .atomic)
             }
         }
     }
@@ -624,7 +624,7 @@ func recordObservation(pass: String, region: [Double],
     guard let data = try? JSONSerialization.data(withJSONObject: rec, options: []),
           let lineText = String(data: data, encoding: .utf8) else { return }
     let line = lineText + "\n"
-    let url = logsDirURL.appendingPathComponent("battle_\(battleArchiveId)_obs.jsonl")
+    let url = battleDirURL(battleArchiveId).appendingPathComponent("battle_\(battleArchiveId)_obs.jsonl")
     do {
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -958,7 +958,7 @@ func paddleConsumeResults() {
 func paddleAppendEvidence(_ rec: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: rec, options: []),
           let lineText = String(data: data, encoding: .utf8) else { return }
-    let url = logsDirURL.appendingPathComponent("battle_\(paddleBattleKey)_paddle.jsonl")
+    let url = battleDirURL(paddleBattleKey).appendingPathComponent("battle_\(paddleBattleKey)_paddle.jsonl")
     do {
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -1450,8 +1450,9 @@ func flushStateSnapshots() {
         // reader 再起動で対戦中の試合を引き継いだ場合は、既存の
         // 蓄積を読み込んでから続ける
         if stateSnapRecords.isEmpty {
-            let url = scriptDir.appendingPathComponent("logs/battle_\(key)_states.json")
-            if let data = try? Data(contentsOf: url),
+            let url = battleDirURL(key).appendingPathComponent("battle_\(key)_states.json")
+            let legacy = scriptDir.appendingPathComponent("logs/battle_\(key)_states.json")
+            if let data = (try? Data(contentsOf: url)) ?? (try? Data(contentsOf: legacy)),
                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let arr = obj["snapshots"] as? [[String: Any]] {
                 stateSnapRecords = arr
@@ -1461,9 +1462,7 @@ func flushStateSnapshots() {
     if stateSnapRecords.isEmpty { return }
     let payload: [String: Any] = ["version": 1, "battle": key, "snapshots": stateSnapRecords]
     guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else { return }
-    let dir = scriptDir.appendingPathComponent("logs")
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
-    try? data.write(to: dir.appendingPathComponent("battle_\(key)_states.json"))
+    try? data.write(to: battleDirURL(key).appendingPathComponent("battle_\(key)_states.json"))
 }
 
 // 新しい試合の開始時に呼ぶ: 合間に蓄積した選出形の記録をその試合の
@@ -3287,6 +3286,14 @@ func safetyNetDraftDue() -> Bool {
 }
 let logsDirURL = scriptDir.appendingPathComponent("logs")
 
+// 1 試合分のファイルは logs/battle_<id>/ フォルダにまとめる
+// (2026-11-23、ユーザーの指示)。フォルダを作って返す
+func battleDirURL(_ id: String) -> URL {
+    let dir = logsDirURL.appendingPathComponent("battle_\(id)")
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+}
+
 func battleStamp(for date: Date = sNow()) -> String {
     let f = DateFormatter()
     f.locale = Locale(identifier: "en_US_POSIX")
@@ -3476,14 +3483,14 @@ func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [Stri
         print("[log] ヘッダーに宣言の無かった種族を補いました: \(completed.added.joined(separator: ", "))")
         fflush(stdout)
     }
-    try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+    let dir = battleDirURL(id)
     let base = "battle_\(id)_\(final ? "final" : "interrupted")"
     let protoText = completed.protocolLines.joined(separator: "\n") + "\n"
     let dispText = completed.displayLines.joined(separator: "\n") + "\n"
-    try? protoText.write(to: logsDirURL.appendingPathComponent(base + "_protocol.log"), atomically: true, encoding: .utf8)
-    try? dispText.write(to: logsDirURL.appendingPathComponent(base + ".log"), atomically: true, encoding: .utf8)
+    try? protoText.write(to: dir.appendingPathComponent(base + "_protocol.log"), atomically: true, encoding: .utf8)
+    try? dispText.write(to: dir.appendingPathComponent(base + ".log"), atomically: true, encoding: .utf8)
     if !quiet {
-        print("[log] 試合ログを保存しました: logs/\(base).log / logs/\(base)_protocol.log")
+        print("[log] 試合ログを保存しました: logs/battle_\(id)/\(base).log / logs/battle_\(id)/\(base)_protocol.log")
         fflush(stdout)
     }
 }
@@ -3502,6 +3509,7 @@ func archiveCurrentBattle(final: Bool) {
     if final {
         // 安全網の下書き (interrupted) が残っていれば取り除く (確定版が正)
         for suffix in ["_interrupted.log", "_interrupted_protocol.log"] {
+            try? FileManager.default.removeItem(at: battleDirURL(id).appendingPathComponent("battle_\(id)\(suffix)"))
             try? FileManager.default.removeItem(at: logsDirURL.appendingPathComponent("battle_\(id)\(suffix)"))
         }
     }
@@ -3595,7 +3603,7 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     let seq = debugShotsThisBattle
     let id = battleArchiveId.isEmpty ? battleStamp() : battleArchiveId
     let base = String(format: "battle_%@_debug%02d", id, seq)
-    try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+    let dir = battleDirURL(id)
     var shot: CGImage? = nil
     if let image { shot = image }
     if shot == nil { shot = debugFrameRing.last?.img }
@@ -3603,7 +3611,7 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
     // 画像は画面全体。解像度は証拠の読み取りに必要なため落とさず、
     // 配信経路 (暗号化して GitHub 経由) のサイズは JPEG 品質で抑える
     if let shot, let data = NSBitmapImageRep(cgImage: shot).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) {
-        let url = logsDirURL.appendingPathComponent(base + ".jpg")
+        let url = dir.appendingPathComponent(base + ".jpg")
         if (try? data.write(to: url)) != nil { imageFile = base + ".jpg" }
     }
     let f = ISO8601DateFormatter()
@@ -3614,9 +3622,9 @@ func debugCapture(kind: String, key: String, rawText: String, detail: [String: A
                              "state": debugStateExcerpt(), "detail": detail]
     if let imageFile { ev["image"] = imageFile }
     if let data = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
-        try? data.write(to: logsDirURL.appendingPathComponent(base + ".json"), options: .atomic)
+        try? data.write(to: dir.appendingPathComponent(base + ".json"), options: .atomic)
     }
-    if debugMode { print("[debug] デバッグ情報を保存しました: logs/\(base) (\(kind))") }
+    if debugMode { print("[debug] デバッグ情報を保存しました: logs/battle_\(id)/\(base) (\(kind))") }
     fflush(stdout)
 }
 
@@ -3651,8 +3659,19 @@ func recordTurnEvidence(turn: Int, path: String, image: CGImage, extra: [String:
 func cleanupOldDebugShots() {
     guard let names = try? FileManager.default.contentsOfDirectory(atPath: logsDirURL.path) else { return }
     let cutoff = Date().addingTimeInterval(-Double(debugRetentionDays) * 86400)
-    for name in names where name.contains("_debug") {
+    var targets: [URL] = []
+    for name in names {
         let url = logsDirURL.appendingPathComponent(name)
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+            if let subs = try? FileManager.default.contentsOfDirectory(atPath: url.path) {
+                for sub in subs where sub.contains("_debug") { targets.append(url.appendingPathComponent(sub)) }
+            }
+        } else if name.contains("_debug") {
+            targets.append(url)
+        }
+    }
+    for url in targets {
         if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
            let mtime = attrs[.modificationDate] as? Date, mtime < cutoff {
             try? FileManager.default.removeItem(at: url)
@@ -3687,14 +3706,25 @@ func salvageLeftoverLogs() {
     // 判定すると通常どおり保存済みの試合まで二重に救済してしまう
     // (実例: 2026-11-22 battle_20261122_193243、次回起動時に
     // battle_..._salvage_final が改めて保存された)
-    if FileManager.default.fileExists(atPath: logsDirURL.appendingPathComponent("battle_\(stamp)_final_protocol.log").path) {
+    if FileManager.default.fileExists(atPath: battleDirURL(stamp).appendingPathComponent("battle_\(stamp)_final_protocol.log").path)
+        || FileManager.default.fileExists(atPath: logsDirURL.appendingPathComponent("battle_\(stamp)_final_protocol.log").path) {
         return
     }
     // 同じ内容が保存済みなら二重に作らない
-    if let names = try? FileManager.default.contentsOfDirectory(atPath: logsDirURL.path) {
-        for name in names where name.hasSuffix("_protocol.log") {
-            if let saved = try? String(contentsOf: logsDirURL.appendingPathComponent(name), encoding: .utf8), saved == proto {
-                return
+    var scanDirs: [URL] = [logsDirURL]
+    if let rootNames = try? FileManager.default.contentsOfDirectory(atPath: logsDirURL.path) {
+        for name in rootNames {
+            let u = logsDirURL.appendingPathComponent(name)
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir), isDir.boolValue { scanDirs.append(u) }
+        }
+    }
+    for dir in scanDirs {
+        if let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) {
+            for name in names where name.hasSuffix("_protocol.log") {
+                if let saved = try? String(contentsOf: dir.appendingPathComponent(name), encoding: .utf8), saved == proto {
+                    return
+                }
             }
         }
     }
@@ -11149,7 +11179,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0841"
+let readerBuild = "20261123_0923"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -11956,10 +11986,11 @@ func handlePreviewTestRequest() -> String {
     }
     let result = identifyPreview(image: img)
     let base = "preview_test_\(battleStamp())"
-    try? FileManager.default.createDirectory(at: logsDirURL, withIntermediateDirectories: true)
+    let dir = logsDirURL.appendingPathComponent(base)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     var imageFile = ""
     if let data = NSBitmapImageRep(cgImage: img).representation(using: .jpeg, properties: [.compressionFactor: 0.7]),
-       (try? data.write(to: logsDirURL.appendingPathComponent(base + ".jpg"))) != nil {
+       (try? data.write(to: dir.appendingPathComponent(base + ".jpg"))) != nil {
         imageFile = base + ".jpg"
     }
     let slotDetails: [[String: Any]] = (result?.slots ?? []).map { s in
@@ -11981,9 +12012,9 @@ func handlePreviewTestRequest() -> String {
                              "identified": result != nil, "lines": [mineLine, oppLine],
                              "jpg": imageFile, "json": base + ".json"]
     if let data = try? JSONSerialization.data(withJSONObject: ev, options: [.prettyPrinted, .sortedKeys]) {
-        try? data.write(to: logsDirURL.appendingPathComponent(base + ".json"), options: .atomic)
+        try? data.write(to: dir.appendingPathComponent(base + ".json"), options: .atomic)
     }
-    print("[preview-test] 見せ合いテストを保存しました: logs/\(base) (同定: \(result != nil ? "実施" : "失敗"))")
+    print("[preview-test] 見せ合いテストを保存しました: logs/\(base)/ (同定: \(result != nil ? "実施" : "失敗"))")
     print(mineLine)
     print(oppLine)
     fflush(stdout)
