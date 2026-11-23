@@ -26891,6 +26891,36 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
     }
     return typeof dm === "number" ? [dm] : null;
   };
+  const koAndDesc = (r, defPoke, defSpec, i, j, moveObj, useField) => {
+    const range = r.range();
+    let koText = r.kochance().text;
+    let descText = r.desc();
+    const customKo = recoveryKoText(attackers[i], defPoke, moveObj, useField, r, koCtx, j, atkSpecs[i], defSpec);
+    if (customKo !== null) {
+      koText = customKo;
+      if (customKo) {
+        const libKo = r.kochance().text;
+        if (libKo && descText.endsWith(libKo)) descText = descText.slice(0, descText.length - libKo.length) + customKo;
+        else if (!libKo) descText = descText + " -- " + customKo;
+      }
+    }
+    if (!koText && customKo === null && range[1] > 0) {
+      const fb = fallbackKoText(
+        attackers[i],
+        defPoke,
+        moveObj,
+        useField,
+        range[1],
+        !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[j]),
+        !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[j])
+      );
+      if (fb) {
+        koText = fb;
+        descText = descText + " -- " + fb;
+      }
+    }
+    return { ko: koText, desc: descText };
+  };
   const out = [];
   atkSpecs.forEach((spec, i) => {
     const entry = { attacker: i, species: spec.mega && spec.megaSpecies ? spec.megaSpecies : spec.species, moveResults: [] };
@@ -26917,30 +26947,16 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
           const range = r.range();
           const rolls = rollsOf(r);
           const defMaxHP = defenders[j].maxHP();
-          let koText = r.kochance().text;
-          let descText = r.desc();
-          const customKo = recoveryKoText(attackers[i], defenders[j], moveObj, useField, r, koCtx, j, atkSpecs[i], defSpecs[j]);
-          if (customKo !== null) {
-            koText = customKo;
-            if (customKo) {
-              const libKo = r.kochance().text;
-              if (libKo && descText.endsWith(libKo)) descText = descText.slice(0, descText.length - libKo.length) + customKo;
-              else if (!libKo) descText = descText + " -- " + customKo;
-            }
-          }
-          if (!koText && customKo === null && range[1] > 0) {
-            const fb = fallbackKoText(
-              attackers[i],
-              defenders[j],
-              moveObj,
-              useField,
-              range[1],
-              !!(koCtx && koCtx.defIngrain && koCtx.defIngrain[j]),
-              !!(koCtx && koCtx.defAquaRing && koCtx.defAquaRing[j])
-            );
-            if (fb) {
-              koText = fb;
-              descText = descText + " -- " + fb;
+          const { ko: koText, desc: descText } = koAndDesc(r, defenders[j], defSpecs[j], i, j, moveObj, useField);
+          let descFull = null;
+          if (defenders[j].curHP() < defMaxHP) {
+            try {
+              const fullSpec = { ...defSpecs[j], curHP: void 0, curHPPercent: 100 };
+              const defFull = toPokemon(fullSpec);
+              const rF = (0, import_calc.calculate)(gen, attackers[i], defFull, moveObj, useField);
+              descFull = koAndDesc(rF, defFull, fullSpec, i, j, moveObj, useField).desc;
+            } catch (e) {
+              descFull = null;
             }
           }
           let alt = null;
@@ -26959,6 +26975,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             maxPct: Math.round(range[1] / defMaxHP * 1e3) / 10,
             ko: koText,
             desc: descText,
+            descFull,
             rolls,
             alt
           });
