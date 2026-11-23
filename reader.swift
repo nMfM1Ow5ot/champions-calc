@@ -1811,6 +1811,39 @@ func applyFlagControl(mode: String, startSeq: Int, endSeq: Int) {
             winLogged = true
             archiveCurrentBattle(final: true)
             inBattle = false
+            // 終了の確定を state.json に反映する (winLogged が
+            // 立った後なので battlePhase は必ず idle になる)
+            writeBattleEndState()
+        }
+    }
+}
+
+// 終了確定時の state.json 書き出し: 終了分岐の後に書き出しが
+// 無いと、ファイルが inBattle のまま残り続け、UI のボタン表示も
+// toggle の判断も古い phase に従ってしまう (実例: 2026-11-23
+// battle_20261123_111415)。通常は writeState で盤面ごと現在の
+// 内部状態を反映する。場の情報が無い場合 (writeState が書き
+// 出さない条件) だけ、リセット形で phase を書き出す
+func writeBattleEndState() {
+    writeState()
+    if lastSlots.isEmpty {
+        var obj: [String: Any] = [:]
+        obj["mine"] = [Any]()
+        obj["opps"] = [Any]()
+        obj["field"] = [String: Any]()
+        obj["oppReset"] = true
+        obj["battlePhase"] = flagPhase()
+        obj["flagMode"] = flagModeName()
+        obj["oppTeam"] = oppTeamSeen.map { $0 as Any }
+        if !battleArchiveId.isEmpty {
+            obj["battle"] = battleArchiveId
+            obj["events"] = battleEventsObjects()
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+           let json = String(data: data, encoding: .utf8), json != lastWritten {
+            lastWritten = json
+            try? json.write(to: outURL, atomically: true, encoding: .utf8)
+            noteStateWrite(shape: "battleend", json: json, eventsCount: battleEvents.count)
         }
     }
 }
@@ -11437,7 +11470,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_1039"
+let readerBuild = "20261123_1146"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
