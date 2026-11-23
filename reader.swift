@@ -1595,6 +1595,7 @@ var pivotReturnAt: [String: Date] = [:]
 var sendOutTextSeen: [String: (species: String, at: Date)] = [:]  // side -> 繰り出し文で観測した入場種族 (フェーズ3: 文証拠)           // side -> 交代技で戻る文を消費した時刻 (後任の交代確定を早める)
 var fieldHoldBypass = false                       // 保留した天候・地形を流す際の再保留防止
 var pendingStatusFrom: [String: (code: String, at: Date)] = [:]  // "p1:Species" -> 状態異常ダメージの帰属
+var pendingHealFrom: [String: (label: String, at: Date)] = [:]  // "p1:Species" -> 文で判明した回復の発生源 (おちゃかい等)
 var wishSetTurn: [String: Int] = [:]               // side -> ねがいごとを使ったターン (回復の説明用)
 var pendingHazard: (side: String, hazard: String, seq: Int)? = nil   // がんせきアックスの設置保留 (当たって初めて確定する)
 var pendingRemoval: (side: String, seq: Int)? = nil                  // スピン系の設置物解除保留 (同上)
@@ -1766,6 +1767,7 @@ func mergeMineDetailFromCapture() {
     }
 }
 var winLogged = false                             // このバトルで勝敗が確定したか
+var winLineEmitted = false                        // 勝敗行を既に出したか (手動モードでは winLogged を立てないため、再読での二重生成をこれで抑える)
 // 手動フラグモード: 試合開始・終了のフラグは自動で立てず、ダメ計 UI
 // 上部のボタン (serve.py の POST /battle_flag 経由で flag_control.json
 // に記録される連番つき要求) でのみ立てる。出荷状態は手動モード。
@@ -1848,6 +1850,8 @@ var entryBatchAbBuffer: [(label: String, ability: String)] = []  // ウィンド
 var lastExactHp: [String: [Int]] = [:]            // key -> [現在HP, 最大HP] (自軍の正確な数値の追跡)
 var lastDmgEventPrevExact: [String: [Int]] = [:]  // key -> 直近の dmg イベントが使った基準実数 ([] = 基準なし)。再放出の上書き時に amt を元の基準から計算し直すため
 var lastMoveMsgAt = Date.distantPast
+var segmentFirstMoveAt: Date? = nil   // 現在のターン区間で最初の技行が出た時刻 (交代引き戻しの判定用)
+var lastTurnLineAt = Date.distantPast // 直近のターン行が出た時刻
 var lastFallbackText = ""                         // 直近の |-message| の正規化文 (OCR ゆれの重複防止)
 var fieldWeatherSetAt = Date.distantPast          // 天候が張られた時刻 (特性の帰属判定用)
 var fieldTerrainSetAt = Date.distantPast          // フィールドが張られた時刻
@@ -2254,6 +2258,8 @@ func applyEvent(_ line: String) {
     }
     if line.hasPrefix("|turn|") {
         if let n = Int(line.dropFirst(6)) { currentTurn = n }
+        lastTurnLineAt = sNow()
+        segmentFirstMoveAt = nil
     } else if line.hasPrefix("|-weather|") {
         let name = String(line.dropFirst(10))
         if name == "none" { logFieldWeather = "" }
@@ -2354,6 +2360,7 @@ func applyEvent(_ line: String) {
         }
     } else if line.hasPrefix("|move|") {
         lastMoveEmitSeq = actionSeq
+        if segmentFirstMoveAt == nil { segmentFirstMoveAt = sNow() }
         // まもるの使用ターンを控える (activate 行の同ターン照合用)
         let mf = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         // 枠ごとの直近の技も控える (反動行の処理が次の技の告知より
@@ -2612,8 +2619,23 @@ func pullBackSwitchBlock(label: String, splitMega: Bool = false, requireEarlySeg
             if l.hasPrefix("|-item|") || l.hasPrefix("|detailschange|") || l.hasPrefix("|-mega|") || l.hasPrefix("|-ability|") { idxs.append(j) }
             // 交代行に付随する補完の被ダメ・回復行 (入場時点の差分) も
             // ブロックの一部として一緒に引き戻す。ただし次の技行より
-            // 後ろの同名行はその技の結果なので対象にしない
-            else if !passedMove && (l.hasPrefix("|-damage|") || l.hasPrefix("|-heal|")) { idxs.append(j) }
+            // 後ろの同名行はその技の結果なので対象にしない。
+            // 経過ダメージ (天候・状態異常・拘束等) の行はターン終了時
+            // の出来事であり、入場差分ではないため一緒に移さない
+            // (実例: 2026-11-23 battle_20261123_090354 ターン2、
+            // ミロカロスの砂嵐チップ行が交代と一緒にターン頭へ
+            // 引き戻された)
+            else if !passedMove && (l.hasPrefix("|-damage|") || l.hasPrefix("|-heal|")) {
+                let residualFroms = ["sandstorm", "hail", "brn", "psn", "tox", "Leech Seed", "Curse", "Salt Cure",
+                                     "Fire Spin", "Sand Tomb", "Whirlpool", "Bind", "Wrap", "Clamp", "Magma Storm",
+                                     "Infestation", "Snap Trap", "Thunder Cage", "Nightmare"]
+                var isResidual = false
+                if let r = l.range(of: "[from] ") {
+                    let v = String(l[r.upperBound...]).split(separator: "|").first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
+                    isResidual = residualFroms.contains(v)
+                }
+                if !isResidual { idxs.append(j) }
+            }
         }
     }
     // メガ進化は、交代で入場したそのターンには起こらない (交代が
@@ -3150,6 +3172,7 @@ func resetLogState() {
     pendingDamageSince = [:]
     lastEmittedPct = [:]
     winLogged = false
+    winLineEmitted = false
     movesSinceTurnLine = []
     roundEventSeen = false
     suppressNextDetectorTurn = false
@@ -3226,6 +3249,7 @@ func resetLogState() {
     lastItemEmit = [:]
     turnRawFrames = 0
     pendingStatusFrom = [:]
+    pendingHealFrom = [:]
     pendingMegaStone = [:]
     pendingMegaSpecies = [:]
     emittedSwitchKeys = []
@@ -3339,7 +3363,7 @@ func headerDistinctMargin(ranked: [(String, Double)]) -> Double? {
     return runner.1 - pick.1
 }
 
-func completeArchiveHeader(protocolLines: [String], displayLines: [String], idScores: [String: Double] = [:], pickByCandidate: [String: String] = [:], slotMargins: [String: Double] = [:]) -> (protocolLines: [String], displayLines: [String], added: [String], removed: [String]) {
+func completeArchiveHeader(protocolLines: [String], displayLines: [String], idScores: [String: Double] = [:], pickByCandidate: [String: String] = [:], slotMargins: [String: Double] = [:], finalTeams: [String: [String]] = [:]) -> (protocolLines: [String], displayLines: [String], added: [String], removed: [String]) {
     var proto = protocolLines
     var added: [String] = []
     var removed: [String] = []
@@ -3361,7 +3385,31 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String], idSc
             if !appeared.contains(f[3]) { appeared.append(f[3]) }
         }
         let missing = appeared.filter { a in !declared.contains { sameSpeciesFamily($0, a) } }
-        if missing.isEmpty { continue }
+        if missing.isEmpty {
+            // 最終同定チームによる補完: 登場ベースの補完が無い場合も
+            // 同じ規則で補う (手動開始で同定途中にヘッダーが書かれた
+            // 場合の、未登場だが同定済みの種族。実例: 2026-11-23
+            // battle_20261123_090354、Staraptor と Gholdengo)
+            if let fin = finalTeams[side] {
+                var extra: [String] = []
+                for sp in fin where declared.count + extra.count < 6 {
+                    if !declared.contains(where: { sameSpeciesFamily($0, sp) }) && !extra.contains(where: { sameSpeciesFamily($0, sp) }) {
+                        extra.append(sp)
+                    }
+                }
+                if !extra.isEmpty {
+                    var lastPokeIdx: Int? = nil
+                    for (i, l) in proto.enumerated() {
+                        if l.hasPrefix("|poke|\(side)|") { lastPokeIdx = i }
+                        if l == "|start" { break }
+                    }
+                    let at = lastPokeIdx.map { $0 + 1 } ?? (proto.firstIndex(of: "|start") ?? proto.count)
+                    proto.insert(contentsOf: extra.map { "|poke|\(side)|\($0)" }, at: at)
+                    added += extra.map { "\(side):\($0)" }
+                }
+            }
+            continue
+        }
         // 補完で 6 体を超える場合は、実際には登場しなかった宣言側の
         // 種族 (見せ合い同定の誤り) と入れ替える。チームが 7 体に
         // なるヘッダーはあり得ない (実例: 2026-11-22
@@ -3416,6 +3464,29 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String], idSc
         let insertAt = lastPokeIdx.map { $0 + 1 } ?? (proto.firstIndex(of: "|start") ?? proto.count)
         proto.insert(contentsOf: missing.map { "|poke|\(side)|\($0)" }, at: insertAt)
         added += missing.map { "\(side):\($0)" }
+        // 最終同定チームによる補完: 手動開始で同定の途中にヘッダーが
+        // 書かれた場合、同定済みでも登場しなかった種族は上の補完
+        // (登場した種族が対象) では拾えない (実例: 2026-11-23
+        // battle_20261123_090354、Staraptor と Gholdengo が最終
+        // ヘッダーから落ちた)。同定結果を正として、宣言が 6 体に
+        // 満たない分だけ同定順に補う
+        if let fin = finalTeams[side] {
+            let have = proto.compactMap { l -> String? in
+                l.hasPrefix("|poke|\(side)|") ? String(l.dropFirst("|poke|\(side)|".count)) : nil
+            }
+            var extra: [String] = []
+            for sp in fin where have.count + extra.count < 6 {
+                if !have.contains(where: { sameSpeciesFamily($0, sp) }) && !extra.contains(where: { sameSpeciesFamily($0, sp) }) {
+                    extra.append(sp)
+                }
+            }
+            if !extra.isEmpty {
+                var at = insertAt + missing.count
+                if at > proto.count { at = proto.count }
+                proto.insert(contentsOf: extra.map { "|poke|\(side)|\($0)" }, at: at)
+                added += extra.map { "\(side):\($0)" }
+            }
+        }
     }
     // 自軍の交代行の HP 表記を実数へ統一する: 開幕の交代行が % 表記
     // (100/100) で出た枠も、後の被ダメ行などで実数の最大値が判明
@@ -3478,7 +3549,7 @@ func completeArchiveHeader(protocolLines: [String], displayLines: [String], idSc
 
 func archiveBattleLogs(final: Bool, protocolLines: [String], displayLines: [String], id: String, quiet: Bool = false) {
     guard protocolLines.contains("|start") else { return }
-    let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines, idScores: headerIdScores, pickByCandidate: headerPickByCandidate, slotMargins: headerSlotMargins)
+    let completed = completeArchiveHeader(protocolLines: protocolLines, displayLines: displayLines, idScores: headerIdScores, pickByCandidate: headerPickByCandidate, slotMargins: headerSlotMargins, finalTeams: ["p2": oppTeamSeen])
     if !completed.added.isEmpty, debugMode {
         print("[log] ヘッダーに宣言の無かった種族を補いました: \(completed.added.joined(separator: ", "))")
         fflush(stdout)
@@ -3842,6 +3913,14 @@ func noteItemLost(slot: String, side: String, speciesEn: String) {
 func healSource(plateName: String, key: String, speciesEn: String, fromPct: Int, toPct: Int) -> (label: String, itemJa: String?)? {
     let delta = toPct - fromPct
     guard delta > 0 else { return nil }
+    // 文で判明した回復の発生源 (おちゃかいの回復等) が控えてあれば
+    // それを最優先する。回復量は最大の 1/4 前後 (実例: 2026-11-23
+    // battle_20261123_090354、ミロカロス 62 -> 85 が発生源なしとして
+    // 抑えられ、基準値が止まって後続の低下まで呑んだ)
+    if let ph = pendingHealFrom[key], sNow().timeIntervalSince(ph.at) < 10, (20...30).contains(delta) {
+        pendingHealFrom[key] = nil
+        return (ph.label, nil)
+    }
     // 自軍データ (teamEntries) は種族キーなので、相手側の同種族に
     // 引きずられないよう p1 の枠のときだけ参照する (実例: 2026-11-20
     // vs チェイス戦、相手エルフーンのオボン回復が、自軍エルフーンの
@@ -4175,6 +4254,21 @@ func emitDamageLine(plateName: String, slot: String, key: String, speciesEn: Str
         if let pf = pendingStatusFrom[key], sNow().timeIntervalSince(pf.at) < 5 {
             fromCode = pf.code
             pendingStatusFrom[key] = nil
+        }
+        // 予告記録が間に合わなかった場合の受け皿: 状態異常が判明して
+        // いて、低下量がその経過ダメージに一致し、荒天の経過と紛れ
+        // ず、解決中の技の対象でもない低下は、状態異常の経過として
+        // 帰属させる (実例: 2026-11-23 battle_20261123_090354
+        // ターン3、ミロカロスのやけどチップ行に [from] brn が
+        // 付かなかった)
+        if fromCode == nil, let st = monStates[key]?.status, st == "brn" || st == "psn",
+           logFieldWeather != "Sand" && logFieldWeather != "Snow",
+           lastMoveLabel != "\(slot): \(speciesEn)",
+           !(damagedBySeq[actionSeq] ?? []).contains("\(slot): \(speciesEn)") {
+            let drop = effFrom - toPct
+            if (st == "brn" && (drop == 6 || drop == 7)) || (st == "psn" && (drop == 12 || drop == 13)) {
+                fromCode = st
+            }
         }
         if fromCode == nil {
             // 初登場の交代行が既に同じ HP を示している場合、その値への
@@ -5060,7 +5154,19 @@ func processPlates(_ hits: [String: SlotState]) {
                             return f.count >= 3 && f[2] == outLabel
                         }
                         if segHasMove && !outActed {
-                            let pulled = pullBackSwitchBlock(label: "\(slot): \(s.speciesEn)", requireEarlySegment: true)
+                            // 繰り出し文がこのターンに入ってから最初の
+                            // 技より前に見えていた場合は、そのターンの
+                            // 開始交代である直接証拠があるため、発達
+                            // した区間でも引き戻す (実例: 2026-11-23
+                            // battle_20261123_090354 ターン3、コータス
+                            // の交代は文ではターン頭、プレート確定は
+                            // ターン末尾だった)
+                            let sideKey = String(slot.prefix(2))
+                            let announceOK = sendOutTextSeen[sideKey].map { ev in
+                                ev.species == s.speciesEn && ev.at > lastTurnLineAt
+                                    && (segmentFirstMoveAt.map { ev.at < $0 } ?? false)
+                            } ?? false
+                            let pulled = pullBackSwitchBlock(label: "\(slot): \(s.speciesEn)", requireEarlySegment: !announceOK)
                             if !pulled.proto.isEmpty {
                                 if let ti = battleLog.lastIndex(where: { $0.hasPrefix("|turn|") }) {
                                     battleLog.insert(contentsOf: pulled.proto, at: ti + 1)
@@ -5429,7 +5535,7 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
         if let b = best { recordDecode(stage: "tsu", raw: text, resolved: b.en) }
     }
     // 字形混同 (ミロカロス→三ロカロス のようにカタカナが似た漢字に
-    // 化ける) は上の全段で拾えないため、同長で 1 文字だけ食い違い、
+    // 化ける) は上の全段で拾えないため、同長で最大 2 文字だけ食い違い、
     // その位置がカタカナと漢字の混同である場合に限る照合を最終段と
     // して置く (復号段の第6段: glyph)。カタカナ同士の置換まで広げる
     // と、緩い照合でしか解けない崩れ名で場の登録まで進んでしまう
@@ -5453,10 +5559,10 @@ func findSpeciesJa(in text: String) -> SpeciesEntry? {
                     let a = tArr[start + k], b = nArr[k]
                     if a == b { continue }
                     diffs += 1
-                    if diffs > 1 { break }
-                    if !((isKana(a) && isKanji(b)) || (isKanji(a) && isKana(b))) { diffs = 2; break }
+                    if diffs > 2 { break }
+                    if !((isKana(a) && isKanji(b)) || (isKanji(a) && isKana(b))) { diffs = 3; break }
                 }
-                if diffs == 1 { hit = true; break outer }
+                if diffs == 1 || diffs == 2 { hit = true; break outer }
             }
             guard hit else { continue }
             let anch = fieldAnchoredSpecies(e)
@@ -5516,7 +5622,7 @@ func checkStatusText(text: String, side: String, speciesEn: String, slot: String
         }
         return
     }
-    let cues = ["おかされた", "あびた", "なった", "なつた", "おった", "おつた", "ついた", "しまった", "しまつた", "ねむった", "ねむつた"]
+    let cues = ["おかされた", "あびた", "なった", "なつた", "おった", "おつた", "ついた", "しまった", "しまつた", "ねむった", "ねむつた", "負った", "負つた"]
     guard cues.contains(where: { text.contains($0) }) else { return }
     var code: String? = nil
     if text.contains("もうどく") { code = "tox" }
@@ -7072,7 +7178,7 @@ func salvageStatus(in t: String) -> Bool {
     let hasCode = t.contains("もうどく") || t.contains("どく") || t.contains("やけど") || t.contains("まひ")
         || t.contains("ねむ") || (t.contains("眠") && !t.contains("眠気")) || t.contains("こおり") || t.contains("こおった")
     let cured = t.contains("なおった") || t.contains("なおつた")
-    let cues = ["おかされた", "あびた", "なった", "なつた", "おった", "おつた", "ついた", "しまった", "しまつた", "ねむった", "ねむつた"]
+    let cues = ["おかされた", "あびた", "なった", "なつた", "おった", "おつた", "ついた", "しまった", "しまつた", "ねむった", "ねむつた", "負った", "負つた"]
     guard cured || (hasCode && cues.contains(where: { t.contains($0) })) else { return false }
     guard let subj = salvageSubject(in: t) else { return false }
     checkStatusText(text: t, side: subj.side, speciesEn: subj.speciesEn, slot: subj.slot)
@@ -7372,7 +7478,7 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 勝敗が確定せず、完結した試合が interrupted で届いた)
     let tw = t.replacingOccurrences(of: "っ", with: "つ").replacingOccurrences(of: "ッ", with: "ツ")
     if t.range(of: "勝.に", options: .regularExpression) != nil && (t.contains("負けた") || tw.contains("勝つた")) {
-        if winLogged { return true }   // 同じ勝敗文の再読では出さない
+        if winLogged || winLineEmitted { return true }   // 同じ勝敗文の再読では出さない
         let won = tw.contains("勝つた")
         var oppName = trainerOpp
         if let r = t.range(of: "との") {
@@ -7394,6 +7500,7 @@ func translateBattleMessage(_ text: String) -> Bool {
         emitPendingFaints()
         if won { emitLog("|win|\(trainerMine.isEmpty ? "p1" : trainerMine)") }
         else { emitLog("|win|\(oppName.isEmpty ? "p2" : oppName)") }
+        winLineEmitted = true
         if !oppName.isEmpty { trainerOpp = oppName }
         // 手動モードでは勝敗行だけを記録し、フラグと確定保存は
         // 終了ボタンの押下まで遅らせる
@@ -7404,11 +7511,12 @@ func translateBattleMessage(_ text: String) -> Bool {
         return true
     }
     if t.contains("あきらめた") {
-        if winLogged { return true }   // 同じ勝敗文の再読では出さない
+        if winLogged || winLineEmitted { return true }   // 同じ勝敗文の再読では出さない
         let oppGaveUp = t.contains("相手") || t.contains("あいて")
         forfeitName = oppGaveUp ? (trainerOpp.isEmpty ? "Opponent" : trainerOpp) : (trainerMine.isEmpty ? "You" : trainerMine)
         emitPendingFaints()
         emitLog("|win|\(oppGaveUp ? (trainerMine.isEmpty ? "p1" : trainerMine) : (trainerOpp.isEmpty ? "p2" : trainerOpp))")
+        winLineEmitted = true
         if !flagManualMode {
             winLogged = true
             archiveCurrentBattle(final: true)
@@ -7423,17 +7531,19 @@ func translateBattleMessage(_ text: String) -> Bool {
     // 相手/あいて・自分/じぶん の有無で分ける。判別できない場合も
     // 対戦終了として確定保存だけは行う (勝敗行は出さない)
     if t.contains("操作がありません") || (t.contains("対戦を終了します") && t.contains("操作")) {
-        if winLogged { return true }
+        if winLogged || winLineEmitted { return true }
         let oppIdle = t.contains("相手") || t.contains("あいて")
         let mineIdle = t.contains("自分") || t.contains("じぶん")
         emitPendingFaints()
         if oppIdle && !mineIdle {
             forfeitName = trainerOpp.isEmpty ? "Opponent" : trainerOpp
             emitLog("|win|\(trainerMine.isEmpty ? "p1" : trainerMine)")
+            winLineEmitted = true
             if !flagManualMode { winLogged = true }
         } else if mineIdle && !oppIdle {
             forfeitName = trainerMine.isEmpty ? "You" : trainerMine
             emitLog("|win|\(trainerOpp.isEmpty ? "p2" : trainerOpp)")
+            winLineEmitted = true
             if !flagManualMode { winLogged = true }
         }
         if !flagManualMode { archiveCurrentBattle(final: true) }
@@ -7637,6 +7747,30 @@ func translateBattleMessage(_ text: String) -> Bool {
             }
         }
         return true
+    }
+    // おちゃかい (ヤバソチャの特性): 「相手のヤバソチャが たてた
+    // お茶を <相方>は 飲みほした！」(2 行構成。ボックス結合で語順が
+    // 崩れて届くこともある)。特性行を出し、回復の発生源を相方へ
+    // 控える (プレートの上昇を |-heal| として採用するため。実例:
+    // 2026-11-23 battle_20261123_090354、文が |-message| に落ちて
+    // 回復行が出ず、後続の低下まで欠落した)
+    if t.contains("お茶") && (t.contains("飲みほした") || t.contains("飲み干した") || t.contains("のみほした")) {
+        let named = findAllSpeciesJa(in: t)
+        let sinistcha = named.first(where: { $0.en == "Sinistcha" })
+            ?? lastSlots.values.first(where: { $0.speciesEn == "Sinistcha" }).map { s in
+                speciesDict.first(where: { $0.en == s.speciesEn })
+            } ?? nil
+        if let sc = sinistcha {
+            let side = (lastSlots["oppA"]?.speciesEn == sc.en || lastSlots["oppB"]?.speciesEn == sc.en) ? "p2" : "p1"
+            let names = side == "p2" ? ["oppA", "oppB"] : ["mineA", "mineB"]
+            let scSlot = names.first(where: { lastSlots[$0]?.speciesEn == sc.en }).map { slotId($0) }
+            let allyName = names.first(where: { lastSlots[$0]?.speciesEn != sc.en && lastSlots[$0] != nil })
+            if let scSlot, let allyName, let ally = lastSlots[allyName] {
+                emitAbilityOnce(slot: scSlot, side: side, speciesEn: sc.en, abilityEn: "Hospitality")
+                pendingHealFrom["\(side):\(ally.speciesEn)"] = ("ability: Hospitality", sNow())
+                return true
+            }
+        }
     }
     // 繰り出し (自分): 「ゆけっ！ A！ B！」の並び順 = 場の左右 (実機で確認)。
     // Vision は小さい「っ」を「つ」と読むことが多いため両方を拾う
@@ -11179,7 +11313,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_0923"
+let readerBuild = "20261123_0948"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
