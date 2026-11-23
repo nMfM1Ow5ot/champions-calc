@@ -851,6 +851,13 @@ _NOTE_GATE_SINCE = "20261121_131309"
 # はこの値を True に戻すだけ (ゲートの仕組み自体は残してある)
 _NOTE_GATE_ENABLED = False
 
+# ログの自動送信は、ユーザーの指示により一時的に無効化している
+# (2026-11-23)。無効化中は送信処理が何も送らず、送信済みの記録
+# も付けない。Mac ローカルへの記録 (logs フォルダへの保存) は
+# 従来どおり続く。再有効化はこの値を True に戻すだけ (送信の
+# 仕組み自体は残してある)
+_AUTO_UPLOAD_ENABLED = False
+
 
 def _note_gate_applies(key):
     """その試合に備考ゲートがかかるか (導入後に始まった試合だけ)。"""
@@ -1264,6 +1271,9 @@ def upload_logs_once(session_only=False):
 
 def _upload_logs_once_locked(session_only=False):
     global _log_notice_shown, _log_last_error
+    if not _AUTO_UPLOAD_ENABLED:
+        # 自動送信の無効化中は何も送らない (送信済みの記録も付けない)
+        return
     if not os.path.isdir(LOG_DIR):
         return
     if _note_prompt_waiting:
