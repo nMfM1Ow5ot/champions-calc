@@ -38,7 +38,7 @@
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "paddle_sidecar.py": "672fbbf032652bbe385d5960a96b713d4544abc6b40f93d3c14afd378dd437bf",
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
-  "reader.swift": "a3806779c053af3ce599a1d18a1d6e99539d2b53d342b5300768736dd97aae46",
+  "reader.swift": "c2473772567bbd50d19ee2c7ec4f5d0054627ea3515a57fc31e95ec1a2fa92ab",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "0ebc213dc21373384e7f5aa04000b0e1ef51eede1024654d2c9bc1dd88ed408b",
   "start_all.sh": "8761f84fdb2db8907de7fc1f0b494ee74243035c53abcd14b415d26892cc5a04",
@@ -49,5 +49,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261124_0115"
+ "rev": "20261124_0112"
 }
