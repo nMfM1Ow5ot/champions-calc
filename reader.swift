@@ -11483,7 +11483,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_2331"
+let readerBuild = "20261124_0105"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
@@ -11953,6 +11953,65 @@ let natureTable: [(up: Int?, down: Int?)] = [
     (4, 1), (4, 2), (4, 5), (4, 3), (nil, nil),
 ]
 
+// natureTable と同じ並びの性格名 (英語)。矢印検出で確定した性格の登録用
+let natureNames = ["Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish", "Lax",
+                   "Timid", "Hasty", "Serious", "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful", "Rash",
+                   "Calm", "Gentle", "Sassy", "Careful", "Quirky"]
+
+// ステータス画面の性格補正矢印 (ラベルの右に出る ▲▼) を色で検出する。
+// 上昇 = ピンク赤、下げ = 水色で、位置はカード内の相対位置で固定
+// (左列 x 0.26 / 右列 x 0.725、行 y 0.365 / 0.60 / 0.835)。
+// 実測 (2026-11-24、2266x1488 の画面・6体30枠): 矢印のある窓では
+// その色が窓の 3.3% 以上を占め、無い窓では両色とも 0% だったため、
+// 閾値は割合 1% とし、解像度に依存しない形にした。
+// 戻り値は natureTable のインデックス。上昇・下降がちょうど 1 つずつ
+// 取れた場合のみ確定し、それ以外 (無補正と検出失敗は区別がつかない
+// ため、まとめて) は nil を返して従来の逆算に委ねる。
+func detectNatureArrows(buf: (data: [UInt8], w: Int, h: Int), cardX: Double, cardY: Double) -> Int? {
+    if buf.w <= 0 || buf.h <= 0 { return nil }
+    // (行, 列) -> 能力インデックス (natureTable と同じ 1=atk, 2=def, 3=spa, 4=spd, 5=spe)
+    // 左列: HP / こうげき / ぼうぎょ、右列: とくこう / とくぼう / すばやさ
+    let statAt: [[Int]] = [[0, 3], [1, 4], [2, 5]]
+    let xCenters = [0.26, 0.725]
+    let yCenters = [0.365, 0.60, 0.835]
+    var upStat: Int? = nil
+    var downStat: Int? = nil
+    for r in 0..<3 {
+        for c in 0..<2 {
+            let stat = statAt[r][c]
+            if stat == 0 { continue }  // HP に矢印は出ない
+            let cx = Int((cardX + xCenters[c] * cardW) * Double(buf.w))
+            let cy = Int((cardY + yCenters[r] * cardH) * Double(buf.h))
+            let wx = max(2, Int(0.035 * cardW * Double(buf.w)))
+            let wy = max(2, Int(0.10 * cardH * Double(buf.h)))
+            var upCount = 0, downCount = 0, total = 0
+            for yy in (cy - wy)...(cy + wy) {
+                if yy < 0 || yy >= buf.h { continue }
+                for xx in (cx - wx)...(cx + wx) {
+                    if xx < 0 || xx >= buf.w { continue }
+                    let i = (yy * buf.w + xx) * 4
+                    let rr = Int(buf.data[i]), gg = Int(buf.data[i + 1]), bb = Int(buf.data[i + 2])
+                    total += 1
+                    if rr >= 200 && gg >= 70 && gg <= 180 && bb >= 90 && bb <= 215 && rr - gg >= 45 && rr - bb >= 25 { upCount += 1 }
+                    if bb > 170 && gg > 150 && rr < 140 && bb - rr > 60 { downCount += 1 }
+                }
+            }
+            if total == 0 { continue }
+            let upShare = Double(upCount) / Double(total)
+            let downShare = Double(downCount) / Double(total)
+            if upShare >= 0.01 && upShare > downShare {
+                if upStat != nil { return nil }  // 上昇が 2 つはありえない (検出失敗として扱う)
+                upStat = stat
+            } else if downShare >= 0.01 && downShare > upShare {
+                if downStat != nil { return nil }
+                downStat = stat
+            }
+        }
+    }
+    guard let u = upStat, let d = downStat else { return nil }
+    return natureTable.firstIndex { $0.up == u && $0.down == d }
+}
+
 // 種族値・SP・性格から Lv50 (IV31) の実数値を計算する (Champions の計算式)
 func expectedStats(base: [Int], sp: [String: Int], speciesEn: String, up: Int?, down: Int?) -> [Int] {
     let keys = ["hp", "atk", "def", "spa", "spd", "spe"]
@@ -12010,6 +12069,8 @@ func captureTeamScreen(image: CGImage, tab: String) -> Int {
             if species.en != matched.en { diagPrint("  フォルム判別: \(matched.ja) (性別 \(gender ?? "?")) -> \(species.en)") }
             var entry: [String: Any] = teamEntries[species.en] ?? ["species": species.en]
             if tab == "status" {
+                // 性格補正矢印から性格を確定する (取れない場合は nil で従来動作)
+                let natureIdx = detectNatureArrows(buf: teamBuf, cardX: x0, cardY: y0)
                 let labelVariants: [(String, [String])] = [
                     ("hp", ["HP"]), ("atk", ["こうげき", "攻撃"]), ("def", ["ぼうぎょ", "防御"]),
                     ("spa", ["とくこう", "特攻"]), ("spd", ["とくぼう", "特防"]), ("spe", ["すばやさ", "素早さ"]),
@@ -12090,6 +12151,10 @@ func captureTeamScreen(image: CGImage, tab: String) -> Int {
                         species = f
                     }
                 }
+                if let ni = natureIdx {
+                    entry["nature"] = natureNames[ni]
+                    diagPrint("  [\(species.ja)] 性格を矢印から検出: \(natureNames[ni])")
+                }
                 // SP が 6 項目とも読めた場合は、実数値が「種族値 + SP + 性格」で
                 // 再現できるか検証する。ステータス画面の 1 桁誤読 (例: HP 162 を
                 // 161 と読む) は範囲チェック (20...999) をすり抜けて登録され、
@@ -12103,7 +12168,10 @@ func captureTeamScreen(image: CGImage, tab: String) -> Int {
                         let read = keys.map { stats[$0] ?? -1 }
                         var matched = false
                         var corrections = Set<String>()
-                        for nt in natureTable {
+                        // 矢印で性格が確定している場合は、その性格だけで検証する
+                        // (1 項目の誤読の補正先が一意に決まる)
+                        let natureCandidates: [(up: Int?, down: Int?)] = natureIdx != nil ? [natureTable[natureIdx!]] : natureTable
+                        for nt in natureCandidates {
                             let exp = expectedStats(base: base, sp: spHint, speciesEn: species.en, up: nt.up, down: nt.down)
                             if exp == read { matched = true; break }
                             let diffs = (0..<6).filter { exp[$0] != read[$0] }
