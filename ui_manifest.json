@@ -16,13 +16,13 @@
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
   "data/names_ja.json": "6f900267d7914eef7feacd0487fb0fa354e2cb4cadadbff37e5b6c9a08e2c7bf",
   "data/pokedb_parsed.json": "ab9477e7dfb16fc57d4720415ee4e16aa163e8d183dd36e20e990c035bda9f09",
-  "data/preview_features.json": "476ccf7821649d5c121bf729559d891379b17f672aea73b7490161ccb5ebcebd",
+  "data/preview_features.json": "3584132489bf3a3638ca6cc07233b5fccc9142f2f8c9914f2f9ace5b7597073c",
   "data/regulation.json": "b9d69d356c95ad3a7e87dd2da9b1587c53d8b29d710ba79cd857cfdd90704d0a",
   "data/spec_patches.json": "c6dc628c70e0078f72ea3891d6bf8c7ced14a1d40c25213cd91f2097f5c53f98",
   "data/species_abilities.json": "60de98a5b4c4294fcbf6b1f7a530a32de31d86f0784f5be492d4ef5f261d49c0",
   "data/species_moves.json": "03c0f240de9d9a66cefc65c9e1ea155ccf120c9b4f91d6e46296ca29b6b0d181",
   "data/species_types.json": "ce11f9ae2d01f8a6061b473ed9260b61c95c1c3d58c40e5231cfde9df05623ec",
-  "data/type_icons.json": "0970854897df8762a787d198d95a335959d3d8a684c7fc2af14fa1fc4c167b79",
+  "data/type_icons.json": "a1f29d7c70c2a9a35e9b58d7745a30476cd072e381d89e77d67fc738161a1f15",
   "data/usage_sets.json": "9ce7893401a7f9572e741de25727e8862f8967c3ae32e8c14ecabd407e43f8c1",
   "data/vgc_pastes.json": "b082b6360989d275468dc236aae3ab011d347e1793b723d6a39dc05f8a429602",
   "data/vgc_pastes_stats.json": "94c2211fea37f32390a17e1086173a427ef4de89082ab27bd6f0f12c0a43440d",
@@ -38,7 +38,7 @@
   "package.json": "ec0a6bb18d30cbd6f4087468f9f05e3de84c39de04589b36b90cfb1fdfacdddd",
   "paddle_sidecar.py": "672fbbf032652bbe385d5960a96b713d4544abc6b40f93d3c14afd378dd437bf",
   "preview_test.sh": "25ffdf073ee4ec4abf11e84e042cf1025d52b44f4aec797522e7d59d45029872",
-  "reader.swift": "5c4cd7fd6f4f34fc179df74eb31dc38d1633e4bd3cc17a1ef8b4deb98057b7d5",
+  "reader.swift": "e7b07e6747f3200bae79ec0deb1c4dc67391e8448fcfc23ca653224daa49a7f4",
   "run_reader.sh": "6e937e0f81df7e53891e831ed40941f02001e10eb75a9840e1f6bfef4904c1a4",
   "serve.py": "0ebc213dc21373384e7f5aa04000b0e1ef51eede1024654d2c9bc1dd88ed408b",
   "start_all.sh": "8761f84fdb2db8907de7fc1f0b494ee74243035c53abcd14b415d26892cc5a04",
@@ -49,5 +49,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261124_0202"
+ "rev": "20261124_0326"
 }
