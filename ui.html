@@ -857,6 +857,17 @@ function myTeamPreset(e) {
       if (s.length) { sols = s; species = cand; sd = gen.species.get(idOf(cand)); break; }
     }
   }
+  // reader がステータス画面の性格補正矢印から確定した性格 (e.nature、英語名) が
+  // あれば、逆算候補をその性格のものだけに絞る。実数値と矛盾して絞った結果が
+  // 空になる場合は絞らず、従来どおり全候補から選ぶ。曖昧さ (derivedAmbiguous)
+  // も絞った後の候補数で評価される。
+  if (sols.length && e.nature) {
+    const nd = gen.natures.get(idOf(e.nature));
+    if (nd) {
+      const f = sols.filter(s => s.nature === nd.name);
+      if (f.length) sols = f;
+    }
+  }
   if (sols.length) {
     let pick = sols[0];
     if (e.spHint) {
