@@ -1913,6 +1913,8 @@ func loadSpeciesMoves() {
 // battle.log には人間可読な Showdown 風テキストを出す
 var displayLog: [String] = []
 var displayPrintedCount = 0               // 可読ログのうち terminal へ印刷済みの行数 (遅延印刷の管理)
+var headerPrintReady = false              // ヘッダーが完成形になり印刷可能になったか (相手同定の完了待ち)
+var headerLineCount = 0                   // displayLog 冒頭のヘッダー行数 (0 = ヘッダー未生成)
 let protocolLogURL = scriptDir.appendingPathComponent("battle_protocol.log")
 var renderSlotSpecies: [String: String] = [:]   // 枠 ("p1a") -> 現在の種族
 var renderFainted: Set<String> = []              // ひんしになった枠 (交代が引き戻しかの判定)
@@ -2703,7 +2705,48 @@ func pullBackSwitchBlock(label: String, splitMega: Bool = false, requireEarlySeg
 // terminal 上のログが battle.log と一致した状態で締める
 func confirmedDisplayCount(isFinal: Bool) -> Int {
     if isFinal { return displayLog.count }
-    return displayLog.lastIndex(where: { $0.hasPrefix("Turn ") }) ?? 0
+    let turnBound = displayLog.lastIndex(where: { $0.hasPrefix("Turn ") }) ?? 0
+    // ヘッダーは相手の同定がそろう (または同定が終了する) まで
+    // 印刷を止める。ヘッダーは displayLog の先頭にあるため、
+    // 未完成の間は後続の行も含めて何も印刷しない
+    if headerPrintReady { return max(turnBound, headerLineCount) }
+    return headerLineCount > 0 ? 0 : turnBound
+}
+
+// ヘッダーを現在の同定結果で完成形に書き直す (renderLogLine の
+// |start| と同じ組み立て。自分のチーム行は生成時のものを保持
+// する)。battle.log のヘッダーもこの時点で正しい内容になる
+func completeDisplayHeader() {
+    guard headerLineCount > 0, displayLog.count >= headerLineCount else { return }
+    let mine = trainerMine.isEmpty ? "you" : trainerMine
+    let opp = trainerOpp.isEmpty ? "Opponent" : trainerOpp
+    let p1Line = headerLineCount > 7 ? displayLog[7] : ""
+    var h = ["\(mine) and \(opp) joined", "Format:", "[Gen 9 Champions] VGC 2026 Reg \(regulationDisplay())", "Rated battle",
+             "Species Clause: Limit one of each Pokémon", "Item Clause: Limit 1 of each item",
+             trainerMine.isEmpty ? "Your team:" : "\(trainerMine)'s team:", p1Line,
+             "\(opp)'s team:", oppTeamSeen.joined(separator: " / "), "",
+             "Battle started between \(mine) and \(opp)!"]
+    if !oppRank.isEmpty { h.append("\(opp)'s rank: \(oppRank)") }
+    if !oppRating.isEmpty { h.append("\(opp)'s rating: \(oppRating)") }
+    h.append("")
+    displayLog.replaceSubrange(0..<headerLineCount, with: h)
+    headerLineCount = h.count
+    try? (displayLog.joined(separator: "\n") + "\n").write(to: battleLogURL, atomically: true, encoding: .utf8)
+}
+
+// ヘッダーの完成判定: (a) 選出画面で相手トレーナー名が判明し、
+// (b) 相手チーム 6 体がそろった時点で完成形に書き直して印刷
+// 可能にする。同定が終了してもそろわない場合は、その時点で
+// そろっている分で完成させる (ユーザーの決定)。試合終了時の
+// 最終確認では同定終了とみなす (forceEnd)
+func refreshHeaderState(forceEnd: Bool = false) {
+    guard headerLineCount > 0, !headerPrintReady else { return }
+    let complete = !trainerOpp.isEmpty && oppTeamSeen.count >= 6
+    if complete || previewHandled || forceEnd {
+        completeDisplayHeader()
+        headerPrintReady = true
+        flushDisplayPrint()
+    }
 }
 
 func takeDisplayPrintLines(isFinal: Bool) -> [String] {
@@ -3265,7 +3308,7 @@ func resetLogState() {
     faintedSpecies = []; heldEntryBoosts = []
     battleHazards = [:]; pendingHazard = nil; pendingRemoval = nil
     debugShotsThisBattle = 0; debugRoutineShots = 0; debugEventShots = 0; debugSeenEntries = []; debugFrameRing = []
-    displayLog = []; displayPrintedCount = 0; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
+    displayLog = []; displayPrintedCount = 0; headerPrintReady = false; headerLineCount = 0; renderSlotSpecies = [:]; renderFainted = []; renderLastPct = [:]
     renderPokeP1 = []; renderPokeP2 = []; renderWeatherProto = ""; forfeitName = nil
     renderHold = []
     pendingTurnDisplay = []
@@ -3602,8 +3645,9 @@ func archiveCurrentBattle(final: Bool) {
     // interrupted 無効化中はファイルだけを出さない (後始末は従来どおり)
     if final || interruptedSaveEnabled {
         // 試合終了時は未印刷分をすべて印刷し、terminal のログを
-        // battle.log と一致させて締める (遅延印刷・案2)
-        if final { flushDisplayPrint(isFinal: true) }
+        // battle.log と一致させて締める (遅延印刷・案2)。ヘッダーが
+        // 未完成なら、そろっている分で完成させてから出す
+        if final { refreshHeaderState(forceEnd: true); flushDisplayPrint(isFinal: true) }
         archiveBattleLogs(final: final, protocolLines: battleLog, displayLines: displayLog, id: id)
     }
     paddleEndBattle()
@@ -3904,6 +3948,11 @@ func startBattleLog() {
         }
     }
     emitLog("|start")
+    // ヘッダーの印刷可否の初期判定: この時点で displayLog の冒頭が
+    // ヘッダー。同定が済んでいれば完成形で生まれ、未了なら判明
+    // した時点で refreshHeaderState が書き直す
+    headerLineCount = displayLog.count
+    refreshHeaderState()
     logStarted = true
 }
 
@@ -11097,6 +11146,9 @@ func runOnce(image: CGImage) {
                 }
             }
         }
+        // 同定の更新のたびにヘッダーの完成判定を行う (開始ボタンが
+        // 同定完了より先に押された場合の書き直し)
+        refreshHeaderState()
         inBattle = false
         return
     }
@@ -11345,7 +11397,7 @@ func savePNG(_ image: CGImage, to url: URL) {
     if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: url) }
 }
 
-let readerBuild = "20261123_1007"
+let readerBuild = "20261123_1033"
 
 func runDebug(image: CGImage) {
     let dir = scriptDir.appendingPathComponent("debug")
