@@ -4,7 +4,7 @@
   "audit_items_ja.mjs": "b536fff2ca001daed9e79d2c8859484339f41e32c702bade0d5c62dd39136b4a",
   "audit_names_ja.mjs": "6839fab8954883a93bc12005ced44cd5858948d1690e393297496f6be9372bd8",
   "build_species_gender.py": "36e4d0d6f2cf2125b3e7d575660c25afc9ffaaf7fac45a51738cca99106adaa3",
-  "bundle.mjs": "9798fa12f7fc8c34bbd9126dc3aa155cb72db8b6f5ed8e305946ec770a9b21c4",
+  "bundle.mjs": "fc1f88df14c7c92780bfb32a08535a2e0625c81624f146f9308ff82a078f20d2",
   "check/apple_stubs.swift": "a3c127deea0c10d74032106ebe47fd9ca14683ea776b36d4353784d998643ddf",
   "check_reader.sh": "de0e202eda8424d9135ab8519656132d9011a8ae72bb030eb649b293b842e299",
   "core.mjs": "7be4711d33cbaba3bcbebd4b4e263c1e0f0a0bcefa58d75a47a5ae4da38c506e",
@@ -27,7 +27,7 @@
   "data/vgc_pastes.json": "b082b6360989d275468dc236aae3ab011d347e1793b723d6a39dc05f8a429602",
   "data/vgc_pastes_stats.json": "94c2211fea37f32390a17e1086173a427ef4de89082ab27bd6f0f12c0a43440d",
   "data/vgcpastes_sets.json": "6232518a3c8b11dae770b0a3b5f2941da6cbc41a8c2defe142d3c8320a3a543c",
-  "estimate_engine.mjs": "7532733faab9a92721f67673d0137ddafa8122bb3f88ff3500e6756e1fdc4bf3",
+  "estimate_engine.mjs": "21780d0c78f133277c8ee9803fa8b02a9cac89e1c8e75795405a326a09f7c885",
   "fetch_champions_dex.mjs": "278d7db46a15a6a78318839bebe4fbd4843af90e6a80b5f4677cdda0cd641a65",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
   "fetch_species_abilities.mjs": "4e4692c6c93f233e23befcf937053b325e675849f216b02d89898577c3abb1a9",
@@ -45,9 +45,18 @@
   "start_ui.sh": "43bc758bc047153915b9f6491d9a9c3a86821ff10e7642d3827cd88d672989bf",
   "tests/bayes_equiv_golden.json": "144de6d910c9a3d7ce4ea384e2d54f7b05efd604a2119c9d0205f2164bb4ab6e",
   "tests/bayes_sim.mjs": "0a1221f18ccc0ad0b974ff2719cc3e6b2d30e1e1d0f8e5f89b8cf80943420658",
+  "tests/test_candranges_display.mjs": "8bb75310099a787a3d6f040bb9241b4e0a5e28ac5db573df03a59b46cfe59c87",
+  "tests/test_dist_unavailable.mjs": "cc3730367fca5962bce37ad3b447d01d48e4b36833ce42f56799b4d7de705bf4",
+  "tests/test_fault_injection.mjs": "bc89f2d069322894a63c6f8a04d22730c8bd07338c5a1e37774434c364830770",
+  "tests/test_hh_consumption.mjs": "2fdd7f94b9eeebf0e2fe38c7857b8584cbd9eba8f01f70f7aa9a70d82caa2de5",
+  "tests/test_hh_residual_risks.mjs": "005af4fc5f3438aa5e99aa31009559607955171951d1b0e194acb3c27a443c6f",
+  "tests/test_multihit_gate.mjs": "7f480bf761550436edc5c374a8328fc8c8d2693585c82d260cb9d4b2f7d52526",
+  "tests/test_r1d_replay.mjs": "ce5005915de05960aad5bcd5c7323bb90dab1123a3a103da760ab6aa4f468965",
+  "tests/test_r1f_verification.mjs": "03aba1933380b298a2e97e5cdf44a38befdf21f37be33650f2084260a0a2be70",
+  "tests/test_r1g1_fixes.mjs": "dc039fd2dfb54ad15c0f4e77e03cc4a94b2a1f4ba23987ee39f4f554ad5caab2",
   "ui.html": "499ae73a76b117bf8b44b7f05da6dd9e0b648b775ffe13cf9486a4d483ed0e63",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261124_1808"
+ "rev": "20261124_1810"
 }
