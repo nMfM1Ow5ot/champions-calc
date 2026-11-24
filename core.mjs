@@ -638,19 +638,16 @@ function dynamicKoText(ctx) {
 }
 
 function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ, koCtx) {
-  // 乱数幅の内訳 (16 本)。多段技はヒットごとのロールを要素ごとに
-  // 合計して合計ダメージの 16 本にする (range() と一致する)
-  const rollsOf = (res) => {
+  // 乱数幅の内訳。単発は 16 本のロール列、複数ヒットはヒットごとの
+  // ロールを畳み込んだ合計ダメージの分布 (dist) で返す。複数ヒットの
+  // ロールを要素ごとに合計すると中間の値と頻度が誤るため行わない (MH-001)
+  const rollsAndDist = (res) => {
     const dm = res.damage;
     if (Array.isArray(dm)) {
-      if (Array.isArray(dm[0])) {
-        const totals = new Array(16).fill(0);
-        for (const hit of dm) { if (!Array.isArray(hit)) continue; for (let ri = 0; ri < 16; ri++) totals[ri] += hit[ri] || 0; }
-        return totals;
-      }
-      return dm.slice();
+      if (Array.isArray(dm[0])) return { rolls: null, dist: convolveHitRolls(dm) };
+      return { rolls: dm.slice(), dist: null };
     }
-    return typeof dm === 'number' ? [dm] : null;
+    return { rolls: typeof dm === 'number' ? [dm] : null, dist: null };
   };
   // 確定数と説明文の組み立て (カスタム回復層と 9HKO 超の補完を含む)。
   // コピー文章用に防御側を満タンへ差し替えた再計算でも同じ組み立てを使う
@@ -689,7 +686,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
         try {
           const r = calculate(gen, attackers[i], defenders[j], moveObj, useField);
           const range = r.range();
-          const rolls = rollsOf(r);
+          const { rolls, dist } = rollsAndDist(r);
           const defMaxHP = defenders[j].maxHP();
           const { ko: koText, desc: descText } = koAndDesc(r, defenders[j], defSpecs[j], i, j, moveObj, useField);
           // コピー文章専用: 防御側の HP が削れている場合だけ、満タン前提で
@@ -710,7 +707,8 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             const altMove = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : undefined, !(critFlags && critFlags[i]), !!(moveZ && moveZ[i] && moveZ[i][mv]), spec);
             const ra = calculate(gen, attackers[i], defenders[j], altMove, useField);
             const ar = ra.range();
-            alt = { min: ar[0], max: ar[1], minPct: Math.round(ar[0] / defMaxHP * 1000) / 10, maxPct: Math.round(ar[1] / defMaxHP * 1000) / 10, rolls: rollsOf(ra) };
+            const altRD = rollsAndDist(ra);
+            alt = { min: ar[0], max: ar[1], minPct: Math.round(ar[0] / defMaxHP * 1000) / 10, maxPct: Math.round(ar[1] / defMaxHP * 1000) / 10, rolls: altRD.rolls, dist: altRD.dist };
           } catch (e) { alt = null; }
           row.vs.push({
             min: range[0], max: range[1],
@@ -720,6 +718,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             desc: descText,
             descFull,
             rolls,
+            dist,
             alt,
           });
         } catch (e) {
@@ -1220,6 +1219,62 @@ function buildMove(moveName, specValue, crit, zMode, atkSpec) {
 // moveSpec は技ごとの指定値 (moveSpecInfo の kind に対応する数値)。
 // ヒット数を指定した連続技では、ヒットごとのロールを合計した 16 本を返す。
 // 指定がない場合の戻り値は従来と完全に同じ。
+// 複数ヒット技の合計ダメージ分布。ヒットごとのロール列 (各要素は等確率) を
+// 整数の組合せ数で動的計画法により畳み込み、合計値ごとの頻度を返す。
+// 16^n の全展開はせず、重複値は頻度として保持する (MH-001 の契約)。
+// 戻り値: { values: 昇順のダメージ値[], counts: 各値の組合せ数[], total: 総組合せ数 }
+export function convolveHitRolls(hitRollsList) {
+  let dist = new Map([[0, 1]]);
+  let total = 1;
+  for (const hitRolls of hitRollsList) {
+    const freq = new Map();
+    for (const v of hitRolls) freq.set(v, (freq.get(v) || 0) + 1);
+    const next = new Map();
+    for (const [base, c1] of dist) {
+      for (const [v, c2] of freq) {
+        const key = base + v;
+        next.set(key, (next.get(key) || 0) + c1 * c2);
+      }
+    }
+    dist = next;
+    total *= hitRolls.length;
+  }
+  const values = [...dist.keys()].sort((a, b) => a - b);
+  return { values, counts: values.map(v => dist.get(v)), total };
+}
+
+// calculate の結果からダメージ分布を返す (MH-001 の契約)。
+// 攻撃技: { dist: {values, counts, total}, min, max, hits, multi }
+//   単発は multi=false・hits=1 で、16 本から重複を数えた分布になる。
+// 変化技は { status: true }、無効は { immune: true }、例外時は { error }。
+export function damageDistribution(atkSpec, defSpec, moveName, opts = {}) {
+  const atk = toPokemon(atkSpec);
+  const def = toPokemon(defSpec);
+  const moveObj = buildMove(moveName, opts.moveSpec, opts.crit);
+  const field = new Field({
+    gameType: opts.gameType || 'Doubles',
+    weather: opts.weather || undefined,
+    terrain: opts.terrain || undefined,
+    attackerSide: opts.atkSide || {},
+    defenderSide: opts.defSide || {},
+  });
+  if (moveObj.category === 'Status') return { status: true };
+  if (isImmune(atk, def, moveObj)) return { immune: true };
+  try {
+    const r = calculate(gen, atk, def, moveObj, field);
+    const d = r.damage;
+    if (Array.isArray(d) && Array.isArray(d[0])) {
+      const dist = convolveHitRolls(d);
+      return { dist, min: dist.values[0], max: dist.values[dist.values.length - 1], hits: d.length, multi: true };
+    }
+    const rolls = Array.isArray(d) ? d : [d];
+    const dist = convolveHitRolls([rolls]);
+    return { dist, min: dist.values[0], max: dist.values[dist.values.length - 1], hits: 1, multi: false };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
 export function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   const atk = toPokemon(atkSpec);
   const def = toPokemon(defSpec);
@@ -1236,17 +1291,11 @@ export function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   try {
     const r = calculate(gen, atk, def, moveObj, field);
     const d = r.damage;
-    const info = moveSpecInfo(moveName);
-    if (opts.moveSpec != null && info && info.kind === 'hits' &&
-        Array.isArray(d) && Array.isArray(d[0])) {
-      // ヒットごとのロール (ヒット数 × 16) を要素ごとに合計し、
-      // 合計ダメージの 16 本として返す
-      const totals = new Array(16).fill(0);
-      for (const hitRolls of d) {
-        if (!Array.isArray(hitRolls)) continue;
-        for (let i = 0; i < 16; i++) totals[i] += hitRolls[i] || 0;
-      }
-      return { rolls: totals };
+    if (Array.isArray(d) && Array.isArray(d[0])) {
+      // 複数ヒット (moveSpec の有無を問わない): ヒットごとのロールを
+      // 要素ごとに合計した偽の 16 本は作らず、合計の分布で返す (MH-001)
+      const dist = convolveHitRolls(d);
+      return { rolls: null, dist, hits: d.length, multi: true };
     }
     return { rolls: Array.isArray(d) ? d : [d] };
   } catch (e) {
