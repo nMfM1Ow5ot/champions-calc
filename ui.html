@@ -2450,9 +2450,19 @@ function movesBox(side, res) {
       else if (r.error) { dmg = '—'; }
       else {
         dmg = `${fmtPct(r.minPct)} – ${fmtPct(r.maxPct)}%`;
-        // 乱数幅の内訳 (16 本) をホバーで吹き出し表示する。吹き出しの
-        // 下段には反対の急所状態の範囲と乱数も併記する
-        if (r.rolls && r.rolls.length > 1) {
+        // 乱数幅の内訳をホバーで吹き出し表示する。単発は 16 本のロール列、
+        // 複数ヒットは合計ダメージの分布 (各値と確率) を出す (MH-001)。
+        // 吹き出しの下段には反対の急所状態の範囲と内訳も併記する
+        const distTip = dist => dist.values.map((v, vi) => `${v}: ${Math.round(dist.counts[vi] / dist.total * 1000) / 10}%`).join(', ');
+        if (r.dist) {
+          let tip = distTip(r.dist);
+          if (r.alt && r.alt.dist && (r.alt.min !== r.min || r.alt.max !== r.max)) {
+            const altLbl = ui.crit[side] ? '通常' : '急所';
+            tip += `<span class="rolltip-alt"><span class="rolltip-altlab">${altLbl} ${fmtPct(r.alt.minPct)} – ${fmtPct(r.alt.maxPct)}%</span><br>${distTip(r.alt.dist)}</span>`;
+          }
+          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span>`;
+        }
+        else if (r.rolls && r.rolls.length > 1) {
           let tip = r.rolls.join(', ');
           if (r.alt && (r.alt.min !== r.min || r.alt.max !== r.max)) {
             const altLbl = ui.crit[side] ? '通常' : '急所';
