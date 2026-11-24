@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated": "2026-11-22",
+ "updated": "2026-11-25",
  "regulation": "M-C",
  "species": {
   "Golisopod-Mega": [
@@ -15537,7 +15537,7 @@
     "moves": [
      "Heat Wave",
      "Weather Ball",
-     "Solar Beam",
+     "Ancient Power",
      "Protect"
     ],
     "teamId": "MC926",
@@ -20437,12 +20437,12 @@
     "item": "Choice Scarf",
     "nature": "Adamant",
     "sp": {
-     "hp": 8,
+     "hp": 16,
      "atk": 32,
      "def": 0,
      "spa": 0,
-     "spd": 0,
-     "spe": 26
+     "spd": 2,
+     "spe": 16
     },
     "moves": [
      "Earthquake",
