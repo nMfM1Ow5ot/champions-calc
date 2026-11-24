@@ -5,7 +5,7 @@
 // 受け取る。ダメージ計算は「表示用」(core.mjs の calcMatchup を UI が使う)
 // と分け、ここでは推定のための計算 (damageRolls による尤度評価と候補全体の
 // ダメージ幅の集計) だけを行う。自チームの逆算 (deriveBuild) は含まない。
-import { gen, statTable, damageRolls, withCurHP, moveData } from './core.mjs';
+import { gen, statTable, damageRolls, damageDistribution, withCurHP, moveData } from './core.mjs';
 
 const idOf = en => String(en).toLowerCase().replace(/[^a-z0-9]/g, '');
 export const labelSide = label => (label.startsWith('p1') ? 'p1' : 'p2');
@@ -169,11 +169,45 @@ function amtRangeForPct(pct, maxHP, ko) {
   const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
   return [lo, hi];
 }
+// ダメージ分布の統一形 (MH-001): core の damageDistribution を推定側の形に
+// 正規化する。攻撃技は { values, counts, total, min, max, hits, multi }
+// (values は昇順、質量は counts/total)。単発は total=16 で質量 = 件数/16 と
+// なり、従来のロール件数の算術と一致する。分布が得られない場合
+// (error / status) は null を返し、呼び出し側は従来どおり証拠を保留する。
+// 無効 (immune) は従来の rolls:[0] の挙動を全経路で再現するため、値0に
+// 質量1の退化分布として返す
+function dmgDist(atkSpec, defSpec, moveName, opts) {
+  const r = damageDistribution(atkSpec, defSpec, moveName, opts);
+  if (!r || r.error || r.status) return null;
+  if (r.immune) return { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false };
+  if (!r.dist) return null;
+  return { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi };
+}
+// 観測述語に一致する確率質量 (0〜1)。ベイズ側は bayesApply へ質量×16 を
+// 渡す (単発では 16 が2の冪のため算術が厳密で従来の件数と一致し、複数
+// ヒットでは真の分布の尤度になる)
+function distMass(dist, pred) {
+  if (!dist) return 0;
+  let m = 0;
+  for (let j = 0; j < dist.values.length; j++) if (dist.counts[j] > 0 && pred(dist.values[j])) m += dist.counts[j];
+  return m / dist.total;
+}
+// 可変ヒット技でヒット数の指定 (moveSpec) が無い場合、分布はライブラリ
+// 既定のヒット数に依存する。その想定を推論ログに残すための判定 (MH-001)
+function assumedHitsFor(md, opts, dist) {
+  if (!dist || !dist.multi) return null;
+  if (!md || !md.spec || md.spec.kind !== 'hits') return null;
+  if (opts && opts.moveSpec != null) return null;
+  return dist.hits;
+}
 function processDamageInf(ev, ctx, optsOverride, collect) {
   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
   if (!collect) pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
   const md = moveData(ev.move);
-  if (!md || md.category === 'Status' || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
+  // 複数ヒット技は合計ダメージの分布 (damageDistribution) で表せるように
+  // なったため対象外にしない (MH-001 で multihit 項を解除)。変化技・
+  // 固定ダメージ・ブラックリストは従来どおり対象外
+  if (!md || md.category === 'Status' || !md.basePower || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
   // 自分自身へのダメージ (反動など) は攻撃として扱わない (ベイズ側は
   // processRecoilBayes が持ち物推論の証拠として取り込む)
   if (ev.atk && ev.atk === ev.def) return;
@@ -232,8 +266,8 @@ function processDamageInf(ev, ctx, optsOverride, collect) {
       for (const rows of byValue.values()) {
         const rep = rows[0];
         const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
-        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-        if (rolls.some(inRange)) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
+        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+        if (distMass(dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
       }
     }
     if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
@@ -256,10 +290,10 @@ function processDamageInf(ev, ctx, optsOverride, collect) {
       for (const rows of byValue.values()) {
         const rep = rows[0];
         const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
-        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-        if (!rolls.length) continue;
+        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+        if (!dist) continue;
         for (const [spHp, hpVal] of hpBySp) {
-          if (rolls.some(r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct))) {
+          if (distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
             for (const r of rows) feasPairs.add(r.nature + '|' + r.sp);
             feasHp.add(spHp);
           }
@@ -1149,16 +1183,17 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
       [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
     }
     const matchRoll = hasAmt ? (r => r === ev.amt) : (r => r >= amtLo && r <= amtHi);
-    const rollsList = ent.cands.map(c => damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts).rolls);
-    let counts = rollsList.map(rolls => rolls.filter(matchRoll).length);
+    const distList = ent.cands.map(c => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
+    let counts = distList.map(dist => distMass(dist, matchRoll) * 16);
     const trig = { kind: 'damage', move: md.name, by: 'opp', crit: !!ev.crit };
     if (hasAmt) trig.amt = ev.amt;
     else { trig.pct = ev.pct; trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi]; }
+    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
     if (!counts.some(n => n > 0)) {
       // 最大超過の判定は、観測と整合する最小の実数で行う (pct のみの
       // 観測や、とどめの一撃で切り捨てられた観測でも偽陽性にならない)
       const obsMin = hasAmt ? ev.amt : amtLo;
-      const over = rollsList.every(rolls => rolls.length && obsMin > Math.max(...rolls));
+      const over = distList.every(dist => dist && obsMin > dist.max);
       if (over) {
         trig.dir = 'over';
         const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
@@ -1171,8 +1206,7 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
       if ((flag === 'Choice Band' && md.category === 'Physical') || (flag === 'Choice Specs' && md.category === 'Special')) {
         counts = ent.cands.map(c => {
           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
-          const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
-          return rolls.filter(matchRoll).length;
+          return distMass(dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts), matchRoll) * 16;
         });
         trig.dmgFlag = flag;
       }
@@ -1197,16 +1231,15 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
     if (!ent || !atkSpec || !base) { if (!capture) logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, applied: false, reason: 'no-base' }); return; }
     const flagIn = ent.dmgFlag;
     let flagWork = capture ? capture.flagIn : flagIn;
-    const pctCounts = (c, rolls) => {
+    const pctCounts = (c, dist) => {
       const hpVal = c.values.hp;
-      if (!hpVal || !rolls) return 0;
-      let n = 0;
-      for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
-      return n;
+      if (!hpVal || !dist) return 0;
+      return distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
     };
-    const rollsList = ent.cands.map(c => c.values.hp ? damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts).rolls : null);
-    let counts = ent.cands.map((c, i) => pctCounts(c, rollsList[i]));
+    const distList = ent.cands.map(c => c.values.hp ? dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts) : null);
+    let counts = ent.cands.map((c, i) => pctCounts(c, distList[i]));
     const trig = { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit };
+    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
     if (!counts.some(n => n > 0)) {
       // とどめの一撃では観測 pct が残り HP で頭打ちになり、実際のロールは
       // それ以上だった可能性がある (下限の観測)。「全候補の最小ロール
@@ -1215,9 +1248,9 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
       // pct で Assault Vest が誤発火した)
       const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
       const under = !ko && ent.cands.every((c, i) => {
-        const rolls = rollsList[i];
-        if (!rolls || !c.values.hp) return false;
-        return ev.pct < Math.min(...rolls.map(r => Math.floor(r / c.values.hp * 100)));
+        const dist = distList[i];
+        if (!dist || !c.values.hp) return false;
+        return ev.pct < Math.min(...dist.values.map(r => Math.floor(r / c.values.hp * 100)));
       });
       if (under) {
         trig.dir = 'under';
@@ -1230,8 +1263,7 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
       counts = ent.cands.map(c => {
         if (!c.values.hp) return 0;
         const cc = isMegaStoneItem(c.item) ? c : { ...c, item: 'Assault Vest' };
-        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
-        return pctCounts(c, rolls);
+        return pctCounts(c, dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts));
       });
       trig.dmgFlag = 'Assault Vest';
     }
@@ -1742,17 +1774,20 @@ function candRanges(args) {
       // 出さないよう対象外にする (moveData の isZ / isMax で判定)
       const md = moveData(mv);
       if (md && (md.isZ || md.isMax)) return;
-      const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), mv,
+      const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), mv,
         { ...F, gameType: singleFn(mv) ? 'Singles' : 'Doubles', crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide });
-      if (!rolls || !rolls.length) return;
-      const lo = Math.min(...rolls) / defHp * 100, hi = Math.max(...rolls) / defHp * 100;
+      if (!dist) return;
+      const lo = dist.min / defHp * 100, hi = dist.max / defHp * 100;
       // 事後確率で重み付けした期待値 (包絡と同じ信用集合内での期待値)。
-      // exp = 期待ダメージ% (候補の16ロールの平均)、ko = 期待KO%
-      // (候補のロールのうち現在HP以上を占める割合) を、候補の事後確率で加重
-      const meanPct = (rolls.reduce((s, r) => s + r, 0) / rolls.length) / defHp * 100;
+      // exp = 期待ダメージ% (分布の質量で重み付けした平均。単発では従来の
+      // 16ロールの平均と一致)、ko = 期待KO% (現在HP以上の質量の割合) を、
+      // 候補の事後確率で加重 (MH-001 で分布ベースに置き換え)
       const pctNow = defSpec && defSpec.curHPPercent != null ? defSpec.curHPPercent : 100;
       const curHp = pctNow >= 100 ? defHp : Math.max(1, Math.floor(defHp * pctNow / 100));
-      const koPct = rolls.filter(r => r >= curHp).length / rolls.length * 100;
+      let meanSum = 0, koMass = 0;
+      for (let j = 0; j < dist.values.length; j++) { meanSum += dist.values[j] * dist.counts[j]; if (dist.values[j] >= curHp) koMass += dist.counts[j]; }
+      const meanPct = (meanSum / dist.total) / defHp * 100;
+      const koPct = koMass / dist.total * 100;
       const cur = dst[mi];
       dst[mi] = cur
         ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi), exp: cur.exp + w * meanPct, ko: cur.ko + w * koPct }
