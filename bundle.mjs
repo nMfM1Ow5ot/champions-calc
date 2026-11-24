@@ -26876,20 +26876,13 @@ function dynamicKoText(ctx) {
   return fm && +fm[1] > 9 ? fb : "";
 }
 function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ, koCtx) {
-  const rollsOf = (res) => {
+  const rollsAndDist = (res) => {
     const dm = res.damage;
     if (Array.isArray(dm)) {
-      if (Array.isArray(dm[0])) {
-        const totals = new Array(16).fill(0);
-        for (const hit of dm) {
-          if (!Array.isArray(hit)) continue;
-          for (let ri = 0; ri < 16; ri++) totals[ri] += hit[ri] || 0;
-        }
-        return totals;
-      }
-      return dm.slice();
+      if (Array.isArray(dm[0])) return { rolls: null, dist: convolveHitRolls(dm) };
+      return { rolls: dm.slice(), dist: null };
     }
-    return typeof dm === "number" ? [dm] : null;
+    return { rolls: typeof dm === "number" ? [dm] : null, dist: null };
   };
   const koAndDesc = (r, defPoke, defSpec, i, j, moveObj, useField) => {
     const range = r.range();
@@ -26945,7 +26938,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
         try {
           const r = (0, import_calc.calculate)(gen, attackers[i], defenders[j], moveObj, useField);
           const range = r.range();
-          const rolls = rollsOf(r);
+          const { rolls, dist } = rollsAndDist(r);
           const defMaxHP = defenders[j].maxHP();
           const { ko: koText, desc: descText } = koAndDesc(r, defenders[j], defSpecs[j], i, j, moveObj, useField);
           let descFull = null;
@@ -26964,7 +26957,8 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             const altMove = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : void 0, !(critFlags && critFlags[i]), !!(moveZ && moveZ[i] && moveZ[i][mv]), spec);
             const ra = (0, import_calc.calculate)(gen, attackers[i], defenders[j], altMove, useField);
             const ar = ra.range();
-            alt = { min: ar[0], max: ar[1], minPct: Math.round(ar[0] / defMaxHP * 1e3) / 10, maxPct: Math.round(ar[1] / defMaxHP * 1e3) / 10, rolls: rollsOf(ra) };
+            const altRD = rollsAndDist(ra);
+            alt = { min: ar[0], max: ar[1], minPct: Math.round(ar[0] / defMaxHP * 1e3) / 10, maxPct: Math.round(ar[1] / defMaxHP * 1e3) / 10, rolls: altRD.rolls, dist: altRD.dist };
           } catch (e) {
             alt = null;
           }
@@ -26977,6 +26971,7 @@ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlag
             desc: descText,
             descFull,
             rolls,
+            dist,
             alt
           });
         } catch (e) {
@@ -27425,6 +27420,52 @@ function buildMove(moveName, specValue, crit, zMode, atkSpec) {
   if (crit) moveObj.isCrit = true;
   return moveObj;
 }
+function convolveHitRolls(hitRollsList) {
+  let dist = /* @__PURE__ */ new Map([[0, 1]]);
+  let total = 1;
+  for (const hitRolls of hitRollsList) {
+    const freq = /* @__PURE__ */ new Map();
+    for (const v of hitRolls) freq.set(v, (freq.get(v) || 0) + 1);
+    const next = /* @__PURE__ */ new Map();
+    for (const [base, c1] of dist) {
+      for (const [v, c2] of freq) {
+        const key = base + v;
+        next.set(key, (next.get(key) || 0) + c1 * c2);
+      }
+    }
+    dist = next;
+    total *= hitRolls.length;
+  }
+  const values = [...dist.keys()].sort((a, b) => a - b);
+  return { values, counts: values.map((v) => dist.get(v)), total };
+}
+function damageDistribution(atkSpec, defSpec, moveName, opts = {}) {
+  const atk = toPokemon(atkSpec);
+  const def = toPokemon(defSpec);
+  const moveObj = buildMove(moveName, opts.moveSpec, opts.crit);
+  const field = new import_calc.Field({
+    gameType: opts.gameType || "Doubles",
+    weather: opts.weather || void 0,
+    terrain: opts.terrain || void 0,
+    attackerSide: opts.atkSide || {},
+    defenderSide: opts.defSide || {}
+  });
+  if (moveObj.category === "Status") return { status: true };
+  if (isImmune(atk, def, moveObj)) return { immune: true };
+  try {
+    const r = (0, import_calc.calculate)(gen, atk, def, moveObj, field);
+    const d = r.damage;
+    if (Array.isArray(d) && Array.isArray(d[0])) {
+      const dist2 = convolveHitRolls(d);
+      return { dist: dist2, min: dist2.values[0], max: dist2.values[dist2.values.length - 1], hits: d.length, multi: true };
+    }
+    const rolls = Array.isArray(d) ? d : [d];
+    const dist = convolveHitRolls([rolls]);
+    return { dist, min: dist.values[0], max: dist.values[dist.values.length - 1], hits: 1, multi: false };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
 function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   const atk = toPokemon(atkSpec);
   const def = toPokemon(defSpec);
@@ -27441,14 +27482,9 @@ function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
   try {
     const r = (0, import_calc.calculate)(gen, atk, def, moveObj, field);
     const d = r.damage;
-    const info = moveSpecInfo(moveName);
-    if (opts.moveSpec != null && info && info.kind === "hits" && Array.isArray(d) && Array.isArray(d[0])) {
-      const totals = new Array(16).fill(0);
-      for (const hitRolls of d) {
-        if (!Array.isArray(hitRolls)) continue;
-        for (let i = 0; i < 16; i++) totals[i] += hitRolls[i] || 0;
-      }
-      return { rolls: totals };
+    if (Array.isArray(d) && Array.isArray(d[0])) {
+      const dist = convolveHitRolls(d);
+      return { rolls: null, dist, hits: d.length, multi: true };
     }
     return { rolls: Array.isArray(d) ? d : [d] };
   } catch (e) {
@@ -29362,7 +29398,9 @@ export {
   applySpecPatch,
   assumedSet,
   calcMatchup,
+  convolveHitRolls,
   createEstimator,
+  damageDistribution,
   damageRolls,
   deriveBuild,
   exclusiveZMove,
