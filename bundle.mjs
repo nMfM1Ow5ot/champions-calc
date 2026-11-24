@@ -27538,6 +27538,7 @@ var labelSpecies = (label) => {
 };
 function createEstimator(deps) {
   const effSpecies = deps.effSpecies;
+  const distFn = deps && typeof deps.damageDistribution === "function" ? deps.damageDistribution : damageDistribution;
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
   let VGC_SETS = null;
   let SPECIES_MOVES = null;
@@ -27553,7 +27554,7 @@ function createEstimator(deps) {
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
-  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
+  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, hhSeen: { p1: /* @__PURE__ */ new Set(), p2: /* @__PURE__ */ new Set() }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
   let infLastMove = null;
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
@@ -27561,6 +27562,7 @@ function createEstimator(deps) {
   let lastFaintCtx = null, faintCtxSeq = 0, lastFaintAppliedId = 0;
   let pendingOpts = null;
   let dmgRecords = [], pendingDmgRecord = null, infHistory = {};
+  let pendingInfStash = null;
   const deepCopy = (o) => {
     try {
       return structuredClone(o);
@@ -27591,6 +27593,56 @@ function createEstimator(deps) {
       atkSide: { isHelpingHand: hh },
       defSide: { isReflect: active(ds.reflect, 5), isLightScreen: active(ds.light, 5), isAuroraVeil: active(ds.veil, 5) }
     };
+  }
+  function hhSuspendedFor(ev) {
+    if (!ev || ev.atk == null || typeof ev.turn !== "number") return false;
+    const seen = infCtx.hhSeen[labelSide(ev.atk)];
+    return !!(seen && seen.has(ev.turn));
+  }
+  function rollbackHHApplied(side, turn) {
+    const targets = dmgRecords.filter((r) => r.turn === turn && labelSide(r.atk) === side);
+    for (let ti = targets.length - 1; ti >= 0; ti--) {
+      const rec = targets[ti];
+      if (rec.bayes) {
+        const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
+        if (ent) {
+          const counts = rec.bayesCritCounts || rec.bayes.counts;
+          const applied = rec.bayesCritCounts ? true : rec.bayes.applied;
+          if (applied && counts && counts.length === ent.cands.length) {
+            let tot = 0;
+            ent.cands.forEach((c, i) => {
+              if (c.post > 0) c.post /= Math.max(counts[i] / 16, BAYES_FLOOR);
+              tot += c.post;
+            });
+            if (tot > 0) for (const c of ent.cands) c.post /= tot;
+            ent.used--;
+          }
+          const critFlagSet = rec.bayesCritFlagSet || null;
+          if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet || critFlagSet && ent.dmgFlag === critFlagSet || ent.dmgFlag == null && rec.bayesCritFlagCleared) ent.dmgFlag = rec.bayes.flagIn;
+          if (rec.bayes.hpLiftedIn != null) ent.hpLifted = rec.bayes.hpLiftedIn;
+        }
+      }
+      const touchedSp = /* @__PURE__ */ new Set();
+      for (const ref of rec.infRefs) {
+        const hist = infHistory[ref.species];
+        if (hist && ref.idx < hist.length) {
+          hist.splice(ref.idx, 1);
+          touchedSp.add(ref.species);
+          for (const r2 of dmgRecords) for (const rf of r2.infRefs) if (rf.species === ref.species && rf.idx > ref.idx) rf.idx--;
+        }
+      }
+      for (const sp of touchedSp) rebuildInfState(sp);
+      const ix = dmgRecords.indexOf(rec);
+      if (ix >= 0) dmgRecords.splice(ix, 1);
+      if (pendingDmgRecord === rec) {
+        pendingDmgRecord = null;
+        pendingOpts = null;
+      }
+      if (pendingCritRec && pendingCritRec.rec === rec) pendingCritRec = null;
+      logSnapshot(rec.by === "opp" ? rec.atkSpecies : rec.defSpecies, turn, { kind: "inf", move: rec.move, applied: false, reason: "helping-hand-observed", delayed: true });
+      if (rec.bayes) logSnapshot(rec.bayes.entSpecies, turn, { kind: "damage", move: rec.move, by: rec.by, applied: false, reason: "helping-hand-observed", delayed: true });
+      dirty = true;
+    }
   }
   function logSnapshot(species, turn, trigger) {
     try {
@@ -27737,17 +27789,70 @@ function createEstimator(deps) {
     return [lo, hi];
   }
   function dmgDist(atkSpec, defSpec, moveName, opts) {
-    const r = damageDistribution(atkSpec, defSpec, moveName, opts);
-    if (!r || r.error || r.status) return null;
-    if (r.immune) return { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false };
-    if (!r.dist) return null;
-    return { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi };
+    let r;
+    try {
+      r = distFn(atkSpec, defSpec, moveName, opts);
+    } catch (e) {
+      return { ok: false, reason: "exception" };
+    }
+    if (!r) return { ok: false, reason: "no-result" };
+    if (r.error) return { ok: false, reason: "error" };
+    if (r.status) return { ok: false, reason: "status" };
+    if (r.immune) return { ok: true, dist: { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false } };
+    if (!r.dist) return { ok: false, reason: "no-dist" };
+    return { ok: true, dist: { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi } };
   }
   function distMass(dist, pred) {
-    if (!dist) return 0;
     let m = 0;
     for (let j = 0; j < dist.values.length; j++) if (dist.counts[j] > 0 && pred(dist.values[j])) m += dist.counts[j];
     return m / dist.total;
+  }
+  function stashInfBeforeIntersect(key, species, rec, turn) {
+    const ie = inference.bySpecies[species];
+    const copySet = (s) => s ? new Set(s) : null;
+    pendingInfStash = {
+      key,
+      species,
+      turn: turn != null ? turn : null,
+      existed: !!ie,
+      entry: ie ? { pairs: { atk: copySet(ie.pairs.atk), spa: copySet(ie.pairs.spa), def: copySet(ie.pairs.def), spd: copySet(ie.pairs.spd), spe: copySet(ie.pairs.spe) }, hpSps: copySet(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
+      histLen: infHistory[species] ? infHistory[species].length : 0,
+      rec: rec || null
+    };
+  }
+  function rollbackInfStash(key, reason) {
+    const st = pendingInfStash;
+    if (!st || st.key !== key) return;
+    pendingInfStash = null;
+    if (st.existed) inference.bySpecies[st.species] = st.entry;
+    else delete inference.bySpecies[st.species];
+    if (infHistory[st.species]) infHistory[st.species].length = st.histLen;
+    if (st.rec) {
+      const ix = dmgRecords.indexOf(st.rec);
+      if (ix >= 0) dmgRecords.splice(ix, 1);
+      if (pendingDmgRecord === st.rec) pendingDmgRecord = null;
+    }
+    pendingOpts = null;
+    dirty = true;
+    logSnapshot(st.species, st.turn, { kind: "inf", applied: false, reason: reason || "dist-unavailable-rollback" });
+  }
+  function speciesCanParentalBond(name) {
+    if (!name) return false;
+    try {
+      const s = gen.species.get(idOf(name));
+      return !!(s && s.abilities && Object.values(s.abilities).includes("Parental Bond"));
+    } catch (e) {
+      return false;
+    }
+  }
+  function isSuspendedMultiHit(md, atkSpeciesName, atkSpecs) {
+    if (md && md.multihit != null) return true;
+    for (const sp of atkSpecs || []) {
+      if (!sp) continue;
+      if (sp.ability === "Parental Bond" || sp.megaAbility === "Parental Bond") return true;
+      if (speciesCanParentalBond(sp.megaSpecies) || speciesCanParentalBond(sp.species)) return true;
+    }
+    return speciesCanParentalBond(atkSpeciesName);
   }
   function assumedHitsFor(md, opts, dist) {
     if (!dist || !dist.multi) return null;
@@ -27758,11 +27863,25 @@ function createEstimator(deps) {
   function processDamageInf(ev, ctx, optsOverride, collect) {
     if (typeof ev.turn === "number") infLogTurn = ev.turn;
     if (!collect) pendingOpts = null;
+    if (!collect && pendingInfStash && pendingInfStash.key !== ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move) pendingInfStash = null;
     const md = moveData(ev.move);
     if (!md || md.category === "Status" || !md.basePower || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
     if (ev.atk && ev.atk === ev.def) return;
     const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
     const oppIsAtk = labelSide(ev.atk) === "p2";
+    if (hhSuspendedFor(ev)) {
+      if (collect) collect.push({ withheld: "helping-hand-observed" });
+      else logSnapshot(oppIsAtk ? atkSpecies : defSpecies, ev.turn, { kind: "inf", move: md.name, applied: false, reason: "helping-hand-observed" });
+      return;
+    }
+    if (isSuspendedMultiHit(md, atkSpecies, oppIsAtk ? ctx.basesAtk || [] : [ctx.myAtk])) {
+      if (!collect) {
+        const atkSideKey = labelSide(ev.atk);
+        if (infCtx.hhTurn[atkSideKey] === ev.turn) infCtx.hhTurn[atkSideKey] = -99;
+        logSnapshot(oppIsAtk ? atkSpecies : defSpecies, ev.turn, { kind: "inf", move: md.name, applied: false, reason: "multihit-suspended" });
+      } else collect.push({ withheld: "multihit-suspended" });
+      return;
+    }
     let target = md.target;
     if (md.name === "Expanding Force" && ev.t === "Psychic") target = "allAdjacentFoes";
     let targets = 1;
@@ -27797,81 +27916,163 @@ function createEstimator(deps) {
       dmgRecords.push(pendingDmgRecord);
       if (dmgRecords.length > 400) dmgRecords.splice(0, dmgRecords.length - 400);
     }
-    if (oppIsAtk) {
-      const statKey = md.name === "Body Press" ? "def" : md.category === "Physical" ? "atk" : "spa";
-      const defSpec = ctx.myDef;
-      const bases = ctx.basesAtk;
-      const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
-      if (!defSpec || !bases.length || !table) {
-        if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-base" });
+    const evKey = ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move;
+    const myRec = !optsOverride && !collect ? pendingDmgRecord : null;
+    const withholdDistUnavailable = (species) => {
+      if (collect) {
+        collect.push({ withheld: "dist-unavailable" });
         return;
       }
-      let inRange;
-      if (typeof ev.amt === "number" && ev.amt > 0) inRange = (r) => r === ev.amt;
-      else {
-        if (typeof ev.pct !== "number" || ev.pct <= 0) {
-          if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
-          return;
-        }
-        const M = specMaxHP(defSpec);
-        if (!M) {
-          if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
-          return;
-        }
-        const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
-        const [lo, hi] = amtRangeForPct(ev.pct, M, ko);
-        inRange = (r) => r >= lo && r <= hi;
+      logSnapshot(species, ev.turn, { kind: "inf", move: md.name, applied: false, reason: "dist-unavailable" });
+      if (myRec) {
+        const ix = dmgRecords.indexOf(myRec);
+        if (ix >= 0) dmgRecords.splice(ix, 1);
+        if (pendingDmgRecord === myRec) pendingDmgRecord = null;
+        pendingOpts = null;
       }
-      const byValue = /* @__PURE__ */ new Map();
-      for (const row of table[statKey]) {
-        if (!byValue.has(row.value)) byValue.set(row.value, []);
-        byValue.get(row.value).push(row);
-      }
-      const feasible = /* @__PURE__ */ new Set();
-      for (const base of bases) {
-        for (const rows of byValue.values()) {
-          const rep = rows[0];
-          const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
-          const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-          if (distMass(dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + "|" + r.sp);
-        }
-      }
-      if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
-      else infIntersect(atkSpecies, statKey, feasible, null);
-    } else {
-      if (typeof ev.pct !== "number" || ev.pct <= 0) return;
-      const defKey = md.category === "Physical" ? "def" : "spd";
-      const atkSpec = ctx.myAtk;
-      const bases = ctx.basesDef;
-      const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
-      if (!atkSpec || !bases.length || !table) {
-        if (!collect) logSnapshot(defSpecies, ev.turn, { kind: "inf", stat: defKey, applied: false, reason: "no-base" });
+    };
+    const withholdBackstopMulti = (species) => {
+      if (collect) {
+        collect.push({ withheld: "multihit-suspended" });
         return;
       }
-      const hpBySp = /* @__PURE__ */ new Map();
-      for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
-      const byValue = /* @__PURE__ */ new Map();
-      for (const row of table[defKey]) {
-        if (!byValue.has(row.value)) byValue.set(row.value, []);
-        byValue.get(row.value).push(row);
+      logSnapshot(species, ev.turn, { kind: "inf", move: md.name, applied: false, reason: "multihit-suspended" });
+      if (myRec) {
+        const ix = dmgRecords.indexOf(myRec);
+        if (ix >= 0) dmgRecords.splice(ix, 1);
+        if (pendingDmgRecord === myRec) pendingDmgRecord = null;
+        pendingOpts = null;
       }
-      const feasPairs = /* @__PURE__ */ new Set(), feasHp = /* @__PURE__ */ new Set();
-      for (const base of bases) {
-        for (const rows of byValue.values()) {
-          const rep = rows[0];
-          const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
-          const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-          if (!dist) continue;
-          for (const [spHp, hpVal] of hpBySp) {
-            if (distMass(dist, (r) => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
-              for (const r of rows) feasPairs.add(r.nature + "|" + r.sp);
-              feasHp.add(spHp);
+    };
+    try {
+      if (oppIsAtk) {
+        const statKey = md.name === "Body Press" ? "def" : md.category === "Physical" ? "atk" : "spa";
+        const defSpec = ctx.myDef;
+        const bases = ctx.basesAtk;
+        const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : atkSpecies);
+        if (!defSpec || !bases.length || !table) {
+          if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-base" });
+          return;
+        }
+        let inRange;
+        if (typeof ev.amt === "number" && ev.amt > 0) inRange = (r) => r === ev.amt;
+        else {
+          if (typeof ev.pct !== "number" || ev.pct <= 0) {
+            if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
+            return;
+          }
+          const M = specMaxHP(defSpec);
+          if (!M) {
+            if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: "inf", stat: statKey, applied: false, reason: "no-amt" });
+            return;
+          }
+          const ko = ev.pct >= (defSpec.curHPPercent != null ? defSpec.curHPPercent : 100);
+          const [lo, hi] = amtRangeForPct(ev.pct, M, ko);
+          inRange = (r) => r >= lo && r <= hi;
+        }
+        const byValue = /* @__PURE__ */ new Map();
+        for (const row of table[statKey]) {
+          if (!byValue.has(row.value)) byValue.set(row.value, []);
+          byValue.get(row.value).push(row);
+        }
+        const feasible = /* @__PURE__ */ new Set();
+        let backstopMulti = false, distUnavailable = false;
+        for (const base of bases) {
+          for (const rows of byValue.values()) {
+            const rep = rows[0];
+            const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
+            const res = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+            if (!res.ok) {
+              distUnavailable = true;
+              break;
+            }
+            if (res.dist.multi) {
+              backstopMulti = true;
+              break;
+            }
+            if (distMass(res.dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + "|" + r.sp);
+          }
+          if (backstopMulti || distUnavailable) break;
+        }
+        if (distUnavailable) {
+          withholdDistUnavailable(atkSpecies);
+          return;
+        }
+        if (backstopMulti) {
+          withholdBackstopMulti(atkSpecies);
+          return;
+        }
+        if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
+        else {
+          stashInfBeforeIntersect(evKey, atkSpecies, myRec, ev.turn);
+          infIntersect(atkSpecies, statKey, feasible, null);
+        }
+      } else {
+        if (typeof ev.pct !== "number" || ev.pct <= 0) return;
+        const defKey = md.category === "Physical" ? "def" : "spd";
+        const atkSpec = ctx.myAtk;
+        const bases = ctx.basesDef;
+        const table = statTable(bases[0] && bases[0].mega && bases[0].megaSpecies ? bases[0].megaSpecies : defSpecies);
+        if (!atkSpec || !bases.length || !table) {
+          if (!collect) logSnapshot(defSpecies, ev.turn, { kind: "inf", stat: defKey, applied: false, reason: "no-base" });
+          return;
+        }
+        const hpBySp = /* @__PURE__ */ new Map();
+        for (const row of table.hp) if (!hpBySp.has(row.sp)) hpBySp.set(row.sp, row.value);
+        const byValue = /* @__PURE__ */ new Map();
+        for (const row of table[defKey]) {
+          if (!byValue.has(row.value)) byValue.set(row.value, []);
+          byValue.get(row.value).push(row);
+        }
+        const feasPairs = /* @__PURE__ */ new Set(), feasHp = /* @__PURE__ */ new Set();
+        let backstopMulti = false, distUnavailable = false;
+        for (const base of bases) {
+          for (const rows of byValue.values()) {
+            const rep = rows[0];
+            const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
+            const res = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+            if (!res.ok) {
+              distUnavailable = true;
+              break;
+            }
+            if (res.dist.multi) {
+              backstopMulti = true;
+              break;
+            }
+            for (const [spHp, hpVal] of hpBySp) {
+              if (distMass(res.dist, (r) => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
+                for (const r of rows) feasPairs.add(r.nature + "|" + r.sp);
+                feasHp.add(spHp);
+              }
             }
           }
+          if (backstopMulti || distUnavailable) break;
+        }
+        if (distUnavailable) {
+          withholdDistUnavailable(defSpecies);
+          return;
+        }
+        if (backstopMulti) {
+          withholdBackstopMulti(defSpecies);
+          return;
+        }
+        if (collect) collect.push({ species: defSpecies, statKey: defKey, feasible: feasPairs, hpSps: feasHp });
+        else {
+          stashInfBeforeIntersect(evKey, defSpecies, myRec, ev.turn);
+          infIntersect(defSpecies, defKey, feasPairs, feasHp);
         }
       }
-      if (collect) collect.push({ species: defSpecies, statKey: defKey, feasible: feasPairs, hpSps: feasHp });
-      else infIntersect(defSpecies, defKey, feasPairs, feasHp);
+    } catch (e) {
+      if (!collect) {
+        if (myRec) {
+          const ix = dmgRecords.indexOf(myRec);
+          if (ix >= 0) dmgRecords.splice(ix, 1);
+          if (pendingDmgRecord === myRec) pendingDmgRecord = null;
+        }
+        pendingOpts = null;
+        rollbackInfStash(evKey);
+      }
+      throw e;
     }
   }
   const WEATHER_SPE = { Chlorophyll: "Sun", "Swift Swim": "Rain", "Sand Rush": "Sand", "Slush Rush": "Snow" };
@@ -27920,7 +28121,9 @@ function createEstimator(deps) {
       intents.push({ t: "side", side, key: "veil", turn: ev.turn });
     } else if (ev.move === "Helping Hand") {
       infCtx.hhTurn[side] = ev.turn;
+      infCtx.hhSeen[side].add(ev.turn);
       intents.push({ t: "side", side, key: "hand", turn: ev.turn });
+      rollbackHHApplied(side, ev.turn);
     }
     const foeSide = side === "p1" ? "p2" : "p1";
     if (ev.move === "Stealth Rock" || ev.move === "Stone Axe") intents.push({ t: "side", side: foeSide, key: "rock", turn: ev.turn });
@@ -28708,8 +28911,25 @@ function createEstimator(deps) {
     return void 0;
   }
   function processDamageBayes(ev, ctx, optsOverride, capture) {
+    try {
+      processDamageBayesImpl(ev, ctx, optsOverride, capture);
+    } catch (e) {
+      if (!capture) rollbackInfStash(ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move);
+      throw e;
+    }
+  }
+  function processDamageBayesImpl(ev, ctx, optsOverride, capture) {
+    if (!capture && pendingInfStash && pendingInfStash.key !== ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move) pendingInfStash = null;
     if (ev.atk && ev.atk === ev.def) {
       if (labelSide(ev.atk) === "p2") processRecoilBayes(ev);
+      return;
+    }
+    if (hhSuspendedFor(ev)) {
+      if (capture) capture.hhSuspended = true;
+      else {
+        const md0 = moveData(ev.move);
+        logSnapshot(labelSide(ev.atk) === "p2" ? labelSpecies(ev.atk) : labelSpecies(ev.def), ev.turn, { kind: "damage", move: md0 ? md0.name : ev.move, by: labelSide(ev.atk) === "p2" ? "opp" : "mine", applied: false, reason: "helping-hand-observed" });
+      }
       return;
     }
     const opts = optsOverride || pendingOpts;
@@ -28717,6 +28937,36 @@ function createEstimator(deps) {
     const md = moveData(ev.move);
     if (!md) return;
     const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
+    {
+      const isOpp = labelSide(ev.atk) === "p2";
+      const entPeek = isOpp && bayes && bayes.bySpecies ? bayes.bySpecies[atkSpecies] : null;
+      const atkSpecs = isOpp ? [ctx.baseAtk, ...entPeek ? entPeek.cands : []] : [ctx.myAtk];
+      if (isSuspendedMultiHit(md, atkSpecies, atkSpecs)) {
+        if (capture) capture.suspended = true;
+        else {
+          logSnapshot(isOpp ? atkSpecies : defSpecies, ev.turn, { kind: "damage", move: md.name, by: isOpp ? "opp" : "mine", applied: false, reason: "multihit-suspended" });
+          rollbackInfStash(ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move, "multihit-suspended-rollback");
+        }
+        return;
+      }
+    }
+    const evKey = ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move;
+    const failDistUnavailable = (species, by) => {
+      if (capture) {
+        capture.unavailable = true;
+        return;
+      }
+      logSnapshot(species, ev.turn, { kind: "damage", move: md.name, by, applied: false, reason: "dist-unavailable" });
+      rollbackInfStash(evKey);
+    };
+    const failMultiHit = (species, by) => {
+      if (capture) {
+        capture.suspended = true;
+        return;
+      }
+      logSnapshot(species, ev.turn, { kind: "damage", move: md.name, by, applied: false, reason: "multihit-suspended" });
+      rollbackInfStash(evKey, "multihit-suspended-rollback");
+    };
     if (labelSide(ev.atk) === "p2") {
       const ent = bayesEntry(atkSpecies);
       const defSpec = ctx.myDef;
@@ -28739,8 +28989,17 @@ function createEstimator(deps) {
         [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
       }
       const matchRoll = hasAmt ? ((r) => r === ev.amt) : ((r) => r >= amtLo && r <= amtHi);
-      const distList = ent.cands.map((c) => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
+      const distResults = ent.cands.map((c) => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
+      if (distResults.some((r) => !r.ok)) {
+        failDistUnavailable(atkSpecies, "opp");
+        return;
+      }
+      const distList = distResults.map((r) => r.dist);
       let counts = distList.map((dist) => distMass(dist, matchRoll) * 16);
+      if (distList.some((d) => d.multi)) {
+        failMultiHit(atkSpecies, "opp");
+        return;
+      }
       const trig = { kind: "damage", move: md.name, by: "opp", crit: !!ev.crit };
       if (hasAmt) trig.amt = ev.amt;
       else {
@@ -28748,18 +29007,17 @@ function createEstimator(deps) {
         trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi];
       }
       {
-        const ah = assumedHitsFor(md, opts, distList.find((d) => d));
+        const ah = assumedHitsFor(md, opts, distList[0]);
         if (ah != null) trig.assumedHits = ah;
       }
       if (!counts.some((n) => n > 0)) {
         const obsMin = hasAmt ? ev.amt : amtLo;
-        const over = distList.every((dist) => dist && obsMin > dist.max);
+        const over = distList.every((dist) => obsMin > dist.max);
         if (over) {
           trig.dir = "over";
           const want = md.category === "Physical" ? "Choice Band" : md.category === "Special" ? "Choice Specs" : null;
           if (want && !flagWork && !ent.itemKnown) {
             flagWork = want;
-            if (!capture) ent.dmgFlag = want;
             trig.dmgFlagSet = want;
           }
         }
@@ -28767,10 +29025,19 @@ function createEstimator(deps) {
       const flag = flagWork;
       if (flag === "Choice Band" || flag === "Choice Specs") {
         if (flag === "Choice Band" && md.category === "Physical" || flag === "Choice Specs" && md.category === "Special") {
-          counts = ent.cands.map((c) => {
+          const reResults = ent.cands.map((c) => {
             const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
-            return distMass(dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts), matchRoll) * 16;
+            return dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
           });
+          if (reResults.some((r) => !r.ok)) {
+            failDistUnavailable(atkSpecies, "opp");
+            return;
+          }
+          if (reResults.some((r) => r.dist.multi)) {
+            failMultiHit(atkSpecies, "opp");
+            return;
+          }
+          counts = reResults.map((r) => distMass(r.dist, matchRoll) * 16);
           trig.dmgFlag = flag;
         }
       }
@@ -28782,10 +29049,11 @@ function createEstimator(deps) {
         return;
       }
       if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move) {
-        pendingDmgRecord.bayes = { entSpecies: atkSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some((n) => n > 0) };
+        pendingDmgRecord.bayes = { entSpecies: atkSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some((n) => n > 0), hpLiftedIn: ent.hpLifted };
         pendingDmgRecord.bayesCtx = deepCopy(ctx);
         pendingDmgRecord.open = false;
       }
+      if (trig.dmgFlagSet) ent.dmgFlag = trig.dmgFlagSet;
       logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     } else {
@@ -28799,40 +29067,57 @@ function createEstimator(deps) {
       }
       const flagIn = ent.dmgFlag;
       let flagWork = capture ? capture.flagIn : flagIn;
-      const pctCounts = (c, dist) => {
+      const pctCounts = (c, res) => {
         const hpVal = c.values.hp;
-        if (!hpVal || !dist) return 0;
-        return distMass(dist, (r) => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
+        if (!hpVal || !res || !res.ok) return null;
+        return distMass(res.dist, (r) => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
       };
-      const distList = ent.cands.map((c) => c.values.hp ? dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts) : null);
-      let counts = ent.cands.map((c, i) => pctCounts(c, distList[i]));
+      const distResults = ent.cands.map((c) => dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts));
+      let counts = ent.cands.map((c, i) => pctCounts(c, distResults[i]));
+      if (distResults.some((r) => !r.ok) || counts.some((n) => n === null)) {
+        failDistUnavailable(defSpecies, "mine");
+        return;
+      }
+      const distList = distResults.map((r) => r.dist);
+      if (distList.some((d) => d.multi)) {
+        failMultiHit(defSpecies, "mine");
+        return;
+      }
       const trig = { kind: "damage", move: md.name, by: "mine", pct: ev.pct, crit: !!ev.crit };
       {
-        const ah = assumedHitsFor(md, opts, distList.find((d) => d));
+        const ah = assumedHitsFor(md, opts, distList[0]);
         if (ah != null) trig.assumedHits = ah;
       }
       if (!counts.some((n) => n > 0)) {
         const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
         const under = !ko && ent.cands.every((c, i) => {
           const dist = distList[i];
-          if (!dist || !c.values.hp) return false;
+          if (!c.values.hp) return false;
           return ev.pct < Math.min(...dist.values.map((r) => Math.floor(r / c.values.hp * 100)));
         });
         if (under) {
           trig.dir = "under";
           if (md.category === "Special" && !flagWork && !ent.itemKnown) {
             flagWork = "Assault Vest";
-            if (!capture) ent.dmgFlag = "Assault Vest";
             trig.dmgFlagSet = "Assault Vest";
           }
         }
       }
       if (flagWork === "Assault Vest" && md.category === "Special") {
-        counts = ent.cands.map((c) => {
-          if (!c.values.hp) return 0;
+        const reResults = ent.cands.map((c) => {
           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: "Assault Vest" };
-          return pctCounts(c, dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts));
+          return dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
         });
+        const reCounts = ent.cands.map((c, i) => pctCounts(c, reResults[i]));
+        if (reResults.some((r) => !r.ok) || reCounts.some((n) => n === null)) {
+          failDistUnavailable(defSpecies, "mine");
+          return;
+        }
+        if (reResults.some((r) => r.dist.multi)) {
+          failMultiHit(defSpecies, "mine");
+          return;
+        }
+        counts = reCounts;
         trig.dmgFlag = "Assault Vest";
       }
       if (!counts.some((n) => n > 0)) trig.reason = trig.dir === "under" ? "under-min" : "no-match";
@@ -28843,10 +29128,11 @@ function createEstimator(deps) {
         return;
       }
       if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + "|" + ev.atk + "|" + ev.def + "|" + ev.move) {
-        pendingDmgRecord.bayes = { entSpecies: defSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some((n) => n > 0) };
+        pendingDmgRecord.bayes = { entSpecies: defSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some((n) => n > 0), hpLiftedIn: ent.hpLifted };
         pendingDmgRecord.bayesCtx = deepCopy(ctx);
         pendingDmgRecord.open = false;
       }
+      if (trig.dmgFlagSet) ent.dmgFlag = trig.dmgFlagSet;
       logTrigger = { turn: ev.turn, trig };
       bayesApply(ent, counts, true);
     }
@@ -28876,9 +29162,44 @@ function createEstimator(deps) {
     rec.patched = true;
     rec.ev.crit = true;
     rec.opts.crit = true;
+    const unpatch = () => {
+      rec.patched = false;
+      rec.ev.crit = false;
+      if (rec.opts) rec.opts.crit = false;
+    };
     const infCtx2 = rec.ctx || io;
     const collect = [];
-    processDamageInf(rec.ev, infCtx2, rec.opts, collect);
+    try {
+      processDamageInf(rec.ev, infCtx2, rec.opts, collect);
+    } catch (e) {
+      unpatch();
+      pendingCritRec = null;
+      throw e;
+    }
+    const withheldMark = collect.find((c) => c.withheld);
+    const origOf = (ref) => {
+      const hist = infHistory[ref.species];
+      return hist && hist[ref.idx] ? hist[ref.idx] : null;
+    };
+    const allRefsMatched = rec.infRefs.every((ref) => {
+      const o = origOf(ref);
+      return !!o && collect.some((c) => c.species === ref.species && c.statKey === o.statKey);
+    });
+    const allCollectPlaced = collect.every((c) => c.withheld || rec.infRefs.some((ref) => {
+      const o = origOf(ref);
+      return !!o && c.species === ref.species && c.statKey === o.statKey;
+    }));
+    if (withheldMark || !allRefsMatched || !allCollectPlaced) {
+      unpatch();
+      pendingCritRec = null;
+      logSnapshot(logSpecies, ev.turn, { kind: "critPatch", move: ev.move, applied: false, reason: withheldMark ? withheldMark.withheld : "dist-unavailable", bayes: false, inf: false });
+      return;
+    }
+    const infStash = [];
+    for (const ref of rec.infRefs) {
+      const hist = infHistory[ref.species];
+      if (hist && hist[ref.idx]) infStash.push({ species: ref.species, idx: ref.idx, prev: { statKey: hist[ref.idx].statKey, feasible: hist[ref.idx].feasible ? new Set(hist[ref.idx].feasible) : hist[ref.idx].feasible, hpSps: hist[ref.idx].hpSps ? new Set(hist[ref.idx].hpSps) : null } });
+    }
     const touched = /* @__PURE__ */ new Set();
     for (const ref of rec.infRefs) {
       const hist = infHistory[ref.species];
@@ -28889,7 +29210,7 @@ function createEstimator(deps) {
       }
     }
     for (const sp of touched) rebuildInfState(sp);
-    pendingCritRec = { rec, key, infTouched: touched.size > 0 };
+    pendingCritRec = { rec, key, infTouched: touched.size > 0, infStash };
   }
   function processCritBayes(ev, io) {
     const pc = pendingCritRec;
@@ -28898,38 +29219,76 @@ function createEstimator(deps) {
     pendingCritRec = null;
     const rec = pc.rec;
     const logSpecies = rec.by === "opp" ? rec.atkSpecies : rec.defSpecies;
+    const restoreCritInfStash = () => {
+      if (!pc.infStash || !pc.infStash.length) return;
+      const touchedSp = /* @__PURE__ */ new Set();
+      for (const s of pc.infStash) {
+        const hist = infHistory[s.species];
+        if (hist) {
+          hist[s.idx] = s.prev;
+          touchedSp.add(s.species);
+        }
+      }
+      for (const sp of touchedSp) rebuildInfState(sp);
+    };
     let flagCleared = null, bayesPatched = false;
     if (rec.bayes) {
       const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
       if (ent && ent.cands.length === rec.bayes.counts.length) {
         const bayesCtx = rec.bayesCtx || rec.ctx || io;
-        const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null };
-        processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
-        if (capture.counts) {
-          if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) {
-            ent.dmgFlag = null;
-            flagCleared = rec.bayes.flagSet;
-          } else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
-          if (rec.bayes.applied) {
-            let tot = 0;
-            ent.cands.forEach((c, i) => {
-              if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR);
-              tot += c.post;
-            });
-            if (tot > 0) for (const c of ent.cands) c.post /= tot;
-          } else if (capture.counts.some((n) => n > 0)) {
-            let tot = 0;
-            ent.cands.forEach((c, i) => {
-              c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR);
-              tot += c.post;
-            });
-            if (tot > 0) {
-              for (const c of ent.cands) c.post /= tot;
-              ent.used++;
-            }
+        const postSnap = { posts: ent.cands.map((c) => c.post), dmgFlag: ent.dmgFlag, used: ent.used };
+        const unpatch = () => {
+          rec.patched = false;
+          rec.ev.crit = false;
+          if (rec.opts) rec.opts.crit = false;
+        };
+        try {
+          const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null, suspended: false, unavailable: false, hhSuspended: false };
+          processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
+          if (capture.suspended || capture.unavailable || capture.hhSuspended) {
+            restoreCritInfStash();
+            unpatch();
+            logSnapshot(logSpecies, ev.turn, { kind: "critPatch", move: ev.move, applied: false, reason: capture.hhSuspended ? "helping-hand-observed" : capture.unavailable ? "dist-unavailable" : "multihit-suspended", bayes: false, inf: false });
+            return;
           }
-          bayesPatched = true;
-          dirty = true;
+          if (capture.counts && !capture.suspended && !capture.unavailable && !capture.hhSuspended) {
+            if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) {
+              ent.dmgFlag = null;
+              flagCleared = rec.bayes.flagSet;
+            } else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
+            if (rec.bayes.applied) {
+              let tot = 0;
+              ent.cands.forEach((c, i) => {
+                if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR);
+                tot += c.post;
+              });
+              if (tot > 0) for (const c of ent.cands) c.post /= tot;
+            } else if (capture.counts.some((n) => n > 0)) {
+              let tot = 0;
+              ent.cands.forEach((c, i) => {
+                c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR);
+                tot += c.post;
+              });
+              if (tot > 0) {
+                for (const c of ent.cands) c.post /= tot;
+                ent.used++;
+              }
+            }
+            bayesPatched = true;
+            dirty = true;
+            rec.bayesCritCounts = rec.bayes.applied || capture.counts.some((n) => n > 0) ? [...capture.counts] : null;
+            rec.bayesCritFlagSet = capture.flagSet || null;
+            rec.bayesCritFlagCleared = flagCleared;
+          }
+        } catch (e) {
+          ent.cands.forEach((c, i) => {
+            c.post = postSnap.posts[i];
+          });
+          ent.dmgFlag = postSnap.dmgFlag;
+          ent.used = postSnap.used;
+          restoreCritInfStash();
+          unpatch();
+          throw e;
         }
       }
     }
@@ -29310,19 +29669,31 @@ function createEstimator(deps) {
       atkSide: { isHelpingHand: !!args.side[atkKey === "mine" ? "mine" : "opp"].hand },
       defSide: { isLightScreen: !!args.side[defKey === "mine" ? "mine" : "opp"].light, isReflect: !!args.side[defKey === "mine" ? "mine" : "opp"].reflect, isAuroraVeil: !!args.side[defKey === "mine" ? "mine" : "opp"].veil, isFriendGuard: !!args.side[defKey === "mine" ? "mine" : "opp"].guard, isSR: !!args.side[defKey === "mine" ? "mine" : "opp"].rock, spikes: args.side[defKey === "mine" ? "mine" : "opp"].spikes || 0 }
     });
+    const failedByDst = /* @__PURE__ */ new Map();
     const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst, w) => {
       const sc = sideFor(atkKey, defKey);
+      let failed = failedByDst.get(dst);
+      if (!failed) {
+        failed = /* @__PURE__ */ new Set();
+        failedByDst.set(dst, failed);
+      }
       (moves || []).forEach((mv, mi) => {
         if (!mv || !defHp) return;
+        if (failed.has(mi)) return;
         const md = moveData(mv);
         if (md && (md.isZ || md.isMax)) return;
-        const dist = dmgDist(
+        const distRes = dmgDist(
           withCurHP(atkSpec),
           withCurHP(defSpec),
           mv,
           { ...F, gameType: singleFn(mv) ? "Singles" : "Doubles", crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide }
         );
-        if (!dist) return;
+        if (!distRes.ok) {
+          failed.add(mi);
+          dst[mi] = { unavailable: true };
+          return;
+        }
+        const dist = distRes.dist;
         const lo = dist.min / defHp * 100, hi = dist.max / defHp * 100;
         const pctNow = defSpec && defSpec.curHPPercent != null ? defSpec.curHPPercent : 100;
         const curHp = pctNow >= 100 ? defHp : Math.max(1, Math.floor(defHp * pctNow / 100));
@@ -29353,7 +29724,8 @@ function createEstimator(deps) {
     pendingDmgRecord = null;
     infHistory = {};
     pendingCritRec = null;
-    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
+    pendingInfStash = null;
+    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, hhSeen: { p1: /* @__PURE__ */ new Set(), p2: /* @__PURE__ */ new Set() }, abBatches: {}, abPairs: /* @__PURE__ */ new Set() };
     infLastMove = null;
     dirty = false;
     pendingOpts = null;
