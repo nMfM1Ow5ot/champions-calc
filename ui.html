@@ -294,6 +294,8 @@ input.estin:focus{box-shadow:0 0 0 2px var(--blue)}
 .dmgwrap:hover .rolltip{opacity:1; visibility:visible}
 .rolltip-alt{display:block; margin-top:.35rem; border-top:1px solid rgba(255,255,255,.25); padding-top:.35rem}
 .rolltip-altlab{font-weight:600}
+.rolltip-note{display:block; margin-bottom:.35rem; border-bottom:1px solid rgba(255,255,255,.25); padding-bottom:.35rem}
+.dmgbtn .hitnote{font-size:.72rem; color:var(--faint); white-space:nowrap; margin-left:.3rem}
 .dmgbtn:hover{background:rgba(255,255,255,.06)}
 .dmgbtn.copied{color:var(--green)}
 .dmgbtn .candsub{display:block; font-size:.72rem; color:var(--blue); white-space:nowrap}
@@ -2455,12 +2457,27 @@ function movesBox(side, res) {
         // 吹き出しの下段には反対の急所状態の範囲と内訳も併記する
         const distTip = dist => dist.values.map((v, vi) => `${v}: ${Math.round(dist.counts[vi] / dist.total * 1000) / 10}%`).join(', ');
         if (r.dist) {
-          let tip = distTip(r.dist);
+          // 複数ヒット表示の安全化 (MH-001-R1-E): 使ったヒット数とその由来
+          // (利用者の指定 / 技の固定ヒット数 / ライブラリ既定の想定 /
+          // おやこあいによる追加ヒット) を明示し、想定を観測済みの事実の
+          // ように見せない。分布の仮定と型推定への利用停止も併記する
+          const hitsUsed = Math.max(1, Math.round(Math.log(r.dist.total) / Math.log(16)));
+          const mdMH = spec.moves[mi] ? moveData(spec.moves[mi]) : null;
+          const userHits = spec.moveSpec && spec.moveSpec[mi] != null && mdMH && mdMH.spec && mdMH.spec.kind === 'hits' ? Number(spec.moveSpec[mi]) : null;
+          const effAbMH = spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability;
+          let hitHead, hitMark;
+          if (userHits != null) { hitHead = `${hitsUsed}ヒットで計算しています（ヒット数は利用者が指定したものです）`; hitMark = `（${hitsUsed}ヒット指定）`; }
+          else if ((!mdMH || mdMH.multihit == null) && effAbMH === 'Parental Bond') { hitHead = `おやこあいにより${hitsUsed}ヒットとして計算しています`; hitMark = `（おやこあい${hitsUsed}ヒット）`; }
+          else if (mdMH && typeof mdMH.multihit === 'number') { hitHead = `${hitsUsed}ヒットで計算しています（技の固定ヒット数です）`; hitMark = `（${hitsUsed}ヒット固定）`; }
+          else if (mdMH && Array.isArray(mdMH.multihit)) { hitHead = `${hitsUsed}ヒットと想定して計算しています（実際のヒット数は未観測で、ライブラリ既定の想定です）`; hitMark = `（${hitsUsed}ヒット想定）`; }
+          else { hitHead = `${hitsUsed}ヒットで計算しています`; hitMark = `（${hitsUsed}ヒット）`; }
+          const mhNote = `${hitHead}。仮定：ヒットごとの乱数は独立として計算しています。ヒットごとの急所・命中判定や、途中で相手がひんしになることによる終了は計算に含めていません。この技のダメージは型推定に利用していません。`;
+          let tip = `<span class="rolltip-note">${mhNote}</span>` + distTip(r.dist);
           if (r.alt && r.alt.dist && (r.alt.min !== r.min || r.alt.max !== r.max)) {
             const altLbl = ui.crit[side] ? '通常' : '急所';
             tip += `<span class="rolltip-alt"><span class="rolltip-altlab">${altLbl} ${fmtPct(r.alt.minPct)} – ${fmtPct(r.alt.maxPct)}%</span><br>${distTip(r.alt.dist)}</span>`;
           }
-          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span>`;
+          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span><span class="hitnote">${hitMark}</span>`;
         }
         else if (r.rolls && r.rolls.length > 1) {
           let tip = r.rolls.join(', ');
@@ -2485,10 +2502,15 @@ function movesBox(side, res) {
       if (!r.immune && r.desc) copyText = r.descFull || r.desc;
       else if (r.immune) copyText = `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: IMMUNE`;
     }
-    // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す
+    // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す。
+    // 候補の中に計算不能なものがある場合は集計値が返らず unavailable になる
+    // (MH-001-R1-E)。その場合は数値を出さず、表示保留であることを示す
     let sub = '';
     const cr = lastCalc && lastCalc.candRanges ? lastCalc.candRanges[side][mi] : null;
-    if (r && cr && !r.status && !r.immune && !r.error && (cr.lo < r.minPct - 0.05 || cr.hi > r.maxPct + 0.05)) {
+    if (r && cr && cr.unavailable && !r.status && !r.immune && !r.error) {
+      sub = `<span class="candsub" title="型候補の中に計算できない候補があるため、候補範囲の集計を表示保留しています">候補範囲は計算不能のため表示保留</span>`;
+    }
+    else if (r && cr && !r.status && !r.immune && !r.error && (cr.lo < r.minPct - 0.05 || cr.hi > r.maxPct + 0.05)) {
       sub = `<span class="candsub" title="相手の型候補（事後確率 ${Math.round((lastCalc.candRanges.acc || 0) * 100)}% 分）を通じたダメージ範囲">候補 ${fmtPct(cr.lo)}–${fmtPct(cr.hi)}%</span>`;
     }
     return `<div class="mvcell">${ddHTML(`move:${side}:${mi}`)}${zBtn}</div>
