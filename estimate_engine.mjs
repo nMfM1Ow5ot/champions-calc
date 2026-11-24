@@ -13,6 +13,13 @@ export const labelSpecies = label => { const i = label.indexOf(':'); return i >=
 
 export function createEstimator(deps) {
   const effSpecies = deps.effSpecies;
+  // 分布計算の差し替え口 (テスト専用、MH-001-R1-C2): deps 経由で任意に
+  // 渡された場合だけ差し替えを使い、未指定なら従来どおり core の
+  // damageDistribution を使う。UI は渡さないため本番動作は不変で、
+  // グローバル・保存データ・環境から有効化する経路は存在しない。
+  // R1-B の事前判定 (multihit 属性 + Parental Bond) はこの口に依存せず、
+  // バックストップ (c) は差し替え後の分布結果に対して従来どおり働く
+  const distFn = deps && typeof deps.damageDistribution === 'function' ? deps.damageDistribution : damageDistribution;
   // 材料データ (UI 側のグローバルと同名で受ける。候補生成のたびに最新化する)
   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
   let VGC_SETS = null; // data/vgc_pastes.json (VGCPastes の実在型。meta_sets と同じ形式で候補コーパスへ統合する。未提供なら従来動作)
@@ -29,7 +36,7 @@ export function createEstimator(deps) {
     NAMES = d.NAMES || {};
   }
   let inference = { seen: 0, bySpecies: {} };
-  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
+  let infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, hhSeen: { p1: new Set(), p2: new Set() }, abBatches: {}, abPairs: new Set() };
   let infLastMove = null;
   let dirty = false;
   let bayes = null, lastSpeCtx = null;
@@ -41,6 +48,10 @@ export function createEstimator(deps) {
   // 急所の確定がダメージ証拠の処理より後に届いた場合、未是正版の
   // 寄与を取り除いて急所ありで再評価するために使う
   let dmgRecords = [], pendingDmgRecord = null, infHistory = {};
+  // 跨ぎ原子性 (MH-001-R1-C): inf の交差適用直前の状態の控え。同一
+  // イベントのベイズ側が計算不能で保留した場合にだけ巻き戻し、それ
+  // 以外の結末では控えは破棄されて inf の更新がそのまま残る
+  let pendingInfStash = null;
   const deepCopy = o => { try { return structuredClone(o); } catch (e) { try { return JSON.parse(JSON.stringify(o)); } catch (e2) { return o; } } };
   let teamContextSpecies = null; // 相手チームの種族一覧 (UI が setTeamContext で渡す)
   // 推論過程ログ (検証用): 更新のたびにスナップショットをキューへ積み、
@@ -65,6 +76,64 @@ function infSideConds(ev) {
     atkSide: { isHelpingHand: hh },
     defSide: { isReflect: active(ds.reflect, 5), isLightScreen: active(ds.light, 5), isAuroraVeil: active(ds.veil, 5) },
   };
+}
+// てだすけ証拠の保留判定 (MH-001-R1-G1 / G-F01): てだすけの対象帰属を
+// 確定できない現状では、てだすけが観測されたターンの、そのサイドを
+// 攻撃側とするダメージ証拠は推定から保留する (てだすけなしで評価する
+// こともしない)。判定は消費 (hhTurn) とは独立した観測記録 (hhSeen)
+// に基づくため、早期除外・対象別イベント・重複処理・消費の順序や
+// 回数に依存しない
+function hhSuspendedFor(ev) {
+  if (!ev || ev.atk == null || typeof ev.turn !== 'number') return false;
+  const seen = infCtx.hhSeen[labelSide(ev.atk)];
+  return !!(seen && seen.has(ev.turn));
+}
+// 遅れて届いた てだすけ観測への対応 (G-F01): そのターン・そのサイドの
+// 攻撃で既に適用済みのダメージ証拠 (dmgRecord が残っているもの) を、
+// 記録に残された適用内容から巻き戻す。ベイズ側は適用 counts (急所
+// 是正済みなら是正後の counts) の逆演算で割り戻し、仮説フラグと
+// hpLifted は適用前の値へ戻す。inf 側は履歴エントリを取り除き
+// (後続レコードの参照インデックスを詰め直す)、交差状態を再構築する。
+// 対象レコードは dmgRecords から除くため、後続の急所イベントは
+// 対象なし (no-match) になる
+function rollbackHHApplied(side, turn) {
+  const targets = dmgRecords.filter(r => r.turn === turn && labelSide(r.atk) === side);
+  for (let ti = targets.length - 1; ti >= 0; ti--) {
+    const rec = targets[ti];
+    if (rec.bayes) {
+      const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
+      if (ent) {
+        const counts = rec.bayesCritCounts || rec.bayes.counts;
+        const applied = rec.bayesCritCounts ? true : rec.bayes.applied;
+        if (applied && counts && counts.length === ent.cands.length) {
+          let tot = 0;
+          ent.cands.forEach((c, i) => { if (c.post > 0) c.post /= Math.max(counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+          if (tot > 0) for (const c of ent.cands) c.post /= tot;
+          ent.used--;
+        }
+        const critFlagSet = rec.bayesCritFlagSet || null;
+        if ((rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet) || (critFlagSet && ent.dmgFlag === critFlagSet) || (ent.dmgFlag == null && rec.bayesCritFlagCleared)) ent.dmgFlag = rec.bayes.flagIn;
+        if (rec.bayes.hpLiftedIn != null) ent.hpLifted = rec.bayes.hpLiftedIn;
+      }
+    }
+    const touchedSp = new Set();
+    for (const ref of rec.infRefs) {
+      const hist = infHistory[ref.species];
+      if (hist && ref.idx < hist.length) {
+        hist.splice(ref.idx, 1);
+        touchedSp.add(ref.species);
+        for (const r2 of dmgRecords) for (const rf of r2.infRefs) if (rf.species === ref.species && rf.idx > ref.idx) rf.idx--;
+      }
+    }
+    for (const sp of touchedSp) rebuildInfState(sp);
+    const ix = dmgRecords.indexOf(rec);
+    if (ix >= 0) dmgRecords.splice(ix, 1);
+    if (pendingDmgRecord === rec) { pendingDmgRecord = null; pendingOpts = null; }
+    if (pendingCritRec && pendingCritRec.rec === rec) pendingCritRec = null;
+    logSnapshot(rec.by === 'opp' ? rec.atkSpecies : rec.defSpecies, turn, { kind: 'inf', move: rec.move, applied: false, reason: 'helping-hand-observed', delayed: true });
+    if (rec.bayes) logSnapshot(rec.bayes.entSpecies, turn, { kind: 'damage', move: rec.move, by: rec.by, applied: false, reason: 'helping-hand-observed', delayed: true });
+    dirty = true;
+  }
 }
 // 推論過程ログの1レコードを組み立ててキューへ積む。失敗しても推論は止めない
 function logSnapshot(species, turn, trigger) {
@@ -169,28 +238,87 @@ function amtRangeForPct(pct, maxHP, ko) {
   const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
   return [lo, hi];
 }
-// ダメージ分布の統一形 (MH-001): core の damageDistribution を推定側の形に
-// 正規化する。攻撃技は { values, counts, total, min, max, hits, multi }
-// (values は昇順、質量は counts/total)。単発は total=16 で質量 = 件数/16 と
-// なり、従来のロール件数の算術と一致する。分布が得られない場合
-// (error / status) は null を返し、呼び出し側は従来どおり証拠を保留する。
-// 無効 (immune) は従来の rolls:[0] の挙動を全経路で再現するため、値0に
-// 質量1の退化分布として返す
+// ダメージ分布の統一形 (MH-001 / MH-001-R1-C): core の damageDistribution
+// を推定側の形に正規化する。計算の成否を明示する表現で返し、成功時は
+// { ok:true, dist } (dist は { values, counts, total, min, max, hits,
+// multi }、values は昇順、質量は counts/total。単発は total=16 で質量 =
+// 件数/16 となり、従来のロール件数の算術と一致する)、失敗時は
+// { ok:false, reason } を返す。失敗には damageDistribution の {error} /
+// {status} のほか、その外側 (toPokemon / buildMove) から伝播する例外も
+// 含め、try/catch で捕捉して計算不能として扱う。確率質量0 (有効な分布で
+// 観測と両立する値が無い) と計算不能は明確に区別され、呼び出し側は不能
+// を0として扱ってはならない。無効 (immune) は従来の rolls:[0] の挙動を
+// 全経路で再現するため、値0に質量1の退化分布として ok で返す
 function dmgDist(atkSpec, defSpec, moveName, opts) {
-  const r = damageDistribution(atkSpec, defSpec, moveName, opts);
-  if (!r || r.error || r.status) return null;
-  if (r.immune) return { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false };
-  if (!r.dist) return null;
-  return { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi };
+  let r;
+  try { r = distFn(atkSpec, defSpec, moveName, opts); }
+  catch (e) { return { ok: false, reason: 'exception' }; }
+  if (!r) return { ok: false, reason: 'no-result' };
+  if (r.error) return { ok: false, reason: 'error' };
+  if (r.status) return { ok: false, reason: 'status' };
+  if (r.immune) return { ok: true, dist: { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false } };
+  if (!r.dist) return { ok: false, reason: 'no-dist' };
+  return { ok: true, dist: { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi } };
 }
-// 観測述語に一致する確率質量 (0〜1)。ベイズ側は bayesApply へ質量×16 を
-// 渡す (単発では 16 が2の冪のため算術が厳密で従来の件数と一致し、複数
-// ヒットでは真の分布の尤度になる)
+// 観測述語に一致する確率質量 (0〜1)。ok な分布専用で、計算不能を0として
+// 返すことはしない (呼び出し側が ok を確認してから使う)。ベイズ側は
+// bayesApply へ質量×16 を渡す (単発では 16 が2の冪のため算術が厳密で
+// 従来の件数と一致し、複数ヒットでは真の分布の尤度になる)
 function distMass(dist, pred) {
-  if (!dist) return 0;
   let m = 0;
   for (let j = 0; j < dist.values.length; j++) if (dist.counts[j] > 0 && pred(dist.values[j])) m += dist.counts[j];
   return m / dist.total;
+}
+// inf 交差適用の直前に、その種族の交差状態と履歴長とこのイベントの
+// dmgRecord を控える (跨ぎ原子性の巻き戻し用、MH-001-R1-C)
+function stashInfBeforeIntersect(key, species, rec, turn) {
+  const ie = inference.bySpecies[species];
+  const copySet = s => s ? new Set(s) : null;
+  pendingInfStash = { key, species, turn: turn != null ? turn : null, existed: !!ie,
+    entry: ie ? { pairs: { atk: copySet(ie.pairs.atk), spa: copySet(ie.pairs.spa), def: copySet(ie.pairs.def), spd: copySet(ie.pairs.spd), spe: copySet(ie.pairs.spe) }, hpSps: copySet(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
+    histLen: infHistory[species] ? infHistory[species].length : 0, rec: rec || null };
+}
+// ベイズ側の計算不能保留に伴う inf 側の巻き戻し (同一イベントの控えが
+// ある場合のみ)。交差状態・履歴・dmgRecord を交差適用前に戻す
+function rollbackInfStash(key, reason) {
+  const st = pendingInfStash;
+  if (!st || st.key !== key) return;
+  pendingInfStash = null;
+  if (st.existed) inference.bySpecies[st.species] = st.entry;
+  else delete inference.bySpecies[st.species];
+  if (infHistory[st.species]) infHistory[st.species].length = st.histLen;
+  if (st.rec) {
+    const ix = dmgRecords.indexOf(st.rec);
+    if (ix >= 0) dmgRecords.splice(ix, 1);
+    if (pendingDmgRecord === st.rec) pendingDmgRecord = null;
+  }
+  pendingOpts = null;
+  dirty = true;
+  // 巻き戻しを推論ログ上で一意に辿れるよう、inf 側へ相殺エントリを残す
+  // (適用済みのスナップショットだけが残り、保留された証拠が適用済みに
+  // 見える状態を避ける。MH-001-R1-C2)
+  logSnapshot(st.species, st.turn, { kind: 'inf', applied: false, reason: reason || 'dist-unavailable-rollback' });
+}
+// 複数ヒット証拠の保留判定 (MH-001-R1-B): ヒット数が観測から一意に
+// 決まらない技・機構のダメージ証拠は、推定に取り込まず保留する。
+// (a) moveData の multihit 属性がある技 (固定数・[2,5] 配列・
+//     multiaccuracy をすべて含む。ヒット数の明示指定 (moveSpec) が
+//     あっても保留する)
+// (b) 攻撃側が おやこあい (Parental Bond) を持ち得る場合 (単発技でも
+//     2回攻撃になり、合計ダメージの分布が単発と異なるため)。種族の
+//     持ち得る特性と、渡された攻撃側 spec 群の特性・メガ種族で判定する
+function speciesCanParentalBond(name) {
+  if (!name) return false;
+  try { const s = gen.species.get(idOf(name)); return !!(s && s.abilities && Object.values(s.abilities).includes('Parental Bond')); } catch (e) { return false; }
+}
+function isSuspendedMultiHit(md, atkSpeciesName, atkSpecs) {
+  if (md && md.multihit != null) return true;
+  for (const sp of atkSpecs || []) {
+    if (!sp) continue;
+    if (sp.ability === 'Parental Bond' || sp.megaAbility === 'Parental Bond') return true;
+    if (speciesCanParentalBond(sp.megaSpecies) || speciesCanParentalBond(sp.species)) return true;
+  }
+  return speciesCanParentalBond(atkSpeciesName);
 }
 // 可変ヒット技でヒット数の指定 (moveSpec) が無い場合、分布はライブラリ
 // 既定のヒット数に依存する。その想定を推論ログに残すための判定 (MH-001)
@@ -203,16 +331,44 @@ function assumedHitsFor(md, opts, dist) {
 function processDamageInf(ev, ctx, optsOverride, collect) {
   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
   if (!collect) pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
+  // 別イベントの古い跨ぎ原子性の控えは破棄する (同一イベントの控えは
+  // 後続の processDamageBayes が使うため残す)
+  if (!collect && pendingInfStash && pendingInfStash.key !== ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) pendingInfStash = null;
   const md = moveData(ev.move);
-  // 複数ヒット技は合計ダメージの分布 (damageDistribution) で表せるように
-  // なったため対象外にしない (MH-001 で multihit 項を解除)。変化技・
-  // 固定ダメージ・ブラックリストは従来どおり対象外
+  // 変化技・固定ダメージ・ブラックリストは従来どおり対象外。複数ヒット
+  // 技は直後の保留ゲート (MH-001-R1-B) で別途遮断する
   if (!md || md.category === 'Status' || !md.basePower || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
   // 自分自身へのダメージ (反動など) は攻撃として扱わない (ベイズ側は
   // processRecoilBayes が持ち物推論の証拠として取り込む)
   if (ev.atk && ev.atk === ev.def) return;
   const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
   const oppIsAtk = labelSide(ev.atk) === 'p2';
+  // てだすけ証拠の保留 (MH-001-R1-G1 / G-F01): 観測されたターン・
+  // 攻撃サイドが一致するダメージ証拠は、分布計算・場の条件の消費・
+  // dmgRecord の生成より前に遮断する。collect (crit 再計算) 時は
+  // 保留として何も積まない
+  if (hhSuspendedFor(ev)) {
+    if (collect) collect.push({ withheld: 'helping-hand-observed' });
+    else logSnapshot(oppIsAtk ? atkSpecies : defSpecies, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'helping-hand-observed' });
+    return;
+  }
+  // 複数ヒット証拠の保留 (MH-001-R1-B): 保留時は pendingOpts を設定せず
+  // dmgRecord も作らないため、ベイズ側も連動して対象外になる
+  if (isSuspendedMultiHit(md, atkSpecies, oppIsAtk ? (ctx.basesAtk || []) : [ctx.myAtk])) {
+    if (!collect) {
+      // てだすけの消費は観測された戦闘状態の遷移であり、証拠の推定への
+      // 採否とは分離する (MH-001-R1-F1): 保留される技も、実戦では
+      // てだすけを消費している。消費の条件は infSideConds と同一
+      // (攻撃側サイドとターンの一致) とし、消費箇所は inf 側のここ
+      // だけに限る (ベイズ側のゲートでは消費しない。消費により
+      // hhTurn は -99 になるため、同一イベントの重複処理でも
+      // 二重消費は起きない)
+      const atkSideKey = labelSide(ev.atk);
+      if (infCtx.hhTurn[atkSideKey] === ev.turn) infCtx.hhTurn[atkSideKey] = -99;
+      logSnapshot(oppIsAtk ? atkSpecies : defSpecies, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'multihit-suspended' });
+    } else collect.push({ withheld: 'multihit-suspended' });
+    return;
+  }
   let target = md.target;
   if (md.name === 'Expanding Force' && ev.t === 'Psychic') target = 'allAdjacentFoes';
   let targets = 1;
@@ -235,6 +391,37 @@ function processDamageInf(ev, ctx, optsOverride, collect) {
     dmgRecords.push(pendingDmgRecord);
     if (dmgRecords.length > 400) dmgRecords.splice(0, dmgRecords.length - 400);
   }
+  const evKey = ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move;
+  const myRec = (!optsOverride && !collect) ? pendingDmgRecord : null;
+  // 計算不能による証拠全体の保留 (MH-001-R1-C): 必要な分布の一部でも
+  // 計算できなければ、交差適用へ渡さず証拠全体を保留する。この
+  // イベント用に作った dmgRecord を取り除き pendingOpts を下ろすことで
+  // ベイズ側も連動して止まる。collect (crit 再計算) 時は呼び出し側が
+  // 元の履歴を保持できるよう、何も残さずに返る
+  const withholdDistUnavailable = (species) => {
+    if (collect) { collect.push({ withheld: 'dist-unavailable' }); return; }
+    logSnapshot(species, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'dist-unavailable' });
+    if (myRec) {
+      const ix = dmgRecords.indexOf(myRec);
+      if (ix >= 0) dmgRecords.splice(ix, 1);
+      if (pendingDmgRecord === myRec) pendingDmgRecord = null;
+      pendingOpts = null;
+    }
+  };
+  // バックストップで複数ヒットを検出した場合の保留 (MH-001-R1-G1 /
+  // G-F02): 計算不能時と同じく dmgRecord と pendingOpts を処理し、
+  // ベイズ側が進行しないようにする (証拠単位の原子性)
+  const withholdBackstopMulti = (species) => {
+    if (collect) { collect.push({ withheld: 'multihit-suspended' }); return; }
+    logSnapshot(species, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'multihit-suspended' });
+    if (myRec) {
+      const ix = dmgRecords.indexOf(myRec);
+      if (ix >= 0) dmgRecords.splice(ix, 1);
+      if (pendingDmgRecord === myRec) pendingDmgRecord = null;
+      pendingOpts = null;
+    }
+  };
+  try {
   if (oppIsAtk) {
     // 相手の攻撃 -> 自分の被ダメ量から相手の攻撃 (or Body Press は防御) を絞る
     const statKey = md.name === 'Body Press' ? 'def' : (md.category === 'Physical' ? 'atk' : 'spa');
@@ -262,16 +449,25 @@ function processDamageInf(ev, ctx, optsOverride, collect) {
     const byValue = new Map();
     for (const row of table[statKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
     const feasible = new Set();
+    let backstopMulti = false, distUnavailable = false;
     for (const base of bases) {
       for (const rows of byValue.values()) {
         const rep = rows[0];
         const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
-        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-        if (distMass(dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
+        const res = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+        // 計算不能が1件でもあれば証拠全体を保留する (質量0とは区別する)
+        if (!res.ok) { distUnavailable = true; break; }
+        // 防御的バックストップ (MH-001-R1-B): 分布が複数ヒットだったら
+        // 証拠全体を保留する
+        if (res.dist.multi) { backstopMulti = true; break; }
+        if (distMass(res.dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
       }
+      if (backstopMulti || distUnavailable) break;
     }
+    if (distUnavailable) { withholdDistUnavailable(atkSpecies); return; }
+    if (backstopMulti) { withholdBackstopMulti(atkSpecies); return; }
     if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
-    else infIntersect(atkSpecies, statKey, feasible, null);
+    else { stashInfBeforeIntersect(evKey, atkSpecies, myRec, ev.turn); infIntersect(atkSpecies, statKey, feasible, null); }
   } else {
     // 自分の攻撃 -> 相手の HP% の減少から相手の HP と防御 (or 特防) を共同で絞る
     if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
@@ -286,22 +482,45 @@ function processDamageInf(ev, ctx, optsOverride, collect) {
     const byValue = new Map();
     for (const row of table[defKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
     const feasPairs = new Set(), feasHp = new Set();
+    let backstopMulti = false, distUnavailable = false;
     for (const base of bases) {
       for (const rows of byValue.values()) {
         const rep = rows[0];
         const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
-        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-        if (!dist) continue;
+        const res = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+        // 計算不能が1件でもあれば証拠全体を保留する。値グループ単位の
+        // 黙ったスキップ (旧 if (!dist) continue) は廃止した
+        if (!res.ok) { distUnavailable = true; break; }
+        // 防御的バックストップ (MH-001-R1-B): 分布が複数ヒットだったら
+        // 証拠全体を保留する
+        if (res.dist.multi) { backstopMulti = true; break; }
         for (const [spHp, hpVal] of hpBySp) {
-          if (distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
+          if (distMass(res.dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
             for (const r of rows) feasPairs.add(r.nature + '|' + r.sp);
             feasHp.add(spHp);
           }
         }
       }
+      if (backstopMulti || distUnavailable) break;
     }
+    if (distUnavailable) { withholdDistUnavailable(defSpecies); return; }
+    if (backstopMulti) { withholdBackstopMulti(defSpecies); return; }
     if (collect) collect.push({ species: defSpecies, statKey: defKey, feasible: feasPairs, hpSps: feasHp });
-    else infIntersect(defSpecies, defKey, feasPairs, feasHp);
+    else { stashInfBeforeIntersect(evKey, defSpecies, myRec, ev.turn); infIntersect(defSpecies, defKey, feasPairs, feasHp); }
+  }
+  } catch (e) {
+    // 例外時の防御 (MH-001-R1-C2): dmgRecord と pendingOpts を掃除し、
+    // 交差適用まで進んでいた場合は控えで巻き戻してから伝播させる
+    if (!collect) {
+      if (myRec) {
+        const ix = dmgRecords.indexOf(myRec);
+        if (ix >= 0) dmgRecords.splice(ix, 1);
+        if (pendingDmgRecord === myRec) pendingDmgRecord = null;
+      }
+      pendingOpts = null;
+      rollbackInfStash(evKey);
+    }
+    throw e;
   }
 }
 // 【Champions 差分レイヤーの watch 点】ここから moveBracket までの素早さ・
@@ -358,7 +577,7 @@ function processMoveInf(ev, io) {
   else if (ev.move === 'Reflect') { infCtx.screenTurn[side].reflect = ev.turn; intents.push({ t: 'side', side, key: 'reflect', turn: ev.turn }); }
   else if (ev.move === 'Light Screen') { infCtx.screenTurn[side].light = ev.turn; intents.push({ t: 'side', side, key: 'light', turn: ev.turn }); }
   else if (ev.move === 'Aurora Veil') { infCtx.screenTurn[side].veil = ev.turn; intents.push({ t: 'side', side, key: 'veil', turn: ev.turn }); }
-  else if (ev.move === 'Helping Hand') { infCtx.hhTurn[side] = ev.turn; intents.push({ t: 'side', side, key: 'hand', turn: ev.turn }); }
+  else if (ev.move === 'Helping Hand') { infCtx.hhTurn[side] = ev.turn; infCtx.hhSeen[side].add(ev.turn); intents.push({ t: 'side', side, key: 'hand', turn: ev.turn }); rollbackHHApplied(side, ev.turn); }
   // 設置物は使用者と反対側に置かれる。自動では切れず、解除技でのみ消える
   const foeSide = side === 'p1' ? 'p2' : 'p1';
   if (ev.move === 'Stealth Rock' || ev.move === 'Stone Axe') intents.push({ t: 'side', side: foeSide, key: 'rock', turn: ev.turn });
@@ -1144,14 +1363,69 @@ function megaStoneTarget(item, species) {
   } catch (e) { /* fallthrough */ }
   return undefined;
 }
+// 例外時の防御 (MH-001-R1-C2): dmgDist 以外の理由で例外が伝播する場合も、
+// 同一イベントの inf 更新を巻き戻してから伝播させ、控えと部分状態を
+// 残さない。UI 側は呼出ごとに例外を捕捉して対戦を継続するため、部分
+// 状態の残留はそのまま推定の汚染になる
 function processDamageBayes(ev, ctx, optsOverride, capture) {
+  try { processDamageBayesImpl(ev, ctx, optsOverride, capture); }
+  catch (e) {
+    if (!capture) rollbackInfStash(ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move);
+    throw e;
+  }
+}
+function processDamageBayesImpl(ev, ctx, optsOverride, capture) {
+  // 別イベントの古い跨ぎ原子性の控えは破棄する (capture 中は触らない)
+  if (!capture && pendingInfStash && pendingInfStash.key !== ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) pendingInfStash = null;
   // 自分自身へのダメージは攻撃として処理せず、反動の経路へ回す
   if (ev.atk && ev.atk === ev.def) { if (labelSide(ev.atk) === 'p2') processRecoilBayes(ev); return; }
+  // てだすけ証拠の保留 (MH-001-R1-G1 / G-F01): inf 側と対で遮断する。
+  // capture (crit 再計算) 時は印だけを残す
+  if (hhSuspendedFor(ev)) {
+    if (capture) capture.hhSuspended = true;
+    else { const md0 = moveData(ev.move); logSnapshot(labelSide(ev.atk) === 'p2' ? labelSpecies(ev.atk) : labelSpecies(ev.def), ev.turn, { kind: 'damage', move: md0 ? md0.name : ev.move, by: labelSide(ev.atk) === 'p2' ? 'opp' : 'mine', applied: false, reason: 'helping-hand-observed' }); }
+    return;
+  }
   const opts = optsOverride || pendingOpts;
   if (!opts) return; // 旧エンジンが対象外にした技 (変化・固定ダメ等) は同じく対象外
   const md = moveData(ev.move);
   if (!md) return;
   const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
+  // 複数ヒット証拠の保留 (MH-001-R1-B): いかなる状態変更 (dmgFlag の
+  // 代入・bayesApply・dmgRecord への記録) より前に遮断する。capture
+  // (crit 再計算) 時は counts を設定せず、保留の印だけを残す
+  {
+    const isOpp = labelSide(ev.atk) === 'p2';
+    const entPeek = isOpp && bayes && bayes.bySpecies ? bayes.bySpecies[atkSpecies] : null;
+    const atkSpecs = isOpp ? [ctx.baseAtk, ...(entPeek ? entPeek.cands : [])] : [ctx.myAtk];
+    if (isSuspendedMultiHit(md, atkSpecies, atkSpecs)) {
+      if (capture) capture.suspended = true;
+      else {
+        logSnapshot(isOpp ? atkSpecies : defSpecies, ev.turn, { kind: 'damage', move: md.name, by: isOpp ? 'opp' : 'mine', applied: false, reason: 'multihit-suspended' });
+        // 候補側だけが保留条件に触れる非対称な場合でも、同一証拠の
+        // inf 更新を巻き戻して原子性を保つ (MH-001-R1-G1 / G-F02)
+        rollbackInfStash(ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move, 'multihit-suspended-rollback');
+      }
+      return;
+    }
+  }
+  // 計算不能による証拠全体の保留 (MH-001-R1-C): capture 時は印だけを
+  // 残し counts は設定しない。通常時は記録を残したうえで、同一イベント
+  // で inf が確定させた更新を巻き戻す (跨ぎ原子性)
+  const evKey = ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move;
+  const failDistUnavailable = (species, by) => {
+    if (capture) { capture.unavailable = true; return; }
+    logSnapshot(species, ev.turn, { kind: 'damage', move: md.name, by, applied: false, reason: 'dist-unavailable' });
+    rollbackInfStash(evKey);
+  };
+  // バックストップ・再計算で複数ヒットを検出した場合の保留
+  // (MH-001-R1-G1 / G-F02): 計算不能時と同等の整合性で、同一証拠に
+  // よる inf 更新も巻き戻す (証拠単位の原子性)
+  const failMultiHit = (species, by) => {
+    if (capture) { capture.suspended = true; return; }
+    logSnapshot(species, ev.turn, { kind: 'damage', move: md.name, by, applied: false, reason: 'multihit-suspended' });
+    rollbackInfStash(evKey, 'multihit-suspended-rollback');
+  };
   // crit 後付け是正の再計算 (capture 指定時) では、分布もフラグも変更せず、
   // 急所ありで計算した場合の counts とフラグ判定だけを capture へ返す。
   // フラグの作業値は capture.flagIn (是正対象イベント適用前の値) から始める
@@ -1183,31 +1457,46 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
       [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
     }
     const matchRoll = hasAmt ? (r => r === ev.amt) : (r => r >= amtLo && r <= amtHi);
-    const distList = ent.cands.map(c => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
+    const distResults = ent.cands.map(c => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
+    // 計算不能が1件でもあれば、仮説の発生・再計算・bayesApply の前に
+    // 証拠全体を保留する (MH-001-R1-C。質量0とは区別する)
+    if (distResults.some(r => !r.ok)) { failDistUnavailable(atkSpecies, 'opp'); return; }
+    const distList = distResults.map(r => r.dist);
     let counts = distList.map(dist => distMass(dist, matchRoll) * 16);
+    // 防御的バックストップ (MH-001-R1-B): いずれかの候補の分布が複数
+    // ヒットだったら、フラグ発生・再計算と bayesApply の前に証拠全体を
+    // 保留する
+    if (distList.some(d => d.multi)) { failMultiHit(atkSpecies, 'opp'); return; }
     const trig = { kind: 'damage', move: md.name, by: 'opp', crit: !!ev.crit };
     if (hasAmt) trig.amt = ev.amt;
     else { trig.pct = ev.pct; trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi]; }
-    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
+    { const ah = assumedHitsFor(md, opts, distList[0]); if (ah != null) trig.assumedHits = ah; }
     if (!counts.some(n => n > 0)) {
       // 最大超過の判定は、観測と整合する最小の実数で行う (pct のみの
       // 観測や、とどめの一撃で切り捨てられた観測でも偽陽性にならない)
       const obsMin = hasAmt ? ev.amt : amtLo;
-      const over = distList.every(dist => dist && obsMin > dist.max);
+      const over = distList.every(dist => obsMin > dist.max);
       if (over) {
         trig.dir = 'over';
         const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
-        // 持ち物が判明済みの種族に持ち物仮説は立てない
-        if (want && !flagWork && !ent.itemKnown) { flagWork = want; if (!capture) ent.dmgFlag = want; trig.dmgFlagSet = want; }
+        // 持ち物が判明済みの種族に持ち物仮説は立てない。フラグの状態への
+        // 反映は、全ての計算が成功した後の確定時点に回す (MH-001-R1-C)
+        if (want && !flagWork && !ent.itemKnown) { flagWork = want; trig.dmgFlagSet = want; }
       }
     }
     const flag = flagWork;
     if (flag === 'Choice Band' || flag === 'Choice Specs') {
       if ((flag === 'Choice Band' && md.category === 'Physical') || (flag === 'Choice Specs' && md.category === 'Special')) {
-        counts = ent.cands.map(c => {
+        const reResults = ent.cands.map(c => {
           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
-          return distMass(dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts), matchRoll) * 16;
+          return dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
         });
+        // 再計算側の計算不能でも証拠全体を保留し、フラグだけが変更された
+        // 状態を残さない (MH-001-R1-C)
+        if (reResults.some(r => !r.ok)) { failDistUnavailable(atkSpecies, 'opp'); return; }
+        // 再計算後の分布の複数ヒット判定も検証する (MH-001-R1-G1 / G-F02)
+        if (reResults.some(r => r.dist.multi)) { failMultiHit(atkSpecies, 'opp'); return; }
+        counts = reResults.map(r => distMass(r.dist, matchRoll) * 16);
         trig.dmgFlag = flag;
       }
     }
@@ -1216,10 +1505,13 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
     if (!counts.some(n => n > 0)) trig.reason = trig.dir === 'over' ? 'over-max' : 'no-match';
     if (capture) { capture.counts = counts; capture.flagSet = trig.dmgFlagSet || null; capture.trig = trig; return; }
     if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) {
-      pendingDmgRecord.bayes = { entSpecies: atkSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some(n => n > 0) };
+      pendingDmgRecord.bayes = { entSpecies: atkSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some(n => n > 0), hpLiftedIn: ent.hpLifted };
       pendingDmgRecord.bayesCtx = deepCopy(ctx); // ベイズ側の文脈は inf 側と形が違うため別に控える
       pendingDmgRecord.open = false;
     }
+    // 確定: 新規の仮説フラグは、全ての計算が成功したこの時点で初めて
+    // 状態へ反映する
+    if (trig.dmgFlagSet) ent.dmgFlag = trig.dmgFlagSet;
     logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   } else {
@@ -1231,15 +1523,23 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
     if (!ent || !atkSpec || !base) { if (!capture) logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, applied: false, reason: 'no-base' }); return; }
     const flagIn = ent.dmgFlag;
     let flagWork = capture ? capture.flagIn : flagIn;
-    const pctCounts = (c, dist) => {
+    // pctCounts は「hp 値なし／分布が計算不能」を尤度0と同一視せず、
+    // 呼び出し側が検出できるよう null を返す (MH-001-R1-C)
+    const pctCounts = (c, res) => {
       const hpVal = c.values.hp;
-      if (!hpVal || !dist) return 0;
-      return distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
+      if (!hpVal || !res || !res.ok) return null;
+      return distMass(res.dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
     };
-    const distList = ent.cands.map(c => c.values.hp ? dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts) : null);
-    let counts = ent.cands.map((c, i) => pctCounts(c, distList[i]));
+    const distResults = ent.cands.map(c => dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts));
+    let counts = ent.cands.map((c, i) => pctCounts(c, distResults[i]));
+    // 計算不能が1件でもあれば、仮説の発生・再計算・bayesApply の前に
+    // 証拠全体を保留する (MH-001-R1-C。質量0とは区別する)
+    if (distResults.some(r => !r.ok) || counts.some(n => n === null)) { failDistUnavailable(defSpecies, 'mine'); return; }
+    const distList = distResults.map(r => r.dist);
+    // 防御的バックストップ (MH-001-R1-B): 相手方向と同じ
+    if (distList.some(d => d.multi)) { failMultiHit(defSpecies, 'mine'); return; }
     const trig = { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit };
-    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
+    { const ah = assumedHitsFor(md, opts, distList[0]); if (ah != null) trig.assumedHits = ah; }
     if (!counts.some(n => n > 0)) {
       // とどめの一撃では観測 pct が残り HP で頭打ちになり、実際のロールは
       // それ以上だった可能性がある (下限の観測)。「全候補の最小ロール
@@ -1249,32 +1549,42 @@ function processDamageBayes(ev, ctx, optsOverride, capture) {
       const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
       const under = !ko && ent.cands.every((c, i) => {
         const dist = distList[i];
-        if (!dist || !c.values.hp) return false;
+        if (!c.values.hp) return false;
         return ev.pct < Math.min(...dist.values.map(r => Math.floor(r / c.values.hp * 100)));
       });
       if (under) {
         trig.dir = 'under';
         // 持ち物が判明済みの種族に持ち物仮説は立てない (同 seq34:
-        // Eject Button がハード判明済みの Sableye にフラグが立った)
-        if (md.category === 'Special' && !flagWork && !ent.itemKnown) { flagWork = 'Assault Vest'; if (!capture) ent.dmgFlag = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
+        // Eject Button がハード判明済みの Sableye にフラグが立った)。
+        // フラグの状態への反映は確定時点に回す (MH-001-R1-C)
+        if (md.category === 'Special' && !flagWork && !ent.itemKnown) { flagWork = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
       }
     }
     if (flagWork === 'Assault Vest' && md.category === 'Special') {
-      counts = ent.cands.map(c => {
-        if (!c.values.hp) return 0;
+      const reResults = ent.cands.map(c => {
         const cc = isMegaStoneItem(c.item) ? c : { ...c, item: 'Assault Vest' };
-        return pctCounts(c, dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts));
+        return dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
       });
+      const reCounts = ent.cands.map((c, i) => pctCounts(c, reResults[i]));
+      // 再計算側の計算不能でも証拠全体を保留し、フラグだけが変更された
+      // 状態を残さない (MH-001-R1-C)
+      if (reResults.some(r => !r.ok) || reCounts.some(n => n === null)) { failDistUnavailable(defSpecies, 'mine'); return; }
+      // 再計算後の分布の複数ヒット判定も検証する (MH-001-R1-G1 / G-F02)
+      if (reResults.some(r => r.dist.multi)) { failMultiHit(defSpecies, 'mine'); return; }
+      counts = reCounts;
       trig.dmgFlag = 'Assault Vest';
     }
     // 棄却理由の記録 (by opp 側と同じ)
     if (!counts.some(n => n > 0)) trig.reason = trig.dir === 'under' ? 'under-min' : 'no-match';
     if (capture) { capture.counts = counts; capture.flagSet = trig.dmgFlagSet || null; capture.trig = trig; return; }
     if (pendingDmgRecord && pendingDmgRecord.key === ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) {
-      pendingDmgRecord.bayes = { entSpecies: defSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some(n => n > 0) };
+      pendingDmgRecord.bayes = { entSpecies: defSpecies, counts: [...counts], flagSet: trig.dmgFlagSet || null, flagIn, applied: counts.some(n => n > 0), hpLiftedIn: ent.hpLifted };
       pendingDmgRecord.bayesCtx = deepCopy(ctx);
       pendingDmgRecord.open = false;
     }
+    // 確定: 新規の仮説フラグは、全ての計算が成功したこの時点で初めて
+    // 状態へ反映する
+    if (trig.dmgFlagSet) ent.dmgFlag = trig.dmgFlagSet;
     logTrigger = { turn: ev.turn, trig };
     bayesApply(ent, counts, true);
   }
@@ -1303,9 +1613,40 @@ function processCritInf(ev, io) {
   rec.patched = true;
   rec.ev.crit = true;
   rec.opts.crit = true;
+  // 是正が失敗した場合に、レコードを未是正の状態へ戻して再試行を
+  // 可能にするための復旧 (MH-001-R1-G1 / G-F03)
+  const unpatch = () => { rec.patched = false; rec.ev.crit = false; if (rec.opts) rec.opts.crit = false; };
   const infCtx = rec.ctx || io;
   const collect = [];
-  processDamageInf(rec.ev, infCtx, rec.opts, collect);
+  try {
+    processDamageInf(rec.ev, infCtx, rec.opts, collect);
+  } catch (e) {
+    unpatch();
+    pendingCritRec = null;
+    throw e;
+  }
+  // inf 側の再計算が保留された (マーカーあり) 場合、又は差し替えが
+  // 完全でない (元の参照に対応する再計算結果が欠ける／再計算結果に
+  // 対応する参照が無い) 場合は、是正全体を確定しない。ベイズ側へは
+  // 進ませず、レコードを未是正へ戻して再試行可能にする (G-F03)
+  const withheldMark = collect.find(c => c.withheld);
+  const origOf = (ref) => { const hist = infHistory[ref.species]; return hist && hist[ref.idx] ? hist[ref.idx] : null; };
+  const allRefsMatched = rec.infRefs.every(ref => { const o = origOf(ref); return !!o && collect.some(c => c.species === ref.species && c.statKey === o.statKey); });
+  const allCollectPlaced = collect.every(c => c.withheld || rec.infRefs.some(ref => { const o = origOf(ref); return !!o && c.species === ref.species && c.statKey === o.statKey; }));
+  if (withheldMark || !allRefsMatched || !allCollectPlaced) {
+    unpatch();
+    pendingCritRec = null;
+    logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: false, reason: withheldMark ? withheldMark.withheld : 'dist-unavailable', bayes: false, inf: false });
+    return;
+  }
+  // 差し替え前の履歴エントリを控える。ベイズ側の再計算が保留になった
+  // 場合に、inf 側の差し替えも巻き戻して元の履歴を保持するため
+  // (MH-001-R1-C)
+  const infStash = [];
+  for (const ref of rec.infRefs) {
+    const hist = infHistory[ref.species];
+    if (hist && hist[ref.idx]) infStash.push({ species: ref.species, idx: ref.idx, prev: { statKey: hist[ref.idx].statKey, feasible: hist[ref.idx].feasible ? new Set(hist[ref.idx].feasible) : hist[ref.idx].feasible, hpSps: hist[ref.idx].hpSps ? new Set(hist[ref.idx].hpSps) : null } });
+  }
   const touched = new Set();
   for (const ref of rec.infRefs) {
     const hist = infHistory[ref.species];
@@ -1316,7 +1657,7 @@ function processCritInf(ev, io) {
     }
   }
   for (const sp of touched) rebuildInfState(sp);
-  pendingCritRec = { rec, key, infTouched: touched.size > 0 };
+  pendingCritRec = { rec, key, infTouched: touched.size > 0, infStash };
 }
 function processCritBayes(ev, io) {
   const pc = pendingCritRec;
@@ -1325,27 +1666,67 @@ function processCritBayes(ev, io) {
   pendingCritRec = null;
   const rec = pc.rec;
   const logSpecies = rec.by === 'opp' ? rec.atkSpecies : rec.defSpecies;
+  // inf 履歴の差し替えを巻き戻す (保留時・例外時で共用)
+  const restoreCritInfStash = () => {
+    if (!pc.infStash || !pc.infStash.length) return;
+    const touchedSp = new Set();
+    for (const s of pc.infStash) { const hist = infHistory[s.species]; if (hist) { hist[s.idx] = s.prev; touchedSp.add(s.species); } }
+    for (const sp of touchedSp) rebuildInfState(sp);
+  };
   let flagCleared = null, bayesPatched = false;
   if (rec.bayes) {
     const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
     if (ent && ent.cands.length === rec.bayes.counts.length) {
       const bayesCtx = rec.bayesCtx || rec.ctx || io;
-      const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null };
-      processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
-      if (capture.counts) {
-        if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) { ent.dmgFlag = null; flagCleared = rec.bayes.flagSet; }
-        else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
-        if (rec.bayes.applied) {
-          let tot = 0;
-          ent.cands.forEach((c, i) => { if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
-          if (tot > 0) for (const c of ent.cands) c.post /= tot;
-        } else if (capture.counts.some(n => n > 0)) {
-          let tot = 0;
-          ent.cands.forEach((c, i) => { c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
-          if (tot > 0) { for (const c of ent.cands) c.post /= tot; ent.used++; }
+      // 例外時の防御 (MH-001-R1-C2): 再計算・是正の途中で例外が出た
+      // 場合に、適用済みの有効な状態 (事後・フラグ・inf 履歴) を復元
+      // してから伝播させる
+      const postSnap = { posts: ent.cands.map(c => c.post), dmgFlag: ent.dmgFlag, used: ent.used };
+      // 是正が失敗した場合にレコードを未是正へ戻し、再試行を可能に
+      // する (MH-001-R1-G1 / G-F03)
+      const unpatch = () => { rec.patched = false; rec.ev.crit = false; if (rec.opts) rec.opts.crit = false; };
+      try {
+        const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null, suspended: false, unavailable: false, hhSuspended: false };
+        processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
+        // 再計算が保留された場合 (複数ヒット保留 MH-001-R1-B / 計算不能
+        // MH-001-R1-C / てだすけ保留 MH-001-R1-G1) は counts が欠落する。
+        // これを「全候補0」と誤認して割り戻し・掛け直しをせず、inf 側
+        // の差し替えも巻き戻して、既存の有効な状態 (履歴・事後・
+        // フラグ) をすべて保持し、レコードは未是正へ戻す
+        if (capture.suspended || capture.unavailable || capture.hhSuspended) {
+          restoreCritInfStash();
+          unpatch();
+          logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: false, reason: capture.hhSuspended ? 'helping-hand-observed' : capture.unavailable ? 'dist-unavailable' : 'multihit-suspended', bayes: false, inf: false });
+          return;
         }
-        bayesPatched = true;
-        dirty = true;
+        if (capture.counts && !capture.suspended && !capture.unavailable && !capture.hhSuspended) {
+          if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) { ent.dmgFlag = null; flagCleared = rec.bayes.flagSet; }
+          else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
+          if (rec.bayes.applied) {
+            let tot = 0;
+            ent.cands.forEach((c, i) => { if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+            if (tot > 0) for (const c of ent.cands) c.post /= tot;
+          } else if (capture.counts.some(n => n > 0)) {
+            let tot = 0;
+            ent.cands.forEach((c, i) => { c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+            if (tot > 0) { for (const c of ent.cands) c.post /= tot; ent.used++; }
+          }
+          bayesPatched = true;
+          dirty = true;
+          // 是正後の適用内容をレコードへ残す。てだすけ観測が遅れて
+          // 届いた場合の巻き戻し (G-F01) が、是正済みの状態からでも
+          // 正確に割り戻せるようにするため
+          rec.bayesCritCounts = (rec.bayes.applied || capture.counts.some(n => n > 0)) ? [...capture.counts] : null;
+          rec.bayesCritFlagSet = capture.flagSet || null;
+          rec.bayesCritFlagCleared = flagCleared;
+        }
+      } catch (e) {
+        ent.cands.forEach((c, i) => { c.post = postSnap.posts[i]; });
+        ent.dmgFlag = postSnap.dmgFlag;
+        ent.used = postSnap.used;
+        restoreCritInfStash();
+        unpatch();
+        throw e;
       }
     }
   }
@@ -1765,18 +2146,27 @@ function candRanges(args) {
     atkSide: { isHelpingHand: !!args.side[atkKey === 'mine' ? 'mine' : 'opp'].hand },
     defSide: { isLightScreen: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].light, isReflect: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].reflect, isAuroraVeil: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].veil, isFriendGuard: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].guard, isSR: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].rock, spikes: args.side[defKey === 'mine' ? 'mine' : 'opp'].spikes || 0 },
   });
+  // 表示保留が確定した技 (方向 dst ごと)。信用集合内の候補のうち1件
+  // でも分布が計算不能な技は、部分的な候補集合から算出した集計値を
+  // 全候補についての値として返さず、{ unavailable: true } で返す
+  // (MH-001-R1-E の契約。cover 外の候補は判定対象に含めない)
+  const failedByDst = new Map();
   const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst, w) => {
     const sc = sideFor(atkKey, defKey);
+    let failed = failedByDst.get(dst);
+    if (!failed) { failed = new Set(); failedByDst.set(dst, failed); }
     (moves || []).forEach((mv, mi) => {
       if (!mv || !defHp) return;
+      if (failed.has(mi)) return;
       // Zワザ/ダイマックス技は変換トグル経由でのみ正しい威力になる機構技で、
       // 候補横断の計算には変換を入れない (計算側の方針)。ダミー威力の幅を
       // 出さないよう対象外にする (moveData の isZ / isMax で判定)
       const md = moveData(mv);
       if (md && (md.isZ || md.isMax)) return;
-      const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), mv,
+      const distRes = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), mv,
         { ...F, gameType: singleFn(mv) ? 'Singles' : 'Doubles', crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide });
-      if (!dist) return;
+      if (!distRes.ok) { failed.add(mi); dst[mi] = { unavailable: true }; return; }
+      const dist = distRes.dist;
       const lo = dist.min / defHp * 100, hi = dist.max / defHp * 100;
       // 事後確率で重み付けした期待値 (包絡と同じ信用集合内での期待値)。
       // exp = 期待ダメージ% (分布の質量で重み付けした平均。単発では従来の
@@ -1810,8 +2200,8 @@ function candRanges(args) {
 
   function reset() {
     inference = { seen: 0, bySpecies: {} };
-    dmgRecords = []; pendingDmgRecord = null; infHistory = {}; pendingCritRec = null;
-    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
+    dmgRecords = []; pendingDmgRecord = null; infHistory = {}; pendingCritRec = null; pendingInfStash = null;
+    infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, hhSeen: { p1: new Set(), p2: new Set() }, abBatches: {}, abPairs: new Set() };
     infLastMove = null;
     dirty = false;
     pendingOpts = null;
