@@ -27736,11 +27736,30 @@ function createEstimator(deps) {
     const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
     return [lo, hi];
   }
+  function dmgDist(atkSpec, defSpec, moveName, opts) {
+    const r = damageDistribution(atkSpec, defSpec, moveName, opts);
+    if (!r || r.error || r.status) return null;
+    if (r.immune) return { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false };
+    if (!r.dist) return null;
+    return { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi };
+  }
+  function distMass(dist, pred) {
+    if (!dist) return 0;
+    let m = 0;
+    for (let j = 0; j < dist.values.length; j++) if (dist.counts[j] > 0 && pred(dist.values[j])) m += dist.counts[j];
+    return m / dist.total;
+  }
+  function assumedHitsFor(md, opts, dist) {
+    if (!dist || !dist.multi) return null;
+    if (!md || !md.spec || md.spec.kind !== "hits") return null;
+    if (opts && opts.moveSpec != null) return null;
+    return dist.hits;
+  }
   function processDamageInf(ev, ctx, optsOverride, collect) {
     if (typeof ev.turn === "number") infLogTurn = ev.turn;
     if (!collect) pendingOpts = null;
     const md = moveData(ev.move);
-    if (!md || md.category === "Status" || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
+    if (!md || md.category === "Status" || !md.basePower || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
     if (ev.atk && ev.atk === ev.def) return;
     const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
     const oppIsAtk = labelSide(ev.atk) === "p2";
@@ -27813,8 +27832,8 @@ function createEstimator(deps) {
         for (const rows of byValue.values()) {
           const rep = rows[0];
           const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
-          const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-          if (rolls.some(inRange)) for (const r of rows) feasible.add(r.nature + "|" + r.sp);
+          const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+          if (distMass(dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + "|" + r.sp);
         }
       }
       if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
@@ -27841,10 +27860,10 @@ function createEstimator(deps) {
         for (const rows of byValue.values()) {
           const rep = rows[0];
           const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
-          const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
-          if (!rolls.length) continue;
+          const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+          if (!dist) continue;
           for (const [spHp, hpVal] of hpBySp) {
-            if (rolls.some((r) => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct))) {
+            if (distMass(dist, (r) => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
               for (const r of rows) feasPairs.add(r.nature + "|" + r.sp);
               feasHp.add(spHp);
             }
@@ -28720,17 +28739,21 @@ function createEstimator(deps) {
         [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
       }
       const matchRoll = hasAmt ? ((r) => r === ev.amt) : ((r) => r >= amtLo && r <= amtHi);
-      const rollsList = ent.cands.map((c) => damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts).rolls);
-      let counts = rollsList.map((rolls) => rolls.filter(matchRoll).length);
+      const distList = ent.cands.map((c) => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
+      let counts = distList.map((dist) => distMass(dist, matchRoll) * 16);
       const trig = { kind: "damage", move: md.name, by: "opp", crit: !!ev.crit };
       if (hasAmt) trig.amt = ev.amt;
       else {
         trig.pct = ev.pct;
         trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi];
       }
+      {
+        const ah = assumedHitsFor(md, opts, distList.find((d) => d));
+        if (ah != null) trig.assumedHits = ah;
+      }
       if (!counts.some((n) => n > 0)) {
         const obsMin = hasAmt ? ev.amt : amtLo;
-        const over = rollsList.every((rolls) => rolls.length && obsMin > Math.max(...rolls));
+        const over = distList.every((dist) => dist && obsMin > dist.max);
         if (over) {
           trig.dir = "over";
           const want = md.category === "Physical" ? "Choice Band" : md.category === "Special" ? "Choice Specs" : null;
@@ -28746,8 +28769,7 @@ function createEstimator(deps) {
         if (flag === "Choice Band" && md.category === "Physical" || flag === "Choice Specs" && md.category === "Special") {
           counts = ent.cands.map((c) => {
             const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
-            const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
-            return rolls.filter(matchRoll).length;
+            return distMass(dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts), matchRoll) * 16;
           });
           trig.dmgFlag = flag;
         }
@@ -28777,22 +28799,24 @@ function createEstimator(deps) {
       }
       const flagIn = ent.dmgFlag;
       let flagWork = capture ? capture.flagIn : flagIn;
-      const pctCounts = (c, rolls) => {
+      const pctCounts = (c, dist) => {
         const hpVal = c.values.hp;
-        if (!hpVal || !rolls) return 0;
-        let n = 0;
-        for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
-        return n;
+        if (!hpVal || !dist) return 0;
+        return distMass(dist, (r) => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
       };
-      const rollsList = ent.cands.map((c) => c.values.hp ? damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts).rolls : null);
-      let counts = ent.cands.map((c, i) => pctCounts(c, rollsList[i]));
+      const distList = ent.cands.map((c) => c.values.hp ? dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts) : null);
+      let counts = ent.cands.map((c, i) => pctCounts(c, distList[i]));
       const trig = { kind: "damage", move: md.name, by: "mine", pct: ev.pct, crit: !!ev.crit };
+      {
+        const ah = assumedHitsFor(md, opts, distList.find((d) => d));
+        if (ah != null) trig.assumedHits = ah;
+      }
       if (!counts.some((n) => n > 0)) {
         const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
         const under = !ko && ent.cands.every((c, i) => {
-          const rolls = rollsList[i];
-          if (!rolls || !c.values.hp) return false;
-          return ev.pct < Math.min(...rolls.map((r) => Math.floor(r / c.values.hp * 100)));
+          const dist = distList[i];
+          if (!dist || !c.values.hp) return false;
+          return ev.pct < Math.min(...dist.values.map((r) => Math.floor(r / c.values.hp * 100)));
         });
         if (under) {
           trig.dir = "under";
@@ -28807,8 +28831,7 @@ function createEstimator(deps) {
         counts = ent.cands.map((c) => {
           if (!c.values.hp) return 0;
           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: "Assault Vest" };
-          const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
-          return pctCounts(c, rolls);
+          return pctCounts(c, dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts));
         });
         trig.dmgFlag = "Assault Vest";
       }
@@ -29293,18 +29316,23 @@ function createEstimator(deps) {
         if (!mv || !defHp) return;
         const md = moveData(mv);
         if (md && (md.isZ || md.isMax)) return;
-        const { rolls } = damageRolls(
+        const dist = dmgDist(
           withCurHP(atkSpec),
           withCurHP(defSpec),
           mv,
           { ...F, gameType: singleFn(mv) ? "Singles" : "Doubles", crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide }
         );
-        if (!rolls || !rolls.length) return;
-        const lo = Math.min(...rolls) / defHp * 100, hi = Math.max(...rolls) / defHp * 100;
-        const meanPct = rolls.reduce((s, r) => s + r, 0) / rolls.length / defHp * 100;
+        if (!dist) return;
+        const lo = dist.min / defHp * 100, hi = dist.max / defHp * 100;
         const pctNow = defSpec && defSpec.curHPPercent != null ? defSpec.curHPPercent : 100;
         const curHp = pctNow >= 100 ? defHp : Math.max(1, Math.floor(defHp * pctNow / 100));
-        const koPct = rolls.filter((r) => r >= curHp).length / rolls.length * 100;
+        let meanSum = 0, koMass = 0;
+        for (let j = 0; j < dist.values.length; j++) {
+          meanSum += dist.values[j] * dist.counts[j];
+          if (dist.values[j] >= curHp) koMass += dist.counts[j];
+        }
+        const meanPct = meanSum / dist.total / defHp * 100;
+        const koPct = koMass / dist.total * 100;
         const cur = dst[mi];
         dst[mi] = cur ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi), exp: cur.exp + w * meanPct, ko: cur.ko + w * koPct } : { lo, hi, exp: w * meanPct, ko: w * koPct };
       });
