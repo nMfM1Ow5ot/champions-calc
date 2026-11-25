@@ -1,0 +1,200 @@
+{
+  "schema": "preview-pv06-asset-survey-v1",
+  "date": "2026-11-26",
+  "scope": "Metadata inventory and nine-image research feasibility pilot only; no deployment or rights approval",
+  "prior": "6249aefb2525370cb2ac072a2554166b49689714",
+  "baseline": {
+    "reference_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "feature_blob": "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "eligible_entries": 284,
+    "without_nonshiny_source_template": 219
+  },
+  "assets": [
+    {
+      "source": "KevinToodlepoot/pokemon-champions-sprites",
+      "tree": "4953be0b8f2eee5415255c4e0bb2bdec6065c75b",
+      "path": "sprites/",
+      "files": 393,
+      "bytes": 6067750,
+      "exact_normalized_name_matches": 265,
+      "missing_template_matches": 205,
+      "source_description": "Bulbapedia menu images; no GitHub license detected"
+    },
+    {
+      "source": "Gheist23/pokemonbattledata",
+      "tree": "f6ff3126191b58358c14c36104f64e2575a0f659",
+      "path": "pokemon_champions_assets/pokemon/",
+      "files": 393,
+      "bytes": 7503145,
+      "mini_files": 383,
+      "exact_normalized_name_matches": 230,
+      "missing_template_matches": 175,
+      "terms": "https://championsbattledata.com/api-rules/",
+      "constraints": "attribution; reasonable caching, no permanent API mirror; no Pokémon IP rights conveyed"
+    },
+    {
+      "source": "suisui-swimmy/pokemon-SnapCrop",
+      "tree": "86371894a14e505c756130e72345f4de2a05cf03",
+      "path": "assets/pokemon-icons/champions/",
+      "files": 359,
+      "bytes": 1576394,
+      "exact_normalized_name_matches": 240,
+      "missing_template_matches": 182,
+      "upstream": "vgc-multicalc; code MIT, game imagery excluded"
+    },
+    {
+      "source": "robsonbittencourt/vgc-multicalc",
+      "commit": "6be35db34ffedcf32fc7092d70edb33d95d62627",
+      "path": "src/app/assets/sprites/pokemon-champions/",
+      "files": 1346,
+      "bytes": 31607194,
+      "license": "MIT code, asset rights not verified",
+      "note": "Raw file count, not legal roster coverage; no full mapping or image evaluation"
+    },
+    {
+      "source": "PokeAPI/sprites",
+      "commit": "c0542f7c51215d9672439012838c99f520596cbd",
+      "path": "sprites/pokemon/versions/generation-ix/champions/",
+      "inventory": {
+        "front": [
+          452,
+          816117192
+        ],
+        "shiny": [
+          452,
+          805226352
+        ],
+        "female": [
+          32,
+          46829672
+        ],
+        "back": [
+          452,
+          745940406
+        ],
+        "back_shiny": [
+          452,
+          739496228
+        ],
+        "icons": [
+          452,
+          6303810
+        ],
+        "icons_shiny": [
+          452,
+          6373987
+        ]
+      },
+      "numeric_only_icon_ids": 354,
+      "pokemon_csv_blob": "a425fe0fda9d4682cc016225a642518d789d1ab3",
+      "exact_normalized_numeric_name_matches": 247,
+      "missing_template_matches": 189,
+      "note": "Numeric-only filenames joined to pokemon.csv; 98 other filenames not mapped, aliases not resolved. Game assets rendered by FallenDeity per README; asset rights not verified."
+    },
+    {
+      "source": "HoshizoraR0905/Pokemon-Champions-Assistant",
+      "tree": "35d4e68b511890bb42b8edd4a1eb7da39222a3f1",
+      "manifest": "knowledge/data/visual_assets.json",
+      "reported_thumbnail_count": 393,
+      "reported_unmapped": 14,
+      "note": "Separate cache not bundled per README; benchmark/context reference only"
+    },
+    {
+      "source": "Bulbagarden Archives",
+      "url": "https://archives.bulbagarden.net/wiki/Category:Champions_menu_sprites",
+      "shiny_url": "https://archives.bulbagarden.net/wiki/Category:Champions_Shiny_menu_sprites",
+      "rights": "https://archives.bulbagarden.net/wiki/Archives:Copyrights",
+      "note": "Catalog source, most material not openly licensed"
+    },
+    {
+      "source": "Nostalgia64",
+      "url": "https://www.nostalgia64.com/assets/pokemon-champions/",
+      "terms": "https://www.nostalgia64.com/terms/",
+      "note": "GLB with animations advertised; search result/individual pages evidence only; direct catalog/terms open failed, no model downloaded or rendered"
+    },
+    {
+      "source": "Existing recordings",
+      "note": "Actual target domain, partial coverage; eight explicitly named encrypted preview images found in existing repo, 390 encrypted image files total; no decryption attempted."
+    }
+  ],
+  "pilot": {
+    "queries": 3,
+    "selected_posthoc": true,
+    "assets_decoded": 9,
+    "format": "RGBA8 PNG, non-interlaced; zlib Adler32 and decompressed length checked",
+    "extraction": "Alpha >=128, largest 8-connected component, neutral-gray fill, bilinear dHash 256 bits, 24 hue bins, bounding aspect and density; same existing score formula, approximate JS extraction, previous rounded screenshot descriptors reused",
+    "scores": {
+      "columns": [
+        "existing_best",
+        "pokeapi",
+        "kevin",
+        "battledata"
+      ],
+      "Sylveon": [
+        0.19662077300028982,
+        0.09220581976170869,
+        0.03554902175418051,
+        -0.031254405583702904
+      ],
+      "Rillaboom": [
+        0.2482936033750336,
+        0.25364378584957675,
+        0.21746220284626755,
+        0.21085390369274631
+      ],
+      "Gholdengo": [
+        0.1712429062434203,
+        0.17395545923244188,
+        0.20669488263103764,
+        0.17031798178505891
+      ]
+    },
+    "score_direction": "lower is better; not probabilities",
+    "sample_blobs": {
+      "pokeapi": [
+        "7cdb0a5093b4dc891b19b783c33e6fe766a55ef5",
+        "99abd84beb658aa72e2582648263aeb4d2de8d08",
+        "fb770afbcf0ff046eeb56e7531d5703ed2829667"
+      ],
+      "kevin": [
+        "556eb7d31376a1d70edb1d88e53b8e07508d8c30",
+        "65983fa1eccaeb764c664352ac472c6a411ac287",
+        "527f1688e63c1f7aec2c9477cd94d559df1b2f4e"
+      ],
+      "battledata": [
+        "9fba3f733b36652973023ff4393ba8a07d30c057",
+        "97d9cc0f42de778deed80c547bc120dea275564e",
+        "b0e7edc8fae89e91ca289ec1961e3ef40c6c3c76"
+      ]
+    },
+    "limitations": "Same-label distance only; no full candidate pool re-ranking, no independent accuracy estimate; sources can share image origin; decoder executed in connector but not saved as standalone code. No original animated WebP/GLB sample decoded."
+  },
+  "rights": {
+    "official_guideline": "https://www.pokemonchampions.jp/ja/streaming_guideline/",
+    "official_support": "https://support.pokemon.com/hc/en-us/articles/360000634094-Can-I-use-Pok%C3%A9mon-images-or-materials",
+    "disposition": "Technical feasibility is not licensing clearance. Official streaming guidelines restrict isolated asset distribution and app/game creation purposes; no raw assets, source frames or derived descriptors published. Need separate assessment of applicable rights and intended use before durable caching/reuse/distribution."
+  },
+  "blockers": [
+    "Local direct download failed DNS; small images obtained through GitHub connector. No full binary mirror created.",
+    "M-C legal roster/form mapping incomplete; filename coverage is not legality or accuracy. Base reference provenance incomplete; potential common origin and prior test overlap unresolved.",
+    "Model animation files and GLB not experimentally evaluated."
+  ],
+  "todo": [
+    {
+      "id": "PV-06",
+      "status": "COMPLETE_LIMITED",
+      "task": "Asset inventory, mapping, small technical pilot; rights clearance unresolved"
+    },
+    {
+      "id": "PV-07",
+      "status": "NEXT",
+      "task": "Use permitted local data, establish legal label map and provenance, matched balanced reference experiment including competing labels, evaluate HOG/spatial color and full independent ranking"
+    },
+    {
+      "id": "PV-04",
+      "status": "PARTIAL_BLOCKED",
+      "task": "Independent full-frame acceptance after freeze"
+    }
+  ],
+  "privacy": "Only aggregate scores, public source metadata and methodology. No raw images, trainer data, user lineups, or asset files published."
+}
