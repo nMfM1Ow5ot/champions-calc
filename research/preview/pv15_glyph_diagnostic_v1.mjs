@@ -1,0 +1,9 @@
+// PV15 research-only fixed-window icon diagnostic. Private rows never committed.
+import fs from 'node:fs';import crypto from 'node:crypto';
+function classifyIcons(I,rgb,glyph){
+ const corr=(a,b)=>{let ma=a.reduce((s,x)=>s+x,0)/a.length,mb=b.reduce((s,x)=>s+x,0)/b.length,aa=0,bb=0,ab=0;for(let i=0;i<a.length;i++){let x=a[i]-ma,y=b[i]-mb;aa+=x*x;bb+=y*y;ab+=x*y;}return aa*bb?ab/Math.sqrt(aa*bb):0;};
+ const decode=s=>{const alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";let out=[];for(let i=0;i<s.length;i+=4){const z=(alpha.indexOf(s[i])<<18)|(alpha.indexOf(s[i+1])<<12)|(alpha.indexOf(s[i+2])<<6)|alpha.indexOf(s[i+3]);out.push((z>>16)&255,(z>>8)&255,z&255);}return out;};
+ const g=glyph.split("\n");return rgb.split("\n").map((l,i)=>{let [std,...v]=l.split(",").map(Number);if(std<=30)return {type:null,status:"blank"};const a=decode(g[i]);if(a.length!==144)throw Error("bad glyph");const cd=b=>Math.hypot(...v.map((x,j)=>x-b[j]))/441.7;if(v[0]>=195&&v[1]>=145&&v[2]<=135&&v[0]-v[2]>=110&&v[1]-v[2]>=50&&v[0]>=v[1]-10)return {type:"Electric",status:"read",score:.05+.3*cd([247,197,28]),gap:null};
+ const scores=Object.entries(I).map(([type,r])=>({type,d:Math.min(...[r,...(r.samples??[])].map(b=>.7*(1-corr(a,b.glyph))/2+.3*cd(b.rgb)))})).sort((a,b)=>a.d-b.d||a.type.localeCompare(b.type));return {type:scores[0].d<.42?scores[0].type:null,status:scores[0].d<.42?"read":"unknown",score:scores[0].d,gap:scores[1].d-scores[0].d};});
+}
+const b=fs.readFileSync(process.argv[2]);if(crypto.createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex')!=='c4ca6c06022f70e6bbf9edc168e7f86b0d6b06a0')throw Error('icon bank mismatch');const r=classifyIcons(JSON.parse(b),fs.readFileSync(process.argv[3],'utf8'),fs.readFileSync(process.argv[4],'utf8'));console.log(JSON.stringify(r,null,2));
