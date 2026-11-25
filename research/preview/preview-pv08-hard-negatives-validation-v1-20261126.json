@@ -1,0 +1,278 @@
+{
+  "schema": "preview-pv08-hard-negatives-validation-v1",
+  "date": "2026-11-26",
+  "status": "PARTIAL_BLOCKED_RAW_FRAME",
+  "prior": "e49992e54db115effa355252dffd4842cd069f3b",
+  "sourceCommit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+  "inputBlobs": {
+    "preview_features": "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "species_types": "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "regulation": "cf4df343979e930a47e3a71e083a3943e013895f"
+  },
+  "scriptCommit": "369fb227d06e81c678504598af7a69db5fc80e26",
+  "execution": "Connector JS ran the analysis on retrieved JSON. Standalone Node script saved with Git blob checks; standalone execution not yet verified.",
+  "protocol": "PV07 source-string holdout of nonshiny templates with all base references retained; same exact type set ranking is an oracle-only diagnostic, not hard filtering recommendation; strict/worst tied rank tolerance 1e-12; counts of additional templates from sources other than query, not counts of distinct sources; exploratory uncalibrated score gap",
+  "candidates": 284,
+  "queries": 204,
+  "sources": 49,
+  "labels": 65,
+  "columns": [
+    "n",
+    "appearance_top1",
+    "appearance_top3",
+    "same_type_top1",
+    "same_type_top3"
+  ],
+  "summary": {
+    "legacy": [
+      204,
+      136,
+      154,
+      193,
+      203
+    ],
+    "hellinger": [
+      204,
+      149,
+      163,
+      193,
+      204
+    ]
+  },
+  "otherTemplateCount": {
+    "zero": {
+      "legacy": [
+        30,
+        5,
+        9,
+        22,
+        30
+      ],
+      "hellinger": [
+        30,
+        2,
+        6,
+        22,
+        30
+      ]
+    },
+    "one": {
+      "legacy": [
+        18,
+        8,
+        11,
+        16,
+        18
+      ],
+      "hellinger": [
+        18,
+        12,
+        12,
+        16,
+        18
+      ]
+    },
+    "twoOrMore": {
+      "legacy": [
+        156,
+        123,
+        134,
+        155,
+        155
+      ],
+      "hellinger": [
+        156,
+        135,
+        145,
+        155,
+        156
+      ]
+    }
+  },
+  "paired": {
+    "appearance": {
+      "improved": 17,
+      "worsened": 4
+    },
+    "sameType": {
+      "improved": 1,
+      "worsened": 1
+    }
+  },
+  "sameTypeConfusions": {
+    "legacy": [
+      [
+        "Basculegion-F",
+        "Basculegion",
+        2
+      ],
+      [
+        "Alakazam",
+        "Meowstic-F",
+        1
+      ],
+      [
+        "Venusaur",
+        "Victreebel",
+        1
+      ],
+      [
+        "Mawile",
+        "Klefki",
+        1
+      ],
+      [
+        "Salamence",
+        "Altaria",
+        1
+      ],
+      [
+        "Hippowdon",
+        "Sandaconda",
+        1
+      ],
+      [
+        "Meowstic-F",
+        "Alakazam",
+        1
+      ],
+      [
+        "Lycanroc-Dusk",
+        "Garganacl",
+        1
+      ],
+      [
+        "Primarina",
+        "Azumarill",
+        1
+      ],
+      [
+        "Rillaboom",
+        "Tsareena",
+        1
+      ]
+    ],
+    "hellinger": [
+      [
+        "Basculegion-F",
+        "Basculegion",
+        2
+      ],
+      [
+        "Alakazam",
+        "Meowstic-F",
+        1
+      ],
+      [
+        "Venusaur",
+        "Victreebel",
+        1
+      ],
+      [
+        "Salamence",
+        "Altaria",
+        1
+      ],
+      [
+        "Hippowdon",
+        "Sandaconda",
+        1
+      ],
+      [
+        "Meowstic-F",
+        "Alakazam",
+        1
+      ],
+      [
+        "Greninja-Ash",
+        "Samurott-Hisui",
+        1
+      ],
+      [
+        "Lycanroc-Dusk",
+        "Garganacl",
+        1
+      ],
+      [
+        "Primarina",
+        "Azumarill",
+        1
+      ],
+      [
+        "Rillaboom",
+        "Tsareena",
+        1
+      ]
+    ]
+  },
+  "selective": {
+    "columns": [
+      "strict_gap_threshold",
+      "accepted",
+      "wrong"
+    ],
+    "legacy": [
+      [
+        0,
+        204,
+        68
+      ],
+      [
+        0.025,
+        166,
+        32
+      ],
+      [
+        0.05,
+        138,
+        14
+      ],
+      [
+        0.1,
+        114,
+        2
+      ],
+      [
+        0.15,
+        99,
+        0
+      ]
+    ],
+    "hellinger": [
+      [
+        0,
+        203,
+        54
+      ],
+      [
+        0.025,
+        179,
+        34
+      ],
+      [
+        0.05,
+        154,
+        15
+      ],
+      [
+        0.1,
+        127,
+        0
+      ],
+      [
+        0.15,
+        111,
+        0
+      ]
+    ]
+  },
+  "limitations": [
+    "Same PV07 data, exploratory, not independent validation. Source string is not battle identity. Base references unknown provenance. Class composition confounds count strata. No unknown-class challenge. Candidate legality mapping incomplete (e.g. Greninja-Ash). No production threshold inferred. No raw screenshot query available in this turn. Prior PV04 manually cropped one screenshot, not raw whole-frame acceptance."
+  ],
+  "next": [
+    "Use existing local raw preview images, e.g. previous Saifu output if permitted, no new recording required; verify independence and roster/form mapping.",
+    "Freeze PV07 candidates and shape/spatial descriptors; evaluate across battles, including unknowns; report risk/coverage and team exact match.",
+    "Keep production unchanged."
+  ],
+  "privacy": "Aggregate species-level diagnostic only; no raw frames, trainer names, lineups or source identifiers."
+}
