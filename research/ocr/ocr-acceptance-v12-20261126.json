@@ -1,0 +1,115 @@
+{
+  "schema": "ocr-research-acceptance-v12",
+  "date": "2026-11-26",
+  "principles_version": "1.3",
+  "disposition": {
+    "offline_research": "CONDITIONAL_PASS",
+    "production": "NOT_GRANTED",
+    "independent_battle": "BLOCKED_NOT_ESTABLISHED"
+  },
+  "provenance": {
+    "runner_commit": "ac31bb2662af52ac73d1441eb7920fa2b407b097",
+    "runner_blob": "e259417518adcc14f2417f3cfe9d3afe82516934",
+    "runner_sha256": "25704d2612bcb8edfd1700aed2b33541ed41e78df3cdf242c6583bbc14cbe48c",
+    "repository_module_blobs_matched": 7,
+    "archive_sha256": [
+      "087f39b87299e8281f86ff34c3b48dafa2f83e644ea88ed9c934b0e852d3c999",
+      "f98b007155d4af6443927a335bfe796115dda939c7f236b5e78bc615a3c49237"
+    ],
+    "dictionary_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "dictionary_blob": "e6116f0eef415212da809c7f8a64fbd8e84f4c9b",
+    "dictionary_scope": "13 observed query neighborhoods exhaustively checked against pinned 1253 species and 926 move labels using connector; local integrated replay used small neighborhood fixture, one stone label, not full-dictionary CLI run"
+  },
+  "execution": {
+    "new_ocr_calls": 0,
+    "new_installations": 0,
+    "user_actions": 0,
+    "regression": {
+      "v6": 17,
+      "v7": 14,
+      "v8": 12,
+      "v9": 7,
+      "v10": 11,
+      "v11": 15,
+      "total": 76,
+      "passed": 76
+    },
+    "mutation_rejection": {
+      "passed": 5,
+      "total": 5,
+      "cases": [
+        "duplicate primary OCR pass",
+        "missing primary pass",
+        "inconsistent normalized coordinate",
+        "failed OCR pass",
+        "wrong full-frame rectangle"
+      ]
+    },
+    "verified_frame_hashes": 9,
+    "verified_normalized_coordinates": 97,
+    "exact_direct_crop_pixel_checks": 1,
+    "primary_frames": 9,
+    "ocr_passes": 10,
+    "confirmed_events": 0,
+    "all_candidate_confirmed_fields_false": true
+  },
+  "manual_development_reference": {
+    "hp": {
+      "correct": 13,
+      "visible": 15,
+      "false_candidates": 0,
+      "missing": 2
+    },
+    "message_kind": {
+      "correct": 4,
+      "visible": 4,
+      "false_candidates": 0
+    },
+    "move_name": {
+      "correct": 4,
+      "visible": 4
+    },
+    "complete_pp_pair": {
+      "correct": 2,
+      "visible": 4
+    },
+    "notes": [
+      "Visual inspection of archived frames, not independently labeled benchmark.",
+      "Two missing opponent HP values visually read 100% but raw OCR lacks a valid percent sign. Two maximum PP values visibly present but absent in OCR. Do not impute."
+    ]
+  },
+  "limitations": [
+    "Same or visually continuous battle; no genuinely independent battle established.",
+    "All scores are development replays, not statistical accuracy estimates. No temporal event deduplication beyond source-frame grouping demonstrated; no live-stream load, latency distribution, or production state integration validation.",
+    "No full battle grammar, icon/team identification, damage inference, or broad menu/ability/HP geometry coverage. Full dictionaries not replayed.",
+    "A research runner is not a production OCR engine; confirmed-event output intentionally disabled. Manual reference is local and only aggregate results are public."
+  ],
+  "todo": [
+    {
+      "id": "OCR-01",
+      "status": "COMPLETE",
+      "scope": "baseline and initial experiments"
+    },
+    {
+      "id": "OCR-02",
+      "status": "COMPLETE_CONDITIONAL",
+      "scope": "isolated research candidates and integrated replay"
+    },
+    {
+      "id": "OCR-03",
+      "status": "PARTIAL",
+      "scope": "regression automated; unresolved percent/PP recognition deferred to selective ROI test on new evidence"
+    },
+    {
+      "id": "OCR-04",
+      "status": "BLOCKED",
+      "scope": "genuinely different battle; freeze v12 before testing; independently label available screens, HP, PP, message types; disclose missing classes; no reuse of tuning sample as holdout"
+    },
+    {
+      "id": "OCR-05",
+      "status": "PENDING",
+      "scope": "production architecture and integration acceptance; separate user decision if material structural change"
+    }
+  ],
+  "next": "Do not run further tuning on current frames. A genuinely different battle recording is the minimal missing input. Existing holdout collector may be reused, but sample coverage may be insufficient; any production thresholds and integration must be justified and agreed separately. No production changes, no images or raw player transcripts published."
+}
