@@ -1,0 +1,68 @@
+{
+  "schema": "champions-learnset-literal-extract-v1",
+  "source": {
+    "repo": "nMfM1Ow5ot/showdown-virtual-env",
+    "ref": "7f7b03182d1df61c88ad360cf1d1639451b97b42",
+    "path": "data/mods/champions/learnsets.ts",
+    "gitBlob": "d1d80c9dde2bd7b426615587defe1941a7c4e6ab"
+  },
+  "scope": "Literal definitions only; not resolved Dex; unlisted pairs are unknown; source codes preserved. No TeamValidator result.",
+  "counts": {
+    "species": 258,
+    "withLearnset": 258,
+    "inherits": 1,
+    "movePairs": 15764,
+    "distinctMoves": 510,
+    "sourceCodes": {
+      "9M": 15764
+    }
+  },
+  "sample": {
+    "pelipper": {
+      "moves": 53,
+      "inherit": false,
+      "hasLearnset": true
+    },
+    "incineroar": {
+      "moves": 77,
+      "inherit": false,
+      "hasLearnset": true
+    },
+    "rillaboom": {
+      "moves": 67,
+      "inherit": false,
+      "hasLearnset": true
+    },
+    "garchomp": {
+      "moves": 59,
+      "inherit": false,
+      "hasLearnset": true
+    },
+    "gardevoir": {
+      "moves": 80,
+      "inherit": false,
+      "hasLearnset": true
+    },
+    "gengar": {
+      "moves": 76,
+      "inherit": false,
+      "hasLearnset": true
+    },
+    "floetteeternal": {
+      "moves": 41,
+      "inherit": true,
+      "hasLearnset": true
+    },
+    "archaludon": {
+      "moves": 50,
+      "inherit": false,
+      "hasLearnset": true
+    },
+    "basculegion": {
+      "moves": 49,
+      "inherit": false,
+      "hasLearnset": true
+    }
+  },
+  "extractorCommit": "f6882cfcf0f33b6b6188f526fad3ea534291b8c8"
+}
