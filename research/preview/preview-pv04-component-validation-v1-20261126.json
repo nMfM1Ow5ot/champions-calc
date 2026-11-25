@@ -1,0 +1,96 @@
+{
+  "schema": "preview-pv04-independent-component-validation-v1",
+  "date": "2026-11-26",
+  "scope": "Frozen research classifier component evaluation; not production acceptance",
+  "provenance": {
+    "feature_commit": "0470b8d9d09d8a86f60e39bf64823189e43b81d1",
+    "rank_commit": "294fb36be6b9d70aeb62758f2ef9f4f3bda17e80",
+    "previous_record": "ceb8dd8a7600bb9ad1f19b3b5f3d4a8dd5db7f01",
+    "local_source_sha256_verified": [
+      "25f5489c117ed05a921e3e76dd871aa0ae4be1332d68fd521af735b9b9d62076",
+      "60287d3db3aa74d2beb7492461284c60d7beb0e508c1ab1fe085a0c7b64c03a6"
+    ],
+    "reference_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "feature_blob": "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "type_map_blob": "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "palette_blob": "c4ca6c06022f70e6bbf9edc168e7f86b0d6b06a0",
+    "source_image_sha256": "835dba214dfd9223bc9ba7319859e94cffc400cf7338f2478efbb5df8885b6ca",
+    "source_image_dimensions": [
+      1462,
+      1400
+    ],
+    "source": "Previously supplied app-window screenshot, new opponent lineup relative to PV-01/02 development; six panel rectangles manually labeled from screenshot before computing scores. No raw labels or screenshot published.",
+    "reference_overlap": "208/208 templates have source-name metadata; none explicitly match test screenshot name or visible opponent identifier by the checked substrings. Original template image content unavailable; overlap not excluded."
+  },
+  "discovery": {
+    "encrypted_repository_preview_image_count": 8,
+    "encrypted_files_read_or_decrypted": false,
+    "public_fixture_repositories": [
+      "https://github.com/HoshizoraR0905/Pokemon-Champions-Assistant",
+      "https://github.com/SebNotFound/champions-calc"
+    ],
+    "public_image_acquisition": "DNS failure, raw web cache miss, connector binary retrieval empty or rejected; no public fixtures evaluated."
+  },
+  "results": {
+    "self_tests": {
+      "passed": 8,
+      "total": 8
+    },
+    "native_whole_frame_detector": "NOT_APPLICABLE_1920x1080_REQUIRED; detector returned empty on original app screenshot",
+    "manually_supplied_panels": 6,
+    "type_slots": {
+      "correct": 12,
+      "total": 12,
+      "nonempty_correct": 10,
+      "nonempty_total": 10,
+      "empty_correct": 2,
+      "empty_total": 2
+    },
+    "species_appearance_only": {
+      "top1": 3,
+      "top2": 3,
+      "top3": 3,
+      "total": 6
+    },
+    "species_soft_fusion": {
+      "top1": 4,
+      "top2": 5,
+      "top3": 6,
+      "total": 6
+    },
+    "ranking_method": "Unchanged Python feature extraction and type classifier; 284 eligible dictionary entries scored in connector JavaScript with rounded features and fixed penalty 0.25. Full Python dictionary inspect not executed.",
+    "new_recordings": 0,
+    "new_ocr_calls": 0,
+    "new_installations": 0,
+    "user_actions": 0,
+    "confirmed_events": 0
+  },
+  "disposition": {
+    "type_component": "PROMISING_LIMITED_REPLAY",
+    "species_component": "NOT_READY_FOR_AUTOMATIC_CONFIRMATION",
+    "whole_frame_independent_validation": "BLOCKED",
+    "production": "NOT_GRANTED",
+    "reason": "Correct labels present in top 3 for six slots, but two first-ranked species incorrect; manual crop, one frame, potential reference overlap, no calibrated abstention or full dictionary Python end-to-end run. No numerical formal acceptance threshold predeclared for this test."
+  },
+  "todo": [
+    {
+      "id": "PV-01",
+      "status": "COMPLETE_LIMITED"
+    },
+    {
+      "id": "PV-02",
+      "status": "COMPLETE_DEVELOPMENT_WITH_LIMITED_COMPONENT_TEST"
+    },
+    {
+      "id": "PV-03",
+      "status": "PARTIAL",
+      "detail": "Same-type discrimination and form/reference coverage remain unresolved; do not hard-filter uncertain type observations."
+    },
+    {
+      "id": "PV-04",
+      "status": "PARTIAL_BLOCKED",
+      "detail": "Independent component test completed; obtain original 1920x1080 unseen preview frames with reliable reference provenance, run fixed complete pipeline, assess abstention before production acceptance."
+    }
+  ],
+  "privacy": "No raw images, trainer identifiers, team lineups or reference crop coordinates published. Existing production code unchanged."
+}
