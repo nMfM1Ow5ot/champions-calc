@@ -1,0 +1,109 @@
+{
+  "schema": "champions-preview-research-pv01",
+  "scope": "research only; no production change or state confirmation",
+  "date": "2026-11-26",
+  "source": {
+    "code_commit": "0470b8d9d09d8a86f60e39bf64823189e43b81d1",
+    "code_blob": "60a5c75d28d38d3c18a8de478af14bbc46bd90cf",
+    "code_sha256": "25f5489c117ed05a921e3e76dd871aa0ae4be1332d68fd521af735b9b9d62076",
+    "reference_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "reader_blob": "038267041215f0f47e76156acf32ea7d0977a9fd",
+    "features_blob": "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "species_types_blob": "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "type_icons_blob": "c4ca6c06022f70e6bbf9edc168e7f86b0d6b06a0",
+    "batch_sha256": [
+      "2db95b239b07905068a01f7b50fc92ac69b0638a68083bbe7cfd5720c58e29d4",
+      "c461888aef8fbf808bd8fa8fe46bf1f8e7fa0f077d2002707b78b519f0c5feb1"
+    ],
+    "older_image_sha256": "3c1c4321b23e164103a423d4ab6d53e065696a76f2482c8eb7a73de3d3f5293f"
+  },
+  "results": {
+    "geometry": {
+      "positive_images": 4,
+      "detected": 4,
+      "negative_images": 21,
+      "false_positive": 0,
+      "visible_slots": 24,
+      "detected_slots": 24,
+      "old_global_row_threshold_groups_before_split": [
+        5,
+        3,
+        6
+      ],
+      "qualification": "tuned on three images; not held-out. Geometry-only detection, not full scene classification. The original Swift implementation has additional split/fallback logic not tested end-to-end."
+    },
+    "appearance": {
+      "reference_entries": 370,
+      "filtered_entries": 284,
+      "templates_total": 208,
+      "one_frame_six_slots": {
+        "appearance_only_ranks": [
+          1,
+          4,
+          1,
+          11,
+          4,
+          19
+        ],
+        "manual_true_type_ranks": [
+          1,
+          1,
+          1,
+          3,
+          1,
+          1
+        ]
+      },
+      "method": "Python approximate feature extraction; rounded query values ranked via connector against full existing feature dictionary. Non-shiny templates, no gender or full regulation filtering."
+    },
+    "types": {
+      "reference_types": 18,
+      "templates": 322,
+      "baseline_color_central_correct_including_empty": 9,
+      "baseline_cells": 12,
+      "baseline_nonempty_correct": 8,
+      "baseline_nonempty_total": 11,
+      "three_error_cells_combined_color_glyph_first_rank_correct": 0,
+      "adjusted_crop_color_correct_per_frame": [
+        10,
+        10,
+        9
+      ],
+      "adjusted_total": 29,
+      "adjusted_cells": 36,
+      "adjusted_empty_correct": 3,
+      "adjusted_nonempty_correct": 26,
+      "adjusted_nonempty_total": 33,
+      "qualification": "Adjusted coordinates visually fitted; errors shifted rather than eliminated; prior Swift 3x3 search not tested end-to-end. No hard type filter recommended."
+    }
+  },
+  "limitations": [
+    "Two battles, four preview images; three images of one battle share the same six identities; no statistical accuracy claim.",
+    "Reference feature source overlap with test battle not independently excluded; dictionary covers selected entries only and is not verified M-C legality master.",
+    "Approximate Python port not proven numerically equivalent to Swift. Type-assisted result assumes true types supplied manually, not automatic end-to-end recognition.",
+    "No pixel-level ground truth or calibrated rejection threshold, no complete automatic 6-species classification.",
+    "Only code and aggregate records published; no raw screenshots or player/team identifiers."
+  ],
+  "todo": [
+    {
+      "id": "PV-01",
+      "status": "COMPLETE_LIMITED",
+      "task": "geometry and feature baseline"
+    },
+    {
+      "id": "PV-02",
+      "status": "NEXT",
+      "task": "Compare existing full type-icon search, corrected ROI, glyph and multi-frame evidence; retain uncertainty and avoid hard exclusions"
+    },
+    {
+      "id": "PV-03",
+      "status": "PENDING",
+      "task": "Improve sprite segmentation and reference coverage, compare candidate ranks and ambiguity"
+    },
+    {
+      "id": "PV-04",
+      "status": "PENDING",
+      "task": "Freeze and validate on different battles, record unknowns and false positives; no forced uniqueness"
+    }
+  ]
+}
