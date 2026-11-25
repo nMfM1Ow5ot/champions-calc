@@ -1,0 +1,24 @@
+{
+  "schema": "V11-D-stats-types-diff-v1.0",
+  "legacyCommit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+  "masterSha256": "994ce200dbeb2f7fbf1fe8e0bc54b75b3330f318daedf6e7109d87bfac95b43c",
+  "method": "exact normalized ID intersection legacy M-C and component-clear species; stat vector HP/Atk/Def/SpA/SpD/Spe; type order checked separately",
+  "compared": 357,
+  "missing": [
+    "aegislashshield",
+    "floette",
+    "greninjaash",
+    "greninjabond",
+    "pikachualola",
+    "pikachuhoenn",
+    "pikachukalos",
+    "pikachuoriginal",
+    "pikachupartner",
+    "pikachusinnoh",
+    "pikachuunova",
+    "pikachuworld",
+    "qwilfishhisui"
+  ],
+  "statsDiff": [],
+  "typeDiff": []
+}
