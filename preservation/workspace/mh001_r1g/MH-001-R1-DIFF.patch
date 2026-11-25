@@ -1,0 +1,2344 @@
+MH-001-R1 unified diff
+Base: published rev 20261124_1101 (GitHub nMfM1Ow5ot/champions-calc, HEAD at time of writing)
+Target: local working tree after MH-001-R1 stages B/C/C2/E/F/F1 (unpublished)
+
+Notes:
+- bundle.mjs is a generated file and is EXCLUDED from this patch. Pre: 9798fa12f7fc8c34bbd9126dc3aa155cb72db8b6f5ed8e305946ec770a9b21c4, Post: 232893b38abdc914eb2aa76807ccab235e4c2a90202c83a9607f0c6ccda1adfd. Regenerate with: ./node_modules/.bin/esbuild bundle_entry.mjs --bundle --format=esm --outfile=bundle.mjs (rebuild verified byte-identical).
+- core.mjs is unchanged (7be4711d33cbaba3bcbebd4b4e263c1e0f0a0bcefa58d75a47a5ae4da38c506e in both).
+- tests/run_all.sh and tests/run_checks.py are local-only tooling (not in the published repo); their gate-wiring changes are described in MH-001-R1-REPORT.md and their full current contents are in MH-001-R1-SNAPSHOT.zip.
+
+--- a/estimate_engine.mjs
++++ b/estimate_engine.mjs
+@@ -13,6 +13,13 @@
+ 
+ export function createEstimator(deps) {
+   const effSpecies = deps.effSpecies;
++  // 分布計算の差し替え口 (テスト専用、MH-001-R1-C2): deps 経由で任意に
++  // 渡された場合だけ差し替えを使い、未指定なら従来どおり core の
++  // damageDistribution を使う。UI は渡さないため本番動作は不変で、
++  // グローバル・保存データ・環境から有効化する経路は存在しない。
++  // R1-B の事前判定 (multihit 属性 + Parental Bond) はこの口に依存せず、
++  // バックストップ (c) は差し替え後の分布結果に対して従来どおり働く
++  const distFn = deps && typeof deps.damageDistribution === 'function' ? deps.damageDistribution : damageDistribution;
+   // 材料データ (UI 側のグローバルと同名で受ける。候補生成のたびに最新化する)
+   let POKEDB_PARSED = null, USAGE_SETS = null, META_SETS = null, META_SETS_LOADED = false, NAMES = {};
+   let VGC_SETS = null; // data/vgc_pastes.json (VGCPastes の実在型。meta_sets と同じ形式で候補コーパスへ統合する。未提供なら従来動作)
+@@ -41,6 +48,10 @@
+   // 急所の確定がダメージ証拠の処理より後に届いた場合、未是正版の
+   // 寄与を取り除いて急所ありで再評価するために使う
+   let dmgRecords = [], pendingDmgRecord = null, infHistory = {};
++  // 跨ぎ原子性 (MH-001-R1-C): inf の交差適用直前の状態の控え。同一
++  // イベントのベイズ側が計算不能で保留した場合にだけ巻き戻し、それ
++  // 以外の結末では控えは破棄されて inf の更新がそのまま残る
++  let pendingInfStash = null;
+   const deepCopy = o => { try { return structuredClone(o); } catch (e) { try { return JSON.parse(JSON.stringify(o)); } catch (e2) { return o; } } };
+   let teamContextSpecies = null; // 相手チームの種族一覧 (UI が setTeamContext で渡す)
+   // 推論過程ログ (検証用): 更新のたびにスナップショットをキューへ積み、
+@@ -169,29 +180,88 @@
+   const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
+   return [lo, hi];
+ }
+-// ダメージ分布の統一形 (MH-001): core の damageDistribution を推定側の形に
+-// 正規化する。攻撃技は { values, counts, total, min, max, hits, multi }
+-// (values は昇順、質量は counts/total)。単発は total=16 で質量 = 件数/16 と
+-// なり、従来のロール件数の算術と一致する。分布が得られない場合
+-// (error / status) は null を返し、呼び出し側は従来どおり証拠を保留する。
+-// 無効 (immune) は従来の rolls:[0] の挙動を全経路で再現するため、値0に
+-// 質量1の退化分布として返す
++// ダメージ分布の統一形 (MH-001 / MH-001-R1-C): core の damageDistribution
++// を推定側の形に正規化する。計算の成否を明示する表現で返し、成功時は
++// { ok:true, dist } (dist は { values, counts, total, min, max, hits,
++// multi }、values は昇順、質量は counts/total。単発は total=16 で質量 =
++// 件数/16 となり、従来のロール件数の算術と一致する)、失敗時は
++// { ok:false, reason } を返す。失敗には damageDistribution の {error} /
++// {status} のほか、その外側 (toPokemon / buildMove) から伝播する例外も
++// 含め、try/catch で捕捉して計算不能として扱う。確率質量0 (有効な分布で
++// 観測と両立する値が無い) と計算不能は明確に区別され、呼び出し側は不能
++// を0として扱ってはならない。無効 (immune) は従来の rolls:[0] の挙動を
++// 全経路で再現するため、値0に質量1の退化分布として ok で返す
+ function dmgDist(atkSpec, defSpec, moveName, opts) {
+-  const r = damageDistribution(atkSpec, defSpec, moveName, opts);
+-  if (!r || r.error || r.status) return null;
+-  if (r.immune) return { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false };
+-  if (!r.dist) return null;
+-  return { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi };
+-}
+-// 観測述語に一致する確率質量 (0〜1)。ベイズ側は bayesApply へ質量×16 を
+-// 渡す (単発では 16 が2の冪のため算術が厳密で従来の件数と一致し、複数
+-// ヒットでは真の分布の尤度になる)
++  let r;
++  try { r = distFn(atkSpec, defSpec, moveName, opts); }
++  catch (e) { return { ok: false, reason: 'exception' }; }
++  if (!r) return { ok: false, reason: 'no-result' };
++  if (r.error) return { ok: false, reason: 'error' };
++  if (r.status) return { ok: false, reason: 'status' };
++  if (r.immune) return { ok: true, dist: { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false } };
++  if (!r.dist) return { ok: false, reason: 'no-dist' };
++  return { ok: true, dist: { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi } };
++}
++// 観測述語に一致する確率質量 (0〜1)。ok な分布専用で、計算不能を0として
++// 返すことはしない (呼び出し側が ok を確認してから使う)。ベイズ側は
++// bayesApply へ質量×16 を渡す (単発では 16 が2の冪のため算術が厳密で
++// 従来の件数と一致し、複数ヒットでは真の分布の尤度になる)
+ function distMass(dist, pred) {
+-  if (!dist) return 0;
+   let m = 0;
+   for (let j = 0; j < dist.values.length; j++) if (dist.counts[j] > 0 && pred(dist.values[j])) m += dist.counts[j];
+   return m / dist.total;
+ }
++// inf 交差適用の直前に、その種族の交差状態と履歴長とこのイベントの
++// dmgRecord を控える (跨ぎ原子性の巻き戻し用、MH-001-R1-C)
++function stashInfBeforeIntersect(key, species, rec, turn) {
++  const ie = inference.bySpecies[species];
++  const copySet = s => s ? new Set(s) : null;
++  pendingInfStash = { key, species, turn: turn != null ? turn : null, existed: !!ie,
++    entry: ie ? { pairs: { atk: copySet(ie.pairs.atk), spa: copySet(ie.pairs.spa), def: copySet(ie.pairs.def), spd: copySet(ie.pairs.spd), spe: copySet(ie.pairs.spe) }, hpSps: copySet(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++    histLen: infHistory[species] ? infHistory[species].length : 0, rec: rec || null };
++}
++// ベイズ側の計算不能保留に伴う inf 側の巻き戻し (同一イベントの控えが
++// ある場合のみ)。交差状態・履歴・dmgRecord を交差適用前に戻す
++function rollbackInfStash(key) {
++  const st = pendingInfStash;
++  if (!st || st.key !== key) return;
++  pendingInfStash = null;
++  if (st.existed) inference.bySpecies[st.species] = st.entry;
++  else delete inference.bySpecies[st.species];
++  if (infHistory[st.species]) infHistory[st.species].length = st.histLen;
++  if (st.rec) {
++    const ix = dmgRecords.indexOf(st.rec);
++    if (ix >= 0) dmgRecords.splice(ix, 1);
++    if (pendingDmgRecord === st.rec) pendingDmgRecord = null;
++  }
++  pendingOpts = null;
++  dirty = true;
++  // 巻き戻しを推論ログ上で一意に辿れるよう、inf 側へ相殺エントリを残す
++  // (適用済みのスナップショットだけが残り、保留された証拠が適用済みに
++  // 見える状態を避ける。MH-001-R1-C2)
++  logSnapshot(st.species, st.turn, { kind: 'inf', applied: false, reason: 'dist-unavailable-rollback' });
++}
++// 複数ヒット証拠の保留判定 (MH-001-R1-B): ヒット数が観測から一意に
++// 決まらない技・機構のダメージ証拠は、推定に取り込まず保留する。
++// (a) moveData の multihit 属性がある技 (固定数・[2,5] 配列・
++//     multiaccuracy をすべて含む。ヒット数の明示指定 (moveSpec) が
++//     あっても保留する)
++// (b) 攻撃側が おやこあい (Parental Bond) を持ち得る場合 (単発技でも
++//     2回攻撃になり、合計ダメージの分布が単発と異なるため)。種族の
++//     持ち得る特性と、渡された攻撃側 spec 群の特性・メガ種族で判定する
++function speciesCanParentalBond(name) {
++  if (!name) return false;
++  try { const s = gen.species.get(idOf(name)); return !!(s && s.abilities && Object.values(s.abilities).includes('Parental Bond')); } catch (e) { return false; }
++}
++function isSuspendedMultiHit(md, atkSpeciesName, atkSpecs) {
++  if (md && md.multihit != null) return true;
++  for (const sp of atkSpecs || []) {
++    if (!sp) continue;
++    if (sp.ability === 'Parental Bond' || sp.megaAbility === 'Parental Bond') return true;
++    if (speciesCanParentalBond(sp.megaSpecies) || speciesCanParentalBond(sp.species)) return true;
++  }
++  return speciesCanParentalBond(atkSpeciesName);
++}
+ // 可変ヒット技でヒット数の指定 (moveSpec) が無い場合、分布はライブラリ
+ // 既定のヒット数に依存する。その想定を推論ログに残すための判定 (MH-001)
+ function assumedHitsFor(md, opts, dist) {
+@@ -203,16 +273,35 @@
+ function processDamageInf(ev, ctx, optsOverride, collect) {
+   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
+   if (!collect) pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
++  // 別イベントの古い跨ぎ原子性の控えは破棄する (同一イベントの控えは
++  // 後続の processDamageBayes が使うため残す)
++  if (!collect && pendingInfStash && pendingInfStash.key !== ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) pendingInfStash = null;
+   const md = moveData(ev.move);
+-  // 複数ヒット技は合計ダメージの分布 (damageDistribution) で表せるように
+-  // なったため対象外にしない (MH-001 で multihit 項を解除)。変化技・
+-  // 固定ダメージ・ブラックリストは従来どおり対象外
++  // 変化技・固定ダメージ・ブラックリストは従来どおり対象外。複数ヒット
++  // 技は直後の保留ゲート (MH-001-R1-B) で別途遮断する
+   if (!md || md.category === 'Status' || !md.basePower || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
+   // 自分自身へのダメージ (反動など) は攻撃として扱わない (ベイズ側は
+   // processRecoilBayes が持ち物推論の証拠として取り込む)
+   if (ev.atk && ev.atk === ev.def) return;
+   const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
+   const oppIsAtk = labelSide(ev.atk) === 'p2';
++  // 複数ヒット証拠の保留 (MH-001-R1-B): 保留時は pendingOpts を設定せず
++  // dmgRecord も作らないため、ベイズ側も連動して対象外になる
++  if (isSuspendedMultiHit(md, atkSpecies, oppIsAtk ? (ctx.basesAtk || []) : [ctx.myAtk])) {
++    if (!collect) {
++      // てだすけの消費は観測された戦闘状態の遷移であり、証拠の推定への
++      // 採否とは分離する (MH-001-R1-F1): 保留される技も、実戦では
++      // てだすけを消費している。消費の条件は infSideConds と同一
++      // (攻撃側サイドとターンの一致) とし、消費箇所は inf 側のここ
++      // だけに限る (ベイズ側のゲートでは消費しない。消費により
++      // hhTurn は -99 になるため、同一イベントの重複処理でも
++      // 二重消費は起きない)
++      const atkSideKey = labelSide(ev.atk);
++      if (infCtx.hhTurn[atkSideKey] === ev.turn) infCtx.hhTurn[atkSideKey] = -99;
++      logSnapshot(oppIsAtk ? atkSpecies : defSpecies, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'multihit-suspended' });
++    }
++    return;
++  }
+   let target = md.target;
+   if (md.name === 'Expanding Force' && ev.t === 'Psychic') target = 'allAdjacentFoes';
+   let targets = 1;
+@@ -235,6 +324,24 @@
+     dmgRecords.push(pendingDmgRecord);
+     if (dmgRecords.length > 400) dmgRecords.splice(0, dmgRecords.length - 400);
+   }
++  const evKey = ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move;
++  const myRec = (!optsOverride && !collect) ? pendingDmgRecord : null;
++  // 計算不能による証拠全体の保留 (MH-001-R1-C): 必要な分布の一部でも
++  // 計算できなければ、交差適用へ渡さず証拠全体を保留する。この
++  // イベント用に作った dmgRecord を取り除き pendingOpts を下ろすことで
++  // ベイズ側も連動して止まる。collect (crit 再計算) 時は呼び出し側が
++  // 元の履歴を保持できるよう、何も残さずに返る
++  const withholdDistUnavailable = (species) => {
++    if (collect) return;
++    logSnapshot(species, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'dist-unavailable' });
++    if (myRec) {
++      const ix = dmgRecords.indexOf(myRec);
++      if (ix >= 0) dmgRecords.splice(ix, 1);
++      if (pendingDmgRecord === myRec) pendingDmgRecord = null;
++      pendingOpts = null;
++    }
++  };
++  try {
+   if (oppIsAtk) {
+     // 相手の攻撃 -> 自分の被ダメ量から相手の攻撃 (or Body Press は防御) を絞る
+     const statKey = md.name === 'Body Press' ? 'def' : (md.category === 'Physical' ? 'atk' : 'spa');
+@@ -262,16 +369,28 @@
+     const byValue = new Map();
+     for (const row of table[statKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
+     const feasible = new Set();
++    let backstopMulti = false, distUnavailable = false;
+     for (const base of bases) {
+       for (const rows of byValue.values()) {
+         const rep = rows[0];
+         const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
+-        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+-        if (distMass(dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
++        const res = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
++        // 計算不能が1件でもあれば証拠全体を保留する (質量0とは区別する)
++        if (!res.ok) { distUnavailable = true; break; }
++        // 防御的バックストップ (MH-001-R1-B): 分布が複数ヒットだったら
++        // 証拠全体を保留する
++        if (res.dist.multi) { backstopMulti = true; break; }
++        if (distMass(res.dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
+       }
++      if (backstopMulti || distUnavailable) break;
++    }
++    if (distUnavailable) { withholdDistUnavailable(atkSpecies); return; }
++    if (backstopMulti) {
++      if (!collect) logSnapshot(atkSpecies, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'multihit-suspended' });
++      return;
+     }
+     if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
+-    else infIntersect(atkSpecies, statKey, feasible, null);
++    else { stashInfBeforeIntersect(evKey, atkSpecies, myRec, ev.turn); infIntersect(atkSpecies, statKey, feasible, null); }
+   } else {
+     // 自分の攻撃 -> 相手の HP% の減少から相手の HP と防御 (or 特防) を共同で絞る
+     if (typeof ev.pct !== 'number' || ev.pct <= 0) return;
+@@ -286,22 +405,48 @@
+     const byValue = new Map();
+     for (const row of table[defKey]) { if (!byValue.has(row.value)) byValue.set(row.value, []); byValue.get(row.value).push(row); }
+     const feasPairs = new Set(), feasHp = new Set();
++    let backstopMulti = false, distUnavailable = false;
+     for (const base of bases) {
+       for (const rows of byValue.values()) {
+         const rep = rows[0];
+         const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
+-        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+-        if (!dist) continue;
++        const res = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
++        // 計算不能が1件でもあれば証拠全体を保留する。値グループ単位の
++        // 黙ったスキップ (旧 if (!dist) continue) は廃止した
++        if (!res.ok) { distUnavailable = true; break; }
++        // 防御的バックストップ (MH-001-R1-B): 分布が複数ヒットだったら
++        // 証拠全体を保留する
++        if (res.dist.multi) { backstopMulti = true; break; }
+         for (const [spHp, hpVal] of hpBySp) {
+-          if (distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
++          if (distMass(res.dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
+             for (const r of rows) feasPairs.add(r.nature + '|' + r.sp);
+             feasHp.add(spHp);
+           }
+         }
+       }
++      if (backstopMulti || distUnavailable) break;
++    }
++    if (distUnavailable) { withholdDistUnavailable(defSpecies); return; }
++    if (backstopMulti) {
++      if (!collect) logSnapshot(defSpecies, ev.turn, { kind: 'inf', move: md.name, applied: false, reason: 'multihit-suspended' });
++      return;
+     }
+     if (collect) collect.push({ species: defSpecies, statKey: defKey, feasible: feasPairs, hpSps: feasHp });
+-    else infIntersect(defSpecies, defKey, feasPairs, feasHp);
++    else { stashInfBeforeIntersect(evKey, defSpecies, myRec, ev.turn); infIntersect(defSpecies, defKey, feasPairs, feasHp); }
++  }
++  } catch (e) {
++    // 例外時の防御 (MH-001-R1-C2): dmgRecord と pendingOpts を掃除し、
++    // 交差適用まで進んでいた場合は控えで巻き戻してから伝播させる
++    if (!collect) {
++      if (myRec) {
++        const ix = dmgRecords.indexOf(myRec);
++        if (ix >= 0) dmgRecords.splice(ix, 1);
++        if (pendingDmgRecord === myRec) pendingDmgRecord = null;
++      }
++      pendingOpts = null;
++      rollbackInfStash(evKey);
++    }
++    throw e;
+   }
+ }
+ // 【Champions 差分レイヤーの watch 点】ここから moveBracket までの素早さ・
+@@ -1144,7 +1289,20 @@
+   } catch (e) { /* fallthrough */ }
+   return undefined;
+ }
++// 例外時の防御 (MH-001-R1-C2): dmgDist 以外の理由で例外が伝播する場合も、
++// 同一イベントの inf 更新を巻き戻してから伝播させ、控えと部分状態を
++// 残さない。UI 側は呼出ごとに例外を捕捉して対戦を継続するため、部分
++// 状態の残留はそのまま推定の汚染になる
+ function processDamageBayes(ev, ctx, optsOverride, capture) {
++  try { processDamageBayesImpl(ev, ctx, optsOverride, capture); }
++  catch (e) {
++    if (!capture) rollbackInfStash(ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move);
++    throw e;
++  }
++}
++function processDamageBayesImpl(ev, ctx, optsOverride, capture) {
++  // 別イベントの古い跨ぎ原子性の控えは破棄する (capture 中は触らない)
++  if (!capture && pendingInfStash && pendingInfStash.key !== ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move) pendingInfStash = null;
+   // 自分自身へのダメージは攻撃として処理せず、反動の経路へ回す
+   if (ev.atk && ev.atk === ev.def) { if (labelSide(ev.atk) === 'p2') processRecoilBayes(ev); return; }
+   const opts = optsOverride || pendingOpts;
+@@ -1152,6 +1310,28 @@
+   const md = moveData(ev.move);
+   if (!md) return;
+   const atkSpecies = labelSpecies(ev.atk), defSpecies = labelSpecies(ev.def);
++  // 複数ヒット証拠の保留 (MH-001-R1-B): いかなる状態変更 (dmgFlag の
++  // 代入・bayesApply・dmgRecord への記録) より前に遮断する。capture
++  // (crit 再計算) 時は counts を設定せず、保留の印だけを残す
++  {
++    const isOpp = labelSide(ev.atk) === 'p2';
++    const entPeek = isOpp && bayes && bayes.bySpecies ? bayes.bySpecies[atkSpecies] : null;
++    const atkSpecs = isOpp ? [ctx.baseAtk, ...(entPeek ? entPeek.cands : [])] : [ctx.myAtk];
++    if (isSuspendedMultiHit(md, atkSpecies, atkSpecs)) {
++      if (capture) capture.suspended = true;
++      else logSnapshot(isOpp ? atkSpecies : defSpecies, ev.turn, { kind: 'damage', move: md.name, by: isOpp ? 'opp' : 'mine', applied: false, reason: 'multihit-suspended' });
++      return;
++    }
++  }
++  // 計算不能による証拠全体の保留 (MH-001-R1-C): capture 時は印だけを
++  // 残し counts は設定しない。通常時は記録を残したうえで、同一イベント
++  // で inf が確定させた更新を巻き戻す (跨ぎ原子性)
++  const evKey = ev.turn + '|' + ev.atk + '|' + ev.def + '|' + ev.move;
++  const failDistUnavailable = (species, by) => {
++    if (capture) { capture.unavailable = true; return; }
++    logSnapshot(species, ev.turn, { kind: 'damage', move: md.name, by, applied: false, reason: 'dist-unavailable' });
++    rollbackInfStash(evKey);
++  };
+   // crit 後付け是正の再計算 (capture 指定時) では、分布もフラグも変更せず、
+   // 急所ありで計算した場合の counts とフラグ判定だけを capture へ返す。
+   // フラグの作業値は capture.flagIn (是正対象イベント適用前の値) から始める
+@@ -1183,31 +1363,48 @@
+       [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
+     }
+     const matchRoll = hasAmt ? (r => r === ev.amt) : (r => r >= amtLo && r <= amtHi);
+-    const distList = ent.cands.map(c => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
++    const distResults = ent.cands.map(c => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
++    // 計算不能が1件でもあれば、仮説の発生・再計算・bayesApply の前に
++    // 証拠全体を保留する (MH-001-R1-C。質量0とは区別する)
++    if (distResults.some(r => !r.ok)) { failDistUnavailable(atkSpecies, 'opp'); return; }
++    const distList = distResults.map(r => r.dist);
+     let counts = distList.map(dist => distMass(dist, matchRoll) * 16);
++    // 防御的バックストップ (MH-001-R1-B): いずれかの候補の分布が複数
++    // ヒットだったら、フラグ発生・再計算と bayesApply の前に証拠全体を
++    // 保留する
++    if (distList.some(d => d.multi)) {
++      if (capture) capture.suspended = true;
++      else logSnapshot(atkSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'opp', applied: false, reason: 'multihit-suspended' });
++      return;
++    }
+     const trig = { kind: 'damage', move: md.name, by: 'opp', crit: !!ev.crit };
+     if (hasAmt) trig.amt = ev.amt;
+     else { trig.pct = ev.pct; trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi]; }
+-    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
++    { const ah = assumedHitsFor(md, opts, distList[0]); if (ah != null) trig.assumedHits = ah; }
+     if (!counts.some(n => n > 0)) {
+       // 最大超過の判定は、観測と整合する最小の実数で行う (pct のみの
+       // 観測や、とどめの一撃で切り捨てられた観測でも偽陽性にならない)
+       const obsMin = hasAmt ? ev.amt : amtLo;
+-      const over = distList.every(dist => dist && obsMin > dist.max);
++      const over = distList.every(dist => obsMin > dist.max);
+       if (over) {
+         trig.dir = 'over';
+         const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
+-        // 持ち物が判明済みの種族に持ち物仮説は立てない
+-        if (want && !flagWork && !ent.itemKnown) { flagWork = want; if (!capture) ent.dmgFlag = want; trig.dmgFlagSet = want; }
++        // 持ち物が判明済みの種族に持ち物仮説は立てない。フラグの状態への
++        // 反映は、全ての計算が成功した後の確定時点に回す (MH-001-R1-C)
++        if (want && !flagWork && !ent.itemKnown) { flagWork = want; trig.dmgFlagSet = want; }
+       }
+     }
+     const flag = flagWork;
+     if (flag === 'Choice Band' || flag === 'Choice Specs') {
+       if ((flag === 'Choice Band' && md.category === 'Physical') || (flag === 'Choice Specs' && md.category === 'Special')) {
+-        counts = ent.cands.map(c => {
++        const reResults = ent.cands.map(c => {
+           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
+-          return distMass(dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts), matchRoll) * 16;
++          return dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
+         });
++        // 再計算側の計算不能でも証拠全体を保留し、フラグだけが変更された
++        // 状態を残さない (MH-001-R1-C)
++        if (reResults.some(r => !r.ok)) { failDistUnavailable(atkSpecies, 'opp'); return; }
++        counts = reResults.map(r => distMass(r.dist, matchRoll) * 16);
+         trig.dmgFlag = flag;
+       }
+     }
+@@ -1220,6 +1417,9 @@
+       pendingDmgRecord.bayesCtx = deepCopy(ctx); // ベイズ側の文脈は inf 側と形が違うため別に控える
+       pendingDmgRecord.open = false;
+     }
++    // 確定: 新規の仮説フラグは、全ての計算が成功したこの時点で初めて
++    // 状態へ反映する
++    if (trig.dmgFlagSet) ent.dmgFlag = trig.dmgFlagSet;
+     logTrigger = { turn: ev.turn, trig };
+     bayesApply(ent, counts, true);
+   } else {
+@@ -1231,15 +1431,27 @@
+     if (!ent || !atkSpec || !base) { if (!capture) logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, applied: false, reason: 'no-base' }); return; }
+     const flagIn = ent.dmgFlag;
+     let flagWork = capture ? capture.flagIn : flagIn;
+-    const pctCounts = (c, dist) => {
++    // pctCounts は「hp 値なし／分布が計算不能」を尤度0と同一視せず、
++    // 呼び出し側が検出できるよう null を返す (MH-001-R1-C)
++    const pctCounts = (c, res) => {
+       const hpVal = c.values.hp;
+-      if (!hpVal || !dist) return 0;
+-      return distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
++      if (!hpVal || !res || !res.ok) return null;
++      return distMass(res.dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
+     };
+-    const distList = ent.cands.map(c => c.values.hp ? dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts) : null);
+-    let counts = ent.cands.map((c, i) => pctCounts(c, distList[i]));
++    const distResults = ent.cands.map(c => dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts));
++    let counts = ent.cands.map((c, i) => pctCounts(c, distResults[i]));
++    // 計算不能が1件でもあれば、仮説の発生・再計算・bayesApply の前に
++    // 証拠全体を保留する (MH-001-R1-C。質量0とは区別する)
++    if (distResults.some(r => !r.ok) || counts.some(n => n === null)) { failDistUnavailable(defSpecies, 'mine'); return; }
++    const distList = distResults.map(r => r.dist);
++    // 防御的バックストップ (MH-001-R1-B): 相手方向と同じ
++    if (distList.some(d => d.multi)) {
++      if (capture) capture.suspended = true;
++      else logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', applied: false, reason: 'multihit-suspended' });
++      return;
++    }
+     const trig = { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit };
+-    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
++    { const ah = assumedHitsFor(md, opts, distList[0]); if (ah != null) trig.assumedHits = ah; }
+     if (!counts.some(n => n > 0)) {
+       // とどめの一撃では観測 pct が残り HP で頭打ちになり、実際のロールは
+       // それ以上だった可能性がある (下限の観測)。「全候補の最小ロール
+@@ -1249,22 +1461,27 @@
+       const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
+       const under = !ko && ent.cands.every((c, i) => {
+         const dist = distList[i];
+-        if (!dist || !c.values.hp) return false;
++        if (!c.values.hp) return false;
+         return ev.pct < Math.min(...dist.values.map(r => Math.floor(r / c.values.hp * 100)));
+       });
+       if (under) {
+         trig.dir = 'under';
+         // 持ち物が判明済みの種族に持ち物仮説は立てない (同 seq34:
+-        // Eject Button がハード判明済みの Sableye にフラグが立った)
+-        if (md.category === 'Special' && !flagWork && !ent.itemKnown) { flagWork = 'Assault Vest'; if (!capture) ent.dmgFlag = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
++        // Eject Button がハード判明済みの Sableye にフラグが立った)。
++        // フラグの状態への反映は確定時点に回す (MH-001-R1-C)
++        if (md.category === 'Special' && !flagWork && !ent.itemKnown) { flagWork = 'Assault Vest'; trig.dmgFlagSet = 'Assault Vest'; }
+       }
+     }
+     if (flagWork === 'Assault Vest' && md.category === 'Special') {
+-      counts = ent.cands.map(c => {
+-        if (!c.values.hp) return 0;
++      const reResults = ent.cands.map(c => {
+         const cc = isMegaStoneItem(c.item) ? c : { ...c, item: 'Assault Vest' };
+-        return pctCounts(c, dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts));
++        return dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
+       });
++      const reCounts = ent.cands.map((c, i) => pctCounts(c, reResults[i]));
++      // 再計算側の計算不能でも証拠全体を保留し、フラグだけが変更された
++      // 状態を残さない (MH-001-R1-C)
++      if (reResults.some(r => !r.ok) || reCounts.some(n => n === null)) { failDistUnavailable(defSpecies, 'mine'); return; }
++      counts = reCounts;
+       trig.dmgFlag = 'Assault Vest';
+     }
+     // 棄却理由の記録 (by opp 側と同じ)
+@@ -1275,6 +1492,9 @@
+       pendingDmgRecord.bayesCtx = deepCopy(ctx);
+       pendingDmgRecord.open = false;
+     }
++    // 確定: 新規の仮説フラグは、全ての計算が成功したこの時点で初めて
++    // 状態へ反映する
++    if (trig.dmgFlagSet) ent.dmgFlag = trig.dmgFlagSet;
+     logTrigger = { turn: ev.turn, trig };
+     bayesApply(ent, counts, true);
+   }
+@@ -1306,6 +1526,14 @@
+   const infCtx = rec.ctx || io;
+   const collect = [];
+   processDamageInf(rec.ev, infCtx, rec.opts, collect);
++  // 差し替え前の履歴エントリを控える。ベイズ側の再計算が保留になった
++  // 場合に、inf 側の差し替えも巻き戻して元の履歴を保持するため
++  // (MH-001-R1-C)
++  const infStash = [];
++  for (const ref of rec.infRefs) {
++    const hist = infHistory[ref.species];
++    if (hist && hist[ref.idx]) infStash.push({ species: ref.species, idx: ref.idx, prev: { statKey: hist[ref.idx].statKey, feasible: hist[ref.idx].feasible ? new Set(hist[ref.idx].feasible) : hist[ref.idx].feasible, hpSps: hist[ref.idx].hpSps ? new Set(hist[ref.idx].hpSps) : null } });
++  }
+   const touched = new Set();
+   for (const ref of rec.infRefs) {
+     const hist = infHistory[ref.species];
+@@ -1316,7 +1544,7 @@
+     }
+   }
+   for (const sp of touched) rebuildInfState(sp);
+-  pendingCritRec = { rec, key, infTouched: touched.size > 0 };
++  pendingCritRec = { rec, key, infTouched: touched.size > 0, infStash };
+ }
+ function processCritBayes(ev, io) {
+   const pc = pendingCritRec;
+@@ -1325,27 +1553,55 @@
+   pendingCritRec = null;
+   const rec = pc.rec;
+   const logSpecies = rec.by === 'opp' ? rec.atkSpecies : rec.defSpecies;
++  // inf 履歴の差し替えを巻き戻す (保留時・例外時で共用)
++  const restoreCritInfStash = () => {
++    if (!pc.infStash || !pc.infStash.length) return;
++    const touchedSp = new Set();
++    for (const s of pc.infStash) { const hist = infHistory[s.species]; if (hist) { hist[s.idx] = s.prev; touchedSp.add(s.species); } }
++    for (const sp of touchedSp) rebuildInfState(sp);
++  };
+   let flagCleared = null, bayesPatched = false;
+   if (rec.bayes) {
+     const ent = bayes && bayes.bySpecies ? bayes.bySpecies[rec.bayes.entSpecies] : null;
+     if (ent && ent.cands.length === rec.bayes.counts.length) {
+       const bayesCtx = rec.bayesCtx || rec.ctx || io;
+-      const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null };
+-      processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
+-      if (capture.counts) {
+-        if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) { ent.dmgFlag = null; flagCleared = rec.bayes.flagSet; }
+-        else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
+-        if (rec.bayes.applied) {
+-          let tot = 0;
+-          ent.cands.forEach((c, i) => { if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+-          if (tot > 0) for (const c of ent.cands) c.post /= tot;
+-        } else if (capture.counts.some(n => n > 0)) {
+-          let tot = 0;
+-          ent.cands.forEach((c, i) => { c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
+-          if (tot > 0) { for (const c of ent.cands) c.post /= tot; ent.used++; }
++      // 例外時の防御 (MH-001-R1-C2): 再計算・是正の途中で例外が出た
++      // 場合に、適用済みの有効な状態 (事後・フラグ・inf 履歴) を復元
++      // してから伝播させる
++      const postSnap = { posts: ent.cands.map(c => c.post), dmgFlag: ent.dmgFlag, used: ent.used };
++      try {
++        const capture = { flagIn: rec.bayes.flagIn, counts: null, flagSet: null, suspended: false, unavailable: false };
++        processDamageBayes(rec.ev, bayesCtx, rec.opts, capture);
++        // 再計算が保留された場合 (複数ヒット保留 MH-001-R1-B / 計算不能
++        // MH-001-R1-C) は counts が欠落する。これを「全候補0」と誤認して
++        // 割り戻し・掛け直しをせず、inf 側の差し替えも巻き戻して、既存の
++        // 有効な状態 (履歴・事後・フラグ) をすべて保持する
++        if (capture.suspended || capture.unavailable) {
++          restoreCritInfStash();
++          logSnapshot(logSpecies, ev.turn, { kind: 'critPatch', move: ev.move, applied: false, reason: capture.unavailable ? 'dist-unavailable' : 'multihit-suspended', bayes: false, inf: false });
++          return;
+         }
+-        bayesPatched = true;
+-        dirty = true;
++        if (capture.counts && !capture.suspended && !capture.unavailable) {
++          if (rec.bayes.flagSet && ent.dmgFlag === rec.bayes.flagSet && !capture.flagSet) { ent.dmgFlag = null; flagCleared = rec.bayes.flagSet; }
++          else if (capture.flagSet && !ent.dmgFlag) ent.dmgFlag = capture.flagSet;
++          if (rec.bayes.applied) {
++            let tot = 0;
++            ent.cands.forEach((c, i) => { if (c.post > 0) c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR) / Math.max(rec.bayes.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
++            if (tot > 0) for (const c of ent.cands) c.post /= tot;
++          } else if (capture.counts.some(n => n > 0)) {
++            let tot = 0;
++            ent.cands.forEach((c, i) => { c.post *= Math.max(capture.counts[i] / 16, BAYES_FLOOR); tot += c.post; });
++            if (tot > 0) { for (const c of ent.cands) c.post /= tot; ent.used++; }
++          }
++          bayesPatched = true;
++          dirty = true;
++        }
++      } catch (e) {
++        ent.cands.forEach((c, i) => { c.post = postSnap.posts[i]; });
++        ent.dmgFlag = postSnap.dmgFlag;
++        ent.used = postSnap.used;
++        restoreCritInfStash();
++        throw e;
+       }
+     }
+   }
+@@ -1765,18 +2021,27 @@
+     atkSide: { isHelpingHand: !!args.side[atkKey === 'mine' ? 'mine' : 'opp'].hand },
+     defSide: { isLightScreen: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].light, isReflect: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].reflect, isAuroraVeil: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].veil, isFriendGuard: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].guard, isSR: !!args.side[defKey === 'mine' ? 'mine' : 'opp'].rock, spikes: args.side[defKey === 'mine' ? 'mine' : 'opp'].spikes || 0 },
+   });
++  // 表示保留が確定した技 (方向 dst ごと)。信用集合内の候補のうち1件
++  // でも分布が計算不能な技は、部分的な候補集合から算出した集計値を
++  // 全候補についての値として返さず、{ unavailable: true } で返す
++  // (MH-001-R1-E の契約。cover 外の候補は判定対象に含めない)
++  const failedByDst = new Map();
+   const run = (atkSpec, defSpec, defHp, moves, crit, atkKey, defKey, singleFn, dst, w) => {
+     const sc = sideFor(atkKey, defKey);
++    let failed = failedByDst.get(dst);
++    if (!failed) { failed = new Set(); failedByDst.set(dst, failed); }
+     (moves || []).forEach((mv, mi) => {
+       if (!mv || !defHp) return;
++      if (failed.has(mi)) return;
+       // Zワザ/ダイマックス技は変換トグル経由でのみ正しい威力になる機構技で、
+       // 候補横断の計算には変換を入れない (計算側の方針)。ダミー威力の幅を
+       // 出さないよう対象外にする (moveData の isZ / isMax で判定)
+       const md = moveData(mv);
+       if (md && (md.isZ || md.isMax)) return;
+-      const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), mv,
++      const distRes = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), mv,
+         { ...F, gameType: singleFn(mv) ? 'Singles' : 'Doubles', crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide });
+-      if (!dist) return;
++      if (!distRes.ok) { failed.add(mi); dst[mi] = { unavailable: true }; return; }
++      const dist = distRes.dist;
+       const lo = dist.min / defHp * 100, hi = dist.max / defHp * 100;
+       // 事後確率で重み付けした期待値 (包絡と同じ信用集合内での期待値)。
+       // exp = 期待ダメージ% (分布の質量で重み付けした平均。単発では従来の
+@@ -1810,7 +2075,7 @@
+ 
+   function reset() {
+     inference = { seen: 0, bySpecies: {} };
+-    dmgRecords = []; pendingDmgRecord = null; infHistory = {}; pendingCritRec = null;
++    dmgRecords = []; pendingDmgRecord = null; infHistory = {}; pendingCritRec = null; pendingInfStash = null;
+     infCtx = { tailwindTurn: { p1: -99, p2: -99 }, tailwindSetTw: { p1: false, p2: false }, screenTurn: { p1: {}, p2: {} }, trickRoomTurn: -99, trickSetState: false, hhTurn: { p1: -99, p2: -99 }, abBatches: {}, abPairs: new Set() };
+     infLastMove = null;
+     dirty = false;
+--- a/ui.html
++++ b/ui.html
+@@ -294,6 +294,8 @@
+ .dmgwrap:hover .rolltip{opacity:1; visibility:visible}
+ .rolltip-alt{display:block; margin-top:.35rem; border-top:1px solid rgba(255,255,255,.25); padding-top:.35rem}
+ .rolltip-altlab{font-weight:600}
++.rolltip-note{display:block; margin-bottom:.35rem; border-bottom:1px solid rgba(255,255,255,.25); padding-bottom:.35rem}
++.dmgbtn .hitnote{font-size:.72rem; color:var(--faint); white-space:nowrap; margin-left:.3rem}
+ .dmgbtn:hover{background:rgba(255,255,255,.06)}
+ .dmgbtn.copied{color:var(--green)}
+ .dmgbtn .candsub{display:block; font-size:.72rem; color:var(--blue); white-space:nowrap}
+@@ -2455,12 +2457,27 @@
+         // 吹き出しの下段には反対の急所状態の範囲と内訳も併記する
+         const distTip = dist => dist.values.map((v, vi) => `${v}: ${Math.round(dist.counts[vi] / dist.total * 1000) / 10}%`).join(', ');
+         if (r.dist) {
+-          let tip = distTip(r.dist);
++          // 複数ヒット表示の安全化 (MH-001-R1-E): 使ったヒット数とその由来
++          // (利用者の指定 / 技の固定ヒット数 / ライブラリ既定の想定 /
++          // おやこあいによる追加ヒット) を明示し、想定を観測済みの事実の
++          // ように見せない。分布の仮定と型推定への利用停止も併記する
++          const hitsUsed = Math.max(1, Math.round(Math.log(r.dist.total) / Math.log(16)));
++          const mdMH = spec.moves[mi] ? moveData(spec.moves[mi]) : null;
++          const userHits = spec.moveSpec && spec.moveSpec[mi] != null && mdMH && mdMH.spec && mdMH.spec.kind === 'hits' ? Number(spec.moveSpec[mi]) : null;
++          const effAbMH = spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability;
++          let hitHead, hitMark;
++          if (userHits != null) { hitHead = `${hitsUsed}ヒットで計算しています（ヒット数は利用者が指定したものです）`; hitMark = `（${hitsUsed}ヒット指定）`; }
++          else if ((!mdMH || mdMH.multihit == null) && effAbMH === 'Parental Bond') { hitHead = `おやこあいにより${hitsUsed}ヒットとして計算しています`; hitMark = `（おやこあい${hitsUsed}ヒット）`; }
++          else if (mdMH && typeof mdMH.multihit === 'number') { hitHead = `${hitsUsed}ヒットで計算しています（技の固定ヒット数です）`; hitMark = `（${hitsUsed}ヒット固定）`; }
++          else if (mdMH && Array.isArray(mdMH.multihit)) { hitHead = `${hitsUsed}ヒットと想定して計算しています（実際のヒット数は未観測で、ライブラリ既定の想定です）`; hitMark = `（${hitsUsed}ヒット想定）`; }
++          else { hitHead = `${hitsUsed}ヒットで計算しています`; hitMark = `（${hitsUsed}ヒット）`; }
++          const mhNote = `${hitHead}。仮定：ヒットごとの乱数は独立として計算しています。ヒットごとの急所・命中判定や、途中で相手がひんしになることによる終了は計算に含めていません。この技のダメージは型推定に利用していません。`;
++          let tip = `<span class="rolltip-note">${mhNote}</span>` + distTip(r.dist);
+           if (r.alt && r.alt.dist && (r.alt.min !== r.min || r.alt.max !== r.max)) {
+             const altLbl = ui.crit[side] ? '通常' : '急所';
+             tip += `<span class="rolltip-alt"><span class="rolltip-altlab">${altLbl} ${fmtPct(r.alt.minPct)} – ${fmtPct(r.alt.maxPct)}%</span><br>${distTip(r.alt.dist)}</span>`;
+           }
+-          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span>`;
++          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span><span class="hitnote">${hitMark}</span>`;
+         }
+         else if (r.rolls && r.rolls.length > 1) {
+           let tip = r.rolls.join(', ');
+@@ -2485,10 +2502,15 @@
+       if (!r.immune && r.desc) copyText = r.descFull || r.desc;
+       else if (r.immune) copyText = `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: IMMUNE`;
+     }
+-    // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す
++    // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す。
++    // 候補の中に計算不能なものがある場合は集計値が返らず unavailable になる
++    // (MH-001-R1-E)。その場合は数値を出さず、表示保留であることを示す
+     let sub = '';
+     const cr = lastCalc && lastCalc.candRanges ? lastCalc.candRanges[side][mi] : null;
+-    if (r && cr && !r.status && !r.immune && !r.error && (cr.lo < r.minPct - 0.05 || cr.hi > r.maxPct + 0.05)) {
++    if (r && cr && cr.unavailable && !r.status && !r.immune && !r.error) {
++      sub = `<span class="candsub" title="型候補の中に計算できない候補があるため、候補範囲の集計を表示保留しています">候補範囲は計算不能のため表示保留</span>`;
++    }
++    else if (r && cr && !r.status && !r.immune && !r.error && (cr.lo < r.minPct - 0.05 || cr.hi > r.maxPct + 0.05)) {
+       sub = `<span class="candsub" title="相手の型候補（事後確率 ${Math.round((lastCalc.candRanges.acc || 0) * 100)}% 分）を通じたダメージ範囲">候補 ${fmtPct(cr.lo)}–${fmtPct(cr.hi)}%</span>`;
+     }
+     return `<div class="mvcell">${ddHTML(`move:${side}:${mi}`)}${zBtn}</div>
+--- /dev/null
++++ b/tests/test_multihit_gate.mjs
+@@ -0,0 +1,166 @@
++// MH-001-R1-B: 複数ヒット証拠の推定利用停止 (保留ゲート) の検証。
++// 候補集合・事後分布・仮説フラグが保留対象の証拠で変わらないこと、
++// 保留理由が推論ログに残ること、単発技の挙動が従来と一致することを見る。
++// 実行: node tests/test_multihit_gate.mjs (最後に ALL PASS と出す)
++import { pathToFileURL } from 'node:url';
++import { createHash } from 'node:crypto';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
++const core = await import(pathToFileURL(ROOT + '/core.mjs').href);
++const eng = await import(pathToFileURL(ROOT + '/estimate_engine.mjs').href);
++const { gen, statTable, damageRolls, damageDistribution, withCurHP } = core;
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++
++const J = f => JSON.parse(fs.readFileSync(ROOT + '/data/' + f, 'utf8'));
++const POKEDB_PARSED = J('pokedb_parsed.json');
++const USAGE_SETS = J('usage_sets.json');
++const META_SETS = J('meta_sets.json');
++const VGC_SETS = J('vgc_pastes.json');
++const SPECIES_MOVES = J('species_moves.json');
++const namesJa = J('names_ja.json');
++const itemsJa = J('items_ja.json');
++const moveJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.moves || {})) { const m = gen.moves.get(id); if (m) moveJa2en[ja] = m.name; }
++const abilityJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.abilities || {})) { const a = gen.abilities.get(id); if (a) abilityJa2en[ja] = a.name; }
++const NAMES = { ...namesJa, _itemJa2en: { ...itemsJa }, _moveJa2en: moveJa2en, _abilityJa2en: abilityJa2en };
++const effSpecies = spec => (spec && spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
++const est = eng.createEstimator({ effSpecies, getData: () => ({ POKEDB_PARSED, USAGE_SETS, META_SETS, META_SETS_LOADED: true, NAMES, VGC_SETS, SPECIES_MOVES }) });
++
++const blank = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
++const boosts0 = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
++const spec = (species, nature, sp, extra = {}) => ({ species, nature, sp: { ...blank, ...sp }, item: '', ability: '', moves: [], boosts: { ...boosts0 }, status: '', curHPPercent: 100, mega: false, ...extra });
++
++// 推定状態の指紋: 候補集合 (同定情報)・事後分布・仮説フラグ・使用回数と、
++// inf 側の交差状態 (feasible 集合) をまとめて比較可能にする
++function fingerprint(species) {
++  const ent = est._debug().bayes.bySpecies[species];
++  const ie = est._debug().inference.bySpecies[species];
++  const ser = v => v instanceof Set ? [...v].sort() : v;
++  return JSON.stringify({
++    cands: ent ? ent.cands.map(c => [c.nature, c.item, c.ability, JSON.stringify(c.sp), c.post]) : null,
++    dmgFlag: ent ? ent.dmgFlag : null, speFlag: ent ? ent.speFlag : null, used: ent ? ent.used : null,
++    inf: ie ? { pairs: Object.fromEntries(Object.entries(ie.pairs).map(([k, v]) => [k, ser(v)])), hpSps: ser(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++  });
++}
++const suspendedRec = log => log.find(r => r.trigger && r.trigger.reason === 'multihit-suspended');
++
++const myBlastoise = spec('Blastoise', 'Modest', { hp: 2, spa: 32, spe: 32 }, { item: 'Blastoisinite', ability: 'Rain Dish' });
++const myVenusaur = spec('Venusaur', 'Modest', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'], boosts: { ...boosts0, def: 2 } });
++
++// ---- 1. 可変ヒット技 (相手の Bullet Seed, 実数観測) で状態が変わらない ----
++{
++  est.reset();
++  const base = spec('Rillaboom', 'Adamant', {});
++  est.entry('Rillaboom');
++  const before = fingerprint('Rillaboom');
++  const ev = { turn: 1, atk: 'p2: Rillaboom', def: 'p1: Blastoise', move: 'Bullet Seed', amt: 100, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myBlastoise, basesAtk: [base] });
++  est.processDamageBayes(ev, { myDef: myBlastoise, baseAtk: base });
++  const log = est.takeInferenceLog();
++  check('1: Bullet Seed で推定状態が変わらない', fingerprint('Rillaboom') === before);
++  check('1: 保留理由が推論ログに残る', !!suspendedRec(log), JSON.stringify(log.map(r => r.trigger)));
++  // ---- 3. 急所イベント経由でも遮断が維持される (dmgRecord 自体が無い) ----
++  est.processCritInf({ turn: 1, atk: 'p2: Rillaboom', def: 'p1: Blastoise', move: 'Bullet Seed' }, {});
++  est.processCritBayes({ turn: 1, atk: 'p2: Rillaboom', def: 'p1: Blastoise', move: 'Bullet Seed' }, {});
++  const log2 = est.takeInferenceLog();
++  check('3: crit 経由でも推定状態が変わらない', fingerprint('Rillaboom') === before);
++  check('3: critPatch は no-match で終わる (記録が存在しない)', log2.some(r => r.trigger.kind === 'critPatch' && r.trigger.applied === false && r.trigger.reason === 'no-match'), JSON.stringify(log2.map(r => r.trigger)));
++  // ---- 4. 全候補の最大超過の複数ヒット観測でも dmgFlag が発生しない ----
++  const evBig = { turn: 2, atk: 'p2: Rillaboom', def: 'p1: Blastoise', move: 'Bullet Seed', amt: 9999, crit: false, w: '', t: '' };
++  est.processDamageInf(evBig, { myDef: myBlastoise, basesAtk: [base] });
++  est.processDamageBayes(evBig, { myDef: myBlastoise, baseAtk: base });
++  const ent = est._debug().bayes.bySpecies['Rillaboom'];
++  check('4: 最大超過の複数ヒット観測でも dmgFlag が発生しない', !ent.dmgFlag && fingerprint('Rillaboom') === before);
++}
++
++// ---- 2a. 固定ヒット技 (Double Kick) でも保留される ----
++{
++  est.reset();
++  const base = spec('Hitmonlee', 'Adamant', {});
++  est.entry('Hitmonlee');
++  const before = fingerprint('Hitmonlee');
++  const ev = { turn: 1, atk: 'p2: Hitmonlee', def: 'p1: Blastoise', move: 'Double Kick', amt: 60, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myBlastoise, basesAtk: [base] });
++  est.processDamageBayes(ev, { myDef: myBlastoise, baseAtk: base });
++  check('2a: Double Kick で推定状態が変わらない', fingerprint('Hitmonlee') === before);
++  check('2a: 保留理由が推論ログに残る', !!suspendedRec(est.takeInferenceLog()));
++}
++
++// ---- 2b. moveSpec 明示の呼び出しでも保留される ----
++{
++  est.reset();
++  const base = spec('Rillaboom', 'Adamant', {});
++  est.entry('Rillaboom');
++  const before = fingerprint('Rillaboom');
++  const ev = { turn: 1, atk: 'p2: Rillaboom', def: 'p1: Blastoise', move: 'Bullet Seed', amt: 100, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myBlastoise, basesAtk: [base] }, { moveSpec: 5, gameType: 'Singles' });
++  est.processDamageBayes(ev, { myDef: myBlastoise, baseAtk: base }, { moveSpec: 5, gameType: 'Singles' });
++  const log = est.takeInferenceLog();
++  check('2b: moveSpec 明示でも推定状態が変わらない', fingerprint('Rillaboom') === before);
++  check('2b: ベイズ側でも保留が記録される', log.some(r => r.trigger.kind === 'damage' && r.trigger.reason === 'multihit-suspended'), JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- 2c. Parental Bond の攻撃側では単発技 (Body Slam) でも保留される ----
++{
++  // 前提確認: メガカンガルーの Body Slam は分布が multi=true になる
++  const megaK = spec('Kangaskhan', 'Adamant', { atk: 32 }, { ability: 'Parental Bond', mega: true, megaSpecies: 'Kangaskhan-Mega' });
++  const dd = damageDistribution(withCurHP(megaK), withCurHP(myBlastoise), 'Body Slam', { gameType: 'Singles' });
++  check('2c 前提: Parental Bond の単発技は分布が multi=true', dd.multi === true && dd.hits === 2, JSON.stringify({ multi: dd.multi, hits: dd.hits }));
++  est.reset();
++  const base = spec('Kangaskhan', 'Adamant', {}, { ability: 'Parental Bond', mega: true, megaSpecies: 'Kangaskhan-Mega' });
++  est.entry('Kangaskhan');
++  const before = fingerprint('Kangaskhan');
++  const ev = { turn: 1, atk: 'p2: Kangaskhan', def: 'p1: Blastoise', move: 'Body Slam', amt: 50, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myBlastoise, basesAtk: [base] });
++  est.processDamageBayes(ev, { myDef: myBlastoise, baseAtk: base });
++  check('2c: Parental Bond の Body Slam で推定状態が変わらない', fingerprint('Kangaskhan') === before);
++  check('2c: 保留理由が推論ログに残る', !!suspendedRec(est.takeInferenceLog()));
++}
++
++// ---- 1b. 自分方向の複数ヒット技 (Triple Axel) でも保留される ----
++{
++  est.reset();
++  const myWeavile = spec('Weavile', 'Adamant', { atk: 32 }, { ability: 'Pressure', moves: ['Triple Axel'] });
++  const base = spec('Garchomp', 'Hardy', {});
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const ev = { turn: 1, atk: 'p1: Weavile', def: 'p2: Garchomp', move: 'Triple Axel', pct: 40, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myAtk: myWeavile, basesDef: [base] });
++  est.processDamageBayes(ev, { myAtk: myWeavile, baseDef: base });
++  check('1b: 自分方向の Triple Axel で推定状態が変わらない', fingerprint('Garchomp') === before);
++  check('1b: 保留理由が推論ログに残る', !!suspendedRec(est.takeInferenceLog()));
++}
++
++// ---- 5. 単発技の回帰: 固定場面ハッシュが MH-001 検収時と一致する ----
++{
++  est.reset();
++  const truthChomp = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide', 'Earthquake'] });
++  const baseChomp = spec('Garchomp', 'Adamant', {});
++  const ent = est.entry('Garchomp');
++  const rolls1 = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls;
++  const amt = rolls1[10];
++  const ev1 = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt, crit: false };
++  est.processDamageInf(ev1, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev1, { myDef: myVenusaur, baseAtk: baseChomp });
++  const truthHp = statTable('Garchomp').hp.find(r => r.nature === 'Adamant' && r.sp === 0).value;
++  const rolls2 = damageRolls(withCurHP(myVenusaur), withCurHP(truthChomp), 'Earth Power', { gameType: 'Singles' }).rolls;
++  const pct = Math.round(rolls2[7] / truthHp * 100);
++  const ev2 = { turn: 1, atk: 'p1: Venusaur', def: 'p2: Garchomp', move: 'Earth Power', pct, crit: false };
++  est.processDamageInf(ev2, { myAtk: myVenusaur, basesDef: [baseChomp] });
++  est.processDamageBayes(ev2, { myAtk: myVenusaur, baseDef: baseChomp });
++  const canon = JSON.stringify({ posts: ent.cands.map(c => c.post), log: est.takeInferenceLog().map(r => r.trigger) });
++  const hash = createHash('sha256').update(canon).digest('hex');
++  check('5: 単発固定場面のハッシュが一致', hash === '688c01d9a1bfc2d9a58b564c046756b02a96e7c2e3ebd6b2638f998232e8c4f0', hash);
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
+--- /dev/null
++++ b/tests/test_dist_unavailable.mjs
+@@ -0,0 +1,259 @@
++// MH-001-R1-C: 計算不能 (分布が得られない) と確率質量0 の分離・原子的
++// 更新の検証。計算不能が一部でも混ざれば証拠全体が保留され、候補集合・
++// 事後分布・仮説フラグ・inf 交差状態が更新前に戻ること、質量0 は従来の
++// 推論規則どおり処理されることを、実際の推定経路で確認する。
++// 実行: node tests/test_dist_unavailable.mjs (最後に ALL PASS と出す)
++import { pathToFileURL } from 'node:url';
++import { createHash } from 'node:crypto';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
++const core = await import(pathToFileURL(ROOT + '/core.mjs').href);
++const eng = await import(pathToFileURL(ROOT + '/estimate_engine.mjs').href);
++const { gen, statTable, damageRolls, withCurHP } = core;
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++
++const J = f => JSON.parse(fs.readFileSync(ROOT + '/data/' + f, 'utf8'));
++const POKEDB_PARSED = J('pokedb_parsed.json');
++const USAGE_SETS = J('usage_sets.json');
++const META_SETS = J('meta_sets.json');
++const VGC_SETS = J('vgc_pastes.json');
++const SPECIES_MOVES = J('species_moves.json');
++const namesJa = J('names_ja.json');
++const itemsJa = J('items_ja.json');
++const moveJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.moves || {})) { const m = gen.moves.get(id); if (m) moveJa2en[ja] = m.name; }
++const abilityJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.abilities || {})) { const a = gen.abilities.get(id); if (a) abilityJa2en[ja] = a.name; }
++const NAMES = { ...namesJa, _itemJa2en: { ...itemsJa }, _moveJa2en: moveJa2en, _abilityJa2en: abilityJa2en };
++const effSpecies = spec => (spec && spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
++const est = eng.createEstimator({ effSpecies, getData: () => ({ POKEDB_PARSED, USAGE_SETS, META_SETS, META_SETS_LOADED: true, NAMES, VGC_SETS, SPECIES_MOVES }) });
++
++const blank = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
++const boosts0 = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
++const spec = (species, nature, sp, extra = {}) => ({ species, nature, sp: { ...blank, ...sp }, item: '', ability: '', moves: [], boosts: { ...boosts0 }, status: '', curHPPercent: 100, mega: false, ...extra });
++
++function fingerprint(species) {
++  const ent = est._debug().bayes.bySpecies[species];
++  const ie = est._debug().inference.bySpecies[species];
++  const ser = v => v instanceof Set ? [...v].sort() : v;
++  return JSON.stringify({
++    cands: ent ? ent.cands.map(c => [c.nature, c.item, c.ability, JSON.stringify(c.sp), c.post]) : null,
++    dmgFlag: ent ? ent.dmgFlag || null : null, speFlag: ent ? ent.speFlag || null : null, used: ent ? ent.used : null,
++    inf: ie ? { pairs: Object.fromEntries(Object.entries(ie.pairs).map(([k, v]) => [k, ser(v)])), hpSps: ser(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++  });
++}
++const hasRec = (log, kind, reason) => log.some(r => r.trigger && r.trigger.kind === kind && r.trigger.reason === reason);
++
++const myVenusaur = spec('Venusaur', 'Modest', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'], boosts: { ...boosts0, def: 2 } });
++const myBlastoise = spec('Blastoise', 'Modest', { hp: 2, spa: 32, spe: 32 }, { item: 'Blastoisinite', ability: 'Rain Dish' });
++const truthChomp = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide', 'Earthquake'] });
++const baseChomp = spec('Garchomp', 'Adamant', {});
++const bogusBase = spec('Bogusmon', 'Adamant', {});
++const amtRock = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls[10];
++
++// ---- R1-T03 (inf 相手方向): bases の一部が計算不能なら証拠全体を保留 ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp, bogusBase] });
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  const log = est.takeInferenceLog();
++  check('T03 inf-opp: 一部不能で推定状態が変わらない', fingerprint('Garchomp') === before);
++  check('T03 inf-opp: dist-unavailable が推論ログに残る', hasRec(log, 'inf', 'dist-unavailable'), JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- R1-T03 (inf 自分方向): basesDef の一部が計算不能なら保留 ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const truthHp = statTable('Garchomp').hp.find(r => r.nature === 'Adamant' && r.sp === 0).value;
++  const pct = Math.round(damageRolls(withCurHP(myVenusaur), withCurHP(truthChomp), 'Earth Power', { gameType: 'Singles' }).rolls[7] / truthHp * 100);
++  const ev = { turn: 1, atk: 'p1: Venusaur', def: 'p2: Garchomp', move: 'Earth Power', pct, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myAtk: myVenusaur, basesDef: [baseChomp, bogusBase] });
++  est.processDamageBayes(ev, { myAtk: myVenusaur, baseDef: baseChomp });
++  const log = est.takeInferenceLog();
++  check('T03 inf-mine: 一部不能で推定状態が変わらない', fingerprint('Garchomp') === before);
++  check('T03 inf-mine: dist-unavailable が推論ログに残る', hasRec(log, 'inf', 'dist-unavailable'), JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- R1-T03 (bayes 相手方向・跨ぎ原子性): inf は確定し得るが bayes 側の
++// 計算不能で inf ごと巻き戻る ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  const mid = fingerprint('Garchomp');
++  check('T03 bayes-opp 前提: inf 単独では交差状態が進む', mid !== before);
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: bogusBase });
++  const log = est.takeInferenceLog();
++  check('T03 bayes-opp: bayes 不能で inf まで巻き戻り状態が戻る', fingerprint('Garchomp') === before);
++  check('T03 bayes-opp: dist-unavailable が推論ログに残る', hasRec(log, 'damage', 'dist-unavailable'), JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- R1-T03 (bayes 自分方向・跨ぎ原子性) ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const truthHp = statTable('Garchomp').hp.find(r => r.nature === 'Adamant' && r.sp === 0).value;
++  const pct = Math.round(damageRolls(withCurHP(myVenusaur), withCurHP(truthChomp), 'Earth Power', { gameType: 'Singles' }).rolls[7] / truthHp * 100);
++  const ev = { turn: 1, atk: 'p1: Venusaur', def: 'p2: Garchomp', move: 'Earth Power', pct, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myAtk: myVenusaur, basesDef: [baseChomp] });
++  est.processDamageBayes(ev, { myAtk: myVenusaur, baseDef: bogusBase });
++  const log = est.takeInferenceLog();
++  check('T03 bayes-mine: bayes 不能で inf まで巻き戻り状態が戻る', fingerprint('Garchomp') === before);
++  check('T03 bayes-mine: dist-unavailable が推論ログに残る', hasRec(log, 'damage', 'dist-unavailable'), JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- R1-T05: 全候補の計算不能 (防御側 spec が例外を投げる入力) ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const bogusDef = spec('Bogusmon', 'Modest', {});
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: bogusDef, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev, { myDef: bogusDef, baseAtk: baseChomp });
++  const log = est.takeInferenceLog();
++  const ent = est._debug().bayes.bySpecies['Garchomp'];
++  check('T05: 全不能で候補集合・事後・フラグが維持される', fingerprint('Garchomp') === before && ent.cands.length > 0 && !ent.dmgFlag);
++  check('T05: dist-unavailable が推論ログに残る', hasRec(log, 'inf', 'dist-unavailable'), JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- R1-T04a: 質量0 の候補と正の候補が混ざれば従来どおり適用される ----
++{
++  est.reset();
++  const ent = est.entry('Garchomp');
++  const postsBefore = ent.cands.map(c => c.post);
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  const log = est.takeInferenceLog();
++  const dmg = log.find(r => r.trigger && r.trigger.kind === 'damage');
++  check('T04a: 質量0 を含んでも証拠は適用される', !!dmg && dmg.trigger.applied === true && ent.used === 1, JSON.stringify(dmg && dmg.trigger));
++  // 独立計算した質量ベースの期待事後と全候補で一致すること (質量0 の
++  // 候補は床の係数で更新され、計算不能として保留・除外はされない)
++  const { damageDistribution } = core;
++  let tot = 0;
++  const expected = ent.cands.map((c, i) => {
++    const cs = { ...baseChomp, nature: c.nature, sp: { ...c.sp }, item: c.item, ability: c.ability, megaSpecies: c.megaSpecies };
++    const dd = damageDistribution(withCurHP(cs), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' });
++    let mass = 0;
++    if (dd.dist) { for (let j = 0; j < dd.dist.values.length; j++) if (dd.dist.values[j] === amtRock) mass += dd.dist.counts[j]; mass /= dd.dist.total; }
++    const p = postsBefore[i] * Math.max(mass, 0.02);
++    tot += p;
++    return p;
++  });
++  const maxDiff = Math.max(...ent.cands.map((c, i) => Math.abs(c.post - expected[i] / tot)));
++  check('T04a: 事後が質量ベースの期待値と一致 (質量0 と不能を区別)', maxDiff < 1e-9, 'maxDiff=' + maxDiff);
++}
++
++// ---- R1-T04b: 全候補で質量0 (計算は可能) なら no-match で保留され、
++// dist-unavailable とは記録されない ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: 1, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  const log = est.takeInferenceLog();
++  const dmg = log.find(r => r.trigger && r.trigger.kind === 'damage');
++  check('T04b: 全候補質量0 は no-match で保留される', !!dmg && dmg.trigger.applied === false && dmg.trigger.reason === 'no-match', JSON.stringify(dmg && dmg.trigger));
++  check('T04b: dist-unavailable とは記録されない', !hasRec(log, 'damage', 'dist-unavailable') && !hasRec(log, 'inf', 'dist-unavailable'));
++}
++
++// ---- R1-T06a: 仮説生成と再計算が計算可能な場合は従来どおりフラグが立つ ----
++{
++  est.reset();
++  const ent = est.entry('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: 9999, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  est.takeInferenceLog();
++  check('T06a: 最大超過では Choice Band の仮説が立つ', ent.dmgFlag === 'Choice Band', String(ent.dmgFlag));
++}
++
++// ---- R1-T06b: 仮説生成の経路で計算不能があれば、フラグだけが残らず
++// 証拠全体が保留され、以前の状態 (inf の dropped 増加を含む) が維持される ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: 9999, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: bogusBase });
++  const log = est.takeInferenceLog();
++  const ent = est._debug().bayes.bySpecies['Garchomp'];
++  check('T06b: 不能時はフラグが発生せず状態が維持される', !ent.dmgFlag && fingerprint('Garchomp') === before);
++  check('T06b: dist-unavailable が推論ログに残る', hasRec(log, 'damage', 'dist-unavailable'), JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- crit: 通常の急所後付け是正は従来どおり効く ----
++{
++  est.reset();
++  const ent = est.entry('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  est.processDamageInf(ev, io);
++  est.processDamageBayes(ev, io);
++  est.takeInferenceLog();
++  const postsBefore = ent.cands.map(c => c.post);
++  const critEv = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide' };
++  est.processCritInf(critEv, io);
++  est.processCritBayes(critEv, io);
++  const log = est.takeInferenceLog();
++  const patch = log.find(r => r.trigger && r.trigger.kind === 'critPatch');
++  check('crit: 後付け是正が適用される', !!patch && patch.trigger.applied === true, JSON.stringify(patch && patch.trigger));
++  check('crit: 是正で事後が動き、inf 状態も維持される', ent.cands.some((c, i) => c.post !== postsBefore[i]) && fingerprint('Garchomp').length > 0);
++}
++
++// ---- crit: 保留された証拠には記録が無く、急所イベントでも状態は変わらない ----
++{
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp, bogusBase], baseAtk: baseChomp };
++  est.processDamageInf(ev, io);
++  est.processDamageBayes(ev, io);
++  est.takeInferenceLog();
++  const critEv = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide' };
++  est.processCritInf(critEv, io);
++  est.processCritBayes(critEv, io);
++  const log = est.takeInferenceLog();
++  check('crit: 保留された証拠の critPatch は no-match で状態不変', hasRec(log, 'critPatch', 'no-match') && fingerprint('Garchomp') === before, JSON.stringify(log.map(r => r.trigger)));
++}
++
++// ---- R1-T08: 単発固定場面のハッシュが MH-001 検収時と一致する ----
++{
++  est.reset();
++  const ent = est.entry('Garchomp');
++  const ev1 = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false };
++  est.processDamageInf(ev1, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev1, { myDef: myVenusaur, baseAtk: baseChomp });
++  const truthHp = statTable('Garchomp').hp.find(r => r.nature === 'Adamant' && r.sp === 0).value;
++  const pct = Math.round(damageRolls(withCurHP(myVenusaur), withCurHP(truthChomp), 'Earth Power', { gameType: 'Singles' }).rolls[7] / truthHp * 100);
++  const ev2 = { turn: 1, atk: 'p1: Venusaur', def: 'p2: Garchomp', move: 'Earth Power', pct, crit: false };
++  est.processDamageInf(ev2, { myAtk: myVenusaur, basesDef: [baseChomp] });
++  est.processDamageBayes(ev2, { myAtk: myVenusaur, baseDef: baseChomp });
++  const canon = JSON.stringify({ posts: ent.cands.map(c => c.post), log: est.takeInferenceLog().map(r => r.trigger) });
++  const hash = createHash('sha256').update(canon).digest('hex');
++  check('T08: 単発固定場面のハッシュが一致', hash === '688c01d9a1bfc2d9a58b564c046756b02a96e7c2e3ebd6b2638f998232e8c4f0', hash);
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
+--- /dev/null
++++ b/tests/test_fault_injection.mjs
+@@ -0,0 +1,331 @@
++// MH-001-R1-C2: テスト専用シーム (deps.damageDistribution) を使った故障
++// 注入テスト。R1-C では構成できなかった「ベイズの一部候補だけ計算不能」
++// 「仮説の再計算だけ失敗」「急所再推論の途中失敗」「バックストップ単独
++// の保留」を、差し替え関数の呼出記録 (到達証拠) と推論ログで検証する。
++// あわせて巻き戻し方式の監査項目 (キー同一性・巻き戻し後の整合性・
++// ログの見え方・例外時の防御) を確認する。各場面に対照実験 (注入なし
++// では同じ証拠が通常どおり適用される) を含む。
++// 実行: node tests/test_fault_injection.mjs (最後に ALL PASS と出す)
++import { pathToFileURL } from 'node:url';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
++const core = await import(pathToFileURL(ROOT + '/core.mjs').href);
++const eng = await import(pathToFileURL(ROOT + '/estimate_engine.mjs').href);
++const { gen, damageRolls, withCurHP } = core;
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++
++const J = f => JSON.parse(fs.readFileSync(ROOT + '/data/' + f, 'utf8'));
++const POKEDB_PARSED = J('pokedb_parsed.json');
++const USAGE_SETS = J('usage_sets.json');
++const META_SETS = J('meta_sets.json');
++const VGC_SETS = J('vgc_pastes.json');
++const SPECIES_MOVES = J('species_moves.json');
++const namesJa = J('names_ja.json');
++const itemsJa = J('items_ja.json');
++const moveJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.moves || {})) { const m = gen.moves.get(id); if (m) moveJa2en[ja] = m.name; }
++const abilityJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.abilities || {})) { const a = gen.abilities.get(id); if (a) abilityJa2en[ja] = a.name; }
++const NAMES = { ...namesJa, _itemJa2en: { ...itemsJa }, _moveJa2en: moveJa2en, _abilityJa2en: abilityJa2en };
++const effSpecies = spec => (spec && spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
++const getData = () => ({ POKEDB_PARSED, USAGE_SETS, META_SETS, META_SETS_LOADED: true, NAMES, VGC_SETS, SPECIES_MOVES });
++const makeEst = fakeFn => eng.createEstimator(fakeFn ? { effSpecies, getData, damageDistribution: fakeFn } : { effSpecies, getData });
++
++// 差し替え関数の工場: rule(atkSpec, defSpec, moveName, opts, callIndex) が
++// 'fail' (計算不能を返す) / 'multi' (multi=true を強制) / 'malformed'
++// (壊れた分布を返す) / null (実関数へ委譲) を返す。全呼出を記録する
++function makeFake(rule) {
++  const calls = [];
++  const fn = (atkSpec, defSpec, moveName, opts) => {
++    const verdict = rule ? rule(atkSpec, defSpec, moveName, opts, calls.length) : null;
++    if (verdict === 'fail') { calls.push({ item: atkSpec && atkSpec.item, nature: atkSpec && atkSpec.nature, crit: !!(opts && opts.crit), result: 'fail' }); return { error: 'injected' }; }
++    if (verdict === 'malformed') { calls.push({ item: atkSpec && atkSpec.item, nature: atkSpec && atkSpec.nature, crit: !!(opts && opts.crit), result: 'malformed' }); return { dist: { values: null, counts: null, total: 1 }, min: 0, max: 0, hits: 1, multi: false }; }
++    const r = core.damageDistribution(atkSpec, defSpec, moveName, opts);
++    if (verdict === 'multi' && r && r.dist) { calls.push({ item: atkSpec && atkSpec.item, nature: atkSpec && atkSpec.nature, crit: !!(opts && opts.crit), result: 'multi' }); return { ...r, multi: true, hits: Math.max(2, r.hits || 1) }; }
++    calls.push({ item: atkSpec && atkSpec.item, nature: atkSpec && atkSpec.nature, crit: !!(opts && opts.crit), result: r && r.error ? 'error' : 'ok' });
++    return r;
++  };
++  return { fn, calls };
++}
++
++const blank = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
++const boosts0 = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
++const spec = (species, nature, sp, extra = {}) => ({ species, nature, sp: { ...blank, ...sp }, item: '', ability: '', moves: [], boosts: { ...boosts0 }, status: '', curHPPercent: 100, mega: false, ...extra });
++const myVenusaur = spec('Venusaur', 'Modest', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'], boosts: { ...boosts0, def: 2 } });
++const truthChomp = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide', 'Earthquake'] });
++const baseChomp = spec('Garchomp', 'Adamant', {});
++const bogusBase = spec('Bogusmon', 'Adamant', {});
++const amtRock = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls[10];
++const amtQuake = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Earthquake', { gameType: 'Singles' }).rolls[8];
++
++function fingerprint(est, species) {
++  const ent = est._debug().bayes.bySpecies[species];
++  const ie = est._debug().inference.bySpecies[species];
++  const ser = v => v instanceof Set ? [...v].sort() : v;
++  return JSON.stringify({
++    cands: ent ? ent.cands.map(c => [c.nature, c.item, c.ability, JSON.stringify(c.sp), c.post]) : null,
++    dmgFlag: ent ? ent.dmgFlag || null : null, used: ent ? ent.used : null,
++    inf: ie ? { pairs: Object.fromEntries(Object.entries(ie.pairs).map(([k, v]) => [k, ser(v)])), hpSps: ser(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++  });
++}
++const hasRec = (log, kind, reason) => log.some(r => r.trigger && r.trigger.kind === kind && r.trigger.reason === reason);
++
++// ---- (a) ベイズの一部候補だけが計算不能 ----
++{
++  const fake = makeFake(atk => atk && atk.item === 'Life Orb' ? 'fail' : null);
++  const est = makeEst(fake.fn);
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint(est, 'Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  est.processDamageInf(ev, io);
++  const bayesStart = fake.calls.length;
++  est.processDamageBayes(ev, io);
++  const bayesCalls = fake.calls.slice(bayesStart);
++  const log = est.takeInferenceLog();
++  check('(a) 到達証拠: ベイズ計算で一部候補が失敗し他は成功した', bayesCalls.some(c => c.result === 'fail') && bayesCalls.some(c => c.result === 'ok'), JSON.stringify(bayesCalls.map(c => c.result)));
++  check('(a) 証拠全体が保留され状態が不変', fingerprint(est, 'Garchomp') === before);
++  check('(a) dist-unavailable が推論ログに残る', hasRec(log, 'damage', 'dist-unavailable'), JSON.stringify(log.map(r => r.trigger)));
++  // 対照実験: 注入なしでは同じ証拠が適用される
++  const est2 = makeEst(makeFake(null).fn);
++  est2.reset();
++  const ent2 = est2.entry('Garchomp');
++  est2.processDamageInf(ev, io);
++  est2.processDamageBayes(ev, io);
++  const log2 = est2.takeInferenceLog();
++  check('(a) 対照: 注入なしでは適用される', log2.some(r => r.trigger && r.trigger.kind === 'damage' && r.trigger.applied === true) && ent2.used === 1);
++}
++
++// ---- (b) 仮説の再計算だけが失敗 ----
++{
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: 9999, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  // ベイズ側の呼出窓: 初回計算 (候補数ぶん) の直後が再計算。再計算側の
++  // Choice Band 持ち spec でのみ失敗させる
++  const win = { from: Infinity, to: -Infinity };
++  const fake2 = makeFake((atk, def, mv, opts, idx) => (idx >= win.from && idx <= win.to && atk && atk.item === 'Choice Band') ? 'fail' : null);
++  const estB = makeEst(fake2.fn);
++  estB.reset();
++  const entB = estB.entry('Garchomp');
++  const beforeB = fingerprint(estB, 'Garchomp');
++  estB.processDamageInf(ev, io);
++  const startB = fake2.calls.length;
++  win.from = startB + entB.cands.length;
++  win.to = startB + 2 * entB.cands.length - 1;
++  estB.processDamageBayes(ev, io);
++  const bc = fake2.calls.slice(startB);
++  const pass1 = bc.slice(0, entB.cands.length), recomp = bc.slice(entB.cands.length);
++  const logB = estB.takeInferenceLog();
++  check('(b) 到達証拠: 初回計算は全件成功した', pass1.length === entB.cands.length && pass1.every(c => c.result === 'ok'), JSON.stringify(pass1.map(c => c.result)));
++  check('(b) 到達証拠: 再計算の呼出が発生し Band 持ちで失敗した', recomp.some(c => c.result === 'fail' && c.item === 'Choice Band'), JSON.stringify(recomp.map(c => [c.item, c.result])));
++  check('(b) フラグが残らず証拠全体が保留され状態が不変', !entB.dmgFlag && fingerprint(estB, 'Garchomp') === beforeB);
++  check('(b) dist-unavailable が推論ログに残る', hasRec(logB, 'damage', 'dist-unavailable'), JSON.stringify(logB.map(r => r.trigger)));
++  // 対照実験: 注入なしでは仮説が実際に立つ
++  const est2 = makeEst(makeFake(null).fn);
++  est2.reset();
++  const ent2 = est2.entry('Garchomp');
++  est2.processDamageInf(ev, io);
++  est2.processDamageBayes(ev, io);
++  est2.takeInferenceLog();
++  check('(b) 対照: 注入なしでは Choice Band の仮説が立つ', ent2.dmgFlag === 'Choice Band', String(ent2.dmgFlag));
++}
++
++// ---- (c) 急所再推論の途中で失敗 ----
++{
++  const fake = makeFake((atk, def, mv, opts) => (opts && opts.crit === true && atk && atk.item === 'Life Orb') ? 'fail' : null);
++  const est = makeEst(fake.fn);
++  est.reset();
++  est.entry('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  est.processDamageInf(ev, io);
++  est.processDamageBayes(ev, io);
++  est.takeInferenceLog();
++  const applied = fingerprint(est, 'Garchomp');
++  const critStart = fake.calls.length;
++  const critEv = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide' };
++  est.processCritInf(critEv, io);
++  const bayesCritStart = fake.calls.length;
++  est.processCritBayes(critEv, io);
++  const critCalls = fake.calls.slice(critStart);
++  const captureCalls = fake.calls.slice(bayesCritStart);
++  const log = est.takeInferenceLog();
++  check('(c) 到達証拠: inf 再生は成功し capture で一部候補が失敗した', critCalls.slice(0, bayesCritStart - critStart).every(c => c.result !== 'fail') && captureCalls.some(c => c.result === 'fail') && captureCalls.some(c => c.result === 'ok'), JSON.stringify(captureCalls.map(c => c.result)));
++  check('(c) 是正が中断され適用済みの状態が完全に維持される', fingerprint(est, 'Garchomp') === applied);
++  const patch = log.find(r => r.trigger && r.trigger.kind === 'critPatch');
++  check('(c) critPatch は dist-unavailable で未適用と記録される', !!patch && patch.trigger.applied === false && patch.trigger.reason === 'dist-unavailable', JSON.stringify(patch && patch.trigger));
++  // 対照実験: 注入なしでは是正が適用される
++  const est2 = makeEst(makeFake(null).fn);
++  est2.reset();
++  const ent2 = est2.entry('Garchomp');
++  est2.processDamageInf(ev, io);
++  est2.processDamageBayes(ev, io);
++  est2.takeInferenceLog();
++  const postsBefore2 = ent2.cands.map(c => c.post);
++  est2.processCritInf(critEv, io);
++  est2.processCritBayes(critEv, io);
++  const log2 = est2.takeInferenceLog();
++  const patch2 = log2.find(r => r.trigger && r.trigger.kind === 'critPatch');
++  check('(c) 対照: 注入なしでは是正が適用される', !!patch2 && patch2.trigger.applied === true && ent2.cands.some((c, i) => c.post !== postsBefore2[i]));
++}
++
++// ---- (d) バックストップ単独の保留 ----
++{
++  const fake = makeFake(() => 'multi');
++  const est = makeEst(fake.fn);
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint(est, 'Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  est.processDamageInf(ev, io);
++  est.processDamageBayes(ev, io);
++  const log = est.takeInferenceLog();
++  check('(d) 到達証拠: 事前判定を通過し分布関数が実際に呼ばれた', fake.calls.length > 0, 'calls=' + fake.calls.length);
++  check('(d) multi 分布で multihit-suspended として保留される', hasRec(log, 'inf', 'multihit-suspended'), JSON.stringify(log.map(r => r.trigger)));
++  check('(d) 推定状態が変わらない', fingerprint(est, 'Garchomp') === before);
++  // 対比: 事前判定で止まる技では分布呼出が0件 (ゲートはシームに依存しない)
++  est.reset();
++  est.entry('Rillaboom');
++  const callsBefore = fake.calls.length;
++  const evB = { turn: 1, atk: 'p2: Rillaboom', def: 'p1: Venusaur', move: 'Bullet Seed', amt: 50, crit: false, w: '', t: '' };
++  const baseRilla = spec('Rillaboom', 'Adamant', {});
++  est.processDamageInf(evB, { myDef: myVenusaur, basesAtk: [baseRilla] });
++  check('(d) 対比: ゲート対象技では分布呼出が0件', fake.calls.length === callsBefore, 'calls=' + (fake.calls.length - callsBefore));
++  // 対照実験: multi 強制なしでは同じ証拠が適用される
++  const est2 = makeEst(makeFake(null).fn);
++  est2.reset();
++  const ent2 = est2.entry('Garchomp');
++  est2.processDamageInf(ev, io);
++  est2.processDamageBayes(ev, io);
++  const log2 = est2.takeInferenceLog();
++  check('(d) 対照: 注入なしでは適用される', log2.some(r => r.trigger && r.trigger.kind === 'damage' && r.trigger.applied === true) && ent2.used === 1);
++}
++
++// ---- 監査 (e): キー不一致では巻き戻しが発動しない ----
++{
++  const est = makeEst(null);
++  est.reset();
++  est.entry('Garchomp');
++  const evA = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const evB = { turn: 2, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Earthquake', amt: amtQuake, crit: false, w: '', t: '' };
++  est.processDamageInf(evA, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageInf(evB, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  const afterInfAB = fingerprint(est, 'Garchomp');
++  // A のベイズを、不能になる文脈と明示 opts で後から呼ぶ (UI の実際の
++  // 呼出順序では発生しない割り込みパターン)
++  est.processDamageBayes(evA, { myDef: myVenusaur, baseAtk: bogusBase }, { gameType: 'Singles' });
++  const log = est.takeInferenceLog();
++  check('(e) キー不一致: A の inf は巻き戻されない', fingerprint(est, 'Garchomp') === afterInfAB);
++  check('(e) キー不一致: 相殺エントリは記録されない', !hasRec(log, 'inf', 'dist-unavailable-rollback'), JSON.stringify(log.map(r => r.trigger)));
++  check('(e) A のベイズ保留自体は記録される', hasRec(log, 'damage', 'dist-unavailable'));
++}
++
++// ---- 監査 (f)(g): 巻き戻し後の整合性とログの見え方 ----
++{
++  const est = makeEst(null);
++  est.reset();
++  const ent = est.entry('Garchomp');
++  const before = fingerprint(est, 'Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: bogusBase });
++  const log = est.takeInferenceLog();
++  check('(f) 巻き戻し後: used を含む推定状態が処理前に戻る', fingerprint(est, 'Garchomp') === before);
++  const infAppliedIdx = log.findIndex(r => r.trigger && r.trigger.kind === 'inf' && r.trigger.applied === true);
++  const rollbackIdx = log.findIndex(r => r.trigger && r.trigger.kind === 'inf' && r.trigger.reason === 'dist-unavailable-rollback');
++  check('(g) ログ: inf 適用の後に相殺エントリが続き、適用済みのまま残らない', infAppliedIdx >= 0 && rollbackIdx > infAppliedIdx, JSON.stringify(log.map(r => r.trigger)));
++  check('(g) ログ: damage の適用済み記録は無い', !log.some(r => r.trigger && r.trigger.kind === 'damage' && r.trigger.applied === true));
++  // pendingOpts が下りていること: 同じ証拠のベイズ再呼出は無動作
++  const postsNow = ent.cands.map(c => c.post);
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  check('(f) 巻き戻し後: pendingOpts が下りてベイズ再呼出が無動作', ent.cands.every((c, i) => c.post === postsNow[i]) && ent.used === 0);
++  est.takeInferenceLog();
++  // dmgRecord が無いこと: 急所イベントは no-match
++  est.processCritInf({ turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide' }, { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp });
++  const log2 = est.takeInferenceLog();
++  check('(f) 巻き戻し後: dmgRecord が無く critPatch は no-match', hasRec(log2, 'critPatch', 'no-match'), JSON.stringify(log2.map(r => r.trigger)));
++  // 後続の正常な証拠とその急所是正が通常どおり効くこと (記録連鎖の健全性)
++  const ev2 = { turn: 2, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Earthquake', amt: amtQuake, crit: false, w: '', t: '' };
++  const io2 = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  est.processDamageInf(ev2, io2);
++  est.processDamageBayes(ev2, io2);
++  est.processCritInf({ turn: 2, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Earthquake' }, io2);
++  est.processCritBayes({ turn: 2, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Earthquake' }, io2);
++  const log3 = est.takeInferenceLog();
++  const patch3 = log3.find(r => r.trigger && r.trigger.kind === 'critPatch');
++  check('(f) 巻き戻し後: 後続の証拠と急所是正が通常どおり効く', !!patch3 && patch3.trigger.applied === true && ent.used >= 1, JSON.stringify(patch3 && patch3.trigger));
++}
++
++// ---- 監査 (h): dmgDist 以外の例外でも部分状態が残らない ----
++{
++  // inf 側: 壊れた分布で distMass が例外を投げる
++  const fakeBad = makeFake(() => 'malformed');
++  const est = makeEst(fakeBad.fn);
++  est.reset();
++  est.entry('Garchomp');
++  const before = fingerprint(est, 'Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  let threw = false;
++  try { est.processDamageInf(ev, io); } catch (e) { threw = true; }
++  check('(h) inf 例外: 例外は伝播する', threw);
++  check('(h) inf 例外: 推定状態が変わらない', fingerprint(est, 'Garchomp') === before);
++  const ent = est._debug().bayes.bySpecies['Garchomp'];
++  const postsNow = ent.cands.map(c => c.post);
++  est.processDamageBayes(ev, io);
++  check('(h) inf 例外: pendingOpts が掃除されベイズは無動作', ent.cands.every((c, i) => c.post === postsNow[i]));
++  est.takeInferenceLog();
++  // bayes 側: inf は正常、ベイズ計算の途中で例外
++  let malformed = false;
++  const fakeSw = makeFake(() => malformed ? 'malformed' : null);
++  const est2 = makeEst(fakeSw.fn);
++  est2.reset();
++  est2.entry('Garchomp');
++  const before2 = fingerprint(est2, 'Garchomp');
++  est2.processDamageInf(ev, io);
++  malformed = true;
++  let threw2 = false;
++  try { est2.processDamageBayes(ev, io); } catch (e) { threw2 = true; }
++  const logB = est2.takeInferenceLog();
++  check('(h) bayes 例外: 例外は伝播する', threw2);
++  check('(h) bayes 例外: inf まで巻き戻り状態が戻る', fingerprint(est2, 'Garchomp') === before2);
++  check('(h) bayes 例外: 相殺エントリが記録される', hasRec(logB, 'inf', 'dist-unavailable-rollback'), JSON.stringify(logB.map(r => r.trigger)));
++  malformed = false;
++  const ent2 = est2._debug().bayes.bySpecies['Garchomp'];
++  est2.processDamageInf(ev, io);
++  est2.processDamageBayes(ev, io);
++  check('(h) bayes 例外: その後も通常どおり推定できる', ent2.used === 1);
++}
++
++// ---- 監査 (i): 急所再推論の capture 中の例外でも適用済みの状態が保たれる ----
++{
++  const fake = makeFake((atk, def, mv, opts) => (opts && opts.crit === true && atk && atk.item === 'Life Orb') ? 'malformed' : null);
++  const est = makeEst(fake.fn);
++  est.reset();
++  est.entry('Garchomp');
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRock, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  est.processDamageInf(ev, io);
++  est.processDamageBayes(ev, io);
++  est.takeInferenceLog();
++  const applied = fingerprint(est, 'Garchomp');
++  const critEv = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide' };
++  est.processCritInf(critEv, io);
++  let threw = false;
++  try { est.processCritBayes(critEv, io); } catch (e) { threw = true; }
++  check('(i) crit 例外: 例外は伝播する', threw);
++  check('(i) crit 例外: 適用済みの状態 (事後・inf 履歴) が完全に維持される', fingerprint(est, 'Garchomp') === applied);
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
+--- /dev/null
++++ b/tests/test_r1d_replay.mjs
+@@ -0,0 +1,207 @@
++// MH-001-R1-D: 既存推定結果の撤回・再計算の検証。同一の観測イベント
++// 履歴を3条件で再生して比較する。
++//   A: 公開 rev 20261124_1101 の旧版エンジン (隔離環境 /tmp/r1d_old/。
++//      R1D_OLD_DIR で変更可)。UI の guardEv と同様にイベント単位で
++//      例外を捕捉して継続する
++//   B: 修正版 (現行ローカル) の新規インスタンス
++//   C: 移行の再現 — 旧版で履歴を処理した状態を初期化 (新規インスタンス
++//      への切替 = UI の resetInference 相当) し、修正版で同じ履歴を再生
++// 本番ファイルは変更しない。実行: node tests/test_r1d_replay.mjs
++import { pathToFileURL } from 'node:url';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
++const OLD_DIR = process.env.R1D_OLD_DIR || '/tmp/r1d_old';
++const core = await import(pathToFileURL(ROOT + '/core.mjs').href);
++const engNew = await import(pathToFileURL(ROOT + '/estimate_engine.mjs').href);
++if (!fs.existsSync(OLD_DIR + '/estimate_engine.mjs')) { console.log('FAIL 旧版エンジンが ' + OLD_DIR + ' にありません'); process.exit(1); }
++const engOld = await import(pathToFileURL(OLD_DIR + '/estimate_engine.mjs').href);
++const { gen, damageRolls, damageDistribution, withCurHP } = core;
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++
++const J = f => JSON.parse(fs.readFileSync(ROOT + '/data/' + f, 'utf8'));
++const POKEDB_PARSED = J('pokedb_parsed.json');
++const USAGE_SETS = J('usage_sets.json');
++const META_SETS = J('meta_sets.json');
++const VGC_SETS = J('vgc_pastes.json');
++const SPECIES_MOVES = J('species_moves.json');
++const namesJa = J('names_ja.json');
++const itemsJa = J('items_ja.json');
++const moveJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.moves || {})) { const m = gen.moves.get(id); if (m) moveJa2en[ja] = m.name; }
++const abilityJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.abilities || {})) { const a = gen.abilities.get(id); if (a) abilityJa2en[ja] = a.name; }
++const NAMES = { ...namesJa, _itemJa2en: { ...itemsJa }, _moveJa2en: moveJa2en, _abilityJa2en: abilityJa2en };
++const effSpecies = spec => (spec && spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
++const getData = () => ({ POKEDB_PARSED, USAGE_SETS, META_SETS, META_SETS_LOADED: true, NAMES, VGC_SETS, SPECIES_MOVES });
++
++const blank = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
++const boosts0 = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
++const spec = (species, nature, sp, extra = {}) => ({ species, nature, sp: { ...blank, ...sp }, item: '', ability: '', moves: [], boosts: { ...boosts0 }, status: '', curHPPercent: 100, mega: false, ...extra });
++const myVenusaur = spec('Venusaur', 'Modest', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'], boosts: { ...boosts0, def: 2 } });
++const bogusVenusaur = spec('Venusaur', 'BogusNature', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'], boosts: { ...boosts0, def: 2 } });
++const truthChomp = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide'] });
++const baseChomp = spec('Garchomp', 'Adamant', {});
++const bogusBase = spec('Bogusmon', 'Adamant', {});
++const truthRilla = spec('Rillaboom', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Grassy Surge', moves: ['Bullet Seed'] });
++const baseRilla = spec('Rillaboom', 'Adamant', {});
++const kangaExtra = { item: 'Kangaskhanite', ability: 'Parental Bond', mega: true, megaSpecies: 'Kangaskhan-Mega', megaAbility: 'Parental Bond' };
++const truthKanga = spec('Kangaskhan', 'Adamant', { atk: 32, spe: 32 }, { ...kangaExtra, moves: ['Body Slam'] });
++const baseKanga = spec('Kangaskhan', 'Adamant', {}, kangaExtra);
++
++// 実分布から代表値を取る (複数ヒットは既定ヒット数の分布の最頻値)
++function distMode(atk, def, move) {
++  const dd = damageDistribution(withCurHP(atk), withCurHP(def), move, { gameType: 'Singles' });
++  let best = null, bc = -1;
++  dd.dist.values.forEach((v, i) => { if (dd.dist.counts[i] > bc) { bc = dd.dist.counts[i]; best = v; } });
++  return best;
++}
++const amtSeed = distMode(truthRilla, myVenusaur, 'Bullet Seed');
++const amtSlam = (() => { const dd = damageDistribution(withCurHP(truthKanga), withCurHP(myVenusaur), 'Body Slam', { gameType: 'Singles' }); return dd.max; })();
++const amtRock = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls[10];
++
++const SPECIES = ['Rillaboom', 'Garchomp', 'Kangaskhan'];
++function fingerprint(est) {
++  const out = {};
++  for (const sp of SPECIES) {
++    const ent = est._debug().bayes.bySpecies[sp];
++    const ie = est._debug().inference.bySpecies[sp];
++    const ser = v => v instanceof Set ? [...v].sort() : v;
++    out[sp] = {
++      cands: ent ? ent.cands.map(c => [c.nature, c.item, c.ability, JSON.stringify(c.sp), c.post]) : null,
++      dmgFlag: ent ? ent.dmgFlag || null : null, used: ent ? ent.used : null,
++      inf: ie ? { pairs: Object.fromEntries(Object.entries(ie.pairs).map(([k, v]) => [k, ser(v)])), hpSps: ser(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++    };
++  }
++  return JSON.stringify(out);
++}
++
++// 同一の観測イベント履歴。各ステップは呼出の列で、runner が guardEv
++// 相当の捕捉をしながら実行し、ステップごとの状態控えと例外を記録する
++function buildScript() {
++  const dmg = (turn, atkSp, defSp, move, amt, ctx) => ([
++    ['inf', est => est.processDamageInf({ turn, atk: 'p2: ' + atkSp, def: 'p1: ' + defSp, move, amt, crit: false, w: '', t: '' }, ctx)],
++    ['bayes', est => est.processDamageBayes({ turn, atk: 'p2: ' + atkSp, def: 'p1: ' + defSp, move, amt, crit: false, w: '', t: '' }, ctx)],
++  ]);
++  const crit = (turn, atkSp, defSp, move, ctx) => ([
++    ['critInf', est => est.processCritInf({ turn, atk: 'p2: ' + atkSp, def: 'p1: ' + defSp, move }, ctx)],
++    ['critBayes', est => est.processCritBayes({ turn, atk: 'p2: ' + atkSp, def: 'p1: ' + defSp, move }, ctx)],
++  ]);
++  const ioRilla = { myDef: myVenusaur, basesAtk: [baseRilla], baseAtk: baseRilla };
++  const ioKanga = { myDef: myVenusaur, basesAtk: [baseKanga], baseAtk: baseKanga };
++  const ioChomp = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  const ioChompBogusBase = { myDef: myVenusaur, basesAtk: [baseChomp, bogusBase], baseAtk: baseChomp };
++  const ioChompBogusDef = { myDef: bogusVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++  return [
++    { name: 's1-bullet-seed', calls: dmg(1, 'Rillaboom', 'Venusaur', 'Bullet Seed', amtSeed, ioRilla) },
++    { name: 's2-bullet-seed-over', calls: dmg(2, 'Rillaboom', 'Venusaur', 'Bullet Seed', 9999, ioRilla) },
++    { name: 's3-body-slam-pb', calls: dmg(3, 'Kangaskhan', 'Venusaur', 'Body Slam', amtSlam, ioKanga) },
++    { name: 's4-unavailable-throw', calls: dmg(4, 'Garchomp', 'Venusaur', 'Rock Slide', amtRock, ioChompBogusBase) },
++    { name: 's5-unavailable-error', calls: dmg(5, 'Garchomp', 'Venusaur', 'Rock Slide', amtRock, ioChompBogusDef) },
++    { name: 's6-crit-multihit', calls: crit(1, 'Rillaboom', 'Venusaur', 'Bullet Seed', ioRilla) },
++    { name: 's6b-crit-unavailable', calls: crit(4, 'Garchomp', 'Venusaur', 'Rock Slide', ioChompBogusBase) },
++    { name: 's7-valid-after-invalid', calls: dmg(6, 'Garchomp', 'Venusaur', 'Rock Slide', amtRock, ioChomp) },
++  ];
++}
++
++function runScript(eng, script) {
++  const est = eng.createEstimator({ effSpecies, getData });
++  est.reset();
++  for (const sp of SPECIES) est.entry(sp);
++  const initial = fingerprint(est);
++  const steps = [];
++  const throws = [];
++  for (const step of script) {
++    for (const [label, fn] of step.calls) {
++      try { fn(est); } catch (e) { throws.push(step.name + '/' + label + ': ' + (e && e.message ? e.message.slice(0, 60) : String(e))); }
++    }
++    steps.push({ name: step.name, fp: fingerprint(est), log: est.takeInferenceLog() });
++  }
++  return { est, initial, steps, throws };
++}
++const trigSeq = steps => steps.flatMap(s => s.log.map(r => [r.species, r.trigger && r.trigger.kind, r.trigger && r.trigger.applied, r.trigger && r.trigger.reason, r.trigger && r.trigger.move]));
++const stepLog = (run, name) => run.steps.find(s => s.name === name).log;
++const fpAt = (run, name) => JSON.parse(run.steps.find(s => s.name === name).fp);
++const hasRec = (log, kind, reason) => log.some(r => r.trigger && r.trigger.kind === kind && (reason === undefined || r.trigger.reason === reason));
++
++const script = buildScript();
++const runA = runScript(engOld, script);
++const runB = runScript(engNew, script);
++const runB2 = runScript(engNew, script);
++// C: 旧版で処理した後に初期化 (インスタンス切替) して修正版で再生 ×2
++runScript(engOld, script);
++const runC = runScript(engNew, script);
++runScript(engOld, script);
++const runC2 = runScript(engNew, script);
++
++const initB = JSON.parse(runB.initial);
++const initA = JSON.parse(runA.initial);
++check('前提: A と B の初期候補集合が一致する', JSON.stringify(initA) === JSON.stringify(initB));
++
++// ---- 対象1・2: 複数ヒット技による不当な候補排除・事後更新 ----
++{
++  const a1 = fpAt(runA, 's1-bullet-seed'), b1 = fpAt(runB, 's1-bullet-seed');
++  check('対象1: A では inf の交差が進む (ハード除外が発生)', !!(a1.Rillaboom.inf && a1.Rillaboom.inf.used > (initA.Rillaboom.inf ? initA.Rillaboom.inf.used : 0)), JSON.stringify(a1.Rillaboom.inf));
++  check('対象1: B では inf が進まない', JSON.stringify(b1.Rillaboom.inf) === JSON.stringify(initB.Rillaboom.inf));
++  check('対象2: A では事後が動く', JSON.stringify(a1.Rillaboom.cands) !== JSON.stringify(initA.Rillaboom.cands));
++  check('対象2: B では事後が動かない', JSON.stringify(b1.Rillaboom.cands) === JSON.stringify(initB.Rillaboom.cands));
++  check('対象2: B では multihit-suspended が記録される', hasRec(stepLog(runB, 's1-bullet-seed'), 'inf', 'multihit-suspended') || hasRec(stepLog(runB, 's1-bullet-seed'), 'damage', 'multihit-suspended'));
++}
++// ---- 対象3: 複数ヒット観測による dmgFlag の誤発生 ----
++{
++  const a2 = fpAt(runA, 's2-bullet-seed-over'), b2 = fpAt(runB, 's2-bullet-seed-over');
++  check('対象3: A では dmgFlag が誤発生する', !!a2.Rillaboom.dmgFlag, String(a2.Rillaboom.dmgFlag));
++  check('対象3: B では dmgFlag が発生しない', !b2.Rillaboom.dmgFlag);
++}
++// ---- 対象4: Parental Bond の追加ヒット ----
++{
++  const a3 = fpAt(runA, 's3-body-slam-pb'), b3 = fpAt(runB, 's3-body-slam-pb');
++  check('対象4: A では2ヒット分布で事後が動く', JSON.stringify(a3.Kangaskhan.cands) !== JSON.stringify(initA.Kangaskhan.cands));
++  check('対象4: B では保留され事後が動かない', JSON.stringify(b3.Kangaskhan.cands) === JSON.stringify(initB.Kangaskhan.cands));
++  check('対象4: B では multihit-suspended が記録される', hasRec(stepLog(runB, 's3-body-slam-pb'), 'inf', 'multihit-suspended') || hasRec(stepLog(runB, 's3-body-slam-pb'), 'damage', 'multihit-suspended'));
++}
++// ---- 対象5: 計算不能を含むダメージ証拠 ----
++{
++  check('対象5: A では例外が発生する', runA.throws.some(t => t.startsWith('s4-unavailable-throw')), JSON.stringify(runA.throws));
++  check('対象5: B では例外が発生しない', runB.throws.length === 0, JSON.stringify(runB.throws));
++  const bPre = fpAt(runB, 's3-body-slam-pb'), b4 = fpAt(runB, 's4-unavailable-throw'), b5 = fpAt(runB, 's5-unavailable-error');
++  check('対象5: B では証拠全体が保留され状態が保たれる (例外型)', JSON.stringify(b4.Garchomp) === JSON.stringify(bPre.Garchomp));
++  check('対象5: B では証拠全体が保留され状態が保たれる (error 型)', JSON.stringify(b5.Garchomp) === JSON.stringify(b4.Garchomp));
++  check('対象5: B では dist-unavailable が記録される', hasRec(stepLog(runB, 's4-unavailable-throw'), 'inf', 'dist-unavailable') && hasRec(stepLog(runB, 's5-unavailable-error'), 'inf', 'dist-unavailable') || hasRec(stepLog(runB, 's5-unavailable-error'), 'damage', 'dist-unavailable'));
++  check('対象5: A には dist-unavailable の記録概念がない', !runA.steps.some(s => hasRec(s.log, 'inf', 'dist-unavailable') || hasRec(s.log, 'damage', 'dist-unavailable')));
++}
++// ---- 対象6: 急所イベントによる後付け再推論 ----
++{
++  const aLog = stepLog(runA, 's6-crit-multihit'), bLog = stepLog(runB, 's6-crit-multihit');
++  const aPatch = aLog.find(r => r.trigger && r.trigger.kind === 'critPatch');
++  check('対象6: A では複数ヒット証拠への critPatch が適用される', !!aPatch && aPatch.trigger.applied === true, JSON.stringify(aPatch && aPatch.trigger));
++  check('対象6: B では critPatch は no-match で状態が変わらない', hasRec(bLog, 'critPatch', 'no-match') && JSON.stringify(fpAt(runB, 's6-crit-multihit')) === JSON.stringify(fpAt(runB, 's5-unavailable-error')));
++  const bLog2 = stepLog(runB, 's6b-crit-unavailable');
++  check('対象6: B では計算不能証拠への critPatch も no-match', hasRec(bLog2, 'critPatch', 'no-match'), JSON.stringify(bLog2.map(r => r.trigger)));
++}
++// ---- 対象7: 無効な証拠の後に有効な証拠が続く場合 ----
++{
++  const b7 = fpAt(runB, 's7-valid-after-invalid'), b6 = fpAt(runB, 's6b-crit-unavailable');
++  check('対象7: B では後続の正常な単発証拠が通常どおり適用される', b7.Garchomp.used > b6.Garchomp.used && JSON.stringify(b7.Garchomp.cands) !== JSON.stringify(b6.Garchomp.cands), `used ${b6.Garchomp.used} -> ${b7.Garchomp.used}`);
++  const dmg7 = stepLog(runB, 's7-valid-after-invalid').find(r => r.trigger && r.trigger.kind === 'damage');
++  check('対象7: damage の適用記録が残る', !!dmg7 && dmg7.trigger.applied === true, JSON.stringify(dmg7 && dmg7.trigger));
++}
++// ---- 対象8: 再生の冪等性 (B・C の複数回繰り返し) ----
++{
++  const finalB = runB.steps[runB.steps.length - 1].fp;
++  check('対象8: B の再再生が冪等に一致する', runB2.steps[runB2.steps.length - 1].fp === finalB);
++  check('対象8: C (旧版処理→初期化→修正版再生) が B と一致する', runC.steps[runC.steps.length - 1].fp === finalB);
++  check('対象8: C の繰り返しも B と一致する', runC2.steps[runC2.steps.length - 1].fp === finalB);
++  check('対象8: 推論ログのエントリ列も B と C で一致する', JSON.stringify(trigSeq(runC.steps)) === JSON.stringify(trigSeq(runB.steps)) && JSON.stringify(trigSeq(runB2.steps)) === JSON.stringify(trigSeq(runB.steps)));
++  check('対象8: A の最終状態は B と異なる (誤りが残存する)', runA.steps[runA.steps.length - 1].fp !== finalB);
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
+--- /dev/null
++++ b/tests/test_candranges_display.mjs
+@@ -0,0 +1,209 @@
++// MH-001-R1-E: candRanges の完全性契約の検証。信用集合 (cover) 内の
++// 候補のうち1件でも分布が計算不能なら、その技エントリは部分集計値では
++// なく { unavailable: true } で返ること。有効な分布での真の KO 確率0や
++// 無効 (immune) は計算不能と区別され、通常の集計値が返ること。cover 外
++// の候補は完全性に影響しないこと。candRanges が推定状態を変更しない
++// ことを、実経路 (R1-C2 のシームで計算不能を構成) で確認する。
++// 実行: node tests/test_candranges_display.mjs (最後に ALL PASS と出す)
++import { pathToFileURL } from 'node:url';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
++const core = await import(pathToFileURL(ROOT + '/core.mjs').href);
++const eng = await import(pathToFileURL(ROOT + '/estimate_engine.mjs').href);
++const { gen, damageRolls, withCurHP } = core;
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++
++const J = f => JSON.parse(fs.readFileSync(ROOT + '/data/' + f, 'utf8'));
++const POKEDB_PARSED = J('pokedb_parsed.json');
++const USAGE_SETS = J('usage_sets.json');
++const META_SETS = J('meta_sets.json');
++const VGC_SETS = J('vgc_pastes.json');
++const SPECIES_MOVES = J('species_moves.json');
++const namesJa = J('names_ja.json');
++const itemsJa = J('items_ja.json');
++const moveJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.moves || {})) { const m = gen.moves.get(id); if (m) moveJa2en[ja] = m.name; }
++const abilityJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.abilities || {})) { const a = gen.abilities.get(id); if (a) abilityJa2en[ja] = a.name; }
++const NAMES = { ...namesJa, _itemJa2en: { ...itemsJa }, _moveJa2en: moveJa2en, _abilityJa2en: abilityJa2en };
++const effSpecies = spec => (spec && spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
++const getData = () => ({ POKEDB_PARSED, USAGE_SETS, META_SETS, META_SETS_LOADED: true, NAMES, VGC_SETS, SPECIES_MOVES });
++const makeEst = fakeFn => eng.createEstimator(fakeFn ? { effSpecies, getData, damageDistribution: fakeFn } : { effSpecies, getData });
++
++function makeFake(rule) {
++  const calls = [];
++  const fn = (atkSpec, defSpec, moveName, opts) => {
++    const verdict = rule ? rule(atkSpec, defSpec, moveName, opts) : null;
++    if (verdict === 'fail') { calls.push({ atk: atkSpec && atkSpec.species, def: defSpec && defSpec.species, defItem: defSpec && defSpec.item, move: moveName, result: 'fail' }); return { error: 'injected' }; }
++    const r = core.damageDistribution(atkSpec, defSpec, moveName, opts);
++    calls.push({ atk: atkSpec && atkSpec.species, def: defSpec && defSpec.species, defItem: defSpec && defSpec.item, move: moveName, result: r && r.error ? 'error' : 'ok' });
++    return r;
++  };
++  return { fn, calls };
++}
++
++const blank = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
++const boosts0 = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
++const spec = (species, nature, sp, extra = {}) => ({ species, nature, sp: { ...blank, ...sp }, item: '', ability: '', moves: [], boosts: { ...boosts0 }, status: '', curHPPercent: 100, mega: false, ...extra });
++const myVenusaur = spec('Venusaur', 'Modest', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'] });
++const oppChomp = spec('Garchomp', 'Adamant', {}, { ability: 'Sand Veil', moves: ['Rock Slide', 'Earthquake'] });
++const baseChomp = spec('Garchomp', 'Adamant', {});
++const side0 = { hand: false, light: false, reflect: false, veil: false, guard: false, rock: false, spikes: 0 };
++const crArgs = (mine, opp) => ({ mine, opp, field: { weather: '', terrain: '' }, side: { mine: { ...side0 }, opp: { ...side0 } }, critMine: false, critOpps: false, isSingleMine: () => false, isSingleOpps: () => false });
++
++// candRanges は証拠が1件以上適用された後に cover を返す (エンジンの
++// 既存仕様)。各場面ではまず正常な単発証拠を1件適用してから呼ぶ
++const truthChompEv = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide'] });
++const amtRockEv = damageRolls(withCurHP(truthChompEv), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls[10];
++function applyEvidence(est) {
++  const ev = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt: amtRockEv, crit: false, w: '', t: '' };
++  est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++  est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  est.takeInferenceLog();
++}
++const isUnavailable = e => !!e && e.unavailable === true && Object.keys(e).length === 1;
++const isNumeric = e => !!e && typeof e.lo === 'number' && typeof e.hi === 'number' && typeof e.exp === 'number' && typeof e.ko === 'number' && !e.unavailable;
++
++function fingerprint(est, species) {
++  const ent = est._debug().bayes.bySpecies[species];
++  const ie = est._debug().inference.bySpecies[species];
++  const ser = v => v instanceof Set ? [...v].sort() : v;
++  return JSON.stringify({
++    cands: ent ? ent.cands.map(c => [c.nature, c.item, c.ability, JSON.stringify(c.sp), c.post]) : null,
++    dmgFlag: ent ? ent.dmgFlag || null : null, used: ent ? ent.used : null,
++    inf: ie ? { pairs: Object.fromEntries(Object.entries(ie.pairs).map(([k, v]) => [k, ser(v)])), hpSps: ser(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++  });
++}
++
++// ---- 正常な単発技: 従来どおりの集計値 (シーム無し＝本番経路) ----
++let baselineMine0 = null;
++{
++  const est = makeEst(null);
++  est.reset();
++  est.entry('Garchomp');
++  applyEvidence(est);
++  const out = est.candRanges(crArgs(myVenusaur, oppChomp));
++  baselineMine0 = out.mine[0];
++  check('正常単発: 集計値が返る', isNumeric(out.mine[0]), JSON.stringify(out.mine[0]));
++  check('正常単発: 相手方向も集計値が返る', isNumeric(out.opps[0]) && isNumeric(out.opps[1]), JSON.stringify(out.opps));
++  check('正常単発: acc が信用集合の累積質量を返す', typeof out.acc === 'number' && out.acc > 0.8, String(out.acc));
++}
++// ---- 正常な複数ヒット技 (計算可能な場合): 分布ベースの集計が維持される ----
++{
++  const est = makeEst(null);
++  est.reset();
++  est.entry('Garchomp');
++  applyEvidence(est);
++  const myGreninja = spec('Greninja', 'Timid', { spa: 32, spe: 32 }, { ability: 'Torrent', moves: ['Water Shuriken'] });
++  const out = est.candRanges(crArgs(myGreninja, oppChomp));
++  check('正常複数ヒット: 集計値が返り幅を持つ', isNumeric(out.mine[0]) && out.mine[0].hi > out.mine[0].lo, JSON.stringify(out.mine[0]));
++}
++// ---- 一部候補が計算不能: 当該技は表示保留、部分集計値は返らない ----
++{
++  const fake = makeFake((atk, def) => (atk && atk.species === 'Venusaur' && def && def.nature === 'Adamant' && def.sp && def.sp.atk === 32) ? 'fail' : null);
++  const est = makeEst(fake.fn);
++  est.reset();
++  est.entry('Garchomp');
++  applyEvidence(est);
++  const out = est.candRanges(crArgs(myVenusaur, oppChomp));
++  const mineCalls = fake.calls.filter(c => c.move === 'Earth Power');
++  check('一部不能 到達証拠: cover 内で失敗と成功が混在した', mineCalls.some(c => c.result === 'fail') && mineCalls.some(c => c.result === 'ok'), JSON.stringify(mineCalls.map(c => c.result)));
++  check('一部不能: 当該技エントリが { unavailable: true } のみになる', isUnavailable(out.mine[0]), JSON.stringify(out.mine[0]));
++  check('一部不能: 影響のない相手方向は集計値のまま', isNumeric(out.opps[0]) && isNumeric(out.opps[1]), JSON.stringify(out.opps));
++}
++// ---- 全候補が計算不能: 表示保留になる ----
++{
++  let failAll = false;
++  const fake = makeFake(() => failAll ? 'fail' : null);
++  const est = makeEst(fake.fn);
++  est.reset();
++  est.entry('Garchomp');
++  applyEvidence(est);
++  failAll = true;
++  const out = est.candRanges(crArgs(myVenusaur, oppChomp));
++  check('全不能: 自分方向が表示保留になる', isUnavailable(out.mine[0]), JSON.stringify(out.mine[0]));
++  check('全不能: 相手方向も表示保留になる', isUnavailable(out.opps[0]) && isUnavailable(out.opps[1]), JSON.stringify(out.opps));
++}
++// ---- 有効な分布で真の KO 確率0: unavailable にならず ko=0 で返る ----
++{
++  const est = makeEst(null);
++  est.reset();
++  est.entry('Garchomp');
++  applyEvidence(est);
++  const weakVenusaur = spec('Venusaur', 'Hardy', {}, { ability: 'Overgrow', moves: ['Tackle'] });
++  const out = est.candRanges(crArgs(weakVenusaur, oppChomp));
++  check('真のKO0: 集計値が返り ko が 0', isNumeric(out.mine[0]) && out.mine[0].ko === 0 && out.mine[0].exp > 0, JSON.stringify(out.mine[0]));
++}
++// ---- 無効 (immune) の退化分布は有効: 集計値 (全て0) が返る ----
++{
++  const est = makeEst(null);
++  est.reset();
++  est.entry('Garchomp');
++  applyEvidence(est);
++  const boltVenusaur = spec('Venusaur', 'Modest', { spa: 20 }, { ability: 'Overgrow', moves: ['Thunderbolt'] });
++  const out = est.candRanges(crArgs(boltVenusaur, oppChomp));
++  check('immune: 集計値が返り全て 0', isNumeric(out.mine[0]) && out.mine[0].lo === 0 && out.mine[0].hi === 0 && out.mine[0].exp === 0 && out.mine[0].ko === 0, JSON.stringify(out.mine[0]));
++}
++// ---- cover 外の候補の計算不能は完全性に影響しない ----
++{
++  const fake = makeFake(null);
++  const est = makeEst(fake.fn);
++  est.reset();
++  const ent = est.entry('Garchomp');
++  // 証拠を重ねて cover を絞る
++  const truthChomp = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide'] });
++  const amt = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls[10];
++  for (let t = 1; t <= 3; t++) {
++    const ev = { turn: t, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt, crit: false, w: '', t: '' };
++    est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++    est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  }
++  est.takeInferenceLog();
++  const cov = est.cover('Garchomp');
++  const coveredIdx = new Set(cov.cover.map(c => ent.cands.indexOf(c)));
++  check('cover外 前提: cover が全候補より小さい', cov.cover.length < ent.cands.length, `cover=${cov.cover.length} cands=${ent.cands.length}`);
++  const outside = ent.cands.find((c, i) => !coveredIdx.has(i));
++  // cover 外候補の署名 (性格+持ち物+SP) でのみ失敗させる
++  const sig = c => c.nature + '|' + c.item + '|' + c.ability + '|' + JSON.stringify(c.sp);
++  const fake2 = makeFake((atk, def) => (def && def.species === 'Garchomp' && sig({ nature: def.nature, item: def.item, ability: def.ability, sp: def.sp }) === sig(outside)) ? 'fail' : null);
++  const est2 = eng.createEstimator({ effSpecies, getData, damageDistribution: fake2.fn });
++  est2.reset();
++  const ent2 = est2.entry('Garchomp');
++  for (let t = 1; t <= 3; t++) {
++    const ev = { turn: t, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt, crit: false, w: '', t: '' };
++    est2.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++    est2.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++  }
++  est2.takeInferenceLog();
++  const cov2 = est2.cover('Garchomp');
++  const covered2 = new Set(cov2.cover.map(c => ent2.cands.indexOf(c)));
++  const outside2 = ent2.cands.find((c, i) => !covered2.has(i));
++  check('cover外 前提: 別インスタンスでも cover 外候補が存在する', !!outside2 && sig(outside2) === sig(outside));
++  const out = est2.candRanges(crArgs(myVenusaur, oppChomp));
++  check('cover外: 集計値が返り unavailable にならない', isNumeric(out.mine[0]), JSON.stringify(out.mine[0]));
++  check('cover外 到達証拠: cover 外候補は計算自体されていない', !fake2.calls.some(c => c.result === 'fail'), JSON.stringify(fake2.calls.map(c => c.result)));
++}
++// ---- 状態不変性: 計算不能を含む呼出でも推定状態が変わらない ----
++{
++  const fake = makeFake((atk, def) => (def && def.nature === 'Adamant' && def.sp && def.sp.atk === 32) ? 'fail' : null);
++  const est = makeEst(fake.fn);
++  est.reset();
++  est.entry('Garchomp');
++  applyEvidence(est);
++  const before = fingerprint(est, 'Garchomp');
++  const out = est.candRanges(crArgs(myVenusaur, oppChomp));
++  check('状態不変性: 前提として表示保留が発生している', isUnavailable(out.mine[0]) || isUnavailable(out.opps[0]), JSON.stringify([out.mine[0], out.opps[0]]));
++  check('状態不変性: 候補集合・事後・フラグ・inf が変わらない', fingerprint(est, 'Garchomp') === before);
++  check('状態不変性: 推論ログにも記録が残らない', est.takeInferenceLog().length === 0);
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
+--- /dev/null
++++ b/tests/test_r1f_verification.mjs
+@@ -0,0 +1,261 @@
++// MH-001-R1-F (エンジン側): 統合検収の補足検証。
++// §1 processRecoilBayes の依存関係 (複数ヒット観測から独立か)
++// §2 てだすけ消費の意味論の実証 (ゲート保留・計算不能保留・別個体・
++//    後続技・急所再生)
++// §3 candRanges の cover 条件付けの実証
++// 本番コードは変更しない。実行: node tests/test_r1f_verification.mjs
++import { pathToFileURL } from 'node:url';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
++const core = await import(pathToFileURL(ROOT + '/core.mjs').href);
++const eng = await import(pathToFileURL(ROOT + '/estimate_engine.mjs').href);
++const { gen, damageRolls, damageDistribution, withCurHP } = core;
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++
++const J = f => JSON.parse(fs.readFileSync(ROOT + '/data/' + f, 'utf8'));
++const POKEDB_PARSED = J('pokedb_parsed.json');
++const USAGE_SETS = J('usage_sets.json');
++const META_SETS = J('meta_sets.json');
++const VGC_SETS = J('vgc_pastes.json');
++const SPECIES_MOVES = J('species_moves.json');
++const namesJa = J('names_ja.json');
++const itemsJa = J('items_ja.json');
++const moveJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.moves || {})) { const m = gen.moves.get(id); if (m) moveJa2en[ja] = m.name; }
++const abilityJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.abilities || {})) { const a = gen.abilities.get(id); if (a) abilityJa2en[ja] = a.name; }
++const NAMES = { ...namesJa, _itemJa2en: { ...itemsJa }, _moveJa2en: moveJa2en, _abilityJa2en: abilityJa2en };
++const effSpecies = spec => (spec && spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
++const getData = () => ({ POKEDB_PARSED, USAGE_SETS, META_SETS, META_SETS_LOADED: true, NAMES, VGC_SETS, SPECIES_MOVES });
++const makeEst = fakeFn => eng.createEstimator(fakeFn ? { effSpecies, getData, damageDistribution: fakeFn } : { effSpecies, getData });
++function makeFake(rule) {
++  const calls = [];
++  const fn = (atkSpec, defSpec, moveName, opts) => {
++    const verdict = rule ? rule(atkSpec, defSpec, moveName, opts) : null;
++    if (verdict === 'fail') { calls.push({ move: moveName, result: 'fail' }); return { error: 'injected' }; }
++    if (verdict === 'extreme') { calls.push({ move: moveName, result: 'extreme' }); return { dist: { values: [999999], counts: [1], total: 1 }, min: 999999, max: 999999, hits: 1, multi: false }; }
++    const r = core.damageDistribution(atkSpec, defSpec, moveName, opts);
++    calls.push({ move: moveName, result: r && r.error ? 'error' : 'ok' });
++    return r;
++  };
++  return { fn, calls };
++}
++
++const blank = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
++const boosts0 = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
++const spec = (species, nature, sp, extra = {}) => ({ species, nature, sp: { ...blank, ...sp }, item: '', ability: '', moves: [], boosts: { ...boosts0 }, status: '', curHPPercent: 100, mega: false, ...extra });
++const myVenusaur = spec('Venusaur', 'Modest', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'], boosts: { ...boosts0, def: 2 } });
++const truthRilla = spec('Rillaboom', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Grassy Surge', moves: ['Wood Hammer', 'Bullet Seed'] });
++const baseRilla = spec('Rillaboom', 'Adamant', {});
++const truthChomp = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide'] });
++const baseChomp = spec('Garchomp', 'Adamant', {});
++const bogusBase = spec('Bogusmon', 'Adamant', {});
++
++function fingerprint(est, species) {
++  const ent = est._debug().bayes.bySpecies[species];
++  const ie = est._debug().inference.bySpecies[species];
++  const ser = v => v instanceof Set ? [...v].sort() : v;
++  return JSON.stringify({
++    cands: ent ? ent.cands.map(c => [c.nature, c.item, c.ability, JSON.stringify(c.sp), c.post]) : null,
++    dmgFlag: ent ? ent.dmgFlag || null : null, used: ent ? ent.used : null,
++    inf: ie ? { pairs: Object.fromEntries(Object.entries(ie.pairs).map(([k, v]) => [k, ser(v)])), hpSps: ser(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++  });
++}
++function distMode(atk, def, move) {
++  const dd = damageDistribution(withCurHP(atk), withCurHP(def), move, { gameType: 'Singles' });
++  let best = null, bc = -1;
++  dd.dist.values.forEach((v, i) => { if (dd.dist.counts[i] > bc) { bc = dd.dist.counts[i]; best = v; } });
++  return best;
++}
++const amtSeed = distMode(truthRilla, myVenusaur, 'Bullet Seed');
++const amtHammer = distMode(truthRilla, myVenusaur, 'Wood Hammer');
++
++// ================= §1 processRecoilBayes の依存関係 =================
++function recoilRun(pre, pct, fakeFn) {
++  const est = makeEst(fakeFn || null);
++  est.reset();
++  est.entry('Rillaboom');
++  const initial = fingerprint(est, 'Rillaboom');
++  for (const fn of pre) fn(est);
++  est.takeInferenceLog();
++  const ev = { turn: 2, atk: 'p2: Rillaboom', def: 'p2: Rillaboom', pct };
++  est.processDamageInf(ev, {});
++  est.processDamageBayes(ev, {});
++  const log = est.takeInferenceLog();
++  return { est, initial, fp: fingerprint(est, 'Rillaboom'), log };
++}
++const dmgEv = (move, amt) => est => {
++  const ev = { turn: 1, atk: 'p2: Rillaboom', def: 'p1: Venusaur', move, amt, crit: false, w: '', t: '' };
++  const io = { myDef: myVenusaur, basesAtk: [baseRilla], baseAtk: baseRilla };
++  est.processDamageInf(ev, io);
++  est.processDamageBayes(ev, io);
++};
++{
++  const Z = recoilRun([], 10);
++  check('§1 前提: 反動観測のみで事後が動く', Z.fp !== Z.initial);
++  check('§1 前提: recoil の適用記録が残る', Z.log.some(r => r.trigger && r.trigger.kind === 'recoil' && r.trigger.applied === true), JSON.stringify(Z.log.map(r => r.trigger)));
++  const X = recoilRun([dmgEv('Wood Hammer', amtHammer)], 10);
++  const Y = recoilRun([dmgEv('Bullet Seed', amtSeed)], 10);
++  check('§1(a): 複数ヒット技+反動の結果が反動のみの結果と一致する', Y.fp === Z.fp);
++  check('§1(a): 単発技+反動ではダメージ側の更新も加わる', X.fp !== Z.fp);
++  check('§1(a): 複数ヒットが保留されても反動処理は発火する', Y.log.some(r => r.trigger && r.trigger.kind === 'recoil' && r.trigger.applied === true));
++  // (b) ダメージ量・ヒット数を変えても反動側の更新は変わらない
++  const Y2 = recoilRun([dmgEv('Bullet Seed', 9999)], 10);
++  const Y3 = recoilRun([dmgEv('Bullet Seed', 1)], 10);
++  check('§1(b): 複数ヒット技のダメージ量を変えても反動の更新は同一', Y2.fp === Z.fp && Y3.fp === Z.fp);
++  const P9 = recoilRun([], 9), P11 = recoilRun([], 11);
++  check('§1(b): 反動 pct が帯域内なら更新は同一 (pct の大きさ自体は使わない)', P9.fp === Z.fp && P11.fp === Z.fp);
++  const P7 = recoilRun([], 7), P12 = recoilRun([], 12);
++  check('§1(b): 反動 pct が帯域外なら更新されない', P7.fp === P7.initial && P12.fp === P12.initial);
++  // (c) 分布計算を失敗させても反動経路に影響しない
++  const fakeFail = makeFake(() => 'fail');
++  const W = recoilRun([dmgEv('Wood Hammer', amtHammer)], 10, fakeFail.fn);
++  check('§1(c): 分布が全て失敗しても反動の更新は同一', W.fp === Z.fp);
++  check('§1(c): 到達証拠: ダメージ側では分布計算が試行されている', fakeFail.calls.length > 0, 'calls=' + fakeFail.calls.length);
++}
++
++// ================= §2 てだすけ消費の検証 =================
++// てだすけでしか届かないダメージ量を観測値に使うことで、inf の適用
++// 可否から「その技がてだすけ込みで評価されたか」を読み取る
++function hhOnlyAmt(truth, move) {
++  const noHH = damageDistribution(withCurHP(truth), withCurHP(myVenusaur), move, { gameType: 'Doubles' });
++  const hh = damageDistribution(withCurHP(truth), withCurHP(myVenusaur), move, { gameType: 'Doubles', atkSide: { isHelpingHand: true } });
++  let amt = null;
++  hh.dist.values.forEach((v, i) => { if (v > noHH.max && hh.dist.counts[i] > 0) amt = v; });
++  return { amt, noHHMax: noHH.max };
++}
++const hhChomp = hhOnlyAmt(truthChomp, 'Rock Slide');
++const hhRilla = hhOnlyAmt(truthRilla, 'Wood Hammer');
++check('§2 前提: てだすけでしか届かない観測値が存在する', hhChomp.amt !== null && hhRilla.amt !== null, JSON.stringify([hhChomp, hhRilla]));
++
++function hhScene() {
++  const est = makeEst(null);
++  est.reset();
++  est.entry('Garchomp');
++  est.entry('Rillaboom');
++  return est;
++}
++const hhEvent = (est, label) => est.processMoveInf({ turn: 1, label, move: 'Helping Hand' }, { my: {}, opp: {}, field: { weather: '', terrain: '' } });
++function dmgStep(est, atkSp, move, amt, ctx) {
++  const ev = { turn: 1, atk: 'p2: ' + atkSp, def: 'p1: Venusaur', move, amt, crit: false, w: '', t: '', defAlive: 2 };
++  est.processDamageInf(ev, ctx);
++  est.processDamageBayes(ev, ctx);
++  return est.takeInferenceLog();
++}
++const infApplied = log => { const r = log.find(r => r.trigger && r.trigger.kind === 'inf'); return r ? r.trigger.applied : null; };
++const ioChomp = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++const ioRilla = { myDef: myVenusaur, basesAtk: [baseRilla], baseAtk: baseRilla };
++
++// 場面4 (対照の基礎): 消費されていない場合は適用され、消費後は適用されない
++{
++  const est = hhScene();
++  hhEvent(est, 'p2: Rillaboom');
++  const log1 = dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++  check('§2-4: てだすけ未消費なら次の技に適用される', infApplied(log1) === true, JSON.stringify(log1.map(r => r.trigger)));
++  const log2 = dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++  check('§2-4: 消費後は同一ターンでも適用されない', infApplied(log2) === false, JSON.stringify(log2.map(r => r.trigger)));
++  const est2 = hhScene();
++  const log3 = dmgStep(est2, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++  check('§2-4 対照: てだすけ観測が無ければ適用されない', infApplied(log3) === false, JSON.stringify(log3.map(r => r.trigger)));
++}
++// 場面1: ゲート保留された複数ヒット技の後
++{
++  const est = hhScene();
++  hhEvent(est, 'p2: Rillaboom');
++  const logS = dmgStep(est, 'Rillaboom', 'Bullet Seed', amtSeed, ioRilla);
++  check('§2-1 前提: 複数ヒット技がゲートで保留される', logS.some(r => r.trigger && r.trigger.reason === 'multihit-suspended'), JSON.stringify(logS.map(r => r.trigger)));
++  const log1 = dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++  // R1-F1 で期待値を変更: 修正前は「消費されず後続技に適用される (漏出)」
++  // が実測値だったが、ゲート分岐でも消費する修正により、後続技は
++  // てだすけ なしで評価されるのが正しい挙動になった
++  check('§2-1 実測 (R1-F1 修正後): ゲート保留でも消費され後続技に適用されない', infApplied(log1) === false, JSON.stringify(log1.map(r => r.trigger)));
++}
++// 場面2: 計算不能で保留された技の後
++{
++  const est = hhScene();
++  hhEvent(est, 'p2: Rillaboom');
++  const ioBogus = { myDef: myVenusaur, basesAtk: [baseChomp, bogusBase], baseAtk: baseChomp };
++  const logS = dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioBogus);
++  check('§2-2 前提: 計算不能で保留される', logS.some(r => r.trigger && r.trigger.reason === 'dist-unavailable'), JSON.stringify(logS.map(r => r.trigger)));
++  const log1 = dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++  check('§2-2 実測: 計算不能保留では消費され後続技に適用されない', infApplied(log1) === false, JSON.stringify(log1.map(r => r.trigger)));
++}
++// 場面3: 同一サイドの別個体が先に攻撃した場合
++{
++  const est = hhScene();
++  hhEvent(est, 'p2: Rillaboom');
++  const log1 = dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++  check('§2-3 実測: 先に処理された別個体の技が消費し適用される', infApplied(log1) === true, JSON.stringify(log1.map(r => r.trigger)));
++  const log2 = dmgStep(est, 'Rillaboom', 'Wood Hammer', hhRilla.amt, ioRilla);
++  check('§2-3 実測: その後の技 (使用者側) には適用されない', infApplied(log2) === false, JSON.stringify(log2.map(r => r.trigger)));
++}
++// 場面5: 急所の後付け再推論と再生での一致
++{
++  const script = est => {
++    hhEvent(est, 'p2: Rillaboom');
++    dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++    const critEv = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide' };
++    est.processCritInf(critEv, ioChomp);
++    est.processCritBayes(critEv, ioChomp);
++    const log = est.takeInferenceLog();
++    const after = dmgStep(est, 'Garchomp', 'Rock Slide', hhChomp.amt, ioChomp);
++    return { fp: fingerprint(est, 'Garchomp'), log, after };
++  };
++  const r1 = script(hhScene());
++  const patch = r1.log.find(r => r.trigger && r.trigger.kind === 'critPatch');
++  check('§2-5: てだすけ込みで適用された証拠の急所是正が効く', !!patch && patch.trigger.applied === true, JSON.stringify(patch && patch.trigger));
++  check('§2-5: 急所再生の後も てだすけ は復活しない', infApplied(r1.after) === false, JSON.stringify(r1.after.map(r => r.trigger)));
++  const r2 = script(hhScene());
++  check('§2-5: 初期化+再生で消費状態と最終状態が一致する (二重消費・復活なし)', r2.fp === r1.fp && JSON.stringify(r2.log.map(r => r.trigger)) === JSON.stringify(r1.log.map(r => r.trigger)));
++}
++
++// ================= §3 candRanges の cover 条件付け =================
++const side0 = { hand: false, light: false, reflect: false, veil: false, guard: false, rock: false, spikes: 0 };
++const crArgs = (mine, opp) => ({ mine, opp, field: { weather: '', terrain: '' }, side: { mine: { ...side0 }, opp: { ...side0 } }, critMine: false, critOpps: false, isSingleMine: () => false, isSingleOpps: () => false });
++const oppChomp = spec('Garchomp', 'Adamant', {}, { ability: 'Sand Veil', moves: ['Rock Slide', 'Earthquake'] });
++{
++  const amtA = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls[10];
++  const amtB = damageRolls(withCurHP(truthChomp), withCurHP(myVenusaur), 'Rock Slide', { gameType: 'Singles' }).rolls[0];
++  const feed = (est, amt, turn) => {
++    const ev = { turn, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide', amt, crit: false, w: '', t: '' };
++    est.processDamageInf(ev, { myDef: myVenusaur, basesAtk: [baseChomp] });
++    est.processDamageBayes(ev, { myDef: myVenusaur, baseAtk: baseChomp });
++    est.takeInferenceLog();
++  };
++  const est = makeEst(null);
++  est.reset();
++  const ent = est.entry('Garchomp');
++  for (let t = 1; t <= 3; t++) feed(est, amtA, t);
++  const cov1 = est.cover('Garchomp');
++  const baseline = JSON.stringify(est.candRanges(crArgs(myVenusaur, oppChomp)));
++  // cover 外候補の署名でのみ極端な分布を返す差し替え (別インスタンスで再現)
++  const coveredIdx = new Set(cov1.cover.map(c => ent.cands.indexOf(c)));
++  const outside = ent.cands.find((c, i) => !coveredIdx.has(i));
++  const sig = c => c.nature + '|' + c.item + '|' + c.ability + '|' + JSON.stringify(c.sp);
++  let armed = false;
++  const fake = makeFake((atk, def) => (armed && def && def.species === 'Garchomp' && sig({ nature: def.nature, item: def.item, ability: def.ability, sp: def.sp }) === sig(outside)) ? 'extreme' : null);
++  const est2 = makeEst(fake.fn);
++  est2.reset();
++  est2.entry('Garchomp');
++  for (let t = 1; t <= 3; t++) feed(est2, amtA, t);
++  armed = true;
++  const out2 = JSON.stringify(est2.candRanges(crArgs(myVenusaur, oppChomp)));
++  check('§3: cover 外候補に極端な値を持たせても表示範囲は広がらない', out2 === baseline);
++  check('§3 到達証拠: cover 外候補は計算自体されていない', !fake.calls.some(c => c.result === 'extreme'), JSON.stringify(fake.calls.map(c => c.result)));
++  // 証拠で cover が狭まると範囲が変わり得る
++  for (let t = 4; t <= 5; t++) feed(est, amtB, t);
++  const cov2 = est.cover('Garchomp');
++  const after = JSON.stringify(est.candRanges(crArgs(myVenusaur, oppChomp)));
++  check('§3: 証拠で cover が狭まると集計が変わり得る', cov2.cover.length <= cov1.cover.length && after !== baseline, `cover ${cov1.cover.length} -> ${cov2.cover.length}`);
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
+--- /dev/null
++++ b/tests/test_hh_consumption.mjs
+@@ -0,0 +1,212 @@
++// MH-001-R1-F1: てだすけ消費の限定追加修正の検証。事前ゲートで証拠が
++// 保留されても、観測された てだすけ は消費される (戦闘状態の遷移と
++// 推定への採否の分離)。修正前エンジン (433983df…) と同一イベント列で
++// 比較し、漏出の再現→解消を示す。消費箇所は inf 側のゲート分岐のみ。
++// 実行: node tests/test_hh_consumption.mjs (最後に ALL PASS と出す)
++import { pathToFileURL } from 'node:url';
++import fs from 'node:fs';
++import path from 'node:path';
++import url from 'node:url';
++
++const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
++const core = await import(pathToFileURL(ROOT + '/core.mjs').href);
++const engNew = await import(pathToFileURL(ROOT + '/estimate_engine.mjs').href);
++const OLD_DIR = process.env.R1F1_OLD_DIR || '/tmp/r1f1_prefix';
++if (!fs.existsSync(OLD_DIR + '/estimate_engine.mjs')) { console.error('prefix engine not found: ' + OLD_DIR); process.exit(2); }
++const engOld = await import(pathToFileURL(OLD_DIR + '/estimate_engine.mjs').href);
++const { gen, damageDistribution, withCurHP } = core;
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++
++const J = f => JSON.parse(fs.readFileSync(ROOT + '/data/' + f, 'utf8'));
++const POKEDB_PARSED = J('pokedb_parsed.json');
++const USAGE_SETS = J('usage_sets.json');
++const META_SETS = J('meta_sets.json');
++const VGC_SETS = J('vgc_pastes.json');
++const SPECIES_MOVES = J('species_moves.json');
++const namesJa = J('names_ja.json');
++const itemsJa = J('items_ja.json');
++const moveJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.moves || {})) { const m = gen.moves.get(id); if (m) moveJa2en[ja] = m.name; }
++const abilityJa2en = {};
++for (const [id, ja] of Object.entries(namesJa.abilities || {})) { const a = gen.abilities.get(id); if (a) abilityJa2en[ja] = a.name; }
++const NAMES = { ...namesJa, _itemJa2en: { ...itemsJa }, _moveJa2en: moveJa2en, _abilityJa2en: abilityJa2en };
++const effSpecies = spec => (spec && spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
++const getData = () => ({ POKEDB_PARSED, USAGE_SETS, META_SETS, META_SETS_LOADED: true, NAMES, VGC_SETS, SPECIES_MOVES });
++const makeEst = (mod) => mod.createEstimator({ effSpecies, getData });
++
++const blank = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
++const boosts0 = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
++const spec = (species, nature, sp, extra = {}) => ({ species, nature, sp: { ...blank, ...sp }, item: '', ability: '', moves: [], boosts: { ...boosts0 }, status: '', curHPPercent: 100, mega: false, ...extra });
++const myVenusaur = spec('Venusaur', 'Modest', { spa: 20, spe: 20 }, { ability: 'Overgrow', moves: ['Earth Power'], boosts: { ...boosts0, def: 2 } });
++const truthRilla = spec('Rillaboom', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Grassy Surge', moves: ['Wood Hammer', 'Bullet Seed'] });
++const baseRilla = spec('Rillaboom', 'Adamant', {});
++const truthChomp = spec('Garchomp', 'Adamant', { atk: 32, spe: 32 }, { ability: 'Sand Veil', moves: ['Rock Slide'] });
++const baseChomp = spec('Garchomp', 'Adamant', {});
++const bogusBase = spec('Bogusmon', 'Adamant', {});
++
++function fingerprint(est, species) {
++  const ent = est._debug().bayes.bySpecies[species];
++  const ie = est._debug().inference.bySpecies[species];
++  const ser = v => v instanceof Set ? [...v].sort() : v;
++  return JSON.stringify({
++    cands: ent ? ent.cands.map(c => [c.nature, c.item, c.ability, JSON.stringify(c.sp), c.post]) : null,
++    dmgFlag: ent ? ent.dmgFlag || null : null, used: ent ? ent.used : null,
++    inf: ie ? { pairs: Object.fromEntries(Object.entries(ie.pairs).map(([k, v]) => [k, ser(v)])), hpSps: ser(ie.hpSps), used: ie.used, dropped: ie.dropped } : null,
++  });
++}
++function distMode(atk, def, move) {
++  const dd = damageDistribution(withCurHP(atk), withCurHP(def), move, { gameType: 'Singles' });
++  let best = null, bc = -1;
++  dd.dist.values.forEach((v, i) => { if (dd.dist.counts[i] > bc) { bc = dd.dist.counts[i]; best = v; } });
++  return best;
++}
++const amtSeed = distMode(truthRilla, myVenusaur, 'Bullet Seed');
++function hhOnlyAmt(truth, move) {
++  const noHH = damageDistribution(withCurHP(truth), withCurHP(myVenusaur), move, { gameType: 'Doubles' });
++  const hh = damageDistribution(withCurHP(truth), withCurHP(myVenusaur), move, { gameType: 'Doubles', atkSide: { isHelpingHand: true } });
++  let amt = null;
++  hh.dist.values.forEach((v, i) => { if (v > noHH.max && hh.dist.counts[i] > 0) amt = v; });
++  return amt;
++}
++const amtHHChomp = hhOnlyAmt(truthChomp, 'Rock Slide');
++const amtHHRilla = hhOnlyAmt(truthRilla, 'Wood Hammer');
++check('前提: てだすけでしか届かない観測値が存在する', amtHHChomp !== null && amtHHRilla !== null);
++
++function scene(mod) {
++  const est = makeEst(mod);
++  est.reset();
++  est.entry('Garchomp');
++  est.entry('Rillaboom');
++  return est;
++}
++const hhEvent = (est, label) => est.processMoveInf({ turn: 1, label, move: 'Helping Hand' }, { my: {}, opp: {}, field: { weather: '', terrain: '' } });
++const ioChomp = { myDef: myVenusaur, basesAtk: [baseChomp], baseAtk: baseChomp };
++const ioRilla = { myDef: myVenusaur, basesAtk: [baseRilla], baseAtk: baseRilla };
++function dmgStep(est, atkSp, move, amt, ctx) {
++  const ev = { turn: 1, atk: 'p2: ' + atkSp, def: 'p1: Venusaur', move, amt, crit: false, w: '', t: '', defAlive: 2 };
++  est.processDamageInf(ev, ctx);
++  est.processDamageBayes(ev, ctx);
++  return est.takeInferenceLog();
++}
++const infApplied = log => { const r = log.find(r => r.trigger && r.trigger.kind === 'inf'); return r ? r.trigger.applied : null; };
++const leakScript = (mod, withHH = true) => {
++  const est = scene(mod);
++  if (withHH) hhEvent(est, 'p2: Rillaboom');
++  const logS = dmgStep(est, 'Rillaboom', 'Bullet Seed', amtSeed, ioRilla);
++  const logR = dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioChomp);
++  return { est, logS, logR };
++};
++
++// ---- 1. 漏出の再現 (修正前) と解消 (修正後) ----
++{
++  const oldR = leakScript(engOld);
++  check('1 修正前: ゲート保留で消費されず後続技に てだすけ が漏出する (再現)', infApplied(oldR.logR) === true, JSON.stringify(oldR.logR.map(r => r.trigger)));
++  const newR = leakScript(engNew);
++  check('1 修正前: 複数ヒット技はゲートで保留される', newR.logS.some(r => r.trigger && r.trigger.reason === 'multihit-suspended'));
++  check('1 修正後: ゲート保留でも消費され後続技は てだすけ なしで評価される', infApplied(newR.logR) === false, JSON.stringify(newR.logR.map(r => r.trigger)));
++  const ctrl = leakScript(engNew, false);
++  check('1 修正後: 最終状態が「てだすけ観測なし」の対照と一致する', fingerprint(newR.est, 'Garchomp') === fingerprint(ctrl.est, 'Garchomp') && fingerprint(newR.est, 'Rillaboom') === fingerprint(ctrl.est, 'Rillaboom'));
++}
++// ---- 2. 計算不能経路との整合性 ----
++{
++  const est = scene(engNew);
++  hhEvent(est, 'p2: Rillaboom');
++  const ioBogus = { myDef: myVenusaur, basesAtk: [baseChomp, bogusBase], baseAtk: baseChomp };
++  const logS = dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioBogus);
++  check('2 前提: 計算不能で保留される', logS.some(r => r.trigger && r.trigger.reason === 'dist-unavailable'));
++  const logR = dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioChomp);
++  check('2: 計算不能経路でも後続技は てだすけ なしで評価される', infApplied(logR) === false);
++  const gate = leakScript(engNew);
++  check('2: ゲート経路と計算不能経路で消費の結果 (最終状態) が一致する', fingerprint(gate.est, 'Garchomp') === fingerprint(est, 'Garchomp') && fingerprint(gate.est, 'Rillaboom') === fingerprint(est, 'Rillaboom'));
++}
++// ---- 3. 対象と異なる個体が先に攻撃した場合 ----
++{
++  const est = scene(engNew);
++  hhEvent(est, 'p2: Rillaboom');
++  const log1 = dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioChomp);
++  check('3: 先行する単発技が消費する (従来どおり)', infApplied(log1) === true);
++  dmgStep(est, 'Rillaboom', 'Bullet Seed', amtSeed, ioRilla);
++  const log2 = dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioChomp);
++  check('3: その後のゲート技で二重消費・復活は起きない', infApplied(log2) === false);
++  const est2 = scene(engNew);
++  hhEvent(est2, 'p2: Rillaboom');
++  dmgStep(est2, 'Garchomp', 'Bullet Seed', amtSeed, ioChomp);
++  const log3 = dmgStep(est2, 'Rillaboom', 'Wood Hammer', amtHHRilla, ioRilla);
++  check('3 実測: 別個体の複数ヒット技が先でも消費される (サイド単位の近似の範囲)', infApplied(log3) === false, JSON.stringify(log3.map(r => r.trigger)));
++}
++// ---- 4. 正当に残っている場面では従来どおり適用される ----
++{
++  const est = scene(engNew);
++  hhEvent(est, 'p2: Rillaboom');
++  const log1 = dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioChomp);
++  check('4: ゲート技を挟まなければ てだすけ は従来どおり適用される', infApplied(log1) === true);
++}
++// ---- 5. 同一イベントの重複処理 ----
++{
++  const once = leakScript(engNew);
++  const est = scene(engNew);
++  hhEvent(est, 'p2: Rillaboom');
++  const ev = { turn: 1, atk: 'p2: Rillaboom', def: 'p1: Venusaur', move: 'Bullet Seed', amt: amtSeed, crit: false, w: '', t: '', defAlive: 2 };
++  est.processDamageInf(ev, ioRilla); est.processDamageBayes(ev, ioRilla);
++  est.processDamageInf(ev, ioRilla); est.processDamageBayes(ev, ioRilla);
++  est.takeInferenceLog();
++  const logR = dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioChomp);
++  check('5: 重複処理でも消費は1回だけ (後続技に適用されない)', infApplied(logR) === false);
++  check('5: 重複処理でも状態は単回処理と一致する', fingerprint(est, 'Garchomp') === fingerprint(once.est, 'Garchomp') && fingerprint(est, 'Rillaboom') === fingerprint(once.est, 'Rillaboom'));
++}
++// ---- 6. 急所再推論・再生での一致 + ゲート無関係場面の旧新一致 ----
++{
++  const script = (mod) => {
++    const est = scene(mod);
++    hhEvent(est, 'p2: Rillaboom');
++    dmgStep(est, 'Garchomp', 'Rock Slide', amtHHChomp, ioChomp);
++    const critEv = { turn: 1, atk: 'p2: Garchomp', def: 'p1: Venusaur', move: 'Rock Slide' };
++    est.processCritInf(critEv, ioChomp);
++    est.processCritBayes(critEv, ioChomp);
++    const log = est.takeInferenceLog();
++    return { est, log };
++  };
++  const a = script(engNew), b = script(engNew);
++  const patch = a.log.find(r => r.trigger && r.trigger.kind === 'critPatch');
++  check('6: 急所是正が効く', !!patch && patch.trigger.applied === true, JSON.stringify(patch && patch.trigger));
++  check('6: 再生で消費状態と最終状態が一致する', fingerprint(a.est, 'Garchomp') === fingerprint(b.est, 'Garchomp'));
++  const o = script(engOld);
++  check('6: ゲート技を含まない場面では修正前後で結果が一致する', fingerprint(o.est, 'Garchomp') === fingerprint(a.est, 'Garchomp'));
++  const l1 = leakScript(engNew), l2 = leakScript(engNew);
++  check('6: 漏出解消場面の再生でも最終状態が一致する', fingerprint(l1.est, 'Garchomp') === fingerprint(l2.est, 'Garchomp') && fingerprint(l1.est, 'Rillaboom') === fingerprint(l2.est, 'Rillaboom'));
++}
++// ---- 7. 複数ヒット証拠による不変性 (ゲート自体の回帰) ----
++{
++  const est = scene(engNew);
++  const before = fingerprint(est, 'Rillaboom');
++  const log = dmgStep(est, 'Rillaboom', 'Bullet Seed', 9999, ioRilla);
++  check('7: 過大な複数ヒット証拠でも候補・事後・フラグは不変', fingerprint(est, 'Rillaboom') === before && log.some(r => r.trigger && r.trigger.reason === 'multihit-suspended'));
++  const ent = est._debug().bayes.bySpecies['Rillaboom'];
++  check('7: dmgFlag が誤発動しない', !ent.dmgFlag);
++}
++// ---- 8. 反動推論と正常な単発技の回帰 ----
++{
++  const recoilRun = (mod, pre) => {
++    const est = makeEst(mod);
++    est.reset();
++    est.entry('Rillaboom');
++    for (const fn of pre) fn(est);
++    est.takeInferenceLog();
++    const ev = { turn: 2, atk: 'p2: Rillaboom', def: 'p2: Rillaboom', pct: 10 };
++    est.processDamageInf(ev, {});
++    est.processDamageBayes(ev, {});
++    return fingerprint(est, 'Rillaboom');
++  };
++  const seedEv = est => dmgStep(est, 'Rillaboom', 'Bullet Seed', amtSeed, ioRilla);
++  const zNew = recoilRun(engNew, []);
++  check('8: 複数ヒット+反動の結果が反動のみと一致する (修正後も不変)', recoilRun(engNew, [seedEv]) === zNew);
++  check('8: 反動のみの結果が修正前後で一致する', recoilRun(engOld, []) === zNew);
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
