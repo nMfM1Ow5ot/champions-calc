@@ -1,0 +1,15 @@
+# PV16 選出画面用PokéAPI画像 最小予備検証 v0.1
+- 2026-11-26 JST。ユーザー承認PV16計画v0.2、選出画面の相手登録6体に限定。
+- 判定: アイコン方式が有望。外見の定性的比較のみ。定量性能・採用は保留。
+- 既存収録率調査は再実施しない。台帳v1.86記載の登録候補293/293、全対象382/390はファイル名照合の既存結果。
+- 開発用PV12の同一録画系譜2レイアウト、各slot1/3/4の計6切り抜きと既存ラベル根拠を照合。切り抜き6件・根拠画像3件のSHA-256は既存manifest/label-evidenceと一致。独立候補7画像不使用。同一対戦由来で独立標本ではない。元manifestではQUARANTINE/rights unknown、登録・学習・独立評価への採用は行わない。
+- 参照: PokeAPI/sprites master の sprites/pokemon/versions/generation-ix/champions/ 以下。取得したPNG3枚はいずれも128x128 RGBA、追加の色違い1枚は目視確認。
+  - icons/812.png (Rillaboom) blob 99abd84beb658aa72e2582648263aeb4d2de8d08
+  - icons/727.png (Incineroar) blob 81a5991d0cc745e40b830d3c573ca318babd55ac
+  - icons/637.png (Volcarona) blob 05051bb4903170e7e6f2475e1b10214596130a29
+  - icons/shiny/637.png blob 214fab40998711f85d108def9942558ed5e4967c
+- 目視所見: 3種ともモデル外見、姿勢、視点に顕著な共通性。Rillaboomは目視仮ラベル、Incineroar/Volcaronaは既存名札根拠が基礎種族を補強するのみ。明度・縮尺・背景差あり。Volcaronaの黄色い翅は色違いアイコンと整合し、通常色アイコンとは色差あり。実機の色違い真値は独立に未確認。画像が同じレンダリング原本であることは未証明。
+- 正面画像候補のroot直下・front/への取得は404。正しい正面区分パスは今回未解決。選出用アイコンの有望性が確認できたため追加探索は行わない。背面・戦闘・OCR/HPは対象外。
+- 利用根拠: https://github.com/PokeAPI/sprites/blob/master/LICENCE.txt は画像の権利をThe Pokémon Companyに帰属と明記。CC0は第三者権利の全面許諾を意味しない。日本著作権法30条の4の非享受目的の必要範囲の技術試験・情報解析を暫定的根拠候補とする (https://www.bunka.go.jp/seisaku/chosakuken/hokaisei/h30_hokaisei/) 。公式画像利用ガイドライン https://www.pokemonchampions.jp/ja/streaming_guideline/ は配信等に関するもの。個別許諾、適法性・実戦利用規約適合を確定したものではない。既存開発切り抜きは限定目視検討のみ、原画像のGitHub公開や別サービス送信なし、正式適格性はunknownのまま。
+- Codex・有料API・新規依存0。ローカル数値実験なし、追加新規対戦なし。公開参照4画像のみ取得、私的原画像・ラベル根拠画像はGitHubに含めない。
+- 次工程: 権利根拠及び開発用適格性を明示し、固定済みの認識方式で旧辞書/アイコン辞書を同一ラベル・参照枚数で比較。色違いは独立IDではなく外見変種として扱う。正解ラベルの不確実性は別フラグ。独立候補7画像は隔離維持。性能の定量検証・閾値変更・正式採用は未実施。
