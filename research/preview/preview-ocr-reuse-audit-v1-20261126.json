@@ -1,0 +1,103 @@
+{
+  "schema": "pv-ocr-cross-reuse-audit-v1",
+  "date": "2026-11-26",
+  "scope": "Metadata comparison only; no new pixel recognition experiment. Prior OCR/PV records pinned.",
+  "sourceCommit": "2422149d68180a504ea5e9a381f37debac8e4513",
+  "sourceBlobs": {
+    "research/preview/preview-pv01-validation-20261126.json": "479177008d64160518b1e9b4ea0e6dc0d3885795",
+    "research/ocr/ocr-independent-battle-v13-20261126.json": "e6070b8983961172a2348d8d9e37cfae076a93e3",
+    "research/ocr/ocr-independent-battle-extension-v13-20261126.json": "bad9c1fec8651c72fe0f972689f9e3a3a7d6d346",
+    "research/ocr/ocr-acceptance-v12-20261126.json": "6726ed43ba0d3a04496ad0bfc328658597a2fed3"
+  },
+  "priorIntegratedAudit": "e909eddea5cf1affc442619feb568ea56295ffc4",
+  "hypothesis": "An OCR-independent battle might be unused in preview research.",
+  "result": {
+    "v13ArchiveOverlap": [
+      "2db95b239b07905068a01f7b50fc92ac69b0638a68083bbe7cfd5720c58e29d4",
+      "c461888aef8fbf808bd8fa8fe46bf1f8e7fa0f077d2002707b78b519f0c5feb1"
+    ],
+    "v13Frames": 24,
+    "distinctOCRBattles": 1,
+    "teamListFrames": 3,
+    "selectionOrReadyFrames": 3,
+    "olderArchiveHashes": [
+      "087f39b87299e8281f86ff34c3b48dafa2f83e644ea88ed9c934b0e852d3c999",
+      "f98b007155d4af6443927a335bfe796115dda939c7f236b5e78bc615a3c49237"
+    ],
+    "actual": {
+      "v13": {
+        "decision": "DEVELOPMENT_ONLY",
+        "reasons": [
+          "OVERLAP_archiveHashes"
+        ]
+      },
+      "older": {
+        "decision": "BLOCKED",
+        "reasons": [
+          "PREVIEW_NOT_VERIFIED",
+          "LABELS_NOT_VERIFIED",
+          "RAW_BYTES_NOT_VERIFIED",
+          "BATTLE_INDEPENDENCE_NOT_VERIFIED",
+          "BANK_PROVENANCE_NOT_VERIFIED",
+          "RIGHTS_NOT_VERIFIED",
+          "USED_INVENTORY_INCOMPLETE",
+          "MISSING_SOURCE_OR_BATTLE"
+        ]
+      }
+    },
+    "eligibleNewBattles": 0
+  },
+  "access": {
+    "localOCRArchivesFound": 0,
+    "libraryArchiveMetadataFound": 5,
+    "priorRawAccessDenial": "vision-holdout-v9-7lusf3q_-review.zip",
+    "currentRawAccessDenial": "vision-holdout-v9-qj9w9qzh-review.zip",
+    "bytesNewlyAcquired": 0,
+    "exactLibraryFilenameHashMapping": "unverified; no inference from filename",
+    "rawImagesPublished": 0
+  },
+  "improvement": {
+    "codeCommit": "2aa279a452a76edf85f4bff359db8e6e161dc5c4",
+    "tests": {
+      "positive_control": true,
+      "same_archive": true,
+      "same_video": true,
+      "same_image": true,
+      "same_source": true,
+      "same_battle": true,
+      "different_hash_not_enough": true,
+      "no_labels": true,
+      "no_preview": true,
+      "no_bytes": true,
+      "incomplete_inventory": true,
+      "unknown_bank": true,
+      "invalid_hash": true,
+      "no_rights": true
+    },
+    "execution": "Function executed in connector JS; saved source matched readback; CLI not independently run."
+  },
+  "conclusion": "OCR V13 is distinct from OCR development but both batch digests appear in PV01 input list, so exclude the entire source battle from preview independent acceptance. Exact overlap of particular selection images not established by metadata alone. Older OCR archive hashes differ but no verified distinct battle, selection frames, bytes, labels, dictionary provenance or rights; keep as unverified candidates. No new recognition metrics, no threshold tuning, no production change.",
+  "limitations": [
+    "No raw OCR archives available in inspected local path; one attempted Library materialization denied, previous smaller archive attempt denied. Other archive contents not asserted inaccessible.",
+    "Archive identity based on recorded SHA256 equality, not fresh hashing of actual archive bytes. Reuse gate checks declared metadata only, no transitive or near-duplicate detection beyond supplied group IDs; manual review required. Used inventory incomplete; no independent acceptance possible.",
+    "No archive-name to hash mapping established. No proof that old OCR data contain no previews. Global ledger not updated; TODO recorded."
+  ],
+  "todo": [
+    {
+      "id": "PV-15-independent",
+      "status": "BLOCKED",
+      "action": "Use authorized locally available unused M-C selection images with battle-level lineage and independently verified labels; complete reference provenance and fixed evaluation."
+    },
+    {
+      "id": "OCR-reuse",
+      "status": "COMPLETE_METADATA_AUDIT",
+      "action": "V13 development-only for PV, older assets unverified. Avoid repeated download attempts unless access changes."
+    }
+  ],
+  "resources": {
+    "newVideoBytes": 0,
+    "newArchiveBytes": 0,
+    "paidAPIs": 0,
+    "productionChanges": 0
+  }
+}
