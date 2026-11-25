@@ -1,0 +1,657 @@
+# MH-001 source diff (pre-fix = Snapshot S001 / rev 20261124_0418, post-fix = rev 20261124_1051 + 20261124_1101)
+# Excluded: bundle.mjs (generated file; regenerate with: ./node_modules/.bin/esbuild bundle_entry.mjs --bundle --format=esm --outfile=bundle.mjs)
+# tests/vgc_doubles_sim.mjs: pre-fix content is not recoverable from the survey materials (not a synced file, no pre-fix copy); the change is summarised in MH-001-REPORT.md instead.
+
+--- a/core.mjs
++++ b/core.mjs
+@@ -638,19 +638,16 @@
+ }
+ 
+ function calcDirection(attackers, defenders, atkSpecs, defSpecs, field, critFlags, fieldSingle, singleMoves, moveSpecs, moveZ, koCtx) {
+-  // 乱数幅の内訳 (16 本)。多段技はヒットごとのロールを要素ごとに
+-  // 合計して合計ダメージの 16 本にする (range() と一致する)
+-  const rollsOf = (res) => {
++  // 乱数幅の内訳。単発は 16 本のロール列、複数ヒットはヒットごとの
++  // ロールを畳み込んだ合計ダメージの分布 (dist) で返す。複数ヒットの
++  // ロールを要素ごとに合計すると中間の値と頻度が誤るため行わない (MH-001)
++  const rollsAndDist = (res) => {
+     const dm = res.damage;
+     if (Array.isArray(dm)) {
+-      if (Array.isArray(dm[0])) {
+-        const totals = new Array(16).fill(0);
+-        for (const hit of dm) { if (!Array.isArray(hit)) continue; for (let ri = 0; ri < 16; ri++) totals[ri] += hit[ri] || 0; }
+-        return totals;
+-      }
+-      return dm.slice();
++      if (Array.isArray(dm[0])) return { rolls: null, dist: convolveHitRolls(dm) };
++      return { rolls: dm.slice(), dist: null };
+     }
+-    return typeof dm === 'number' ? [dm] : null;
++    return { rolls: typeof dm === 'number' ? [dm] : null, dist: null };
+   };
+   // 確定数と説明文の組み立て (カスタム回復層と 9HKO 超の補完を含む)。
+   // コピー文章用に防御側を満タンへ差し替えた再計算でも同じ組み立てを使う
+@@ -689,7 +686,7 @@
+         try {
+           const r = calculate(gen, attackers[i], defenders[j], moveObj, useField);
+           const range = r.range();
+-          const rolls = rollsOf(r);
++          const { rolls, dist } = rollsAndDist(r);
+           const defMaxHP = defenders[j].maxHP();
+           const { ko: koText, desc: descText } = koAndDesc(r, defenders[j], defSpecs[j], i, j, moveObj, useField);
+           // コピー文章専用: 防御側の HP が削れている場合だけ、満タン前提で
+@@ -710,7 +707,8 @@
+             const altMove = buildMove(mv, moveSpecs && moveSpecs[i] ? moveSpecs[i][mv] : undefined, !(critFlags && critFlags[i]), !!(moveZ && moveZ[i] && moveZ[i][mv]), spec);
+             const ra = calculate(gen, attackers[i], defenders[j], altMove, useField);
+             const ar = ra.range();
+-            alt = { min: ar[0], max: ar[1], minPct: Math.round(ar[0] / defMaxHP * 1000) / 10, maxPct: Math.round(ar[1] / defMaxHP * 1000) / 10, rolls: rollsOf(ra) };
++            const altRD = rollsAndDist(ra);
++            alt = { min: ar[0], max: ar[1], minPct: Math.round(ar[0] / defMaxHP * 1000) / 10, maxPct: Math.round(ar[1] / defMaxHP * 1000) / 10, rolls: altRD.rolls, dist: altRD.dist };
+           } catch (e) { alt = null; }
+           row.vs.push({
+             min: range[0], max: range[1],
+@@ -720,6 +718,7 @@
+             desc: descText,
+             descFull,
+             rolls,
++            dist,
+             alt,
+           });
+         } catch (e) {
+@@ -1220,6 +1219,62 @@
+ // moveSpec は技ごとの指定値 (moveSpecInfo の kind に対応する数値)。
+ // ヒット数を指定した連続技では、ヒットごとのロールを合計した 16 本を返す。
+ // 指定がない場合の戻り値は従来と完全に同じ。
++// 複数ヒット技の合計ダメージ分布。ヒットごとのロール列 (各要素は等確率) を
++// 整数の組合せ数で動的計画法により畳み込み、合計値ごとの頻度を返す。
++// 16^n の全展開はせず、重複値は頻度として保持する (MH-001 の契約)。
++// 戻り値: { values: 昇順のダメージ値[], counts: 各値の組合せ数[], total: 総組合せ数 }
++export function convolveHitRolls(hitRollsList) {
++  let dist = new Map([[0, 1]]);
++  let total = 1;
++  for (const hitRolls of hitRollsList) {
++    const freq = new Map();
++    for (const v of hitRolls) freq.set(v, (freq.get(v) || 0) + 1);
++    const next = new Map();
++    for (const [base, c1] of dist) {
++      for (const [v, c2] of freq) {
++        const key = base + v;
++        next.set(key, (next.get(key) || 0) + c1 * c2);
++      }
++    }
++    dist = next;
++    total *= hitRolls.length;
++  }
++  const values = [...dist.keys()].sort((a, b) => a - b);
++  return { values, counts: values.map(v => dist.get(v)), total };
++}
++
++// calculate の結果からダメージ分布を返す (MH-001 の契約)。
++// 攻撃技: { dist: {values, counts, total}, min, max, hits, multi }
++//   単発は multi=false・hits=1 で、16 本から重複を数えた分布になる。
++// 変化技は { status: true }、無効は { immune: true }、例外時は { error }。
++export function damageDistribution(atkSpec, defSpec, moveName, opts = {}) {
++  const atk = toPokemon(atkSpec);
++  const def = toPokemon(defSpec);
++  const moveObj = buildMove(moveName, opts.moveSpec, opts.crit);
++  const field = new Field({
++    gameType: opts.gameType || 'Doubles',
++    weather: opts.weather || undefined,
++    terrain: opts.terrain || undefined,
++    attackerSide: opts.atkSide || {},
++    defenderSide: opts.defSide || {},
++  });
++  if (moveObj.category === 'Status') return { status: true };
++  if (isImmune(atk, def, moveObj)) return { immune: true };
++  try {
++    const r = calculate(gen, atk, def, moveObj, field);
++    const d = r.damage;
++    if (Array.isArray(d) && Array.isArray(d[0])) {
++      const dist = convolveHitRolls(d);
++      return { dist, min: dist.values[0], max: dist.values[dist.values.length - 1], hits: d.length, multi: true };
++    }
++    const rolls = Array.isArray(d) ? d : [d];
++    const dist = convolveHitRolls([rolls]);
++    return { dist, min: dist.values[0], max: dist.values[dist.values.length - 1], hits: 1, multi: false };
++  } catch (e) {
++    return { error: e.message };
++  }
++}
++
+ export function damageRolls(atkSpec, defSpec, moveName, opts = {}) {
+   const atk = toPokemon(atkSpec);
+   const def = toPokemon(defSpec);
+@@ -1236,17 +1291,11 @@
+   try {
+     const r = calculate(gen, atk, def, moveObj, field);
+     const d = r.damage;
+-    const info = moveSpecInfo(moveName);
+-    if (opts.moveSpec != null && info && info.kind === 'hits' &&
+-        Array.isArray(d) && Array.isArray(d[0])) {
+-      // ヒットごとのロール (ヒット数 × 16) を要素ごとに合計し、
+-      // 合計ダメージの 16 本として返す
+-      const totals = new Array(16).fill(0);
+-      for (const hitRolls of d) {
+-        if (!Array.isArray(hitRolls)) continue;
+-        for (let i = 0; i < 16; i++) totals[i] += hitRolls[i] || 0;
+-      }
+-      return { rolls: totals };
++    if (Array.isArray(d) && Array.isArray(d[0])) {
++      // 複数ヒット (moveSpec の有無を問わない): ヒットごとのロールを
++      // 要素ごとに合計した偽の 16 本は作らず、合計の分布で返す (MH-001)
++      const dist = convolveHitRolls(d);
++      return { rolls: null, dist, hits: d.length, multi: true };
+     }
+     return { rolls: Array.isArray(d) ? d : [d] };
+   } catch (e) {
+--- a/estimate_engine.mjs
++++ b/estimate_engine.mjs
+@@ -5,7 +5,7 @@
+ // 受け取る。ダメージ計算は「表示用」(core.mjs の calcMatchup を UI が使う)
+ // と分け、ここでは推定のための計算 (damageRolls による尤度評価と候補全体の
+ // ダメージ幅の集計) だけを行う。自チームの逆算 (deriveBuild) は含まない。
+-import { gen, statTable, damageRolls, withCurHP, moveData } from './core.mjs';
++import { gen, statTable, damageRolls, damageDistribution, withCurHP, moveData } from './core.mjs';
+ 
+ const idOf = en => String(en).toLowerCase().replace(/[^a-z0-9]/g, '');
+ export const labelSide = label => (label.startsWith('p1') ? 'p1' : 'p2');
+@@ -169,11 +169,45 @@
+   const hi = ko ? Infinity : Math.ceil((pct + 1) * maxHP / 100 - 1e-9) - 1;
+   return [lo, hi];
+ }
++// ダメージ分布の統一形 (MH-001): core の damageDistribution を推定側の形に
++// 正規化する。攻撃技は { values, counts, total, min, max, hits, multi }
++// (values は昇順、質量は counts/total)。単発は total=16 で質量 = 件数/16 と
++// なり、従来のロール件数の算術と一致する。分布が得られない場合
++// (error / status) は null を返し、呼び出し側は従来どおり証拠を保留する。
++// 無効 (immune) は従来の rolls:[0] の挙動を全経路で再現するため、値0に
++// 質量1の退化分布として返す
++function dmgDist(atkSpec, defSpec, moveName, opts) {
++  const r = damageDistribution(atkSpec, defSpec, moveName, opts);
++  if (!r || r.error || r.status) return null;
++  if (r.immune) return { values: [0], counts: [1], total: 1, min: 0, max: 0, hits: 1, multi: false };
++  if (!r.dist) return null;
++  return { values: r.dist.values, counts: r.dist.counts, total: r.dist.total, min: r.min, max: r.max, hits: r.hits, multi: r.multi };
++}
++// 観測述語に一致する確率質量 (0〜1)。ベイズ側は bayesApply へ質量×16 を
++// 渡す (単発では 16 が2の冪のため算術が厳密で従来の件数と一致し、複数
++// ヒットでは真の分布の尤度になる)
++function distMass(dist, pred) {
++  if (!dist) return 0;
++  let m = 0;
++  for (let j = 0; j < dist.values.length; j++) if (dist.counts[j] > 0 && pred(dist.values[j])) m += dist.counts[j];
++  return m / dist.total;
++}
++// 可変ヒット技でヒット数の指定 (moveSpec) が無い場合、分布はライブラリ
++// 既定のヒット数に依存する。その想定を推論ログに残すための判定 (MH-001)
++function assumedHitsFor(md, opts, dist) {
++  if (!dist || !dist.multi) return null;
++  if (!md || !md.spec || md.spec.kind !== 'hits') return null;
++  if (opts && opts.moveSpec != null) return null;
++  return dist.hits;
++}
+ function processDamageInf(ev, ctx, optsOverride, collect) {
+   if (typeof ev.turn === 'number') infLogTurn = ev.turn;
+   if (!collect) pendingOpts = null; // このイベントに場の条件が付かなければベイズ側は対象外
+   const md = moveData(ev.move);
+-  if (!md || md.category === 'Status' || !md.basePower || md.multihit || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
++  // 複数ヒット技は合計ダメージの分布 (damageDistribution) で表せるように
++  // なったため対象外にしない (MH-001 で multihit 項を解除)。変化技・
++  // 固定ダメージ・ブラックリストは従来どおり対象外
++  if (!md || md.category === 'Status' || !md.basePower || md.fixedDamage || INF_BLACKLIST.has(md.name)) return;
+   // 自分自身へのダメージ (反動など) は攻撃として扱わない (ベイズ側は
+   // processRecoilBayes が持ち物推論の証拠として取り込む)
+   if (ev.atk && ev.atk === ev.def) return;
+@@ -232,8 +266,8 @@
+       for (const rows of byValue.values()) {
+         const rep = rows[0];
+         const atkSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [statKey]: rep.sp } };
+-        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+-        if (rolls.some(inRange)) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
++        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
++        if (distMass(dist, inRange) > 0) for (const r of rows) feasible.add(r.nature + '|' + r.sp);
+       }
+     }
+     if (collect) collect.push({ species: atkSpecies, statKey, feasible, hpSps: null });
+@@ -256,10 +290,10 @@
+       for (const rows of byValue.values()) {
+         const rep = rows[0];
+         const defSpec = { ...base, nature: rep.nature, sp: { ...base.sp, [defKey]: rep.sp } };
+-        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
+-        if (!rolls.length) continue;
++        const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), md.name, opts);
++        if (!dist) continue;
+         for (const [spHp, hpVal] of hpBySp) {
+-          if (rolls.some(r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct))) {
++          if (distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) > 0) {
+             for (const r of rows) feasPairs.add(r.nature + '|' + r.sp);
+             feasHp.add(spHp);
+           }
+@@ -1149,16 +1183,17 @@
+       [amtLo, amtHi] = amtRangeForPct(ev.pct, M, ko);
+     }
+     const matchRoll = hasAmt ? (r => r === ev.amt) : (r => r >= amtLo && r <= amtHi);
+-    const rollsList = ent.cands.map(c => damageRolls(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts).rolls);
+-    let counts = rollsList.map(rolls => rolls.filter(matchRoll).length);
++    const distList = ent.cands.map(c => dmgDist(withCurHP(bayesCandSpec(base, c)), withCurHP(defSpec), md.name, opts));
++    let counts = distList.map(dist => distMass(dist, matchRoll) * 16);
+     const trig = { kind: 'damage', move: md.name, by: 'opp', crit: !!ev.crit };
+     if (hasAmt) trig.amt = ev.amt;
+     else { trig.pct = ev.pct; trig.amtRange = [amtLo, amtHi === Infinity ? null : amtHi]; }
++    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
+     if (!counts.some(n => n > 0)) {
+       // 最大超過の判定は、観測と整合する最小の実数で行う (pct のみの
+       // 観測や、とどめの一撃で切り捨てられた観測でも偽陽性にならない)
+       const obsMin = hasAmt ? ev.amt : amtLo;
+-      const over = rollsList.every(rolls => rolls.length && obsMin > Math.max(...rolls));
++      const over = distList.every(dist => dist && obsMin > dist.max);
+       if (over) {
+         trig.dir = 'over';
+         const want = md.category === 'Physical' ? 'Choice Band' : md.category === 'Special' ? 'Choice Specs' : null;
+@@ -1171,8 +1206,7 @@
+       if ((flag === 'Choice Band' && md.category === 'Physical') || (flag === 'Choice Specs' && md.category === 'Special')) {
+         counts = ent.cands.map(c => {
+           const cc = isMegaStoneItem(c.item) ? c : { ...c, item: flag };
+-          const { rolls } = damageRolls(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts);
+-          return rolls.filter(matchRoll).length;
++          return distMass(dmgDist(withCurHP(bayesCandSpec(base, cc)), withCurHP(defSpec), md.name, opts), matchRoll) * 16;
+         });
+         trig.dmgFlag = flag;
+       }
+@@ -1197,16 +1231,15 @@
+     if (!ent || !atkSpec || !base) { if (!capture) logSnapshot(defSpecies, ev.turn, { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, applied: false, reason: 'no-base' }); return; }
+     const flagIn = ent.dmgFlag;
+     let flagWork = capture ? capture.flagIn : flagIn;
+-    const pctCounts = (c, rolls) => {
++    const pctCounts = (c, dist) => {
+       const hpVal = c.values.hp;
+-      if (!hpVal || !rolls) return 0;
+-      let n = 0;
+-      for (const r of rolls) if (r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) n++;
+-      return n;
++      if (!hpVal || !dist) return 0;
++      return distMass(dist, r => r > 0 && (Math.round(r / hpVal * 100) === ev.pct || Math.floor(r / hpVal * 100) === ev.pct)) * 16;
+     };
+-    const rollsList = ent.cands.map(c => c.values.hp ? damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts).rolls : null);
+-    let counts = ent.cands.map((c, i) => pctCounts(c, rollsList[i]));
++    const distList = ent.cands.map(c => c.values.hp ? dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, c)), md.name, opts) : null);
++    let counts = ent.cands.map((c, i) => pctCounts(c, distList[i]));
+     const trig = { kind: 'damage', move: md.name, by: 'mine', pct: ev.pct, crit: !!ev.crit };
++    { const ah = assumedHitsFor(md, opts, distList.find(d => d)); if (ah != null) trig.assumedHits = ah; }
+     if (!counts.some(n => n > 0)) {
+       // とどめの一撃では観測 pct が残り HP で頭打ちになり、実際のロールは
+       // それ以上だった可能性がある (下限の観測)。「全候補の最小ロール
+@@ -1215,9 +1248,9 @@
+       // pct で Assault Vest が誤発火した)
+       const ko = ev.pct >= (base && base.curHPPercent != null ? base.curHPPercent : 100);
+       const under = !ko && ent.cands.every((c, i) => {
+-        const rolls = rollsList[i];
+-        if (!rolls || !c.values.hp) return false;
+-        return ev.pct < Math.min(...rolls.map(r => Math.floor(r / c.values.hp * 100)));
++        const dist = distList[i];
++        if (!dist || !c.values.hp) return false;
++        return ev.pct < Math.min(...dist.values.map(r => Math.floor(r / c.values.hp * 100)));
+       });
+       if (under) {
+         trig.dir = 'under';
+@@ -1230,8 +1263,7 @@
+       counts = ent.cands.map(c => {
+         if (!c.values.hp) return 0;
+         const cc = isMegaStoneItem(c.item) ? c : { ...c, item: 'Assault Vest' };
+-        const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts);
+-        return pctCounts(c, rolls);
++        return pctCounts(c, dmgDist(withCurHP(atkSpec), withCurHP(bayesCandSpec(base, cc)), md.name, opts));
+       });
+       trig.dmgFlag = 'Assault Vest';
+     }
+@@ -1742,17 +1774,20 @@
+       // 出さないよう対象外にする (moveData の isZ / isMax で判定)
+       const md = moveData(mv);
+       if (md && (md.isZ || md.isMax)) return;
+-      const { rolls } = damageRolls(withCurHP(atkSpec), withCurHP(defSpec), mv,
++      const dist = dmgDist(withCurHP(atkSpec), withCurHP(defSpec), mv,
+         { ...F, gameType: singleFn(mv) ? 'Singles' : 'Doubles', crit: !!crit, atkSide: sc.atkSide, defSide: sc.defSide });
+-      if (!rolls || !rolls.length) return;
+-      const lo = Math.min(...rolls) / defHp * 100, hi = Math.max(...rolls) / defHp * 100;
++      if (!dist) return;
++      const lo = dist.min / defHp * 100, hi = dist.max / defHp * 100;
+       // 事後確率で重み付けした期待値 (包絡と同じ信用集合内での期待値)。
+-      // exp = 期待ダメージ% (候補の16ロールの平均)、ko = 期待KO%
+-      // (候補のロールのうち現在HP以上を占める割合) を、候補の事後確率で加重
+-      const meanPct = (rolls.reduce((s, r) => s + r, 0) / rolls.length) / defHp * 100;
++      // exp = 期待ダメージ% (分布の質量で重み付けした平均。単発では従来の
++      // 16ロールの平均と一致)、ko = 期待KO% (現在HP以上の質量の割合) を、
++      // 候補の事後確率で加重 (MH-001 で分布ベースに置き換え)
+       const pctNow = defSpec && defSpec.curHPPercent != null ? defSpec.curHPPercent : 100;
+       const curHp = pctNow >= 100 ? defHp : Math.max(1, Math.floor(defHp * pctNow / 100));
+-      const koPct = rolls.filter(r => r >= curHp).length / rolls.length * 100;
++      let meanSum = 0, koMass = 0;
++      for (let j = 0; j < dist.values.length; j++) { meanSum += dist.values[j] * dist.counts[j]; if (dist.values[j] >= curHp) koMass += dist.counts[j]; }
++      const meanPct = (meanSum / dist.total) / defHp * 100;
++      const koPct = koMass / dist.total * 100;
+       const cur = dst[mi];
+       dst[mi] = cur
+         ? { lo: Math.min(cur.lo, lo), hi: Math.max(cur.hi, hi), exp: cur.exp + w * meanPct, ko: cur.ko + w * koPct }
+--- a/ui.html
++++ b/ui.html
+@@ -2450,9 +2450,19 @@
+       else if (r.error) { dmg = '—'; }
+       else {
+         dmg = `${fmtPct(r.minPct)} – ${fmtPct(r.maxPct)}%`;
+-        // 乱数幅の内訳 (16 本) をホバーで吹き出し表示する。吹き出しの
+-        // 下段には反対の急所状態の範囲と乱数も併記する
+-        if (r.rolls && r.rolls.length > 1) {
++        // 乱数幅の内訳をホバーで吹き出し表示する。単発は 16 本のロール列、
++        // 複数ヒットは合計ダメージの分布 (各値と確率) を出す (MH-001)。
++        // 吹き出しの下段には反対の急所状態の範囲と内訳も併記する
++        const distTip = dist => dist.values.map((v, vi) => `${v}: ${Math.round(dist.counts[vi] / dist.total * 1000) / 10}%`).join(', ');
++        if (r.dist) {
++          let tip = distTip(r.dist);
++          if (r.alt && r.alt.dist && (r.alt.min !== r.min || r.alt.max !== r.max)) {
++            const altLbl = ui.crit[side] ? '通常' : '急所';
++            tip += `<span class="rolltip-alt"><span class="rolltip-altlab">${altLbl} ${fmtPct(r.alt.minPct)} – ${fmtPct(r.alt.maxPct)}%</span><br>${distTip(r.alt.dist)}</span>`;
++          }
++          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span>`;
++        }
++        else if (r.rolls && r.rolls.length > 1) {
+           let tip = r.rolls.join(', ');
+           if (r.alt && (r.alt.min !== r.min || r.alt.max !== r.max)) {
+             const altLbl = ui.crit[side] ? '通常' : '急所';
+--- a/tests/test_move_spec.mjs
++++ b/tests/test_move_spec.mjs
+@@ -44,11 +44,21 @@
+   }
+   return rolls;
+ }
+-const sumRolls = (...lists) => {
+-  const t = new Array(16).fill(0);
+-  for (const l of lists) for (let i = 0; i < 16; i++) t[i] += l[i];
+-  return t;
+-};
++// MH-001 以降、複数ヒットの期待値は「要素ごとの合計」ではなく合計の分布。
++// 参照分布は全列挙で独立に求める (畳み込み実装とは別の経路で照合する)
++function bruteForceDist(lists) {
++  let combos = [0];
++  for (const l of lists) {
++    const next = [];
++    for (const c of combos) for (const v of l) next.push(c + v);
++    combos = next;
++  }
++  const freq = new Map();
++  for (const c of combos) freq.set(c, (freq.get(c) || 0) + 1);
++  const values = [...freq.keys()].sort((a, b) => a - b);
++  return { values, counts: values.map(v => freq.get(v)), total: combos.length };
++}
++const distEq = (a, b) => !!a && !!b && eq(a.values, b.values) && eq(a.counts, b.counts) && a.total === b.total;
+ 
+ // --- A. メタ情報 (moveData().spec) ---
+ check('Bullet Seed の spec', eq(moveData('Bullet Seed').spec, { kind: 'hits', min: 2, max: 5, def: 3 }), JSON.stringify(moveData('Bullet Seed').spec));
+@@ -60,7 +70,10 @@
+ check('通常技は指定なし', moveData('Tackle').spec === null);
+ 
+ // --- B. 後方互換: 指定なしは従来の計算 (Move を素で組んだ複製) と完全一致 ---
+-for (const [atkSpec, mv] of [[WEAVILE, 'Triple Axel'], [WEAVILE, 'Ice Shard'], [RILLABOOM, 'Bullet Seed'], [ANNIHILAPE, 'Rage Fist'], [ANNIHILAPE, 'Last Respects'], [WEAVILE, 'Double Kick']]) {
++// 単発技は従来どおり。複数ヒット技は MH-001 で分布契約に変更したため、
++// そちらは直下の B2 で新しい期待値に照合する (旧期待値は要素ごと合計の
++// 欠陥そのものを固定していた)。
++for (const [atkSpec, mv] of [[WEAVILE, 'Ice Shard'], [ANNIHILAPE, 'Rage Fist'], [ANNIHILAPE, 'Last Respects']]) {
+   const got = damageRolls(atkSpec, GARCHOMP, mv);
+   const field = new Field({ gameType: 'Doubles' });
+   const r = calculate(gen, mirrorPokemon(atkSpec), mirrorPokemon(GARCHOMP), new Move(gen, mv), field);
+@@ -68,15 +81,31 @@
+   check(`指定なし ${mv} は従来どおり`, eq(got.rolls, expected));
+ }
+ 
++// --- B2. 複数ヒット技の指定なし (MH-001 の分布契約で書き換え) ---
++for (const [atkSpec, mv] of [[WEAVILE, 'Triple Axel'], [RILLABOOM, 'Bullet Seed'], [WEAVILE, 'Double Kick']]) {
++  const got = damageRolls(atkSpec, GARCHOMP, mv);
++  const field = new Field({ gameType: 'Doubles' });
++  const r = calculate(gen, mirrorPokemon(atkSpec), mirrorPokemon(GARCHOMP), new Move(gen, mv), field);
++  check(`指定なし ${mv} は分布で返す (MH-001)`,
++    got.rolls === null && got.multi === true && got.hits === r.damage.length && distEq(got.dist, bruteForceDist(r.damage)),
++    `got=${JSON.stringify(got).slice(0, 200)}`);
++}
++
+ // --- C. トリプルアクセル: 段階威力 20/40/60 の合計 (手計算) ---
++// MH-001 で書き換え: 2 ヒット以上は要素ごと合計ではなく、手計算の
++// ヒットごとのロールを全列挙した分布と照合する。1 ヒットは単発として
++// 従来どおりロール列で返す。
+ {
+   const A = mirrorPokemon(WEAVILE).stats.atk;
+   const D = mirrorPokemon(GARCHOMP).stats.def;
+   const perHit = [1, 2, 3].map(h => handRolls(20 * h, A, D, 1.5, 4)); // 氷→地面・ドラゴンは 4 倍
+-  for (const hits of [1, 2, 3]) {
++  const got1 = damageRolls(WEAVILE, GARCHOMP, 'Triple Axel', { moveSpec: 1 });
++  check('Triple Axel 1 ヒット', eq(got1.rolls, perHit[0]), `got=${JSON.stringify(got1.rolls)}`);
++  for (const hits of [2, 3]) {
+     const got = damageRolls(WEAVILE, GARCHOMP, 'Triple Axel', { moveSpec: hits });
+-    check(`Triple Axel ${hits} ヒット`, eq(got.rolls, sumRolls(...perHit.slice(0, hits))),
+-      `got=${JSON.stringify(got.rolls)}`);
++    check(`Triple Axel ${hits} ヒットは分布 (MH-001)`,
++      got.rolls === null && got.multi === true && got.hits === hits && distEq(got.dist, bruteForceDist(perHit.slice(0, hits))),
++      `got=${JSON.stringify(got).slice(0, 200)}`);
+   }
+ }
+ 
+@@ -104,14 +133,18 @@
+     `got=${JSON.stringify(got2.rolls)}`);
+ }
+ 
+-// --- F. 可変ヒット技の合計ロール (手計算: 1ヒット分 × ヒット数) ---
++// --- F. 可変ヒット技の合計の分布 (手計算: 1ヒット分 × ヒット数) ---
++// MH-001 で書き換え: 要素ごと合計ではなく、手計算の 1 ヒット分を
++// 全列挙した分布と照合する。
+ {
+   const A = mirrorPokemon(RILLABOOM).stats.atk;
+   const D = mirrorPokemon(GARCHOMP).stats.def;
+   const one = handRolls(25, A, D, 1.5, 1); // 草→地面2倍・ドラゴン0.5倍 = 等倍
+   for (const hits of [2, 5]) {
+     const got = damageRolls(RILLABOOM, GARCHOMP, 'Bullet Seed', { moveSpec: hits });
+-    check(`Bullet Seed ${hits} ヒット`, eq(got.rolls, sumRolls(...Array(hits).fill(one))));
++    check(`Bullet Seed ${hits} ヒットは分布 (MH-001)`,
++      got.rolls === null && got.multi === true && got.hits === hits && distEq(got.dist, bruteForceDist(Array(hits).fill(one))),
++      `got=${JSON.stringify(got).slice(0, 200)}`);
+   }
+ }
+ 
+--- a/tests/bayes_sim.mjs
++++ b/tests/bayes_sim.mjs
+@@ -103,7 +103,12 @@
+ 
+ try {
+   const bundle = await import(url.pathToFileURL(ROOT + '/bundle.mjs').href);
+-  const { damageRolls, withCurHP, statTable } = bundle;
++  const { damageRolls, damageDistribution, withCurHP, statTable } = bundle;
++  // 複数ヒット技は分布で扱う (MH-001): 観測値は質量で重み付け抽選し、
++  // 候補の件数は質量×16 で数える (単発では従来のロール数えと一致する)
++  const distOf = (a, d, mv) => { try { return damageDistribution(withCurHP(a), withCurHP(d), mv, {}); } catch { return null; } };
++  const sampleDist = (dist) => { let x = rnd() * dist.total, acc = 0; for (let j = 0; j < dist.values.length; j++) { acc += dist.counts[j]; if (x < acc) return dist.values[j]; } return dist.values[dist.values.length - 1]; };
++  const massCount = (dd, pred) => { if (!dd || !dd.dist) return 0; let m = 0; const d = dd.dist; for (let j = 0; j < d.values.length; j++) if (pred(d.values[j])) m += d.counts[j]; return m / d.total * 16; };
+   const gen9 = bundle.Generations.get(9);
+   const movePrio = mv => { try { return gen9.moves.get(mv)?.priority || 0; } catch { return 0; } };
+   const speValue = spec => {
+@@ -123,7 +128,7 @@
+   const attackers = T.state.mine.map(spec => {
+     const raw = myTeamRaw.find(x => x.species === spec.species) || {};
+     const moves = (spec.moves?.length ? spec.moves : raw.moves || []).filter(mv => {
+-      try { const { rolls } = damageRolls(withCurHP(spec), withCurHP(dummyDef), mv, {}); return rolls && rolls.length >= 8 && Math.max(...rolls) > 0 && new Set(rolls).size >= 4; }
++      try { const r = damageRolls(withCurHP(spec), withCurHP(dummyDef), mv, {}); const vals = r.rolls || (r.dist ? r.dist.values : null); return vals && vals.length >= 4 && Math.max(...vals) > 0 && new Set(vals).size >= 4; }
+       catch { return false; }
+     });
+     return { spec, moves };
+@@ -217,15 +222,13 @@
+         let myPair = null;
+         for (let tries = 0; tries < 3; tries++) {
+           const mv = atk.moves[rndInt(atk.moves.length)];
+-          const { rolls } = damageRolls(withCurHP(atk.spec), withCurHP(truthSpec), mv, {});
+-          if (!rolls || rolls.length < 8 || Math.max(...rolls) <= 0) continue;
+-          const pct = Math.round(rolls[rndInt(16)] / tVals.hp * 100);
++          const td = distOf(atk.spec, truthSpec, mv);
++          if (!td || !td.dist || td.max <= 0) continue;
++          const pct = Math.round(sampleDist(td.dist) / tVals.hp * 100);
+           if (!(pct > 0)) continue;
+           const counts = ent.cands.map(c => {
+             const hpVal = c.values.hp; if (!hpVal) return 0;
+-            const r2 = damageRolls(withCurHP(atk.spec), withCurHP(T.bayesCandSpec(base, c)), mv, {}).rolls;
+-            let n = 0; for (const r of r2) if (r > 0 && (Math.round(r / hpVal * 100) === pct || Math.floor(r / hpVal * 100) === pct)) n++;
+-            return n;
++            return massCount(distOf(atk.spec, T.bayesCandSpec(base, c), mv), r => r > 0 && (Math.round(r / hpVal * 100) === pct || Math.floor(r / hpVal * 100) === pct));
+           });
+           T.bayesApply(ent, counts, true);
+           myPair = { spec: atk.spec, move: mv };
+@@ -235,10 +238,10 @@
+         if (OPP_ATK && truth.moves.length && rnd() < 0.5) {
+           for (let tries = 0; tries < 3; tries++) {
+             const mv = truth.moves[rndInt(truth.moves.length)];
+-            let rolls; try { rolls = damageRolls(withCurHP(truthSpec), withCurHP(myDefender), mv, {}).rolls; } catch { continue; }
+-            if (!rolls || rolls.length < 8 || Math.max(...rolls) <= 0 || new Set(rolls).size < 4) continue;
+-            const amt = rolls[rndInt(16)];
+-            const counts = ent.cands.map(c => damageRolls(withCurHP(T.bayesCandSpec(base, c)), withCurHP(myDefender), mv, {}).rolls.filter(r => r === amt).length);
++            const td = distOf(truthSpec, myDefender, mv);
++            if (!td || !td.dist || td.max <= 0 || td.dist.values.length < 4) continue;
++            const amt = sampleDist(td.dist);
++            const counts = ent.cands.map(c => massCount(distOf(T.bayesCandSpec(base, c), myDefender, mv), r => r === amt));
+             T.bayesApply(ent, counts, true);
+             // 行動順: 両者が同じターンに攻撃技を使った場合のみ。優先度が
+             // 異なれば順序は素早さで決まらないため証拠にしない。本番の
+--- a/tests/test_multihit_dist.mjs
++++ b/tests/test_multihit_dist.mjs
+@@ -0,0 +1,138 @@
++// MH-001: 複数ヒット技のダメージ乱数分布の検証。
++// 契約: ヒットごとのロールは独立で等確率。合計の分布は整数の組合せ数で
++// 畳み込み、要素ごとの合計のような偽の 16 本は作らない。
++// 実行: node tests/test_multihit_dist.mjs (最後に ALL PASS と出す)
++import { Pokemon, Move, Field, calculate } from '@smogon/calc';
++import { gen, convolveHitRolls, damageDistribution, damageRolls, spToEvs } from '../core.mjs';
++
++let failures = 0;
++function check(name, cond, detail = '') {
++  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? ` (${detail})` : ''));
++  if (!cond) failures++;
++}
++const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
++const IVS = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
++
++const WEAVILE = { species: 'Weavile', nature: 'Hardy', ability: 'Pressure', item: '', sp: { atk: 32 } };
++const RILLABOOM = { species: 'Rillaboom', nature: 'Hardy', ability: 'Grassy Surge', item: '', sp: { atk: 32 } };
++const MAUSHOLD = { species: 'Maushold', nature: 'Hardy', ability: 'Technician', item: '', sp: { atk: 32 } };
++const GARCHOMP = { species: 'Garchomp', nature: 'Hardy', ability: 'Rough Skin', item: '', sp: { hp: 32, def: 32 } };
++
++function mirrorPokemon(spec) {
++  return new Pokemon(gen, spec.species, {
++    level: 50, nature: spec.nature, ability: spec.ability, item: spec.item,
++    ivs: IVS, evs: spToEvs(spec.sp),
++  });
++}
++// 参照実装: 小規模な全列挙 (畳み込みとは独立の経路で照合する)
++function bruteForceDist(lists) {
++  let combos = [0];
++  for (const l of lists) {
++    const next = [];
++    for (const c of combos) for (const v of l) next.push(c + v);
++    combos = next;
++  }
++  const freq = new Map();
++  for (const c of combos) freq.set(c, (freq.get(c) || 0) + 1);
++  const values = [...freq.keys()].sort((a, b) => a - b);
++  return { values, counts: values.map(v => freq.get(v)), total: combos.length };
++}
++const distEq = (a, b) => !!a && !!b && eq(a.values, b.values) && eq(a.counts, b.counts) && a.total === b.total;
++
++// --- T01: 2 ヒット同一分布 ---
++{
++  const d = convolveHitRolls([[10, 11, 12, 13], [10, 11, 12, 13]]);
++  check('T01 values', eq(d.values, [20, 21, 22, 23, 24, 25, 26]), JSON.stringify(d.values));
++  check('T01 counts', eq(d.counts, [1, 2, 3, 4, 3, 2, 1]), JSON.stringify(d.counts));
++  check('T01 total', d.total === 16);
++}
++
++// --- T02: 重複値を含むロール ---
++{
++  const d = convolveHitRolls([[10, 10, 11, 12], [10, 10, 11, 12]]);
++  check('T02 values', eq(d.values, [20, 21, 22, 23, 24]), JSON.stringify(d.values));
++  check('T02 counts', eq(d.counts, [4, 4, 5, 2, 1]), JSON.stringify(d.counts));
++  check('T02 total', d.total === 16);
++}
++
++// --- T03: 異なる分布同士 (30〜33 が各 25%) ---
++{
++  const d = convolveHitRolls([[10, 11], [20, 22]]);
++  check('T03 values/counts', eq(d.values, [30, 31, 32, 33]) && eq(d.counts, [1, 1, 1, 1]),
++    JSON.stringify(d));
++  check('T03 each 25%', d.counts.every(c => c / d.total === 0.25));
++}
++
++// --- T04: 16 段階・2〜5 ヒットで全列挙の参照計算と照合 ---
++{
++  const totals = { 2: 256, 3: 4096, 4: 65536, 5: 1048576 };
++  for (let hits = 2; hits <= 5; hits++) {
++    const lists = [];
++    for (let h = 0; h < hits; h++) {
++      const l = [];
++      for (let i = 0; i < 16; i++) l.push(10 + h * 7 + i);
++      lists.push(l);
++    }
++    const d = convolveHitRolls(lists);
++    check(`T04 ${hits} hits total`, d.total === totals[hits], `total=${d.total}`);
++    check(`T04 ${hits} hits matches brute force`, distEq(d, bruteForceDist(lists)));
++  }
++}
++
++// --- T06: T01 の分布で残り HP 23 の KO 確率 ---
++{
++  const d = convolveHitRolls([[10, 11, 12, 13], [10, 11, 12, 13]]);
++  let koCount = 0;
++  d.values.forEach((v, i) => { if (v >= 23) koCount += d.counts[i]; });
++  check('T06 KO probability 62.5%', koCount / d.total === 0.625, `${koCount}/${d.total}`);
++}
++
++// --- T07: 単発技の従来挙動は不変 ---
++{
++  const field = new Field({ gameType: 'Doubles' });
++  const r = calculate(gen, mirrorPokemon(WEAVILE), mirrorPokemon(GARCHOMP), new Move(gen, 'Ice Shard'), field);
++  const expected = Array.isArray(r.damage) ? r.damage : [r.damage];
++  const dr = damageRolls(WEAVILE, GARCHOMP, 'Ice Shard');
++  check('T07 damageRolls single-hit unchanged', eq(dr.rolls, expected) && dr.multi === undefined);
++  const dd = damageDistribution(WEAVILE, GARCHOMP, 'Ice Shard');
++  check('T07 distribution single-hit shape', dd.multi === false && dd.hits === 1 && dd.dist.total === 16
++    && dd.min === Math.min(...expected) && dd.max === Math.max(...expected));
++  check('T07 status shape', eq(damageDistribution(WEAVILE, GARCHOMP, 'Swords Dance'), { status: true }));
++  const drStatus = damageRolls(WEAVILE, GARCHOMP, 'Swords Dance');
++  check('T07 damageRolls status unchanged', eq(drStatus, { rolls: [], status: true }));
++  const fairy = { species: 'Togekiss', nature: 'Hardy', ability: 'Serene Grace', item: '', sp: { hp: 32 } };
++  const garchompAtk = { species: 'Garchomp', nature: 'Hardy', ability: 'Rough Skin', item: '', sp: { atk: 32 } };
++  check('T07 immune shape', eq(damageDistribution(garchompAtk, fairy, 'Dragon Claw'), { immune: true }));
++  const drImm = damageRolls(garchompAtk, fairy, 'Dragon Claw');
++  check('T07 damageRolls immune unchanged', eq(drImm, { rolls: [0], immune: true }));
++}
++
++// --- T09: 代表例 ---
++{
++  // タネマシンガン (ヒット数指定 5)
++  const bs = damageDistribution(RILLABOOM, GARCHOMP, 'Bullet Seed', { moveSpec: 5 });
++  check('T09 Bullet Seed spec 5', bs.multi === true && bs.hits === 5 && bs.dist.total === 1048576
++    && bs.min === bs.dist.values[0] && bs.max === bs.dist.values[bs.dist.values.length - 1],
++    JSON.stringify({ hits: bs.hits, total: bs.dist && bs.dist.total }));
++  const bsRolls = damageRolls(RILLABOOM, GARCHOMP, 'Bullet Seed', { moveSpec: 5 });
++  check('T09 Bullet Seed damageRolls returns dist', bsRolls.rolls === null && bsRolls.multi === true && bsRolls.hits === 5 && distEq(bsRolls.dist, bs.dist));
++  // トリプルアクセル (ヒットごとに威力が異なる)。ライブラリの入れ子結果を
++  // 全列挙した参照分布と照合する
++  const field = new Field({ gameType: 'Doubles' });
++  const rAxel = calculate(gen, mirrorPokemon(WEAVILE), mirrorPokemon(GARCHOMP), new Move(gen, 'Triple Axel'), field);
++  const axel = damageDistribution(WEAVILE, GARCHOMP, 'Triple Axel');
++  check('T09 Triple Axel dist matches brute force', axel.multi === true && axel.hits === 3 && distEq(axel.dist, bruteForceDist(rAxel.damage)),
++    JSON.stringify({ hits: axel.hits, total: axel.dist && axel.dist.total }));
++  // ダブルキック (固定 2 ヒット)
++  const rKick = calculate(gen, mirrorPokemon(WEAVILE), mirrorPokemon(GARCHOMP), new Move(gen, 'Double Kick'), field);
++  const kick = damageDistribution(WEAVILE, GARCHOMP, 'Double Kick');
++  check('T09 Double Kick dist matches brute force', kick.multi === true && kick.hits === 2 && kick.dist.total === 256 && distEq(kick.dist, bruteForceDist(rKick.damage)));
++  // ポピュレーションボム級の 10 ヒット (総数 16^10)
++  const bomb = damageDistribution(MAUSHOLD, GARCHOMP, 'Population Bomb');
++  const sumCounts = bomb.dist ? bomb.dist.counts.reduce((a, b) => a + b, 0) : 0;
++  check('T09 Population Bomb 10 hits', bomb.multi === true && bomb.hits === 10 && bomb.dist.total === 1099511627776 && sumCounts === bomb.dist.total,
++    JSON.stringify({ hits: bomb.hits, total: bomb.dist && bomb.dist.total }));
++}
++
++console.log(failures ? `${failures} FAILURES` : 'ALL PASS');
++process.exit(failures ? 1 : 0);
