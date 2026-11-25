@@ -1,0 +1,82 @@
+{
+  "schema": "ocr-guard-holdout-validation-v9",
+  "date": "2026-11-26",
+  "principles_version": "1.2",
+  "scope": "isolated research; no production changes",
+  "provenance": {
+    "archive_sha256": "087f39b87299e8281f86ff34c3b48dafa2f83e644ea88ed9c934b0e852d3c999",
+    "guard_commit": "64b2a69359f4bfddd2e0f3c12cd3e0c92f68eb38",
+    "guard_blob": "f13258ad8aadf0d956c87e497eef966ca8049e42",
+    "guard_sha256": "036814386994582aa58c64a7c874e37cf7b630ff10cdac515930fb36b7d3c357",
+    "collector_commit": "08399134933443067482708b5b3ffa81653479c0",
+    "collector_blob": "fa31a2940f01c0f2d4bdbb949c45910c3fdca4c8",
+    "collector_sha256": "f5830f055069da5db639c17634a77647ac2f26be8ef9d52aa2f94a4f9a0f903d"
+  },
+  "audit": {
+    "prior_tests": {
+      "pass": 43,
+      "total": 43
+    },
+    "verified_raw_coordinate_boxes": 46,
+    "verified_source_images": 3,
+    "direct_crop_pixel_exact": true,
+    "confirmed_counterexamples": [
+      "v7 one name with two HP readings",
+      "v7 conflicting menu markers produce UNKNOWN then send-out candidate",
+      "v8 trusts altered prior derived fields when raw boxes match"
+    ]
+  },
+  "guard": {
+    "synthetic_checks": {
+      "pass": 7,
+      "total": 7
+    },
+    "manual_archive_mutation_checks": {
+      "pass": 5,
+      "total": 5,
+      "cases": [
+        "modified normalized box",
+        "duplicate frame identity",
+        "duplicate OCR pass",
+        "out-of-range crop",
+        "invalid confidence"
+      ]
+    },
+    "replayed_groups": 3,
+    "replayed_passes": 4,
+    "own_hp_candidates": 2,
+    "opponent_hp_candidates": 2,
+    "confirmed_events": 0,
+    "dictionary_scope": "subset of observed queries; full-dictionary replay not performed",
+    "limitations": [
+      "Archive hash must be obtained from trusted provenance; no proof OCR text is true.",
+      "Direct crop pixel correspondence independently checked locally, not enforced by generic guard.",
+      "Existing ROI and candidate grammar remain fitted; no independent accuracy measurement."
+    ]
+  },
+  "holdout": {
+    "self_tests": {
+      "pass": 4,
+      "total": 4
+    },
+    "mac_execution": "NOT_RUN",
+    "fixed_sample_fractions": [
+      0.08,
+      0.28,
+      0.48,
+      0.65,
+      0.82,
+      0.95
+    ],
+    "max_vision_calls": 6,
+    "required_frame_size": [
+      1920,
+      1080
+    ],
+    "selection": "User selects recording of a different battle; different file hash alone does not establish independence.",
+    "no_additional_installation": true,
+    "no_full_video_scan": true,
+    "report": "One uniquely named review ZIP; contains six frames and raw OCR results. No video or private transcripts published to GitHub.",
+    "decision": "Freeze v6-v9 for next pilot; no further tuning on current examples. Assess new frames before modifying parser; report misses and untested classes separately."
+  }
+}
