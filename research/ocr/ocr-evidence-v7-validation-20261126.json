@@ -1,0 +1,68 @@
+{
+  "schema": "ocr-research-record-v7",
+  "date": "2026-11-26",
+  "principles_version": "1.1",
+  "principles": [
+    "resource_respect",
+    "maximize_time_efficiency",
+    "static_work_first",
+    "investigation_first",
+    "minimize_user_effort_and_download_frequency",
+    "avoid_excessive_plan_subdivision",
+    "adapt_plan_to_progress",
+    "pilot_first",
+    "proportionate_compromise",
+    "minimize_external_dependencies",
+    "version_control",
+    "unique_filenames",
+    "summary_for_long_outputs_and_visually_distinct_details",
+    "confirm_material_uncertainty_or_structural_changes_with_user",
+    "actively_use_diagrams_and_tables",
+    "prefer_machine_readable_instructions_except_user_explanations"
+  ],
+  "scope": "research only; no production or architecture changes",
+  "provenance": {
+    "script_commit": "310cc4473db3a340f3862d8e9b2110f4c77c5d97",
+    "script_blob": "120733324ada8d96154d6bc90de891c66371956a",
+    "script_sha256": "a26a28eef126c2a7f74285f2b8bc94df79968a2b89fc41f86a927ff2979b1be0",
+    "dictionary_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "dictionary_blob": "e6116f0eef415212da809c7f8a64fbd8e84f4c9b",
+    "archive_sha256": "087f39b87299e8281f86ff34c3b48dafa2f83e644ea88ed9c934b0e852d3c999"
+  },
+  "verification": {
+    "synthetic_checks": {
+      "pass": 14,
+      "total": 14
+    },
+    "image_hashes_verified": 3,
+    "saved_ocr_outputs_replayed": 4,
+    "additional_ocr_calls": 0,
+    "additional_installations": 0,
+    "user_actions": 0,
+    "dictionary_method": "Exhaustive candidate lookup for 10 observed queries against the pinned full dictionary (1253 unique species labels, 926 unique move labels); local replay with union of those candidates, not a full-dictionary CLI run.",
+    "observations": {
+      "send_out_candidate_records": 1,
+      "hp_candidates": 2,
+      "move_text_candidates": {
+        "exact": 3,
+        "suggested": 1,
+        "unknown": 1
+      },
+      "confirmed_events": 0,
+      "mega_message": "unparsed; raw evidence retained"
+    }
+  },
+  "limitations": [
+    "Fitted geometry; no held-out accuracy measurement.",
+    "Name suggestions are not calibrated probabilities or exhaustive possible true names.",
+    "Move effectiveness label overlaps a candidate region and remains UNKNOWN.",
+    "HP association is provisional and only tested in one command layout.",
+    "No raw player transcripts or images published.",
+    "No account-wide settings changed."
+  ],
+  "next": {
+    "priority": "Audit and unify observation schema and parser coverage against existing source and archived evidence before requesting a new pilot.",
+    "production_integration": "not authorized or attempted",
+    "new_video_test": "deferred until independent evidence is needed"
+  }
+}
