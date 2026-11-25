@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Video sources for OCR and image recognition experiments",
+  "storage": "google_drive",
+  "notes": [
+    "Video originals remain in Google Drive. This repository stores metadata only.",
+    "Drive sharing permissions are managed separately; no credentials or access tokens are stored here.",
+    "Unverified metadata fields are null. Compute SHA-256 from the downloaded original before reproducibility-sensitive experiments."
+  ],
+  "videos": [
+    {
+      "id": "battle-001",
+      "filename": "2026-11-26 02-26-33.mov",
+      "mime_type": "video/quicktime",
+      "size_bytes": 640301851,
+      "source": {
+        "provider": "google_drive",
+        "file_id": "1u8QxxeFKIBLkRyKsS9K29JIbg7W2k6vq",
+        "url": "https://drive.google.com/file/d/1u8QxxeFKIBLkRyKsS9K29JIbg7W2k6vq/view",
+        "modified_at": "2026-11-25T17:35:53.943Z"
+      },
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "fps": null,
+      "duration_seconds": null,
+      "content_verification": "metadata_only"
+    }
+  ]
+}
