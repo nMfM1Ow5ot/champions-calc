@@ -1,0 +1,132 @@
+{
+  "schema": "pv15-glyph-followup-v1",
+  "date": "2026-11-26",
+  "prior": "7fc4abf89a80518a27071a6443a70cf79720dcda",
+  "status": "DEVELOPMENT_DIAGNOSTIC_COMPLETE_INDEPENDENT_VALIDATION_BLOCKED",
+  "glyphCode": "deee58301ee482de78d0522390c5837f5f89976b",
+  "fusionCode": "4d6a429aec2d068ed68252502b0682909f866049",
+  "transfer": {
+    "rgbFNV32": "90c8a713",
+    "glyphFNV32": "03c56127",
+    "rgbGlyphInputLengths": [
+      387,
+      3485
+    ],
+    "appearanceFNV32": "95fd6eaf",
+    "appearanceLength": 2578,
+    "note": "FNV checks passed; local SHA256 values not cryptographically rechecked after transfer."
+  },
+  "glyph": {
+    "cellMatches": 24,
+    "totalCells": 24,
+    "slotTypeMatches": 12,
+    "slots": 12,
+    "priorRGBSlotTypeMatches": 11,
+    "blankCells": 6,
+    "readCells": 18
+  },
+  "integration": {
+    "n": 12,
+    "iconCells": 24,
+    "blank": 6,
+    "read": 18,
+    "typesCorrect": 12,
+    "verifiedTypesCorrect": 6,
+    "summary": {
+      "legacy": {
+        "top1": 5,
+        "baseVerifiedTop1": 1,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      },
+      "hellinger": {
+        "top1": 11,
+        "baseVerifiedTop1": 6,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      },
+      "soft": {
+        "top1": 12,
+        "baseVerifiedTop1": 6,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      },
+      "guard": {
+        "top1": 11,
+        "baseVerifiedTop1": 6,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      }
+    }
+  },
+  "assetSearch": {
+    "libraryArchive": "vision-holdout-v9-7lusf3q_-review.zip identified; raw byte materialization denied. Prior context reports distinct battle evidence, but selection images and independence unverified; earlier blanket same-battle claim too strong.",
+    "independentEligibleBattles": 0,
+    "additionalVideoDownloads": 0
+  },
+  "limitations": [
+    "One previously used apparent battle, same 12 correlated images and provisional exact-form labels; nameplate corroboration for three base species only.",
+    "Python fixed-window approximate feature extraction and JS scoring, not actual Swift; glyph classifier and rank function executed but standalone CLIs not executed; integration transfers ordered measured types manually, without cryptographic binding of icon predictions to rows.",
+    "No new independent evaluation, no threshold tuning, no production change or raw data publication."
+  ]
+}
