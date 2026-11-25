@@ -1,0 +1,84 @@
+{
+  "schema": "v11-runner-static-audit-v1",
+  "date": "2026-11-26",
+  "status": "RESEARCH_RUNNER_REVISED_RUNTIME_ACCEPTANCE_BLOCKED",
+  "authority": "d68eea0f5bb66fcc352fb707743250552713eeab",
+  "scope": {
+    "runnerV1": "c3f9533ffe8814a27b11786496807f5ed5d360bf",
+    "runnerV2": "38235f9d7d7bd5bd81c33ec7e26691d29eedda94",
+    "showdown": "7f7b03182d1df61c88ad360cf1d1639451b97b42",
+    "format": "gen9championsvgc2026regmc"
+  },
+  "findings": [
+    {
+      "id": "A01",
+      "severity": "major",
+      "problem": "V1 accepted any rejection reason, including unrelated failures; treated empty array as accepted.",
+      "action": "V2 matches expected reason substring, treats unexpected result as error; positive control required. Other simultaneous rejection reasons may still coexist; no proof of isolated cause."
+    },
+    {
+      "id": "A02",
+      "severity": "major",
+      "problem": "Validator normalizes input, including battle-only forms and abilities; v1 ignored normalization when judging match.",
+      "action": "V2 records original/normalized input and requires unchanged selected core fields for positive cases. Level, gender and other fields not compared; JSON property order may produce conservative false discrepancy. Extend before general legality use."
+    },
+    {
+      "id": "A03",
+      "severity": "major",
+      "problem": "Existence and full learnset union are not registered legality. V1 lacked explicit output scope and referenced rules.",
+      "action": "V2 labels universe, preserves direct/full learnset, source codes, event data, form fields, valueRules and complex bans including Infinity. Validator callbacks remain in pinned source; export is not standalone complete legality model."
+    },
+    {
+      "id": "A04",
+      "severity": "major",
+      "problem": "V1 only checks HEAD and tracked cleanliness; stale compiled tree possible.",
+      "action": "V2 hashes dist files before/after execution, records manifest, still requires independently documented clean build from fixed source and dependencies; compiled digest does not prove source equivalence. No installed dependency hashing or sandbox enforcement."
+    },
+    {
+      "id": "A05",
+      "severity": "high",
+      "problem": "V1 could emit empty tables and duplicate IDs or broken references without explicit detection.",
+      "action": "V2 checks nonempty tables, unique IDs, selected cross references and learnset exceptions; any issue blocks clean exit. Some nonstandard rows may legitimately produce issues and need classification; no complete reference audit."
+    },
+    {
+      "id": "A06",
+      "severity": "high",
+      "problem": "Initial test cases omit several boundary and joint restrictions.",
+      "action": "V2 adds one-move and zero-move cases, total 17 planned. Seven-member case duplicates a species but count branch returns first in pinned source; not isolated in general. Need valid controls for form/stone/ability interactions, multi-Mega registration, distinct same-species forms, and joint move/source restrictions as applicable. Not exhaustive."
+    }
+  ],
+  "tests": {
+    "verdictAndCases": {
+      "passed": 10,
+      "total": 10,
+      "execution": "function-level JS synthetic"
+    },
+    "exportMock": {
+      "passed": 8,
+      "total": 8,
+      "results": {
+        "normalExport": true,
+        "infPreserved": true,
+        "duplicateDetected": true,
+        "emptyDetected": true,
+        "missingMoveDetected": true,
+        "learnsetErrorDetected": true,
+        "learnsetUnknown": true,
+        "formatMismatch": true
+      },
+      "commit": "4c1dff342a9e8763037fb83447cc43edc7734fbc",
+      "execution": "function-level JS synthetic"
+    },
+    "actualDexRuns": 0,
+    "actualTeamValidatorCases": 0,
+    "plannedCases": 17,
+    "standaloneCLIExecuted": false
+  },
+  "acceptance": "Not approved. Run in existing isolated local environment with clean build provenance; preserve full artifacts locally, review errors and normalized values, no production integration. V1.1 provisional game authority does not imply simulator input guard is real game rule.",
+  "resources": {
+    "newBulkDownloads": 0,
+    "paidAPIs": 0,
+    "productionChanges": 0
+  },
+  "other": "No changes to approved mathematics or PV/OCR/HP hold. Global ledger not updated. No raw images or secrets transferred."
+}
