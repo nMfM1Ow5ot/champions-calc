@@ -1,0 +1,61 @@
+{
+  "schema": "ocr-unseen-frame-validation-v10",
+  "date": "2026-11-26",
+  "scope": "isolated research; no production changes",
+  "source": {
+    "archive_sha256": "f98b007155d4af6443927a335bfe796115dda939c7f236b5e78bc615a3c49237",
+    "video_sha256": "44f44ab90fa17a9b085af6c50dcfc3d5869fde9acf277cd4c9121c0bf628e856",
+    "frames": 6,
+    "ocr_boxes": 51,
+    "frame_hashes_verified": 6,
+    "normalized_coordinates_verified": 51,
+    "independent_battle": "not established; visual continuity suggests same battle as development sample",
+    "timing": {
+      "total_seconds": 3.013,
+      "vision_sum_seconds": 0.9079570770263672,
+      "vision_median_seconds": 0.1224679946899414
+    }
+  },
+  "frozen_v9": {
+    "guard_commit": "64b2a69359f4bfddd2e0f3c12cd3e0c92f68eb38",
+    "self_tests_passed": 7,
+    "screen_unknown": 6,
+    "visible_hp_displays": 11,
+    "raw_hp_values_exact": 9,
+    "raw_species_labels_exact": 10,
+    "paired_raw_exact": 8,
+    "hp_candidates": 0,
+    "visible_battle_message_frames": 2,
+    "body_text_reconstructed_exact_ignoring_whitespace_and_ruby": 1,
+    "structured_message_candidates": 0,
+    "confirmed_events": 0
+  },
+  "v10": {
+    "script_commit": "0aa3cd8dbf053a19114594dae57dfd8cd42889af",
+    "script_blob": "3adcd336fa88e5b290c8ef78a829911a8ad93179",
+    "script_sha256": "966aabba379368caa57a77b86bfa13db38eea5c291a02e53345ea9b7229dbf79",
+    "tests_passed": 11,
+    "tests_total": 11,
+    "hp_candidates_matching_visual_reference": 9,
+    "visible_hp_displays": 11,
+    "hp_candidates_in_original_command_frame": 4,
+    "screen_candidates": {
+      "COMMAND_ROOT": 1,
+      "COMMUNICATION_WAIT": 1,
+      "UNKNOWN": 4
+    },
+    "confirmed_events": 0,
+    "new_ocr_calls": 0,
+    "dictionary_scope": "local five observed Japanese labels; edit-distance-1 neighborhoods verified against 1253 distinct pinned dictionary labels",
+    "dictionary_blob": "e6116f0eef415212da809c7f8a64fbd8e84f4c9b"
+  },
+  "limitations": [
+    "v10 fitted after examining these frames; 9/11 is development replay, not holdout accuracy.",
+    "The six frames are temporally correlated and likely from the same battle as prior images.",
+    "Two opponent HP labels missing a valid percent sign; retained in original report but no HP candidate emitted.",
+    "No evaluation of move selection in new sample; message grammar and ruby removal remain incomplete.",
+    "No full dictionary CLI replay, no proof of general screen geometry, no state update.",
+    "Only research source and aggregate record published, no raw screenshots or transcripts."
+  ],
+  "next": "Consolidate message coverage and ROI evidence; require genuinely distinct battle before independent evaluation. No immediate repeat upload of same battle."
+}
