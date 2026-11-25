@@ -1,0 +1,161 @@
+{
+  "schema": "preview-pv05-cause-ablation-validation-v1",
+  "date": "2026-11-26",
+  "scope": "research only; no production modifications",
+  "provenance": {
+    "script_commit": "9e81ed0341bd0df16cdef3240a5ce8e00cb0d0af",
+    "script_blob": "da69c55334cde6e6685ffc0adb03684fb99ec771",
+    "reference_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "feature_blob": "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "type_map_blob": "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "prior_rank_commit": "294fb36be6b9d70aeb62758f2ef9f4f3bda17e80"
+  },
+  "method": {
+    "queries": 204,
+    "source_name_groups": 49,
+    "query_labels": 65,
+    "eligible_reference_labels": 284,
+    "base_references": 284,
+    "nonshiny_templates": 204,
+    "labels_with_templates": 65,
+    "labels_without_templates": 219,
+    "holdout": "For each query template, exclude all additional templates with identical src string, including query itself. Base references always retained. Known correct types are supplied for controlled comparisons, not inferred. Fixed type mismatch penalty 0.25. Top1 requires unique best; top3 requires all tied positions fit within 3. Tolerance 1e-12. No weight tuning or new features tested.",
+    "execution": "Analysis function executed twice in connector JavaScript; same function serialized to Node.js CLI source and saved. CLI wrapper not executed locally."
+  },
+  "results": {
+    "columns": [
+      "base_top1",
+      "augmented_top1",
+      "base_top3",
+      "augmented_top3",
+      "base_appearance_only_top1",
+      "augmented_appearance_only_top1"
+    ],
+    "full": [
+      117,
+      187,
+      178,
+      200,
+      18,
+      136
+    ],
+    "no_hash": [
+      125,
+      184,
+      177,
+      201,
+      20,
+      125
+    ],
+    "no_hue": [
+      95,
+      175,
+      173,
+      200,
+      8,
+      124
+    ],
+    "no_geometry": [
+      124,
+      188,
+      174,
+      200,
+      23,
+      135
+    ],
+    "hash_only": [
+      94,
+      172,
+      176,
+      197,
+      5,
+      117
+    ],
+    "hue_only": [
+      124,
+      185,
+      174,
+      198,
+      19,
+      128
+    ],
+    "paired_unique_top1": {
+      "corrected": 73,
+      "broken": 3,
+      "unchanged_correct": 114,
+      "unchanged_not_correct": 14
+    },
+    "strata": {
+      "same_label_other_source": {
+        "n": 174,
+        "base_top1": 97,
+        "aug_top1": 168
+      },
+      "no_same_label_other_source": {
+        "n": 30,
+        "base_top1": 20,
+        "aug_top1": 19
+      }
+    },
+    "macro_label_top1": {
+      "base": 0.6529304029304029,
+      "aug": 0.7974358974358974
+    },
+    "base_exact_duplicate_descriptor_groups": 4,
+    "base_exact_duplicate_entries": 16,
+    "additional_templates_exact_duplicate_across_source_groups": 0,
+    "base_references_with_source_metadata": 0,
+    "posthoc_three_previously_misranked_examples": {
+      "baseline_ranks": [
+        3,
+        2,
+        3
+      ],
+      "alternative_ranks": [
+        1,
+        1,
+        1
+      ],
+      "alternatives": [
+        "remove hash",
+        "remove hash",
+        "remove geometry"
+      ],
+      "note": "Reused rounded descriptor values from prior successful runs. Selected failures only; no independent accuracy claim. Initial 12-case re-evaluation aborted on a malformed 23-bin vector; only the corrected three-case re-evaluation is reported."
+    },
+    "additional_ocr_calls": 0,
+    "additional_recordings": 0,
+    "additional_installations": 0,
+    "user_actions": 0
+  },
+  "interpretation": "For existing descriptor representation, increasing suitable same-label reference coverage produces much greater observed gain than dropping existing components. This does not establish that novel descriptors cannot improve performance or that reference coverage is the sole cause. Specific failures respond to ablation.",
+  "limitations": [
+    "Source string grouping does not establish battle independence. No raw reference pixels or provenance for base references; near-duplicate or source overlap not excluded. Exact descriptor duplicates across source groups not found.",
+    "Only 65 labels have query templates, sampled unevenly; many reference labels not evaluated as targets. Correct type supplied; not end-to-end automatic recognition. Form-level label identity not biological species count.",
+    "No HOG, spatial histogram, embedding or other novel descriptors evaluated because matched raw reference images are unavailable. No full Python pipeline validation, no calibrated abstention, no production acceptance."
+  ],
+  "references": [
+    "https://github.com/nMfM1Ow5ot/champions-calc/blob/f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4/reader.swift",
+    "https://app.cochat.ai/papers/10.1109/cvpr.2005.177",
+    "https://experts.illinois.edu/en/publications/beyond-bags-of-features-spatial-pyramid-matching-for-recognizing-/",
+    "https://docs.opencv.org/4.x/de/da9/tutorial_template_matching.html"
+  ],
+  "todo": [
+    {
+      "id": "PV-05",
+      "status": "COMPLETE_LIMITED",
+      "task": "Reference versus existing descriptor ablation"
+    },
+    {
+      "id": "PV-06",
+      "status": "NEXT",
+      "task": "Audit legal form coverage and source provenance, acquire suitable game-model pixel references or lawful existing assets; balance by label and distinct pose/source, reserve battle-level holdout"
+    },
+    {
+      "id": "PV-07",
+      "status": "PENDING",
+      "task": "Matched reference-image comparison of current descriptor, HOG and spatial color; independent full pipeline validation and abstention"
+    }
+  ],
+  "privacy": "Aggregate results and code only, no raw images, player identities, team lists, or reference source strings published."
+}
