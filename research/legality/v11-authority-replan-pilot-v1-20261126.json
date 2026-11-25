@@ -1,0 +1,82 @@
+{
+  "schema": "v11-authority-replan-pilot-v1",
+  "date": "2026-11-26",
+  "status": "STATIC_EXTRACTION_COMPLETE_RUNTIME_VALIDATION_BLOCKED",
+  "authority": "d68eea0f5bb66fcc352fb707743250552713eeab",
+  "showdownCommit": "7f7b03182d1df61c88ad360cf1d1639451b97b42",
+  "format": "gen9championsvgc2026regmc",
+  "mod": "champions",
+  "plan": [
+    {
+      "id": "V11-A",
+      "status": "PARTIAL_COMPLETE",
+      "purpose": "pin simulator source, audit format and literal learnsets"
+    },
+    {
+      "id": "V11-B",
+      "status": "BLOCKED_RUNTIME",
+      "purpose": "export effective Dex, retain all forms and nonstandard flags, full learnset sources and rule table; verify counts and references, do not infer registration from exists"
+    },
+    {
+      "id": "V11-C",
+      "status": "BLOCKED_RUNTIME",
+      "purpose": "run full team validator and controlled one-factor mutations, positive control required; record normalized inputs and reasons"
+    },
+    {
+      "id": "V11-D",
+      "status": "PENDING",
+      "purpose": "compare current master to effective simulator, construct provisional legality predicates; separate simulator UI/import guards from game rules; verify contradictions and unknowns"
+    },
+    {
+      "id": "V11-E",
+      "status": "PENDING",
+      "purpose": "acceptance review L01-L10, real game checks targeted only; preserve V1.2 hold until user acceptance"
+    }
+  ],
+  "static": {
+    "rules": {
+      "pickedTeamSize": 4,
+      "totalSP": 66,
+      "axisSP": 32,
+      "IV": 31,
+      "zeroSPSerious": "validator emits reminder/rejection for Serious nature at zero SP; other neutral nature avoids that specific warning; actual game rule not inferred",
+      "level50": "Adjust Level = 50 in Flat Rules",
+      "teamMin": 6
+    },
+    "learnsets": {
+      "entries": 263,
+      "nonempty": 258,
+      "empty": [
+        "vivillonfancy",
+        "vivillonpokeball",
+        "gourgeistsuper",
+        "polteageistantique",
+        "sinistchamasterpiece"
+      ],
+      "movePairs": 15764,
+      "distinctMoves": 510,
+      "sourceCode": "9M",
+      "inheritedEntryCount": 1,
+      "fixtureLiteralMatches": 24,
+      "fixtureMissing": [],
+      "qualification": "literal data only, five empty top-level entries; not effective Dex or legality"
+    }
+  },
+  "code": {
+    "literalV2": "3477c3d07557cfba562c4b9ac0419b2d6ad2b007",
+    "runner": "c3f9533ffe8814a27b11786496807f5ed5d360bf",
+    "runnerTests": "three mock guards passed (reject-all, throw-all, accept-all); fifteen planned real cases; no actual TeamValidator invocation",
+    "runnerLimit": "Requires pinned clean source and rebuilt dist; script checks HEAD and tracked dirtiness, not compiled build provenance. No generic joint completeness proof; manual interpretation of warnings and validator normalization required."
+  },
+  "blockers": [
+    "No Showdown runtime in current container; network name resolution unavailable. Existing Mac build not directly accessible.",
+    "Runtime extraction and actual 15-case test not executed; exact effective counts and validation outcomes not established.",
+    "No original V1.1 acceptance report retrieval or ledger update."
+  ],
+  "resources": {
+    "bulkDownloads": 0,
+    "paidAPIs": 0,
+    "productionChanges": 0
+  },
+  "next": "Run runner in authorized existing isolated Mac environment pinned to source, with rebuild provenance; return sanitized summary and SHA256, no need to download all generations or share private data."
+}
