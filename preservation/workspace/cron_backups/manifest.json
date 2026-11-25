@@ -1,0 +1,228 @@
+{
+  "jobs": [
+    {
+      "body_file": "bodies/champions-calc-watchdog.md",
+      "delivery": [
+        "61dc1fd3-a726-46fc-b635-dd7a12c002d0"
+      ],
+      "id": "champions-calc-watchdog",
+      "kind": "agent",
+      "schedule": {
+        "kind": "daily",
+        "time": "12:30:00",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "champions_calc 自動チェック＆修正ウォッチドッグ"
+    },
+    {
+      "body_file": "bodies/champions-pokedb-refresh.md",
+      "delivery": [
+        "61dc1fd3-a726-46fc-b635-dd7a12c002d0"
+      ],
+      "id": "champions-pokedb-refresh",
+      "kind": "agent",
+      "schedule": {
+        "kind": "daily",
+        "time": "00:00:00",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "champions_calc pokedbデータ 24時間ごと再取得"
+    },
+    {
+      "body_file": "bodies/soccer-digest-daily.md",
+      "delivery": [
+        "6a1efb11-75b2-4b2e-babb-6cd679f81a88"
+      ],
+      "id": "soccer-digest-daily",
+      "kind": "agent",
+      "schedule": {
+        "kind": "daily",
+        "time": "06:50:00",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "サッカー結果速報 毎朝7時配信"
+    },
+    {
+      "action": "refreshdata",
+      "args": {},
+      "id": "k-pop-daily-refresh",
+      "kind": "space_action",
+      "schedule": {
+        "kind": "daily",
+        "time": "08:33:30",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "slug": "k-pop",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ]
+    },
+    {
+      "action": "refreshDigest",
+      "args": {},
+      "id": "satuka-digest-refresh",
+      "kind": "space_action",
+      "schedule": {
+        "kind": "daily",
+        "time": "08:16:23",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "slug": "satuka"
+    },
+    {
+      "body_file": "bodies/gc2027-3-announcement-watch.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "gc2027-3-announcement-watch",
+      "kind": "agent",
+      "schedule": {
+        "every": "12h",
+        "kind": "interval",
+        "timezone": "Asia/Tokyo"
+      },
+      "title": "グローバルチャレンジ2027Ⅲ 発表チェック"
+    },
+    {
+      "body_file": "bodies/pending-action-reminder.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "pending-action-reminder",
+      "kind": "agent",
+      "schedule": {
+        "every": "10m",
+        "kind": "interval",
+        "timezone": "Asia/Tokyo"
+      },
+      "title": "応答待ちの承認・許可への催促（他チャットで活動中の場合のみ）"
+    },
+    {
+      "body_file": "bodies/cron-guardian.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "cron-guardian",
+      "kind": "agent",
+      "schedule": {
+        "every": "30m",
+        "kind": "interval",
+        "timezone": "Asia/Tokyo"
+      },
+      "title": "定期タスク見張り役（消えたタスクの自動復元）"
+    },
+    {
+      "body_file": "bodies/champions-calc-daily-audit.md",
+      "delivery": [
+        "706c9700-3dd3-4449-a9e9-86dd78df8a52"
+      ],
+      "id": "champions-calc-daily-audit",
+      "kind": "agent",
+      "schedule": {
+        "kind": "daily",
+        "time": "00:00:00",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "champions_calc 定期監査（毎日0時）"
+    },
+    {
+      "body_file": "bodies/cron-guardian-daily.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "cron-guardian-daily",
+      "kind": "agent",
+      "schedule": {
+        "kind": "daily",
+        "time": "05:30:00",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "定期タスク見張り役の見張り（毎日05:30）"
+    },
+    {
+      "body_file": "bodies/dentist-reminder-20270101-1m.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "dentist-reminder-20270101-1m",
+      "kind": "agent",
+      "schedule": {
+        "at": "2027-01-01T09:00:00",
+        "kind": "runonce",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "むらおか歯科医院 1か月前リマインダー"
+    },
+    {
+      "body_file": "bodies/dentist-reminder-20270118-2w.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "dentist-reminder-20270118-2w",
+      "kind": "agent",
+      "schedule": {
+        "at": "2027-01-18T09:00:00",
+        "kind": "runonce",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "むらおか歯科医院 2週間前リマインダー"
+    },
+    {
+      "body_file": "bodies/dentist-reminder-20270125-1w.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "dentist-reminder-20270125-1w",
+      "kind": "agent",
+      "schedule": {
+        "at": "2027-01-25T09:00:00",
+        "kind": "runonce",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "むらおか歯科医院 1週間前リマインダー"
+    },
+    {
+      "body_file": "bodies/dentist-reminder-20270131-1d.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "dentist-reminder-20270131-1d",
+      "kind": "agent",
+      "schedule": {
+        "at": "2027-01-31T09:00:00",
+        "kind": "runonce",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "むらおか歯科医院 前日リマインダー"
+    },
+    {
+      "body_file": "bodies/dentist-reminder-20270201.md",
+      "delivery": [
+        "198deae5-534f-43e0-8957-dda530a4541c"
+      ],
+      "id": "dentist-reminder-20270201",
+      "kind": "agent",
+      "schedule": {
+        "at": "2027-02-01T09:00:00",
+        "kind": "runonce",
+        "timezone": "Asia/Tokyo",
+        "timing": "exact"
+      },
+      "title": "むらおか歯科医院 2月1日9:00 リマインダー"
+    }
+  ],
+  "note": "ユーザーの定期タスクのバックアップ定義（2026-11-21 導入）。タスクは追跡項目（ゴール）に紐づけず独立させてある（所有者の削除で巻き添えにならないため。2026-11-21 に追跡項目5件の削除と一緒にタスク5件が消えた事故を受けた措置）。cron-guardian が30分ごとにこの manifest と実登録を照合し、消えたタスクを復元する。",
+  "updated": "2026-11-26",
+  "version": 1
+}
