@@ -163,5 +163,78 @@
     "No full roster legality, raw frame, automatic type, six-slot, production Swift or end-to-end validation.",
     "Code function executed on connector; standalone Node wrapper not independently executed. No raw data or source IDs published."
   ],
-  "production": "unchanged"
+  "production": "unchanged",
+  "followup": {
+    "codeCommit": "1c786ab3ee6bfda2d5a8811a834579bb7dd9ee6d",
+    "policyResult": {
+      "legacy": {
+        "knownAccepted": 99,
+        "knownWrong": 0,
+        "unknownAccepted": 0,
+        "knownSources": 47,
+        "unknownSources": 0
+      },
+      "hellinger": {
+        "knownAccepted": 127,
+        "knownWrong": 0,
+        "unknownAccepted": 8,
+        "knownSources": 48,
+        "unknownSources": 7
+      },
+      "hellinger_abs_050": {
+        "knownAccepted": 105,
+        "knownWrong": 0,
+        "unknownAccepted": 0,
+        "knownSources": 43,
+        "unknownSources": 0
+      },
+      "hellinger_abs_045": {
+        "knownAccepted": 102,
+        "knownWrong": 0,
+        "unknownAccepted": 0,
+        "knownSources": 42,
+        "unknownSources": 0
+      },
+      "hellinger_agree": {
+        "knownAccepted": 122,
+        "knownWrong": 0,
+        "unknownAccepted": 7,
+        "knownSources": 48,
+        "unknownSources": 6
+      },
+      "dual_margin_agree": {
+        "knownAccepted": 99,
+        "knownWrong": 0,
+        "unknownAccepted": 0,
+        "knownSources": 47,
+        "unknownSources": 0
+      }
+    },
+    "protocol": "Post-hoc absolute cutoff .50 or .45 in Hellinger composite distance, motivated by lowest observed unknown accepted score >.50; also rank agreement and dual-margin agreement. Not frozen or independently calibrated. No type oracle used. All policies operate on same 204 known and 204 simulated unknown queries."
+  },
+  "references": [
+    "https://pubmed.ncbi.nlm.nih.gov/23682001/",
+    "https://pubmed.ncbi.nlm.nih.gov/26353070/",
+    "https://openaccess.thecvf.com/content_cvpr_2016/html/Bendale_Towards_Open_Set_CVPR_2016_paper.html"
+  ],
+  "disposition": "No production admission. Hellinger preferred as ranking candidate; abstention requires independent calibration and unknown challenge. Never emit confirmed species events from scores alone. Proposed absolute cap .50 for next frozen candidate only, not certified threshold.",
+  "principles": {
+    "review": "All 32 reviewed; no user operations, recording downloads, paid services, or production changes; public code and aggregate records only.",
+    "exceptions": [
+      "Independent actual game recordings not established; source-string independence not proved.",
+      "Global TODO ledger not updated; record contains next steps.",
+      "No exact upfront quantitative runtime estimate; separate Node wrappers not executed."
+    ]
+  },
+  "todo": [
+    {
+      "id": "PV-14",
+      "status": "RETROSPECTIVE_COMPLETE_INDEPENDENT_ACCEPTANCE_BLOCKED"
+    },
+    {
+      "id": "PV-15",
+      "status": "PROPOSED",
+      "detail": "Find permitted independent battle images and complete roster provenance; freeze ranking and candidate rejection policies; automatic type, real unknown and six-slot validation; no tuning on acceptance set."
+    }
+  ]
 }
