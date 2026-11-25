@@ -174,5 +174,54 @@
     "Nameplate corroboration for 3 base species only; remaining labels visual hypotheses; all exact-form targets provisional. 12 images correlated, not independent samples.",
     "Frozen bank provenance overlap not excluded; no recognition generalization claim. No new reference descriptors registered; no raw images or team labels committed. No new pixel descriptor family: nonred is segmentation change, Hellinger is distance change."
   ],
-  "production": "unchanged"
+  "production": "unchanged",
+  "extractor": {
+    "commit": "da3670fe2ec6879be4d2cc8090c668e6b8f8f235",
+    "blob": "500c00c48a938a849cee2251f04f2ea1cfdc8213",
+    "sha256": "2aec62fa04afd14af738958841c9b3a769bdc262def42f00ad142f29e2413346",
+    "localGitBlobMatches": true,
+    "successfulFeatures": 36,
+    "totalFeatures": 36,
+    "old52ExactPV01Equality": 12,
+    "localQueryJSONSha256": "4cddfb5190eaf3bc3a0663f6f959a32c790deb994d8495b70278ae6f23bee98a",
+    "note": "Local private query artifact digest; manual transfer into connector not hash verified."
+  },
+  "prior": "aaa5a91f619c848e2bcfa4f31f90b0f54b64d2ab",
+  "conclusions": [
+    "Hellinger is first-priority frozen candidate for independent validation; old52 has best provisional top1, wide63 Hellinger best provisional top3. No production switch.",
+    "Width alone did not increase top1 and nonred segmentation often degraded performance; existing reference bank generated with potentially different extraction domain. Matching-extractor reference rebuild requires permitted original assets.",
+    "Oracle type penalties demonstrate potential only, not automated accuracy. Do not fit further on this battle."
+  ],
+  "references": [
+    "https://docs.opencv.org/4.13.0/d8/dc8/tutorial_histogram_comparison.html",
+    "https://people.csail.mit.edu/torralba/research/bias/"
+  ],
+  "todo": [
+    {
+      "id": "PV-13",
+      "status": "DEVELOPMENT_ONLY",
+      "detail": "Paired comparison executed; independent acceptance pending."
+    },
+    {
+      "id": "PV-14",
+      "status": "PROPOSED",
+      "detail": "Independent frozen-parameter validation across distinct battles, compare auto types and unknown rejection; where permitted raw references exist, matched-extractor re-extraction."
+    }
+  ],
+  "resource": {
+    "newRecordingDownloads": 0,
+    "paidAPIs": 0,
+    "userActions": 0,
+    "localImagesReused": 12,
+    "bankCandidates": 284,
+    "notes": "Failed direct raw.githubusercontent DNS attempt, connector retrieved frozen bank; no raw assets published."
+  },
+  "principles": {
+    "review": "32 principles and current personalization reviewed; report in plain Japanese style with emoji, links, buttons and limitations.",
+    "exceptions": [
+      "No precise upfront resource estimate.",
+      "Global TODO ledger not updated, research TODO recorded.",
+      "No independent validation or automated cross-environment descriptor integrity check; standalone rank CLI not executed."
+    ]
+  }
 }
