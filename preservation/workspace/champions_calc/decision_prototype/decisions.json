@@ -1,0 +1,4133 @@
+[
+ {
+  "id": "gen9championsvgc2026regmc-2692052685",
+  "opponent": "dtw9",
+  "mikumikuSide": "p2",
+  "winner": "dtw9",
+  "openTeamSheet": false,
+  "mikumikuTeam": [
+   {
+    "species": "Staraptor",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Indeedee-F",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Armarouge",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Basculegion",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Glimmora",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Kingambit",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "opponentTeam": [
+   {
+    "species": "Farigiraf",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Camerupt",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Vivillon-Elegant",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Rillaboom",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Cofagrigus",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Incineroar",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "selection": [
+   "Glimmora",
+   "Basculegion",
+   "Kingambit",
+   "Staraptor"
+  ],
+  "leads": [
+   "Glimmora",
+   "Basculegion"
+  ],
+  "turns": [
+   {
+    "turn": 1,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Glimmora",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Vivillon-Elegant",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Incineroar",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Sludge Bomb",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 2,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Glimmora",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Vivillon-Elegant",
+       "hpPct": 19
+      },
+      {
+       "slot": "b",
+       "species": "Incineroar",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Wave Crash",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 3,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Glimmora",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 65
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Vivillon-Elegant",
+       "hpPct": 19
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": []
+   },
+   {
+    "turn": 4,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Glimmora",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 65
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Vivillon-Elegant",
+       "hpPct": 19
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Kingambit"
+     }
+    ]
+   },
+   {
+    "turn": 5,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Kingambit",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 65
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Vivillon-Elegant",
+       "hpPct": 19
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 6,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Kingambit",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 65
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Camerupt",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Glimmora"
+     },
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Basculegion"
+     },
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Staraptor"
+     }
+    ]
+   },
+   {
+    "turn": 7,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Basculegion",
+       "hpPct": 65
+      },
+      {
+       "slot": "b",
+       "species": "Staraptor",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Camerupt-Mega",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 8,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Basculegion",
+       "hpPct": 0
+      },
+      {
+       "slot": "b",
+       "species": "Staraptor",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Camerupt-Mega",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "gen9championsvgc2026regmc-2692080046",
+  "opponent": "toritonpoke",
+  "mikumikuSide": "p2",
+  "winner": "toritonpoke",
+  "openTeamSheet": false,
+  "mikumikuTeam": [
+   {
+    "species": "Whimsicott",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Garchomp",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Kingambit",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Basculegion",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Charizard",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Floette-Eternal",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "opponentTeam": [
+   {
+    "species": "Gengar",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Rillaboom",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Incineroar",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Politoed",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Archaludon",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Annihilape",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "selection": [
+   "Kingambit",
+   "Charizard",
+   "Garchomp",
+   "Basculegion"
+  ],
+  "leads": [
+   "Kingambit",
+   "Charizard"
+  ],
+  "turns": [
+   {
+    "turn": 1,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Kingambit",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Charizard",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Gengar",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Rillaboom",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Kowtow Cleave",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 2,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Kingambit",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 90
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Gengar-Mega",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Rillaboom",
+       "hpPct": 100
+      }
+     ],
+     "weather": "SunnyDay",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Kowtow Cleave",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 3,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Kingambit",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 90
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 71
+      },
+      {
+       "slot": "b",
+       "species": "Politoed",
+       "hpPct": 82
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Garchomp"
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Kowtow Cleave",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Charizard-Mega-Y"
+     }
+    ]
+   },
+   {
+    "turn": 4,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 90
+      },
+      {
+       "slot": "b",
+       "species": "Garchomp",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 83
+      },
+      {
+       "slot": "b",
+       "species": "Politoed",
+       "hpPct": 61
+      }
+     ],
+     "weather": "SunnyDay",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Stomping Tantrum",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 5,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 90
+      },
+      {
+       "slot": "b",
+       "species": "Garchomp",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 95
+      },
+      {
+       "slot": "b",
+       "species": "Politoed",
+       "hpPct": 61
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Stomping Tantrum",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 6,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 90
+      },
+      {
+       "slot": "b",
+       "species": "Garchomp",
+       "hpPct": 34
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 76
+      },
+      {
+       "slot": "b",
+       "species": "Politoed",
+       "hpPct": 67
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Stomping Tantrum",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Basculegion"
+     }
+    ]
+   },
+   {
+    "turn": 7,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 13
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 30
+      },
+      {
+       "slot": "b",
+       "species": "Politoed",
+       "hpPct": 67
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Last Respects",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 8,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 13
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 0
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 12
+      },
+      {
+       "slot": "b",
+       "species": "Rillaboom",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 9,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 13
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 0
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 24
+      },
+      {
+       "slot": "b",
+       "species": "Rillaboom",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 10,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard-Mega-Y",
+       "hpPct": 4
+      },
+      {
+       "slot": "b",
+       "species": "Basculegion",
+       "hpPct": 0
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 0
+      },
+      {
+       "slot": "b",
+       "species": "Rillaboom",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": []
+   }
+  ]
+ },
+ {
+  "id": "gen9championsvgc2026regmc-2692421744",
+  "opponent": "Skraw Goodmon",
+  "mikumikuSide": "p2",
+  "winner": "Skraw Goodmon",
+  "openTeamSheet": false,
+  "mikumikuTeam": [
+   {
+    "species": "Rillaboom",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Staraptor",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Milotic",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Ceruledge",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Raichu",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Gholdengo",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "opponentTeam": [
+   {
+    "species": "Mr. Rime",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Indeedee-F",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Raichu",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Sneasler",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Gardevoir",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Garchomp",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "selection": [
+   "Rillaboom",
+   "Gholdengo",
+   "Raichu",
+   "Staraptor"
+  ],
+  "leads": [
+   "Rillaboom",
+   "Gholdengo"
+  ],
+  "turns": [
+   {
+    "turn": 1,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Rillaboom",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Gholdengo",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Mr. Rime",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Raichu"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Nasty Plot",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 2,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Raichu",
+       "hpPct": 93
+      },
+      {
+       "slot": "b",
+       "species": "Gholdengo",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu-Mega-Y",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Mr. Rime",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Fake Out",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Staraptor"
+     }
+    ]
+   },
+   {
+    "turn": 3,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Raichu",
+       "hpPct": 93
+      },
+      {
+       "slot": "b",
+       "species": "Staraptor",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Indeedee-F",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Mr. Rime",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Zap Cannon",
+      "target": "p1a",
+      "mega": true,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Rillaboom"
+     }
+    ]
+   },
+   {
+    "turn": 4,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Rillaboom",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Staraptor",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Indeedee-F",
+       "hpPct": 41
+      },
+      {
+       "slot": "b",
+       "species": "Mr. Rime",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Fake Out",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Tailwind",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 5,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Rillaboom",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Staraptor",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Indeedee-F",
+       "hpPct": 41
+      },
+      {
+       "slot": "b",
+       "species": "Mr. Rime",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [
+      "Tailwind"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Brave Bird",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Wood Hammer",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 6,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Rillaboom",
+       "hpPct": 0
+      },
+      {
+       "slot": "b",
+       "species": "Staraptor",
+       "hpPct": 68
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu-Mega-Y",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Mr. Rime",
+       "hpPct": 6
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [
+      "Tailwind"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 7,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Rillaboom",
+       "hpPct": 0
+      },
+      {
+       "slot": "b",
+       "species": "Staraptor",
+       "hpPct": 68
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu-Mega-Y",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Mr. Rime",
+       "hpPct": 12
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [
+      "Tailwind"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "gen9championsvgc2026regmc-2695191010",
+  "opponent": "Coup Critique V1nz",
+  "mikumikuSide": "p2",
+  "winner": "Coup Critique V1nz",
+  "openTeamSheet": false,
+  "mikumikuTeam": [
+   {
+    "species": "Swampert",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Pelipper",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Archaludon",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Grimmsnarl",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Charizard",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Venusaur",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "opponentTeam": [
+   {
+    "species": "Audino",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Indeedee-F",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Slowbro",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Maushold-Four",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Snorlax",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Swalot",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "selection": [
+   "Swampert",
+   "Pelipper",
+   "Venusaur",
+   "Archaludon"
+  ],
+  "leads": [
+   "Swampert",
+   "Pelipper"
+  ],
+  "turns": [
+   {
+    "turn": 1,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Swampert",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Maushold-Four",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Wave Crash",
+      "target": "p1b",
+      "mega": true,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Hurricane",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 2,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Swampert-Mega",
+       "hpPct": 68
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Wave Crash",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 3,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Swampert-Mega",
+       "hpPct": 53
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 21
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Wave Crash",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 4,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Swampert-Mega",
+       "hpPct": 43
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 42
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Wave Crash",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 5,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Swampert-Mega",
+       "hpPct": 35
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 75
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Weather Ball",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 6,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Swampert-Mega",
+       "hpPct": 35
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 61
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 66
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 81
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Venusaur"
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Wave Crash",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 7,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Swampert-Mega",
+       "hpPct": 13
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 4
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 87
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Pelipper"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 8,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Pelipper",
+       "hpPct": 46
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Audino",
+       "hpPct": 4
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 94
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Hurricane",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Sleep Powder",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 9,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Pelipper",
+       "hpPct": 7
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Leaf Storm",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Archaludon"
+     }
+    ]
+   },
+   {
+    "turn": 10,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 75
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 11,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 75
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Swampert-Mega"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Sleep Powder",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Archaludon"
+     }
+    ]
+   },
+   {
+    "turn": 12,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 75
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 13,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 75
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Sleep Powder",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Electro Shot",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 14,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 75
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Electro Shot",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Sleep Powder",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 15,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 1
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 51
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Sleep Powder",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 16,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 1
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 51
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 17,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 0
+      },
+      {
+       "slot": "b",
+       "species": "Venusaur",
+       "hpPct": 1
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Slowbro-Mega",
+       "hpPct": 51
+      },
+      {
+       "slot": "b",
+       "species": "Snorlax",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": true
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "gen9championsvgc2026regmc-2704257650",
+  "opponent": "V1nz' Regional",
+  "mikumikuSide": "p2",
+  "winner": "V1nz' Regional",
+  "openTeamSheet": false,
+  "mikumikuTeam": [
+   {
+    "species": "Salamence",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Gholdengo",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Tyranitar",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Sneasler",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Rillaboom",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Milotic",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "opponentTeam": [
+   {
+    "species": "Raichu",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Espathra",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Pelipper",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Archaludon",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Golisopod",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   },
+   {
+    "species": "Pikachu",
+    "item": "",
+    "ability": "",
+    "moves": [],
+    "nature": ""
+   }
+  ],
+  "selection": [
+   "Gholdengo",
+   "Salamence",
+   "Sneasler",
+   "Tyranitar"
+  ],
+  "leads": [
+   "Gholdengo",
+   "Salamence"
+  ],
+  "turns": [
+   {
+    "turn": 1,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Gholdengo",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Salamence",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pikachu",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": true,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Sneasler"
+     }
+    ]
+   },
+   {
+    "turn": 2,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sneasler",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu-Mega-X",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pikachu",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Tailwind",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Close Combat",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 3,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sneasler",
+       "hpPct": 71
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 73
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu-Mega-X",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pikachu",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [
+      "Tailwind"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Hyper Voice",
+      "target": "spread:p1a,p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Dire Claw",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 4,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sneasler",
+       "hpPct": 71
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 48
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Raichu-Mega-X",
+       "hpPct": 78
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [
+      "Tailwind"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Hyper Voice",
+      "target": "spread:p1a,p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Tyranitar"
+     }
+    ]
+   },
+   {
+    "turn": 5,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Tyranitar",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 48
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 57
+      }
+     ],
+     "weather": "Sandstorm",
+     "mySideConditions": [
+      "Tailwind"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Knock Off",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Double-Edge",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 6,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Tyranitar",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 48
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 57
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Rock Slide",
+      "target": "spread:p1a,p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 7,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Tyranitar",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 48
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 95
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 6
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Low Kick",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 8,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Tyranitar",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 0
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 6
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 9,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Tyranitar",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Salamence-Mega",
+       "hpPct": 0
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Archaludon",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Pelipper",
+       "hpPct": 6
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "gen9championsvgc2026regmc-2704343486",
+  "opponent": "testingqueen001",
+  "mikumikuSide": "p2",
+  "winner": "testingqueen001",
+  "openTeamSheet": true,
+  "mikumikuTeam": [
+   {
+    "species": "Garchomp",
+    "item": "ChoiceScarf",
+    "ability": "RoughSkin",
+    "moves": [
+     "DragonClaw",
+     "Earthquake",
+     "StompingTantrum",
+     "RockTomb"
+    ],
+    "nature": "Adamant"
+   },
+   {
+    "species": "Farigiraf",
+    "item": "SitrusBerry",
+    "ability": "ArmorTail",
+    "moves": [
+     "Psychic",
+     "Thunderbolt",
+     "TrickRoom",
+     "Protect"
+    ],
+    "nature": "Bold"
+   },
+   {
+    "species": "Aerodactyl",
+    "item": "Aerodactylite",
+    "ability": "Unnerve",
+    "moves": [
+     "RockSlide",
+     "DualWingbeat",
+     "Tailwind",
+     "WideGuard"
+    ],
+    "nature": "Jolly"
+   },
+   {
+    "species": "Sylveon",
+    "item": "FairyFeather",
+    "ability": "Pixilate",
+    "moves": [
+     "HyperVoice",
+     "HyperBeam",
+     "QuickAttack",
+     "Detect"
+    ],
+    "nature": "Modest"
+   },
+   {
+    "species": "Charizard",
+    "item": "CharizarditeY",
+    "ability": "Blaze",
+    "moves": [
+     "HeatWave",
+     "WeatherBall",
+     "SolarBeam",
+     "Protect"
+    ],
+    "nature": "Timid"
+   },
+   {
+    "species": "Kingambit",
+    "item": "FocusSash",
+    "ability": "Defiant",
+    "moves": [
+     "KowtowCleave",
+     "SuckerPunch",
+     "IronHead",
+     "LowKick"
+    ],
+    "nature": "Adamant"
+   }
+  ],
+  "opponentTeam": [
+   {
+    "species": "Incineroar",
+    "item": "SitrusBerry",
+    "ability": "Intimidate",
+    "moves": [
+     "FakeOut",
+     "FlareBlitz",
+     "Snarl",
+     "PartingShot"
+    ],
+    "nature": "Careful"
+   },
+   {
+    "species": "Kingambit",
+    "item": "LifeOrb",
+    "ability": "Defiant",
+    "moves": [
+     "Protect",
+     "KowtowCleave",
+     "SuckerPunch",
+     "SwordsDance"
+    ],
+    "nature": "Adamant"
+   },
+   {
+    "species": "Sinistcha",
+    "item": "OccaBerry",
+    "ability": "Hospitality",
+    "moves": [
+     "Protect",
+     "MatchaGotcha",
+     "RagePowder",
+     "TrickRoom"
+    ],
+    "nature": "Bold"
+   },
+   {
+    "species": "Sneasler",
+    "item": "FocusSash",
+    "ability": "PoisonTouch",
+    "moves": [
+     "FakeOut",
+     "CloseCombat",
+     "PoisonJab",
+     "QuickGuard"
+    ],
+    "nature": "Jolly"
+   },
+   {
+    "species": "Floette-Eternal",
+    "item": "Floettite",
+    "ability": "FlowerVeil",
+    "moves": [
+     "Protect",
+     "DazzlingGleam",
+     "DrainingKiss",
+     "CalmMind"
+    ],
+    "nature": "Modest"
+   },
+   {
+    "species": "Delphox",
+    "item": "Delphoxite",
+    "ability": "Blaze",
+    "moves": [
+     "Protect",
+     "HeatWave",
+     "Psychic",
+     "NastyPlot"
+    ],
+    "nature": "Timid"
+   }
+  ],
+  "selection": [
+   "Aerodactyl",
+   "Kingambit",
+   "Farigiraf",
+   "Sylveon"
+  ],
+  "leads": [
+   "Aerodactyl",
+   "Kingambit"
+  ],
+  "turns": [
+   {
+    "turn": 1,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Aerodactyl",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Kingambit",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Incineroar",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Floette-Eternal",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Farigiraf"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Iron Head",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 2,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Farigiraf",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Kingambit",
+       "hpPct": 17
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Incineroar",
+       "hpPct": 75
+      },
+      {
+       "slot": "b",
+       "species": "Floette-Mega",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Aerodactyl"
+     }
+    ]
+   },
+   {
+    "turn": 3,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Farigiraf",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Aerodactyl",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Incineroar",
+       "hpPct": 94
+      },
+      {
+       "slot": "b",
+       "species": "Sinistcha",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Sylveon"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Rock Slide",
+      "target": "spread:p1b",
+      "mega": true,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 4,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sylveon",
+       "hpPct": 78
+      },
+      {
+       "slot": "b",
+       "species": "Aerodactyl-Mega",
+       "hpPct": 67
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Sneasler",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Sinistcha",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Farigiraf"
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Hyper Voice",
+      "target": "spread:p1a,p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 5,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sylveon",
+       "hpPct": 78
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 58
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Sneasler",
+       "hpPct": 15
+      },
+      {
+       "slot": "b",
+       "species": "Incineroar",
+       "hpPct": 63
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Aerodactyl-Mega"
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Quick Attack",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 6,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sylveon",
+       "hpPct": 74
+      },
+      {
+       "slot": "b",
+       "species": "Aerodactyl-Mega",
+       "hpPct": 54
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Floette-Mega",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Incineroar",
+       "hpPct": 63
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Wide Guard",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Hyper Voice",
+      "target": "spread:p1a,p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 7,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sylveon",
+       "hpPct": 7
+      },
+      {
+       "slot": "b",
+       "species": "Aerodactyl-Mega",
+       "hpPct": 54
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Floette-Mega",
+       "hpPct": 71
+      },
+      {
+       "slot": "b",
+       "species": "Incineroar",
+       "hpPct": 42
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Dual Wingbeat",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Farigiraf"
+     }
+    ]
+   },
+   {
+    "turn": 8,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sylveon",
+       "hpPct": 0
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 58
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Floette-Mega",
+       "hpPct": 71
+      },
+      {
+       "slot": "b",
+       "species": "Incineroar",
+       "hpPct": 42
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 9,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Sylveon",
+       "hpPct": 0
+      },
+      {
+       "slot": "b",
+       "species": "Farigiraf",
+       "hpPct": 58
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Floette-Mega",
+       "hpPct": 71
+      },
+      {
+       "slot": "b",
+       "species": "Incineroar",
+       "hpPct": 42
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "gen9championsvgc2026regmc-2705698897",
+  "opponent": "perish blast",
+  "mikumikuSide": "p2",
+  "winner": "mikumiku37",
+  "openTeamSheet": true,
+  "mikumikuTeam": [
+   {
+    "species": "Archaludon",
+    "item": "Leftovers",
+    "ability": "Stamina",
+    "moves": [
+     "ElectroShot",
+     "Snarl",
+     "DragonPulse",
+     "Protect"
+    ],
+    "nature": "Calm"
+   },
+   {
+    "species": "Pelipper",
+    "item": "SitrusBerry",
+    "ability": "Drizzle",
+    "moves": [
+     "Hurricane",
+     "WeatherBall",
+     "Tailwind",
+     "WideGuard"
+    ],
+    "nature": "Bold"
+   },
+   {
+    "species": "Grimmsnarl",
+    "item": "LightClay",
+    "ability": "Prankster",
+    "moves": [
+     "SpiritBreak",
+     "LightScreen",
+     "Reflect",
+     "PartingShot"
+    ],
+    "nature": "Careful"
+   },
+   {
+    "species": "Charizard",
+    "item": "CharizarditeY",
+    "ability": "Blaze",
+    "moves": [
+     "HeatWave",
+     "WeatherBall",
+     "SolarBeam",
+     "Protect"
+    ],
+    "nature": "Timid"
+   },
+   {
+    "species": "Venusaur",
+    "item": "FocusSash",
+    "ability": "Chlorophyll",
+    "moves": [
+     "EarthPower",
+     "SludgeBomb",
+     "SleepPowder",
+     "Protect"
+    ],
+    "nature": "Modest"
+   },
+   {
+    "species": "Garchomp",
+    "item": "GarchompiteZ",
+    "ability": "RoughSkin",
+    "moves": [
+     "EarthPower",
+     "DracoMeteor",
+     "PowerGem",
+     "Protect"
+    ],
+    "nature": "Modest"
+   }
+  ],
+  "opponentTeam": [
+   {
+    "species": "Froslass",
+    "item": "Froslassite",
+    "ability": "CursedBody",
+    "moves": [
+     "Blizzard",
+     "ShadowBall",
+     "AuroraVeil",
+     "Protect"
+    ],
+    "nature": "Timid"
+   },
+   {
+    "species": "Sneasler",
+    "item": "WhiteHerb",
+    "ability": "Unburden",
+    "moves": [
+     "CloseCombat",
+     "DireClaw",
+     "FakeOut",
+     "Protect"
+    ],
+    "nature": "Adamant"
+   },
+   {
+    "species": "Lycanroc-Dusk",
+    "item": "FocusSash",
+    "ability": "ToughClaws",
+    "moves": [
+     "RockSlide",
+     "CloseCombat",
+     "Accelerock",
+     "Protect"
+    ],
+    "nature": "Adamant"
+   },
+   {
+    "species": "Basculegion",
+    "item": "SitrusBerry",
+    "ability": "Adaptability",
+    "moves": [
+     "WaveCrash",
+     "LastRespects",
+     "AquaJet",
+     "Protect"
+    ],
+    "nature": "Adamant"
+   },
+   {
+    "species": "Kingambit",
+    "item": "BlackGlasses",
+    "ability": "Defiant",
+    "moves": [
+     "KowtowCleave",
+     "SuckerPunch",
+     "SwordsDance",
+     "Protect"
+    ],
+    "nature": "Adamant"
+   },
+   {
+    "species": "Scovillain",
+    "item": "Scovillainite",
+    "ability": "Moody",
+    "moves": [
+     "Overheat",
+     "GigaDrain",
+     "RagePowder",
+     "Protect"
+    ],
+    "nature": "Bold"
+   }
+  ],
+  "selection": [
+   "Grimmsnarl",
+   "Charizard",
+   "Archaludon",
+   "Pelipper"
+  ],
+  "leads": [
+   "Grimmsnarl",
+   "Charizard"
+  ],
+  "turns": [
+   {
+    "turn": 1,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Grimmsnarl",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Charizard",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Froslass",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Lycanroc-Dusk",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Archaludon"
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Reflect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 2,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Grimmsnarl",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Archaludon",
+       "hpPct": 75
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Froslass",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Lycanroc-Dusk",
+       "hpPct": 100
+      }
+     ],
+     "weather": null,
+     "mySideConditions": [
+      "Reflect"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Protect",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Light Screen",
+      "target": "self",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 3,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Grimmsnarl",
+       "hpPct": 78
+      },
+      {
+       "slot": "b",
+       "species": "Archaludon",
+       "hpPct": 82
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Froslass-Mega",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Lycanroc-Dusk",
+       "hpPct": 100
+      }
+     ],
+     "weather": "Snowscape",
+     "mySideConditions": [
+      "Reflect",
+      "Light Screen"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Pelipper"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Electro Shot",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 4,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Pelipper",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Archaludon",
+       "hpPct": 88
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Froslass-Mega",
+       "hpPct": 53
+      },
+      {
+       "slot": "b",
+       "species": "Kingambit",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [
+      "Reflect",
+      "Light Screen"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Charizard"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Electro Shot",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 5,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Charizard",
+       "hpPct": 100
+      },
+      {
+       "slot": "b",
+       "species": "Archaludon",
+       "hpPct": 94
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Lycanroc-Dusk",
+       "hpPct": 1
+      },
+      {
+       "slot": "b",
+       "species": "Kingambit",
+       "hpPct": 100
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [
+      "Reflect",
+      "Light Screen"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "a",
+      "type": "switch",
+      "move": null,
+      "target": null,
+      "mega": false,
+      "switchTo": "Grimmsnarl"
+     },
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Electro Shot",
+      "target": "p1b",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   },
+   {
+    "turn": 6,
+    "state": {
+     "myActives": [
+      {
+       "slot": "a",
+       "species": "Grimmsnarl",
+       "hpPct": 78
+      },
+      {
+       "slot": "b",
+       "species": "Archaludon",
+       "hpPct": 100
+      }
+     ],
+     "oppActives": [
+      {
+       "slot": "a",
+       "species": "Lycanroc-Dusk",
+       "hpPct": 1
+      },
+      {
+       "slot": "b",
+       "species": "Kingambit",
+       "hpPct": 3
+      }
+     ],
+     "weather": "RainDance",
+     "mySideConditions": [
+      "Reflect",
+      "Light Screen"
+     ],
+     "oppSideConditions": [],
+     "trickRoom": false
+    },
+    "actions": [
+     {
+      "slot": "b",
+      "type": "move",
+      "move": "Snarl",
+      "target": "spread:p1a,p1b",
+      "mega": false,
+      "switchTo": null
+     },
+     {
+      "slot": "a",
+      "type": "move",
+      "move": "Spirit Break",
+      "target": "p1a",
+      "mega": false,
+      "switchTo": null
+     }
+    ]
+   }
+  ]
+ }
+]
