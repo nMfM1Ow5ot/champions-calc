@@ -1,7 +1,7 @@
 {
   "schema": "pv15-integration-diagnostic-v1",
   "date": "2026-11-26",
-  "status": "DEVELOPMENT_DIAGNOSTIC_ONLY",
+  "status": "DEVELOPMENT_DIAGNOSTIC_COMPLETE_INDEPENDENT_ACCEPTANCE_BLOCKED",
   "prior": "b12aee82eab5786c00ac68d497aa3673d8164f77",
   "codeCommit": "0aad35a42119c82fff576373ad9e19d57e587635",
   "inputBlobs": [
@@ -116,5 +116,79 @@
     "Legacy and Hellinger acceptance use frozen PV14 thresholds; soft applies margin to type-penalized score and appearance cap (exploratory), guard requires original Hellinger acceptance and fused winner agreement and type consistency. Guard is a new conservative candidate, not validated production policy.",
     "Source and roster legality not independently established. No raw frames, lineup, labels or query features committed."
   ],
-  "production": "unchanged"
+  "production": "unchanged",
+  "assetSearch": {
+    "drive": "Existing original and split recording confirmed; no separately identified battle recording.",
+    "library": "Five earlier holdout archives identified. Prior reports state 24 images from same battle; no fresh independent provenance established. Archives not downloaded again.",
+    "publicFixture": "Nintendo release announcement includes a different team preview at 1000x563, April 2026, not established M-C; attempted raw image download failed. Game8 screenshot is single battle and different resolution. Neither admitted.",
+    "newRecordingDownloads": 0,
+    "userActions": 0,
+    "paidServices": 0
+  },
+  "acceptance": {
+    "codeCommit": "7a74833998b560d5ae7dc93a0691ae4459cb573b",
+    "syntheticTests": {
+      "valid_synthetic": true,
+      "unapproved_policy": true,
+      "no_battles": true,
+      "duplicate_battle": true,
+      "same_source": true,
+      "same_image": true,
+      "unverified_label": true,
+      "wrong_slot": true,
+      "all_abstain": true,
+      "unknown_false_accept": true,
+      "false_scene": true,
+      "not_equivalent": true,
+      "not_frozen": true
+    },
+    "actual": {
+      "decision": "BLOCKED",
+      "issues": [
+        "POLICY_NOT_APPROVED_OR_INVALID",
+        "PARAMETERS_NOT_FROZEN",
+        "PROVENANCE_UNVERIFIED",
+        "ROSTER_UNVERIFIED",
+        "LABELS_UNVERIFIED",
+        "PRODUCTION_EQUIVALENCE_UNVERIFIED",
+        "REAL_UNKNOWN_CHALLENGE_MISSING",
+        "SCENE_NEGATIVE_CHALLENGE_MISSING",
+        "NO_INDEPENDENT_BATTLES",
+        "UNKNOWN_REJECTION_NOT_MET",
+        "SCENE_REJECTION_NOT_MET"
+      ],
+      "n": 0,
+      "full": 0,
+      "wrong": 0,
+      "coverage": 0,
+      "zeroErrorUpper95": null
+    },
+    "proposal": "For zero wrong accepted slots per independent battle, one-sided exact 95% upper bound = 1 - 0.05^(1/n), conditional on independent representative battles. 59 for <5%, 299 for <1%; separate team coverage, true unknowns and false-scene thresholds required. Proposed statistical examples only, not approved production policy. Gate validates declarations, not evidence truth or independence."
+  },
+  "disposition": "No production change. RGB soft rank 12/12 provisional matches but accepted 4/12, none of six corroborated base-species images; coverage inadequate and independent validation unavailable. Keep ranking and recognition certainty distinct. Stop further tuning on same battle until independent evidence is available.",
+  "references": [
+    "https://www.nintendo.com/jp/topics/article/948dfa20-e059-47d3-beac-516cd3f5cfb3",
+    "https://game8.jp/pokemon-champions/762952",
+    "https://pubmed.ncbi.nlm.nih.gov/23682001/"
+  ],
+  "todo": [
+    {
+      "id": "PV-15",
+      "status": "BLOCKED_INDEPENDENT_VALIDATION",
+      "detail": "Acquire unused distinct M-C battles, establish exact labels and roster/source provenance, compare production-equivalent auto type and appearance, approve quantitative acceptance policy before evaluation."
+    },
+    {
+      "id": "PV-09..14",
+      "status": "RESEARCH_ONLY",
+      "detail": "Do not promote results to production or W1 deterministic constraints."
+    }
+  ],
+  "principles": {
+    "review": "All 32 reviewed; plain Japanese reporting, references, buttons, limitations. No downloads of recordings or raw publication.",
+    "exceptions": [
+      "Quantitative advance budget not specified; actual extra video transfer zero.",
+      "Global TODO ledger update not verified.",
+      "Standalone Node wrappers not executed; JS functions and synthetic gate executed in connector. Full glyph transfer failed checksum; RGB fallback verified FNV only."
+    ]
+  }
 }
