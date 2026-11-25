@@ -1,0 +1,83 @@
+{
+  "schema": "champions-preview-pv02-03-v1",
+  "date": "2026-11-26",
+  "scope": "development replay only; no production state writes",
+  "source": {
+    "code_commit": "294fb36be6b9d70aeb62758f2ef9f4f3bda17e80",
+    "code_blob": "080406ac80d0a3a890f1a088ac57da2fa9bd4ab2",
+    "code_sha256": "60287d3db3aa74d2beb7492461284c60d7beb0e508c1ab1fe085a0c7b64c03a6",
+    "previous_record": "12535476067b7b72dc1b61af8cdd03e2686b064b",
+    "reference_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "features_blob": "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "species_types_blob": "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "type_icons_blob": "c4ca6c06022f70e6bbf9edc168e7f86b0d6b06a0"
+  },
+  "method": {
+    "type": "inner ring median RGB; channel-centered distance plus 0.5 times squared mean-intensity residual with offset 20; luminance std<=18 empty candidate; fitted parameters",
+    "appearance": "PV-01 feature extraction, existing reader.swift score; median of per-frame best reference scores",
+    "fusion": "0.25 times symmetric set mismatch count, no hard exclusion based on recognized types; disagreement across frames disables type penalty",
+    "reference_scope": "284 entries after existing battle-only exclusions; excludes shiny templates; not validated regulation legality or full coverage"
+  },
+  "results": {
+    "local_self_tests": {
+      "pass": 8,
+      "total": 8
+    },
+    "type_cells": {
+      "correct": 48,
+      "total": 48,
+      "nonempty_correct": 42,
+      "nonempty_total": 42,
+      "empty_correct": 6,
+      "empty_total": 6,
+      "three_same_battle": 36,
+      "other_existing_battle": 12
+    },
+    "species_rank_experiment": {
+      "frames": 3,
+      "battles": 1,
+      "slots": 6,
+      "appearance_single_top1": 2,
+      "appearance_single_top2": 2,
+      "appearance_median_top1": 3,
+      "appearance_median_top2": 3,
+      "soft_single_top1": 5,
+      "soft_single_top2": 5,
+      "soft_median_top1": 5,
+      "soft_median_top2": 6,
+      "method": "Full existing dictionary evaluated in connector JavaScript using extracted rounded query features; local Python implementation unit tested and type classifier tested on four images. Full dictionary Python inspect() end-to-end not run."
+    },
+    "additional_ocr": 0,
+    "additional_recordings": 0,
+    "additional_installations": 0,
+    "confirmed_events": 0
+  },
+  "limitations": [
+    "Two battles; only one battle for species ranking; parameters tuned using existing images; not independent validation.",
+    "One incorrect first-ranked species remains. No calibrated abstention threshold; no candidate probabilities; no forced uniqueness.",
+    "Three images from the same battle are correlated. Same slot order must be established externally; no temporal alignment or deduplication implementation.",
+    "Presence and color thresholds may fail systematically. Only observed types tested; 18-type coverage not demonstrated. Unknown reference species cannot be ranked.",
+    "Feature reference provenance overlap not excluded. Python and Swift equivalence not proved. No full Python end-to-end dictionary replay."
+  ],
+  "todo": [
+    {
+      "id": "PV-01",
+      "status": "COMPLETE_LIMITED"
+    },
+    {
+      "id": "PV-02",
+      "status": "COMPLETE_DEVELOPMENT_ONLY"
+    },
+    {
+      "id": "PV-03",
+      "status": "PARTIAL",
+      "detail": "Multi-frame soft ranking baseline; improve same-type discrimination and reference coverage without tuning further on the same six identities."
+    },
+    {
+      "id": "PV-04",
+      "status": "PENDING",
+      "detail": "Freeze provisional parameters and validate on previously unused team previews; seek existing independent assets first; separate reference overlap, unknown classes, top-k coverage, error and abstention."
+    }
+  ],
+  "privacy": "No raw frames, transcripts or trainer names published; aggregate results only."
+}
