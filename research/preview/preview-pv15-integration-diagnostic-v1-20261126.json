@@ -1,0 +1,120 @@
+{
+  "schema": "pv15-integration-diagnostic-v1",
+  "date": "2026-11-26",
+  "status": "DEVELOPMENT_DIAGNOSTIC_ONLY",
+  "prior": "b12aee82eab5786c00ac68d497aa3673d8164f77",
+  "codeCommit": "0aad35a42119c82fff576373ad9e19d57e587635",
+  "inputBlobs": [
+    "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "cf4df343979e930a47e3a71e083a3943e013895f",
+    "c4ca6c06022f70e6bbf9edc168e7f86b0d6b06a0"
+  ],
+  "privateTransfer": {
+    "bytes": 2578,
+    "fnv32": "95fd6eaf",
+    "localSHA256": "a2b8cba2f01ad8b8a34261f13417562ed8fc28f4548cd7be42d8e301601cff77",
+    "note": "FNV-1a equality checked across environments; SHA256 computed locally only. First glyph-inclusive transfer failed integrity check and was discarded."
+  },
+  "result": {
+    "n": 12,
+    "iconCells": 24,
+    "blank": 6,
+    "read": 18,
+    "typesCorrect": 11,
+    "verifiedTypesCorrect": 5,
+    "summary": {
+      "legacy": {
+        "top1": 5,
+        "baseVerifiedTop1": 1,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      },
+      "hellinger": {
+        "top1": 11,
+        "baseVerifiedTop1": 6,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      },
+      "soft": {
+        "top1": 12,
+        "baseVerifiedTop1": 6,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      },
+      "guard": {
+        "top1": 11,
+        "baseVerifiedTop1": 6,
+        "accepted": 4,
+        "wrongAccepted": 0,
+        "verifiedAccepted": 0,
+        "verifiedBaseWrongAccepted": 0,
+        "unknownAccepted": 0,
+        "layouts": [
+          {
+            "layout": 0,
+            "all6Top1": true,
+            "all6AcceptedCorrect": false
+          },
+          {
+            "layout": 1,
+            "all6Top1": false,
+            "all6AcceptedCorrect": false
+          }
+        ]
+      }
+    }
+  },
+  "limitations": [
+    "Single already used apparent battle, 12 correlated representatives, 3 base species independently corroborated via nameplate. No new independent footage. Exact forms provisional; simulated unknown removes exact target label only.",
+    "RGB-only base-template nearest neighbor plus existing yellow/blank rules is a diagnostic substitute for full glyph matching, not Swift production recognition. No type confidence calibration. Expected types derived from provisional labels.",
+    "Legacy and Hellinger acceptance use frozen PV14 thresholds; soft applies margin to type-penalized score and appearance cap (exploratory), guard requires original Hellinger acceptance and fused winner agreement and type consistency. Guard is a new conservative candidate, not validated production policy.",
+    "Source and roster legality not independently established. No raw frames, lineup, labels or query features committed."
+  ],
+  "production": "unchanged"
+}
