@@ -1,0 +1,47 @@
+{
+  "schema": "ocr-association-validation-v8",
+  "date": "2026-11-26",
+  "principles_version": "1.2",
+  "scope": "isolated research; no production changes",
+  "provenance": {
+    "script_commit": "3167f1bd86b92f02de803eae21b459c28b36ec2a",
+    "script_blob": "207767d908693b5914731ba2e95a2a277926f227",
+    "script_sha256": "4e4a0a7a4ce04b8329b9d818a224853f6b780294403d1b02574a61cd16a975c8",
+    "archive_sha256": "087f39b87299e8281f86ff34c3b48dafa2f83e644ea88ed9c934b0e852d3c999",
+    "prior": "v7 saved replay; raw OCR boxes checked against v5 report",
+    "species_labels": "two observed opponent labels, previously verified against pinned names_ja.json; not full-dictionary test"
+  },
+  "results": {
+    "synthetic_checks": {
+      "pass": 12,
+      "total": 12
+    },
+    "verified_image_hashes": 3,
+    "ocr_passes_replayed": 4,
+    "source_frame_groups": 3,
+    "passes_per_group": [
+      1,
+      1,
+      2
+    ],
+    "move_name_rows": 4,
+    "pp_pairs": 2,
+    "unpaired_numeric_boxes": 2,
+    "opponent_hp_candidates": 2,
+    "confirmed_events": 0,
+    "new_ocr_calls": 0,
+    "new_installations": 0,
+    "user_actions": 0
+  },
+  "limits": [
+    "Same selected recording; not independent accuracy or recall validation.",
+    "Coordinate thresholds fitted to observed command layout.",
+    "Opponent exact name matching uses two verified labels in this pilot, not the full dictionary.",
+    "PP pairing only handles specified split layout; unpaired numbers are not confirmed current PP.",
+    "Grouping identical source frames does not imply independence across distinct frames.",
+    "No raw player transcripts or images published."
+  ],
+  "next": {
+    "plan": "Consolidate remaining static issues; then batch a small independent holdout pilot if necessary. No production architecture selection or code integration without adequate evidence."
+  }
+}
