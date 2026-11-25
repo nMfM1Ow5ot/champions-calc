@@ -1,0 +1,3988 @@
+
+import { Generations, TEAM_PRESETS, assumedSet, usageSpec, calcMatchup, withCurHP, deriveBuild, damageRolls, statTable, moveData, createEstimator, labelSide, labelSpecies, exclusiveZMove, zMoveNameOf, Z_STATUS, Z_EXCLUSIVE_FX, setSpecPatchData, specPatchVersions, activeSpecPatch, applySpecPatch } from './bundle.mjs';
+
+const gen = Generations.get(9);const STATJ = [['hp','HP'],['atk','ATK'],['def','DEF'],['spa','SPA'],['spd','SPD'],['spe','SPE']];
+const TYPE_JA = {Normal:'ノーマル',Fire:'ほのお',Water:'みず',Electric:'でんき',Grass:'くさ',Ice:'こおり',Fighting:'かくとう',Poison:'どく',Ground:'じめん',Flying:'ひこう',Psychic:'エスパー',Bug:'むし',Rock:'いわ',Ghost:'ゴースト',Dragon:'ドラゴン',Dark:'あく',Steel:'はがね',Fairy:'フェアリー',Stellar:'ステラ'};
+const TERA_TYPES = Object.keys(TYPE_JA);
+// items_ja.json に無い持ち物の日本語名 (表示用サプリメント)。
+// Leek は Stick と同一アイテム (第8世代で改名)、第2世代のきのみ4件は金銀の実名、
+// Mail は総称名、Crucibellite / Vile Vial は CAP の持ち物で公式名が無いためカタカナ表記
+const ITEM_JA_EXTRA = { 'Leek': 'ながねぎ', 'Stick': 'ながねぎ', 'Miracle Berry': 'きせきのみ', 'Mystery Berry': 'ふしぎなきのみ', 'PRZ Cure Berry': 'まひなおしのみ', 'PSN Cure Berry': 'どくけしのみ', 'Mail': 'メール', 'Crucibellite': 'クルシーベルナイト', 'Vile Vial': 'バイルバイアル' };
+const ABILITY_JA_EXTRA = { 'Mountaineer': 'マウンテニア', 'Persistent': 'パーシステント', 'Rebound': 'リバウンド' };
+const TYPE_SHORT = {Normal:'NRML',Fire:'FIRE',Water:'WATR',Electric:'ELEC',Grass:'GRASS',Ice:'ICE',Fighting:'FIGHT',Poison:'POISON',Ground:'GROUND',Flying:'FLYING',Psychic:'PSYC',Bug:'BUG',Rock:'ROCK',Ghost:'GHOST',Dragon:'DRAGON',Dark:'DARK',Steel:'STEEL',Fairy:'FARY'};
+const TYPE_COLOR = {Normal:'#8a8a6a',Fire:'#d96f26',Water:'#4f7de0',Electric:'#d9b62a',Grass:'#67b83c',Ice:'#7fc9c6',Fighting:'#b02a24',Poison:'#923a92',Ground:'#c9a94f',Flying:'#8f7fe8',Psychic:'#e84f7f',Bug:'#93a51a',Rock:'#a08f2f',Ghost:'#5f4a8a',Dragon:'#5f2ef0',Dark:'#5f4a3d',Steel:'#9a9ab5',Fairy:'#d685ad',Stellar:'#35a29f'};
+const NATURES = ['Hardy','Lonely','Brave','Adamant','Naughty','Bold','Docile','Relaxed','Impish','Lax','Timid','Hasty','Serious','Jolly','Naive','Modest','Mild','Quiet','Bashful','Rash','Calm','Gentle','Sassy','Careful','Quirky'];
+const NAT_JA = {Hardy:'がんばりや',Lonely:'さみしがり',Brave:'ゆうかん',Adamant:'いじっぱり',Naughty:'やんちゃ',Bold:'ずぶとい',Docile:'すなお',Relaxed:'のんき',Impish:'わんぱく',Lax:'のうてんき',Timid:'おくびょう',Hasty:'せっかち',Serious:'まじめ',Jolly:'ようき',Naive:'むじゃき',Modest:'ひかえめ',Mild:'おっとり',Quiet:'れいせい',Bashful:'てれや',Rash:'うっかりや',Calm:'おだやか',Gentle:'おとなしい',Sassy:'なまいき',Careful:'しんちょう',Quirky:'きまぐれ'};
+const NAT_UPDOWN = {Lonely:['atk','def'],Brave:['atk','spe'],Adamant:['atk','spa'],Naughty:['atk','spd'],Bold:['def','atk'],Relaxed:['def','spe'],Impish:['def','spa'],Lax:['def','spd'],Timid:['spe','atk'],Hasty:['spe','def'],Jolly:['spe','spa'],Naive:['spe','spd'],Modest:['spa','atk'],Mild:['spa','def'],Quiet:['spa','spe'],Rash:['spa','spd'],Calm:['spd','atk'],Gentle:['spd','def'],Sassy:['spd','spe'],Careful:['spd','spa']};
+const itemLabel = en => en ? ((typeof NAMES !== 'undefined' && NAMES._itemEn2ja && NAMES._itemEn2ja[en]) || en) : 'なし';
+const NAT_JA2EN = Object.fromEntries(Object.entries(NAT_JA).map(([en, jaName]) => [jaName, en]));
+const NAT_STAT_JA = { atk: 'ATK', def: 'DEF', spa: 'SPA', spd: 'SPD', spe: 'SPE' };
+// 性格の上昇・下降を色付きで示す断片 (プルダウン一覧のラベル右横に付ける)
+function natureExtraHTML(n) {
+  const ud = NAT_UPDOWN[n];
+  if (!ud) return '';
+  return ` <span class="natp">+${NAT_STAT_JA[ud[0]]}</span> <span class="natm">-${NAT_STAT_JA[ud[1]]}</span>`;
+}
+// 種族の pokedb 使用率分布 (USAGE_SETS の code 経由)。フォルムは基本フォルムへ寄せる
+function pokedbParsedFor(speciesEn) {
+  if (!POKEDB_PARSED || !USAGE_SETS) return null;
+  const sets = USAGE_SETS.sets || USAGE_SETS;
+  let u = sets[idOf(speciesEn)];
+  if (!u) { const base = gen.species.get(idOf(speciesEn))?.baseSpecies; if (base && base !== speciesEn) u = sets[idOf(base)]; }
+  return u && u.code ? (POKEDB_PARSED[u.code] || null) : null;
+}
+// 使用率順オプションの共通処理: rateOf(英名) が率を返すものを使用率の降順 (% 併記)、
+// 残りをラベルのあいうえお順に並べ替えた新しい配列を返す
+function usageSortOptions(options, rateOf) {
+  const rated = [], rest = [];
+  for (const o of options) {
+    const r = o.v ? rateOf(o.v) : null;
+    if (r != null) rated.push({ o, r }); else rest.push(o);
+  }
+  rated.sort((a, b) => b.r - a.r);
+  rest.sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  return rated.map(({ o, r }) => ({ ...o, rate: r, extra: (o.extra || '') + ` <span class="ddrate">${r}%</span>` })).concat(rest);
+}
+// 特性プルダウンの選択肢: その種族の使用率順 (% 併記)、残りはあいうえお順
+function abilityOptionsFor(spec, abs) {
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  const rates = {};
+  if (pd && Array.isArray(pd.abilities)) for (const e of pd.abilities) if (e.name) rates[z2h(e.name)] = e.rate;
+  const rateOf = en => rates[z2h(ja('abilities', en))];
+  // メガシンカ中はメガ後の特性のみ (従来どおり)。それ以外は全特性から選べる
+  if (spec.mega) return usageSortOptions(abs.map(a => ({ v: a, l: biLabel(ja('abilities', a), a) })), rateOf);
+  const opts = usageSortOptions(ABILITY_OPTIONS, rateOf);
+  if (spec.ability && !opts.some(o => o.v === spec.ability)) opts.push({ v: spec.ability, l: biLabel(ja('abilities', spec.ability), spec.ability) });
+  return opts;
+}
+// 技プルダウンの選択肢: その種族の使用率順 (% 併記)、残りはあいうえお順
+function moveOptionsFor(spec) {
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  const head = [{ v: '', l: '（技なし）' }];
+  const used = new Set(['']);
+  if (pd && Array.isArray(pd.moves)) {
+    const byV = new Map(MOVE_OPTIONS.map(o => [o.v, o]));
+    const rated = [];
+    for (const e of pd.moves) {
+      const en = e.ja ? (NAMES._moveJa2en || {})[z2h(e.ja)] : null;
+      if (!en || used.has(en) || !byV.has(en)) continue;
+      used.add(en);
+      rated.push({ o: byV.get(en), r: e.rate || 0 });
+    }
+    rated.sort((a, b) => b.r - a.r);
+    for (const { o, r } of rated) head.push({ ...o, rate: r, extra: ` <span class="ddrate">${r}%</span>` });
+  }
+  const rest = MOVE_OPTIONS.filter(o => o.v && !used.has(o.v)).sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  return head.concat(rest);
+}
+let _itemJa2en = null, _itemJa2enSig = '';
+function itemJa2en(jaName) {
+  // 逆引きの材料 (持ち物名マップと選択肢一覧) は非同期に揃うため、
+  // 材料の状態が変わったらキャッシュを作り直す (途中で作ると
+  // 空のまま固定され、持ち物の使用率が一切出なくなる)
+  const sig = Object.keys(NAMES._itemEn2ja || {}).length + '/' + ITEM_OPTIONS.length;
+  if (!_itemJa2en || _itemJa2enSig !== sig) {
+    _itemJa2en = {}; _itemJa2enSig = sig;
+    for (const o of ITEM_OPTIONS) { if (!o.v) continue; const j = (NAMES._itemEn2ja || {})[idOf(o.v)]; if (j) _itemJa2en[z2h(j)] = o.v; }
+  }
+  return _itemJa2en[jaName] || null;
+}
+// 持ち物プルダウンの選択肢: その種族の使用率の降順 (% を併記) で並べ、
+// 使用率に入っていない残りはその下にあいうえお順で並べる
+function itemOptionsFor(spec) {
+  const byV = new Map(ITEM_OPTIONS.map(o => [o.v, o]));
+  const head = [{ v: '', l: 'なし' }];
+  const used = new Set(['']);
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  if (pd && Array.isArray(pd.items)) {
+    for (const it of pd.items) {
+      const en = it.name ? itemJa2en(z2h(it.name)) : null;
+      if (!en || used.has(en) || !byV.has(en)) continue;
+      used.add(en);
+      head.push({ ...byV.get(en), rate: it.rate, extra: ` <span class="ddrate">${it.rate}%</span>` });
+    }
+  }
+  const rest = ITEM_OPTIONS.filter(o => o.v && !used.has(o.v)).sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  return head.concat(rest);
+}
+
+// 性格プルダウンの選択肢: その種族の使用率の降順 (分布が無い種族は全種族の合算順)
+function natureOptionsFor(spec) {
+  let rates = null;
+  const pd = pokedbParsedFor(effSpecies(spec)) || pokedbParsedFor(spec.species);
+  if (pd && Array.isArray(pd.natures) && pd.natures.length) {
+    rates = {};
+    for (const e of pd.natures) { const en = NAT_JA2EN[e.name]; if (en) rates[en] = e.rate || 0; }
+    if (!Object.keys(rates).length) rates = null;
+  }
+  // 使用率順 (+- 記号の右横に % を併記)、使用率に入っていない残りと
+  // 分布が無い種族はあいうえお順 (記号のみで % なし)
+  const mk = n => {
+    const marks = natureExtraHTML(n).trim();
+    const pct = rates && rates[n] != null ? `<span class="ddrate">${rates[n]}%</span>` : '';
+    const extra = [marks, pct].filter(Boolean).join(' ');
+    return { v: n, l: biLabel(NAT_JA[n] || n, n), rate: rates && rates[n] != null ? rates[n] : undefined, extra: extra ? ' ' + extra : '' };
+  };
+  const byJa = (a, b) => (NAT_JA[a] || a).localeCompare(NAT_JA[b] || b, 'ja');
+  if (rates) {
+    const rated = NATURES.filter(n => rates[n] != null).sort((a, b) => rates[b] - rates[a]);
+    const rest = NATURES.filter(n => rates[n] == null).sort(byJa);
+    return rated.concat(rest).map(mk);
+  }
+  return [...NATURES].sort(byJa).map(mk);
+}
+
+let NAMES = { species: {}, moves: {}, abilities: {} };
+const idOf = en => String(en).toLowerCase().replace(/[^a-z0-9]/g, '');
+const ja = (table, en) => (NAMES[table] && NAMES[table][idOf(en)]) || en;
+// プルダウン表示名: 日本語名の横に英名を併記する (例: カビゴン (Snorlax))。
+// 日本語名が無い場合は英名のみ。検索はラベル・値の双方に当たるため日英どちらでも探せる
+const biLabel = (jaName, en) => (!jaName || jaName === en) ? String(en) : `${jaName} (${en})`;
+
+const $ = id => document.getElementById(id);
+const state = {
+  field: { weather: '', terrain: '' },
+  side: {
+    mine: { light: false, reflect: false, veil: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 },
+    opp: { light: false, reflect: false, veil: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 },
+  },
+  mine: [], opps: [],
+  oppTeam: ['Garchomp', 'Rillaboom'],
+  sel: { mine: 0, opps: 0 },
+  active: { mine: [0, 1], opps: [0, 1] },
+};
+// 天候/フィールドの手動編集の保持: 編集した項目は、実盤面の値 (state.json の
+// field) が編集時点の値から実際に変わるまで、届いた値で上書きしない。
+// fieldSeen は直近に届いた実値、fieldHold は項目ごとの {value, base}
+const fieldSeen = { weather: undefined, terrain: undefined };
+const fieldHold = { weather: null, terrain: null };
+function setFieldManual(k, v) {
+  state.field[k] = v;
+  fieldHold[k] = { value: v, base: fieldSeen[k] };
+}
+// 天候/フィールドを発生させる特性: そのポケモンが新しく選択されたら、
+// 対応する天候/フィールドで上書きする。手動編集と違い「保持」はしない
+// (対戦中にパネルを切り替えただけで実盤面と違う天候が固定されてしまう
+// ため。battle_20261122_070237: 対戦中にコータスのパネル選択で Sun が
+// 保持され、実盤面の Snow に戻らなくなった)。保持しなければ、次の
+// state.json の実値で即座に戻る
+const SETTER_FIELD = {
+  'Drought': ['weather', 'Sun'], 'Orichalcum Pulse': ['weather', 'Sun'], 'Desolate Land': ['weather', 'Harsh Sunshine'],
+  'Drizzle': ['weather', 'Rain'], 'Primordial Sea': ['weather', 'Heavy Rain'],
+  'Sand Stream': ['weather', 'Sand'], 'Snow Warning': ['weather', 'Snow'], 'Delta Stream': ['weather', 'Strong Winds'],
+  'Electric Surge': ['terrain', 'Electric'], 'Hadron Engine': ['terrain', 'Electric'],
+  'Grassy Surge': ['terrain', 'Grassy'], 'Misty Surge': ['terrain', 'Misty'], 'Psychic Surge': ['terrain', 'Psychic'],
+};
+function applySetterAbility(spec) {
+  if (!spec) return;
+  const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
+  const s = SETTER_FIELD[ab];
+  if (s && state.field[s[0]] !== s[1]) state.field[s[0]] = s[1];
+}
+let lastCalc = null;
+// ひんし (HP0) になったポケモンは、対戦中に state.json の誤読で HP が戻らないようロックする (種族名)
+const faintLock = { mine: new Set(), opps: new Set() };
+// oppReset が来ても即座にロックやパネルを消さず、新しい対戦の開始が確認
+// できてから解除する (試合終了後の画面を選出画面と誤検出した oppReset で、
+// 前の対戦のひんしが HP100% で蘇るのを防ぐ)。確認の合図は「別チームの出現」
+// または「events 列のリスタート (長さが縮む)」のどちらか
+let battleResetPending = false;
+let lastEventCount = 0;
+let lastBattleKey = null;
+let inferLog = [];
+let uiErrors = [];
+function errText(e) { return String((e && e.message) || e); }
+function errStack(e) { return String((e && e.stack) || '').split('\n').slice(0, 4).join(' <- '); }
+// 例外の記録 (後日の成果物で「どこで・なぜ止まったか」を追えるように)。
+// メモリ上に保持してデバッグスナップショットに含めるほか、対戦中は
+// 推論ログのアーカイブにもマーカーとして残す (自動で送られるため)
+// 試合開始／終了ボタン (手動フラグ化)。表示は UI ローカルのトグルでは
+// なく、state.json の battlePhase (reader が権威) から決める。再読み込み
+// しても実状態とずれない。押下は serve.py の POST /battle_flag へ
+// {"action": "toggle"} だけを送り、開始か終了かは serve.py が権威ある
+// battlePhase で判断する (UI 側の phase では決めない)。応答が ok の
+// 場合は応答の phase で表示を即時更新し、失敗時 (409 含む) は UI 側の
+// phase を変更しない (ポーリングの追従に委ねる)。
+// ボタンは読み込み直後は無効で、最初の state.json 適用で有効な
+// battlePhase が得られた時点で有効化する。一度有効化した後は、取得が
+// 一時的に失敗しても無効化には戻さない
+let flagPhase = 'idle';
+let flagMode = 'manual';
+let flagBusy = false;
+let flagSeen = false;
+function flagBtnLabel() { return flagPhase === 'inBattle' ? '試合終了' : '試合開始'; }
+function flagBtnDisabled() { return flagBusy || !flagSeen; }
+function renderFlagBtn() {
+  const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById('battleFlagBtn') : null;
+  if (!el) return;
+  el.textContent = flagBtnLabel();
+  el.dataset.phase = flagPhase;
+  el.disabled = flagBtnDisabled();
+}
+async function pressBattleFlag() {
+  if (flagBusy) return;
+  flagBusy = true; renderFlagBtn();
+  try {
+    const res = await fetch('./battle_flag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'toggle' }) });
+    if (res && res.ok) {
+      const j = await res.json().catch(() => null);
+      if (j && (j.phase === 'inBattle' || j.phase === 'idle')) { flagPhase = j.phase; if (j.mode) flagMode = j.mode; }
+    }
+  } catch (e) { /* serve.py 未起動時は何もしない (表示は state.json の到着を待つ) */ }
+  flagBusy = false; renderFlagBtn();
+}
+function recordUiError(rec) {
+  const entry = { at: new Date().toISOString(), ...rec };
+  uiErrors.push(entry);
+  if (uiErrors.length > 50) uiErrors.splice(0, uiErrors.length - 50);
+  try { console.error('[ui-error]', entry.where, entry.message); } catch (e) {}
+  if (lastBattleKey) inferLog.push({ at: entry.at, battle: lastBattleKey, uiError: entry });
+}
+// 推論過程ログの対戦別アーカイブ (試合キー → 記録配列)。リセットをまたいでも
+// 同一対戦分は蓄積し続け、送信は常に対戦分の全件を送る (リセット後の記録
+// だけでファイルを上書きし、対戦前半の記録が失われる事故の再発防止)
+const inferArchive = {};
+const inferPendingKeys = new Set();
+let inferSendAt = 0;
+let inferSendChain = Promise.resolve();
+function inferBucketKey() {
+  const key = String(lastBattleKey || '').replace(/^battle_/, '');
+  return /^[0-9]{8}_[0-9]{6}(_salvage)?$/.test(key) ? key : '';
+}
+// 試合中のダメ計ログ (再計算の記録)。推論過程ログと同方式で、対戦別
+// アーカイブに蓄積し serve.py へ全件再送する (battle_<試合キー>_calclog.json)
+let calcLog = [];
+const calcArchive = {};
+const calcPendingKeys = new Set();
+let calcSendAt = 0;
+let calcSendChain = Promise.resolve();
+let calcSrcPending = null; // 次の再計算のきっかけ ('user' / 'preset' / 'estimate')
+let calcAutoPending = null; // 間引かれた自動再計算の最新スナップショット
+let calcLastSig = ''; // 直前に記録した入力+出力の署名 (重複記録の抑止)
+let calcLastAt = 0; // 直前に記録した時刻 (自動再計算の間引き判定)
+let curTurn = null; // 対戦の現在ターン (イベントから追跡。不明なら null)
+const CALCLOG_MAX = 300; // 1対戦あたりの記録上限
+function markCalcSrc(src) { calcSrcPending = { src, at: Date.now() }; }
+// データ読み込みの状態管理: 失敗を記録・可視化し、重要ファイルは再試行する
+// (読み込み失敗が握りつぶされ、セッションが欠けたまま劣化し続ける事故の再発防止)
+const loadStatus = {};
+const DATA_LOADERS = [];
+let dataRetryTimer = null;
+function regDataLoader(id, label, critical, load) { const d = { id, label, critical, load }; DATA_LOADERS.push(d); return d; }
+async function runDataLoader(d) {
+  const st = loadStatus[d.id] || (loadStatus[d.id] = { ok: false, attempts: 0, lastError: '' });
+  st.attempts++;
+  try { await d.load(); st.ok = true; st.lastError = ''; }
+  catch (e) { st.ok = false; st.lastError = String((e && e.message) || e); try { console.warn('[data load]', d.id, st.lastError); } catch (e2) {} }
+  renderLoadWarn();
+  return st.ok;
+}
+function missingCriticalLoaders() { return DATA_LOADERS.filter(d => d.critical && !(loadStatus[d.id] && loadStatus[d.id].ok)); }
+// 重要データの取得: まず配信元 (相対パス) から取り、失敗したら公開ページ
+// (GitHub Pages) の同一ファイルへ切り替える。ローカル配信へファイルが
+// まだ届いていない・壊れている場合でも、オンラインなら読み込める。
+// 失敗時は HTTP ステータスを含むエラーを投げ、警告表示と loadStatus に
+// 理由が残るようにする (従来は 404 でも本文のパースエラーしか残らず、
+// 原因が分からなかった)
+const PAGES_BASE = 'https://nmfm1ow5ot.github.io/champions-calc/';
+async function fetchCriticalJson(path) {
+  let firstErr = null;
+  try {
+    const r = await fetch('./' + path, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return { json: await r.json(), source: 'local' };
+  } catch (e) { firstErr = e; }
+  try {
+    const r2 = await fetch(PAGES_BASE + path, { cache: 'no-store' });
+    if (!r2.ok) throw new Error('HTTP ' + r2.status);
+    return { json: await r2.json(), source: 'pages' };
+  } catch (e2) {
+    throw new Error(((firstErr && firstErr.message) || 'fetch failed') + ' / pages: ' + ((e2 && e2.message) || e2));
+  }
+}
+// データ回復で推定を作り直す際、最後に受けた state を再適用してイベントを
+// 再生する (poll は state の変化時にしか適用しないため、リセットだけでは
+// 変化が来るまで再生されない)
+function reapplyLastState() { if (lastStateText) { try { applyState(JSON.parse(lastStateText)); } catch (e) {} } }
+function scheduleDataRetry() {
+  if (dataRetryTimer) return;
+  if (!missingCriticalLoaders().some(d => (loadStatus[d.id] ? loadStatus[d.id].attempts : 0) < 240)) { renderLoadWarn(); return; }
+  dataRetryTimer = setTimeout(async () => {
+    dataRetryTimer = null;
+    let recovered = false;
+    for (const d of missingCriticalLoaders()) { if (await runDataLoader(d)) recovered = true; }
+    // 対戦中に遅れて揃った場合は、完全なデータで推定を作り直す
+    if (recovered && lastBattleKey) { resetInference(); reapplyLastState(); }
+    if (missingCriticalLoaders().length) scheduleDataRetry();
+  }, 30000);
+}
+function renderLoadWarn() {
+  const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById('loadWarn') : null;
+  if (!el) return;
+  const missing = missingCriticalLoaders();
+  if (!missing.length) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.textContent = 'データ読込: ' + missing.map(d => { const st = loadStatus[d.id]; const err = st && st.lastError ? String(st.lastError).slice(0, 80) : ''; return d.label + (err ? '（' + err + '）' : ''); }).join('・') + ' が未読込です（再試行中・クリックで再試行）';
+}
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
+  const t = e.target && e.target.closest ? e.target.closest('[data-loadretry]') : null;
+  if (!t) return;
+  (async () => {
+    let recovered = false;
+    for (const d of missingCriticalLoaders()) { if (await runDataLoader(d)) recovered = true; }
+    if (recovered && lastBattleKey) { resetInference(); reapplyLastState(); }
+    if (missingCriticalLoaders().length) scheduleDataRetry();
+  })();
+});
+// 持ち物名マップは names 本体と独立に読み込む (従来は names_ja と
+// names_index の成功に入れ子で依存し、失敗が握りつぶされていた)
+let ITEM_MAPS = null;
+function applyItemMaps() {
+  if (!ITEM_MAPS || !NAMES) return;
+  NAMES._itemJa2en = ITEM_MAPS;
+  NAMES._itemEn2ja = {};
+  for (const [jaName, en] of Object.entries(ITEM_MAPS)) NAMES._itemEn2ja[idOf(en)] = jaName;
+  for (const [en, jaName] of Object.entries(ITEM_JA_EXTRA)) { const k = idOf(en); if (!(k in NAMES._itemEn2ja)) NAMES._itemEn2ja[k] = jaName; }
+  // itemJa2en の逆引きキャッシュは、このマップが届く前に作られると
+  // 空のまま固定されてしまうため、読み込みのたびに作り直させる
+  _itemJa2en = null;
+  // 到着が初回描画より遅れた場合、再描画しないと使用率のない
+  // 持ち物選択肢が表示され続けるため、描画済みなら描き直す
+  if (document.querySelector('.playercalc')) renderAll();
+}
+function confirmNewBattle() {
+  battleResetPending = false;
+  tempTrainerSets = {}; // 前の試合の推定型の一時保持はここで終わる
+  faintLock.mine.clear();
+  faintLock.opps.clear();
+  revivalPending.mine = 0;
+  revivalPending.opps = 0;
+  for (const s of state.mine) if (s) s.itemLost = false;
+}
+// さいきのいのり (Revival Blessing) の使用回数 (側ごと)。使われた直後の復活 (HP約50%) だけロックを解除する
+const revivalPending = { mine: 0, opps: 0 };
+let lastStateJson = '';
+const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, statusPop: null, presetDraft: { save: {}, rename: '', token: '', search: {} }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
+
+function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
+let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
+function presetSpec(i) {
+  const p = PRESETS[i];
+  return { preset: i, species: p.species, megaSpecies: p.megaSpecies, mega: !!p.megaSpecies && i === 1, item: p.item,
+    ability: p.ability, megaAbility: p.megaAbility, nature: p.nature, sp: { ...p.sp }, moves: [...p.moves], origMoves: [...p.moves],
+    curHPPercent: 100, boosts: blankBoosts(), status: '' };
+}
+// 表示名 (括弧書きのフォルム表記を除いた日本語名) が同じフォルム違いの候補。
+// 例: イエッサン -> [Indeedee, Indeedee-F]、キュウコン -> [Ninetales, Ninetales-Alola]
+function speciesVariants(en) {
+  const idx = NAMES._indexSpecies || [];
+  const disp = jaName => (jaName || '').replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '');
+  const mine = idx.find(e => e.en === en);
+  if (!mine) return [en];
+  const d = disp(mine.ja);
+  const out = [];
+  for (const e of idx) if (disp(e.ja) === d && !out.includes(e.en)) out.push(e.en);
+  return out.length ? out : [en];
+}
+// my_team.json の1体分 (reader の --team モードが書く) をプリセット形式に変換する。
+// stats があれば SP・性格を逆算し、item がメガストーンならメガ形態も導く。
+function myTeamPreset(e) {
+  // チーム名の番兵エントリ ({"teamName": ...}) など種族を持たない要素は
+  // ここで弾く。resolveSpecies(undefined) が例外を投げ、loadMyTeam 全体が
+  // 失敗して撮影取り込みが「読み直せませんでした」になる事故があった
+  if (!e || !e.species) return null;
+  let species = resolveSpecies(e.species) || e.species;
+  let sd = gen.species.get(idOf(species));
+  if (!sd) return null;
+  let nature, sp, ambiguous = false;
+  let sols = e.stats ? deriveBuild(species, e.stats) : [];
+  if (e.stats && !sols.length) {
+    // 登録名のフォルムでは実数値を再現できない場合、同名のフォルム違い
+    // (性別・リージョン等) で再現できるものを採用する
+    for (const cand of speciesVariants(species)) {
+      if (cand === species) continue;
+      const s = deriveBuild(cand, e.stats);
+      if (s.length) { sols = s; species = cand; sd = gen.species.get(idOf(cand)); break; }
+    }
+  }
+  // reader がステータス画面の性格補正矢印から確定した性格 (e.nature、英語名) が
+  // あれば、逆算候補をその性格のものだけに絞る。実数値と矛盾して絞った結果が
+  // 空になる場合は絞らず、従来どおり全候補から選ぶ。曖昧さ (derivedAmbiguous)
+  // も絞った後の候補数で評価される。
+  if (sols.length && e.nature) {
+    const nd = gen.natures.get(idOf(e.nature));
+    if (nd) {
+      const f = sols.filter(s => s.nature === nd.name);
+      if (f.length) sols = f;
+    }
+  }
+  if (sols.length) {
+    let pick = sols[0];
+    if (e.spHint) {
+      const keys = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+      const m = sols.find(s => keys.every(k => (s.sp[k] || 0) === (e.spHint[k] || 0)));
+      if (m) pick = m;
+    }
+    nature = pick.nature; sp = pick.sp; ambiguous = sols.length > 1;
+  }
+  else { const a = assumedSet(species, 'attacker'); nature = a.nature; sp = a.sp; }
+  const item = e.item ? (resolveItem(e.item) || '') : '';
+  let megaSpecies, megaAbility;
+  if (item) {
+    const it = gen.items.get(idOf(item));
+    if (it && it.megaStone) megaSpecies = Object.values(it.megaStone)[0];
+  }
+  if (!megaSpecies && e.item && /ナイト/.test(e.item)) {
+    const m = String(e.item).replace(/[Ａ-Ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).match(/ナイト([XYZ])?$/);
+    const cand = gen.species.get(idOf(species + '-Mega' + (m && m[1] ? '-' + m[1] : '')));
+    if (cand) megaSpecies = cand.name;
+  }
+  if (megaSpecies) {
+    const msd = gen.species.get(idOf(megaSpecies));
+    if (msd) megaAbility = Object.values(msd.abilities || {})[0];
+  }
+  const ability = (e.ability && resolveAbility(e.ability)) || Object.values(sd.abilities || {})[0] || '';
+  let moves = Array.isArray(e.moves) ? e.moves.map(mv => resolveMove(mv) || mv).filter(Boolean) : [];
+  if (!moves.length) { const u = usageSpec(species, USAGE_SETS); if (u) moves = [...u.moves]; }
+  return { label: ja('species', species), species, megaSpecies, megaAbility, item, ability, nature, sp,
+    moves: moves.slice(0, 4), derivedAmbiguous: ambiguous, derivedFailed: !sols.length };
+}
+// my_team.json を読み直して自チームプリセットに反映する (撮影取り込み後にも使う)
+async function loadMyTeam() {
+  try {
+    const rt = await fetch('./my_team.json', { cache: 'no-store' });
+    if (!rt.ok) return false;
+    const mt = await rt.json();
+    const list = (Array.isArray(mt) ? mt : []).map(myTeamPreset).filter(Boolean);
+    if (!list.length) return false;
+    PRESETS = list;
+    state.mine = list.map((_, i) => presetSpec(i));
+    state.sel.mine = 0;
+    state.active.mine = [0, Math.min(1, list.length - 1)];
+    faintLock.mine.clear();
+    return true;
+  } catch (e) { return false; }
+}
+// 撮影ボタン: リーダー (localhost:8899) に QuickTime 画面の撮影と解析を頼む
+async function captureTeam(tab) {
+  const st = $('capStatusText');
+  const say = (msg, cls) => { if (st) { st.textContent = msg; st.className = cls || ''; } };
+  say('撮影中…', '');
+  try {
+    const r = await fetch('http://localhost:8899/capture?tab=' + tab);
+    const j = await r.json();
+    if (!j.ok) {
+      say('撮影失敗： ' + (j.error || '画面を確認してください'), 'ng');
+      return;
+    }
+    // 「取り込めた」と「画面に反映できた」は別々に確認する。
+    // 以前は読み直し (loadMyTeam) に失敗しても成功表示のままだったため、
+    // 成功と出ているのに内容が変わらない事故が起きていた
+    const loaded = await loadMyTeam();
+    calcAll();
+    if (!loaded) {
+      say('撮影失敗： 取り込んだチームを読み直せませんでした', 'ng');
+      return;
+    }
+    // リーダーが取り込んだ種族一覧を返してきた場合は、プリセット側に
+    // その種族が揃っていることまで確認して初めて成功とする
+    if (Array.isArray(j.species) && j.species.length) {
+      const have = new Set(PRESETS.map(p => p.species));
+      if (j.species.some(sp => !have.has(sp))) {
+        say('撮影失敗： 取り込んだ内容が画面に反映されませんでした', 'ng');
+        return;
+      }
+      say('撮影成功： ' + j.species.map(sp => ja('species', sp)).join('・') + ' を取り込みました', 'ok');
+      return;
+    }
+    say('撮影成功： ' + (j.message || '取り込みました'), 'ok');
+  } catch (e) {
+    say('撮影失敗： リーダーに接続できません（run_reader.sh を起動してください）', 'ng');
+  }
+}
+let CHAMP = null; // data/champions_dex.json (全ポケモンのユニバース)
+let REG = null; // data/regulation.json (現行レギュレーションの実装範囲スコープを含む)
+let SPECIES_MOVES = null; // data/species_moves.json (種族ごとの習得技)
+// 技・持ち物の候補スコープ (データ範囲の取り決め): regulation.json にスコープ
+// リストがあればそれを正とし、無い間は champions_dex をそのまま使う
+function effScopeSet(champSet, regList) {
+  if (Array.isArray(regList) && regList.length) return new Set(regList);
+  return champSet || new Set();
+}
+let CHAMP_MOVES_JA = null;
+function champMoveList() { return CHAMP_MOVES_JA || Object.keys(NAMES._moveJa2en || {}); }
+let USAGE_SETS = null; // data/usage_sets.json の sets (pokedb 使用率トップ型)
+let POKEDB_PARSED = null; // data/pokedb_parsed.json (pokedb の使用率分布一式。ベイズ推定の候補生成用)
+let META_SETS = null;      // data/meta_sets.json (上位勢の実在型コーパス。ベイズ推定の候補へ統合する)
+let META_SETS_LOADED = false; // meta_sets の読み込み成否が確定したか (ファイルが無い場合も確定扱い)
+let VGC_SETS = null;       // data/vgcpastes_sets.json (VGCPastes 収集型。SET プルダウンから選択可能にする)
+let VGC_CORPUS = null;     // data/vgc_pastes.json (VGCPastes 実在型コーパス。推定エンジンへ getData の VGC_SETS として渡す)
+let VGC_TEAMS = null;      // data/vgc_pastes.json (VGCPastes 収集チーム。プリセット欄の一覧用に遅延読み込み)
+let vgcTeamsLoading = false;
+let oppTrainerName = ''; // state.json から受け取る相手トレーナー名
+// 推定・判明で形になった相手の型を、トレーナー名のカスタムとして
+// 一時保持する (種族 -> {trainer, build})。次の試合の開始が確定する
+// まで残り、SET プルダウンの「カスタム」から再適用できる
+let tempTrainerSets = {};
+let USAGE_SEASON = '';
+// 使用率型の解決: フォルム名 (イルカマン(ヒーロー)等) には使用率データが
+// 無いため、ベース種族の型を流用し種族名だけ差し替える
+// (これが無いとフォルム表示のパネルは技が全部「（技なし）」になる)
+function usageFor(speciesEn) {
+  const direct = usageSpec(speciesEn, USAGE_SETS);
+  if (direct) return direct;
+  const base = gen.species.get(idOf(speciesEn))?.baseSpecies;
+  if (base && base !== speciesEn) {
+    const bu = usageSpec(base, USAGE_SETS);
+    if (bu) return { ...bu, species: speciesEn };
+  }
+  return null;
+}
+// 使用率セットが無い種族の初期技: 習得技 (species_moves.json) から
+// ダメージ技 > STAB 一致 > 威力降順 で最大4つを選ぶ (候補は現行スコープ内の技のみ)
+function fallbackMovesFor(speciesEn) {
+  if (!SPECIES_MOVES) return [];
+  let list = SPECIES_MOVES[speciesEn];
+  if (!Array.isArray(list)) {
+    const base = gen.species.get(idOf(speciesEn))?.baseSpecies;
+    if (base && base !== speciesEn) list = SPECIES_MOVES[base];
+  }
+  if (!Array.isArray(list) || !list.length) return [];
+  const sd = gen.species.get(idOf(speciesEn));
+  const types = sd && Array.isArray(sd.types) ? sd.types : [];
+  const scope = effScopeSet(CHAMP && CHAMP.moves, REG && REG.moves);
+  const scored = [];
+  for (const name of list) {
+    const mv = gen.moves.get(idOf(name));
+    if (!mv) continue;
+    if (scope.size && !scope.has(mv.name)) continue;
+    scored.push({ name: mv.name, dmg: (mv.basePower || 0) > 0 && mv.category !== 'Status' ? 1 : 0, stab: types.includes(mv.type) ? 1 : 0, bp: mv.basePower || 0 });
+  }
+  scored.sort((a, b) => (b.dmg - a.dmg) || (b.stab - a.stab) || (b.bp - a.bp));
+  return scored.slice(0, 4).map(s => s.name);
+}
+function oppSpec(speciesEn, kind) {
+  if (kind === 'usage') {
+    const u = usageFor(speciesEn);
+    if (u) {
+      const mv = u.moves && u.moves.filter(Boolean).length ? [...u.moves] : fallbackMovesFor(speciesEn);
+      return { ...u, kind, moves: mv, origMoves: [...mv], knownMoves: [],
+        curHPPercent: 100, boosts: blankBoosts(), status: '', corrected: [] };
+    }
+  }
+  const a = assumedSet(speciesEn, kind === 'usage' ? 'attacker' : kind);
+  const u = usageFor(speciesEn);
+  let moves = u ? [...u.moves] : [];
+  if (!moves.filter(Boolean).length) moves = fallbackMovesFor(speciesEn);
+  return { species: speciesEn, kind, sp: { ...a.sp }, nature: a.nature, ability: a.ability, item: '',
+    moves, origMoves: [...moves], knownMoves: [], curHPPercent: 100, boosts: blankBoosts(), status: '', note: a.note, corrected: [],
+    noUsage: kind === 'usage' && !USAGE_SETS ? true : undefined };
+}
+// 自分のポケモンの型: 指定した kind の想定型を土台に、
+// 相手側専用の推定・訂正まわりのフィールドを取り除いたものを返す
+function ownSpeciesSpec(speciesEn, kind) {
+  const u = oppSpec(speciesEn, kind || 'usage');
+  const ns = { ...u, moves: [...(u.moves || [])], sp: { ...(u.sp || {}) }, boosts: blankBoosts(), status: '', curHPPercent: 100 };
+  ns.kind = kind || 'usage';
+  delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
+  delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual; delete ns.estMarginal;
+  delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
+  delete ns.mega; delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seedDmg; delete ns.seedHeal; delete ns.hand; delete ns.octolock; delete ns.curse; delete ns.bind; delete ns.saltcure; delete ns.nightmare;
+  return ns;
+}
+// VGCPastes 収集型: パネルの種族 (ベース種族とそのフォルム、メガ含む) に
+// ついて収集データにある型を返す。表示名は Team Description をそのまま使う
+function vgcBuildsFor(spec) {
+  if (!VGC_SETS || !VGC_SETS.species || !spec || !spec.species) return [];
+  const reg = currentRegulation();
+  if (VGC_SETS.regulation && reg && VGC_SETS.regulation !== reg) return [];
+  const sd = gen.species.get(idOf(spec.species));
+  const base = (sd && sd.baseSpecies) || spec.species;
+  const bsd = gen.species.get(idOf(base));
+  const keys = [];
+  const push = k => { if (k && VGC_SETS.species[k] && !keys.includes(k)) keys.push(k); };
+  push(effSpecies(spec)); push(spec.species); push(base);
+  for (const f of ((bsd && bsd.otherFormes) || [])) push(f);
+  const out = [];
+  for (const k of keys) for (const b of VGC_SETS.species[k]) out.push({ key: k, build: b });
+  return out;
+}
+// 収集型 (vgcpastes_sets の型 / vgc_pastes のチームメンバー) からパネル用
+// spec を作る。sp が null の場合は keep の SP を維持する (keep が無ければ 0)
+function vgcBuildSpec(entry, keep) {
+  const { key, build } = entry;
+  const sd = gen.species.get(idOf(key));
+  const base = (sd && sd.baseSpecies) || key;
+  // メガ扱いにするのはメガフォルムの時だけ (イエッサン♀・ロトムの
+  // フォルム・ギルガルド等、ベースと名前が違うだけのフォルムを
+  // メガシンカ扱いしない)。非メガのフォルムはそのフォルム自体が種族になる
+  const megaKey = build.megaSpecies || (key.includes('-Mega') ? key : null);
+  const b = {
+    species: megaKey ? base : key, ability: build.ability || '', item: build.item || '',
+    nature: build.nature || 'Hardy',
+    sp: build.sp ? { ...build.sp } : { ...((keep && keep.sp) || {}) },
+    moves: [...(build.moves || [])],
+  };
+  if (megaKey) {
+    b.megaSpecies = megaKey; b.mega = true;
+    const msd = gen.species.get(idOf(megaKey));
+    const mabs = msd ? Object.values(msd.abilities || {}) : [];
+    const bsd = gen.species.get(idOf(base));
+    const baseList = bsd ? Object.values(bsd.abilities || {}) : [];
+    if (mabs.includes(b.ability)) { b.megaAbility = b.ability; b.ability = baseList[0] || ''; }
+    else { b.megaAbility = mabs[0] || null; if (baseList.length && !baseList.includes(b.ability)) b.ability = baseList[0]; }
+  }
+  return specFromPresetBuild(b);
+}
+// 収集型をパネルへ一括反映する。sp が null の型は現在の SP を維持する
+function applyVgcBuild(side, entry, kindValue) {
+  markCalcSrc('preset');
+  if (!entry || !entry.build) return;
+  const keep = DS(side);
+  const ns = vgcBuildSpec(entry, keep);
+  ns.kind = kindValue;
+  if (side === 'mine') {
+    delete ns.corrected; delete ns.knownMoves; delete ns.origMoves;
+    delete ns.estSp; delete ns.estStat; delete ns.estMapProb; delete ns.estManual; delete ns.estMarginal;
+    delete ns.noUsage; delete ns.usageRates; delete ns.rates; delete ns.note;
+    delete ns.itemLost; delete ns.unburden; delete ns.moveSpec; delete ns.ingrain; delete ns.aquaring; delete ns.seedDmg; delete ns.seedHeal; delete ns.hand; delete ns.octolock; delete ns.curse; delete ns.bind; delete ns.saltcure; delete ns.nightmare;
+  }
+  ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+  state[side][state.sel[side]] = ns;
+}
+// VGCPastes のチームデータ (約4MB) はプリセット欄を開いた時に遅延読み込みする
+function ensureVgcTeams() {
+  if (VGC_TEAMS || vgcTeamsLoading) return;
+  vgcTeamsLoading = true;
+  fetch('./data/vgc_pastes.json').then(r => r.json()).then(d => { if (d && Array.isArray(d.teams)) VGC_TEAMS = d; }).catch(() => { /* optional */ }).finally(() => { vgcTeamsLoading = false; if (ui.presetPop) renderAll(); applyLastUsedStartup(); });
+}
+// 収集チームをそのサイドへ丸ごと読み込む
+function applyVgcTeam(side, teamId, opts) {
+  markCalcSrc('preset');
+  if (!VGC_TEAMS) return;
+  const t = VGC_TEAMS.teams.find(x => x.teamId === teamId);
+  if (!t || !Array.isArray(t.members) || !t.members.length) return;
+  const specs = t.members.slice(0, 6).map(m => {
+    const forme = m.forme || m.species;
+    const ns = vgcBuildSpec({ key: forme, build: { ability: m.ability || '', item: m.item || '', nature: m.nature || 'Hardy', sp: m.sps || null, moves: [...(m.moves || [])], megaSpecies: forme !== m.species && forme.includes('-Mega') ? forme : undefined } }, null);
+    ns.kind = 'custom';
+    return ns;
+  });
+  state[side] = specs;
+  state.sel[side] = 0;
+  state.active[side] = [0, Math.min(1, specs.length - 1)];
+  if (side === 'opps') { state.oppTeam = specs.map(s => s.species); resetInference(); syncTeamContext(); }
+  ui.presetPop = null; ui.presetRename = null;
+  presetApplied[side] = t.description || t.teamId || '';
+  presetRental[side] = t.rentalCode || t.code || '';
+  if (!opts || opts.record !== false) recordLastUsed(side, { kind: 'vgc', teamId: String(t.teamId), label: t.description || String(t.teamId) });
+  applySetterAbility(specs[0]);
+  calcAll();
+}
+// プリセット欄の VGCPastes 専用一覧 (共有表示の行の下に置く)。
+// 先頭の「from VGCPastes」の区切り行は、検索で候補が絞られた時も残す
+function vgcTeamRowsHTML(side, q) {
+  const reg = currentRegulation();
+  if (VGC_TEAMS && VGC_TEAMS.regulation && reg && VGC_TEAMS.regulation !== reg) return '';
+  const divider = '<div class="vgcdivider">from VGCPastes</div>';
+  if (!VGC_TEAMS) return divider + (vgcTeamsLoading ? '<div class="presetempty">VGCPastes のチームを読み込み中です</div>' : '');
+  const teams = VGC_TEAMS.teams.filter(t => !q || String(t.description || '').toLowerCase().includes(q));
+  if (!teams.length) return divider + '<div class="presetempty">VGCPastes: 該当するチームはありません</div>';
+  const MAX = 100;
+  const rows = teams.slice(0, MAX).map(t => {
+    const p = { slots: (t.members || []).map(m => ({ species: m.species, mega: !!(m.forme && m.forme !== m.species && m.forme.includes('-Mega')), megaSpecies: m.forme || '' })) };
+    return `<div class="presetrow"><button class="presetname" data-vgcteam="${side}:${esc(t.teamId)}" title="このチームを読み込む">${presetIconsHTML(p)}<span class="presetnametext">${esc(t.description || t.teamId)}</span></button></div>`;
+  }).join('');
+  const more = teams.length > MAX ? `<div class="presetempty">他 ${teams.length - MAX} 件あります (検索で絞り込めます)</div>` : '';
+  return divider + `<div class="vgcteamlist">${rows}</div>${more}`;
+}
+// 対戦画面で判明した情報 (技・持ち物・特性) を想定型の上に部分的に上書きする
+function applyRevealed(spec, rev) {
+  if (!rev) return spec;
+  const corr = new Set(spec.corrected || []);
+  if (rev.ability) {
+    const ab = resolveAbility(rev.ability) || rev.ability;
+    if (spec.mega && spec.megaSpecies) {
+      const ms = gen.species.get(idOf(spec.megaSpecies));
+      const mabs = ms ? (Array.isArray(ms.abilities) ? ms.abilities : Object.values(ms.abilities || {})) : [];
+      if (mabs.includes(ab)) spec.megaAbility = ab; else spec.ability = ab;
+    } else spec.ability = ab;
+    corr.add('特性');
+  }
+  if (rev.item != null) {
+    spec.item = rev.item === 'none' || rev.item === '' ? '' : (resolveItem(rev.item) || rev.item);
+    corr.add('持ち物');
+    if (spec.item) {
+      const io = gen.items.get(idOf(spec.item));
+      const ms = io && io.megaStone ? Object.values(io.megaStone)[0] : null;
+      if (ms) {
+        // 持ち物がメガストーンと分かっただけではメガシンカ済みにしない
+        // (実際のメガシンカは state.json の mega 通知で applyMegaFlag が立てる)
+        spec.megaSpecies = ms;
+        const msd = gen.species.get(idOf(ms));
+        if (msd) spec.megaAbility = Array.isArray(msd.abilities) ? msd.abilities[0] : Object.values(msd.abilities || {})[0];
+      }
+    }
+  }
+  if (Array.isArray(rev.moves) && rev.moves.length) {
+    // 解決できない名前は生のまま入れない (技枠が「（技なし）」化して使用率技を押し出すため)
+    const rms = rev.moves.map(m => resolveMove(m)).filter(Boolean);
+    spec.moves = [...new Set([...rms, ...(spec.moves || [])])].slice(0, 4);
+    if (!Array.isArray(spec.knownMoves)) spec.knownMoves = [];
+    for (const m of rms) if (!spec.knownMoves.includes(m)) spec.knownMoves.push(m);
+    corr.add('技');
+  }
+  spec.corrected = [...corr];
+  return spec;
+}
+const z2h = s => String(s).replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+function resolveItem(name) {
+  const t = z2h(String(name).trim());
+  if (NAMES._itemJa2en && NAMES._itemJa2en[t]) return NAMES._itemJa2en[t];
+  const it = gen.items.get(idOf(t));
+  return it ? it.name : null;
+}
+function setEv(side, k, raw, refocus) {
+  const spec = state[side][state.sel[side]];
+  spec.sp[k] = Math.min(32, Math.max(0, parseInt(raw) || 0));
+  if (side === 'opps') markCorrected(spec, 'EV');
+  calcAll();
+  if (refocus) { const el = document.querySelector(`[data-ev="${side}:${k}"]`); if (el) { el.focus(); el.select(); } }
+}
+function markCorrected(spec, label) {
+  if (!spec.corrected) spec.corrected = [];
+  if (!spec.corrected.includes(label)) spec.corrected.push(label);
+}
+state.mine = PRESETS.map((_, i) => presetSpec(i));
+state.sel.mine = 1;
+state.active.mine = [1, 5];
+state.opps = state.oppTeam.map(sp => oppSpec(sp, 'usage'));
+
+const effSpecies = spec => (spec.mega && spec.megaSpecies) ? spec.megaSpecies : spec.species;
+function speciesData(spec) { return gen.species.get(idOf(effSpecies(spec))); }
+let SPECIES_ABILITIES = {};
+function speciesAbilities(spec) {
+  // そのフォルム本来の特性一覧 (現在の特性は混ぜない。フォルム変更時の補正判定用)
+  const sd = speciesData(spec);
+  if (spec.mega && spec.megaSpecies) {
+    const msd = gen.species.get(idOf(spec.megaSpecies));
+    return msd ? Object.values(msd.abilities || {}) : [];
+  }
+  const base = (sd && sd.baseSpecies) || spec.species;
+  const full = SPECIES_ABILITIES[base];
+  if (full && full.length) return [...full];
+  if (!sd) return [];
+  return Array.isArray(sd.abilities) ? sd.abilities : Object.values(sd.abilities || {});
+}
+function abilitiesOf(spec) {
+  const vals = speciesAbilities(spec);
+  // メガシンカ中は現在の特性 (= メガ前の特性) を混ぜない
+  if (!spec.mega && spec.ability && !vals.includes(spec.ability)) vals.push(spec.ability);
+  return [...new Set(vals)];
+}
+let dexSpeciesSet = null;
+function formesOf(en) {
+  const sd = gen.species.get(idOf(en));
+  if (!sd) return [en];
+  const base = sd.baseSpecies || en;
+  const bsd = gen.species.get(idOf(base));
+  const others = (bsd && bsd.otherFormes) || sd.otherFormes || [];
+  let formes = [base, ...others.filter(f => f !== base)];
+  // calc 内部の合成エントリ (Aegislash-Both 等) は実装ユニバース
+  // (champions_dex) に含まれないため、フォルム候補から外す
+  if (CHAMP && CHAMP.species) {
+    if (!dexSpeciesSet) dexSpeciesSet = new Set(CHAMP.species);
+    formes = formes.filter(f => f === en || dexSpeciesSet.has(f));
+  }
+  return formes;
+}
+function megaFormesOf(en) { return formesOf(en).filter(f => f.includes('-Mega')); }
+function stoneForForme(forme) {
+  const sd = gen.species.get(idOf(forme));
+  const base = sd?.baseSpecies;
+  if (!base) return null;
+  for (const it of gen.items) {
+    if (it.megaStone && it.megaStone[base] === forme) return it.name;
+  }
+  return null;
+}
+function spriteId(en) {
+  if (en === 'Greninja-Bond') return 'greninja-ash';
+  if (en === 'Aegislash-Shield') return 'aegislash';
+  let s = String(en).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  s = s.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  s = s.replace(/-mega-([xyz])$/, '-mega$1').replace(/^mr-/, 'mr')
+    .replace(/(jangmo|hakamo|kommo)-o$/, '$1o')
+    .replace(/paldea-(blaze|combat|aqua)$/, 'paldea$1')
+    .replace(/-low-key$/, '-lowkey');
+  return s;
+}
+function spriteURL(speciesEn) { return `https://play.pokemonshowdown.com/sprites/gen5/${spriteId(speciesEn)}.png`; }
+// Showdown の画像ファイル名の別表記: 種族名が複合語の場合はハイフンを除き
+// (great-tusk → greattusk)、フォルム名内のハイフンは詰める
+// (basculin-blue-striped → basculin-bluestriped)
+function spriteIdAlt(id) {
+  const first = id.indexOf('-');
+  if (first < 0) return id;
+  const rest = id.slice(first + 1);
+  if (!rest.includes('-')) return id.replace('-', '');
+  return id.slice(0, first + 1) + rest.replace(/-/g, '');
+}
+function spriteImg(en, baseEn, cls) {
+  const sid = spriteId(en), bid = spriteId(baseEn || en);
+  return `<img class="${cls}" src="${spriteURL(en)}" data-spr="0" data-sid="${sid}" data-alt="${spriteIdAlt(sid)}" data-base="${bid}" data-basealt="${spriteIdAlt(bid)}" alt="">`;
+}
+// 持ち物アイコン (Calcdex のようにポケモンアイコンの右下に重ねる)。
+// PokeAPI のアイテム画像を主にし、無ければ Showdown の itemicons、
+// それも無ければ非表示にする (読み込み失敗時の段階切替は下の error 処理)
+function itemSpriteSlug(en) { return String(en || '').toLowerCase().replace(/['’.]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+function itemIconHTML(spec) {
+  if (!spec || !spec.item || spec.itemLost) return '';
+  const slug = itemSpriteSlug(spec.item);
+  if (!slug) return '';
+  return `<img class="pitem" data-ispr="0" data-islug="${slug}" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${slug}.png" alt="">`;
+}
+// 画像フォールバック: gen5 スプライトに無い種族 (一部の新メガ等) は、読み込み
+// 失敗のたびに (1) ani GIF → (2) ベース種族の gen5 PNG の順に切り替え、
+// それも無ければ壊れた画像アイコンを出さず非表示にする (data-spr が段階)
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (!img || img.tagName !== 'IMG') return;
+  if (img.dataset.ispr !== undefined) {
+    if (img.dataset.ispr === '0') {
+      img.dataset.ispr = '1';
+      img.src = `https://play.pokemonshowdown.com/sprites/itemicons/${img.dataset.islug}.png`;
+    } else {
+      img.dataset.ispr = '2';
+      img.style.visibility = 'hidden';
+    }
+    return;
+  }
+  if (img.dataset.spr === undefined) return;
+  // 候補を順に試す: gen5 → ani → 別表記 (gen5 → ani) → ベース種族の gen5 → 別表記
+  const sid = img.dataset.sid, alt = img.dataset.alt || sid, base = img.dataset.base || sid, basealt = img.dataset.basealt || base;
+  const cands = [];
+  for (const u of [`https://play.pokemonshowdown.com/sprites/gen5/${sid}.png`, `https://play.pokemonshowdown.com/sprites/ani/${sid}.gif`, `https://play.pokemonshowdown.com/sprites/gen5/${alt}.png`, `https://play.pokemonshowdown.com/sprites/ani/${alt}.gif`, `https://play.pokemonshowdown.com/sprites/gen5/${base}.png`, `https://play.pokemonshowdown.com/sprites/gen5/${basealt}.png`]) if (!cands.includes(u)) cands.push(u);
+  const n = (parseInt(img.dataset.spr, 10) || 0) + 1;
+  if (n >= cands.length) { img.dataset.spr = '9'; img.style.visibility = 'hidden'; return; }
+  img.dataset.spr = String(n);
+  img.src = cands[n];
+}, true);
+function typeChips(spec) {
+  if (spec.terastallized && spec.teraType) {
+    const t = spec.teraType;
+    return `<span class="typechip tera" style="background:${TYPE_COLOR[t] || '#555'}">${TYPE_JA[t] || t}</span>`;
+  }
+  return speciesData(spec).types.map(t => `<span class="typechip" style="background:${TYPE_COLOR[t] || '#555'}">${TYPE_JA[t] || t}</span>`).join('');
+}
+const DEX_NUM = {"Abra":63,"Aerodactyl":142,"Alakazam":65,"Arbok":24,"Arcanine":59,"Articuno":144,"Beedrill":15,"Bellsprout":69,"Blastoise":9,"Bulbasaur":1,"Butterfree":12,"Caterpie":10,"Chansey":113,"Charizard":6,"Charmander":4,"Charmeleon":5,"Clefable":36,"Clefairy":35,"Cloyster":91,"Cubone":104,"Dewgong":87,"Diglett":50,"Ditto":132,"Dodrio":85,"Doduo":84,"Dragonair":148,"Dragonite":149,"Dratini":147,"Drowzee":96,"Dugtrio":51,"Eevee":133,"Ekans":23,"Electabuzz":125,"Electrode":101,"Exeggcute":102,"Exeggutor":103,"Farfetch’d":83,"Fearow":22,"Flareon":136,"Gastly":92,"Gengar":94,"Geodude":74,"Gloom":44,"Golbat":42,"Goldeen":118,"Golduck":55,"Golem":76,"Graveler":75,"Grimer":88,"Growlithe":58,"Gyarados":130,"Haunter":93,"Hitmonchan":107,"Hitmonlee":106,"Horsea":116,"Hypno":97,"Ivysaur":2,"Jigglypuff":39,"Jolteon":135,"Jynx":124,"Kabuto":140,"Kabutops":141,"Kadabra":64,"Kakuna":14,"Kangaskhan":115,"Kingler":99,"Koffing":109,"Krabby":98,"Lapras":131,"Lickitung":108,"Machamp":68,"Machoke":67,"Machop":66,"Magikarp":129,"Magmar":126,"Magnemite":81,"Magneton":82,"Mankey":56,"Marowak":105,"Meowth":52,"Metapod":11,"Mew":151,"Mewtwo":150,"Moltres":146,"Mr. Mime":122,"Muk":89,"Nidoking":34,"Nidoqueen":31,"Nidoran-F":29,"Nidoran-M":32,"Nidorina":30,"Nidorino":33,"Ninetales":38,"Oddish":43,"Omanyte":138,"Omastar":139,"Onix":95,"Paras":46,"Parasect":47,"Persian":53,"Pidgeot":18,"Pidgeotto":17,"Pidgey":16,"Pikachu":25,"Pinsir":127,"Poliwag":60,"Poliwhirl":61,"Poliwrath":62,"Ponyta":77,"Porygon":137,"Primeape":57,"Psyduck":54,"Raichu":26,"Rapidash":78,"Raticate":20,"Rattata":19,"Rhydon":112,"Rhyhorn":111,"Sandshrew":27,"Sandslash":28,"Scyther":123,"Seadra":117,"Seaking":119,"Seel":86,"Shellder":90,"Slowbro":80,"Slowpoke":79,"Snorlax":143,"Spearow":21,"Squirtle":7,"Starmie":121,"Staryu":120,"Tangela":114,"Tauros":128,"Tentacool":72,"Tentacruel":73,"Vaporeon":134,"Venomoth":49,"Venonat":48,"Venusaur":3,"Victreebel":71,"Vileplume":45,"Voltorb":100,"Vulpix":37,"Wartortle":8,"Weedle":13,"Weepinbell":70,"Weezing":110,"Wigglytuff":40,"Zapdos":145,"Zubat":41,"Aipom":190,"Ampharos":181,"Ariados":168,"Azumarill":184,"Bayleef":153,"Bellossom":182,"Blissey":242,"Celebi":251,"Chikorita":152,"Chinchou":170,"Cleffa":173,"Corsola":222,"Crobat":169,"Croconaw":159,"Cyndaquil":155,"Delibird":225,"Donphan":232,"Dunsparce":206,"Elekid":239,"Entei":244,"Espeon":196,"Feraligatr":160,"Flaaffy":180,"Forretress":205,"Furret":162,"Girafarig":203,"Gligar":207,"Granbull":210,"Heracross":214,"Hitmontop":237,"Ho-Oh":250,"Hoothoot":163,"Hoppip":187,"Houndoom":229,"Houndour":228,"Igglybuff":174,"Jumpluff":189,"Kingdra":230,"Lanturn":171,"Larvitar":246,"Ledian":166,"Ledyba":165,"Lugia":249,"Magby":240,"Magcargo":219,"Mantine":226,"Mareep":179,"Marill":183,"Meganium":154,"Miltank":241,"Misdreavus":200,"Murkrow":198,"Natu":177,"Noctowl":164,"Octillery":224,"Phanpy":231,"Pichu":172,"Piloswine":221,"Pineco":204,"Politoed":186,"Porygon2":233,"Pupitar":247,"Quagsire":195,"Quilava":156,"Qwilfish":211,"Raikou":243,"Remoraid":223,"Scizor":212,"Sentret":161,"Shuckle":213,"Skarmory":227,"Skiploom":188,"Slowking":199,"Slugma":218,"Smeargle":235,"Smoochum":238,"Sneasel":215,"Snubbull":209,"Spinarak":167,"Stantler":234,"Steelix":208,"Sudowoodo":185,"Suicune":245,"Sunflora":192,"Sunkern":191,"Swinub":220,"Teddiursa":216,"Togepi":175,"Togetic":176,"Totodile":158,"Typhlosion":157,"Tyranitar":248,"Tyrogue":236,"Umbreon":197,"Unown":201,"Ursaring":217,"Wobbuffet":202,"Wooper":194,"Xatu":178,"Yanma":193,"Absol":359,"Aggron":306,"Altaria":334,"Anorith":347,"Armaldo":348,"Aron":304,"Azurill":298,"Bagon":371,"Baltoy":343,"Banette":354,"Barboach":339,"Beautifly":267,"Beldum":374,"Blaziken":257,"Breloom":286,"Cacnea":331,"Cacturne":332,"Camerupt":323,"Carvanha":318,"Cascoon":268,"Castform":351,"Chimecho":358,"Clamperl":366,"Claydol":344,"Combusken":256,"Corphish":341,"Cradily":346,"Crawdaunt":342,"Delcatty":301,"Deoxys":386,"Dusclops":356,"Duskull":355,"Dustox":269,"Electrike":309,"Exploud":295,"Feebas":349,"Flygon":330,"Gardevoir":282,"Glalie":362,"Gorebyss":368,"Groudon":383,"Grovyle":253,"Grumpig":326,"Gulpin":316,"Hariyama":297,"Huntail":367,"Illumise":314,"Jirachi":385,"Kecleon":352,"Kirlia":281,"Kyogre":382,"Lairon":305,"Latias":380,"Latios":381,"Lileep":345,"Linoone":264,"Lombre":271,"Lotad":270,"Loudred":294,"Ludicolo":272,"Lunatone":337,"Luvdisc":370,"Makuhita":296,"Manectric":310,"Marshtomp":259,"Masquerain":284,"Mawile":303,"Medicham":308,"Meditite":307,"Metagross":376,"Metang":375,"Mightyena":262,"Milotic":350,"Minun":312,"Mudkip":258,"Nincada":290,"Ninjask":291,"Nosepass":299,"Numel":322,"Nuzleaf":274,"Pelipper":279,"Plusle":311,"Poochyena":261,"Ralts":280,"Rayquaza":384,"Regice":378,"Regirock":377,"Registeel":379,"Relicanth":369,"Roselia":315,"Sableye":302,"Salamence":373,"Sceptile":254,"Sealeo":364,"Seedot":273,"Seviper":336,"Sharpedo":319,"Shedinja":292,"Shelgon":372,"Shiftry":275,"Shroomish":285,"Shuppet":353,"Silcoon":266,"Skitty":300,"Slaking":289,"Slakoth":287,"Snorunt":361,"Solrock":338,"Spheal":363,"Spinda":327,"Spoink":325,"Surskit":283,"Swablu":333,"Swalot":317,"Swampert":260,"Swellow":277,"Taillow":276,"Torchic":255,"Torkoal":324,"Trapinch":328,"Treecko":252,"Tropius":357,"Vibrava":329,"Vigoroth":288,"Volbeat":313,"Wailmer":320,"Wailord":321,"Walrein":365,"Whiscash":340,"Whismur":293,"Wingull":278,"Wurmple":265,"Wynaut":360,"Zangoose":335,"Zigzagoon":263,"Abomasnow":460,"Ambipom":424,"Arceus":493,"Azelf":482,"Bastiodon":411,"Bibarel":400,"Bidoof":399,"Bonsly":438,"Bronzong":437,"Bronzor":436,"Budew":406,"Buizel":418,"Buneary":427,"Burmy":412,"Carnivine":455,"Chatot":441,"Cherrim":421,"Cherubi":420,"Chimchar":390,"Chingling":433,"Combee":415,"Cranidos":408,"Cresselia":488,"Croagunk":453,"Darkrai":491,"Dialga":483,"Drapion":452,"Drifblim":426,"Drifloon":425,"Dusknoir":477,"Electivire":466,"Empoleon":395,"Finneon":456,"Floatzel":419,"Froslass":478,"Gabite":444,"Gallade":475,"Garchomp":445,"Gastrodon":423,"Gible":443,"Giratina":487,"Glaceon":471,"Glameow":431,"Gliscor":472,"Grotle":388,"Happiny":440,"Heatran":485,"Hippopotas":449,"Hippowdon":450,"Honchkrow":430,"Infernape":392,"Kricketot":401,"Kricketune":402,"Leafeon":470,"Lickilicky":463,"Lopunny":428,"Lucario":448,"Lumineon":457,"Luxio":404,"Luxray":405,"Magmortar":467,"Magnezone":462,"Mamoswine":473,"Manaphy":490,"Mantyke":458,"Mesprit":481,"Mime Jr.":439,"Mismagius":429,"Monferno":391,"Mothim":414,"Munchlax":446,"Pachirisu":417,"Palkia":484,"Phione":489,"Piplup":393,"Porygon-Z":474,"Prinplup":394,"Probopass":476,"Purugly":432,"Rampardos":409,"Regigigas":486,"Rhyperior":464,"Riolu":447,"Roserade":407,"Rotom":479,"Shaymin":492,"Shellos":422,"Shieldon":410,"Shinx":403,"Skorupi":451,"Skuntank":435,"Snover":459,"Spiritomb":442,"Staraptor":398,"Staravia":397,"Starly":396,"Stunky":434,"Tangrowth":465,"Togekiss":468,"Torterra":389,"Toxicroak":454,"Turtwig":387,"Uxie":480,"Vespiquen":416,"Weavile":461,"Wormadam":413,"Yanmega":469,"Accelgor":617,"Alomomola":594,"Amoonguss":591,"Archen":566,"Archeops":567,"Audino":531,"Axew":610,"Basculin":550,"Beartic":614,"Beheeyem":606,"Bisharp":625,"Blitzle":522,"Boldore":525,"Bouffalant":626,"Braviary":628,"Carracosta":565,"Chandelure":609,"Cinccino":573,"Cobalion":638,"Cofagrigus":563,"Conkeldurr":534,"Cottonee":546,"Crustle":558,"Cryogonal":615,"Cubchoo":613,"Darmanitan":555,"Darumaka":554,"Deerling":585,"Deino":633,"Dewott":502,"Drilbur":529,"Druddigon":621,"Ducklett":580,"Duosion":578,"Durant":632,"Dwebble":557,"Eelektrik":603,"Eelektross":604,"Elgyem":605,"Emboar":500,"Emolga":587,"Escavalier":589,"Excadrill":530,"Ferroseed":597,"Ferrothorn":598,"Foongus":590,"Fraxure":611,"Frillish":592,"Galvantula":596,"Garbodor":569,"Genesect":649,"Gigalith":526,"Golett":622,"Golurk":623,"Gothita":574,"Gothitelle":576,"Gothorita":575,"Gurdurr":533,"Haxorus":612,"Heatmor":631,"Herdier":507,"Hydreigon":635,"Jellicent":593,"Joltik":595,"Karrablast":588,"Keldeo":647,"Klang":600,"Klink":599,"Klinklang":601,"Krokorok":552,"Krookodile":553,"Kyurem":646,"Lampent":608,"Landorus":645,"Larvesta":636,"Leavanny":542,"Liepard":510,"Lilligant":549,"Lillipup":506,"Litwick":607,"Mandibuzz":630,"Maractus":556,"Meloetta":648,"Mienfoo":619,"Mienshao":620,"Minccino":572,"Munna":517,"Musharna":518,"Oshawott":501,"Palpitoad":536,"Panpour":515,"Pansage":511,"Pansear":513,"Patrat":504,"Pawniard":624,"Petilil":548,"Pidove":519,"Pignite":499,"Purrloin":509,"Reshiram":643,"Reuniclus":579,"Roggenrola":524,"Rufflet":627,"Samurott":503,"Sandile":551,"Sawk":539,"Sawsbuck":586,"Scolipede":545,"Scrafty":560,"Scraggy":559,"Seismitoad":537,"Serperior":497,"Servine":496,"Sewaddle":540,"Shelmet":616,"Sigilyph":561,"Simipour":516,"Simisage":512,"Simisear":514,"Snivy":495,"Solosis":577,"Stoutland":508,"Stunfisk":618,"Swadloon":541,"Swanna":581,"Swoobat":528,"Tepig":498,"Terrakion":639,"Throh":538,"Thundurus":642,"Timburr":532,"Tirtouga":564,"Tornadus":641,"Tranquill":520,"Trubbish":568,"Tympole":535,"Tynamo":602,"Unfezant":521,"Vanillish":583,"Vanillite":582,"Vanilluxe":584,"Venipede":543,"Victini":494,"Virizion":640,"Volcarona":637,"Vullaby":629,"Watchog":505,"Whimsicott":547,"Whirlipede":544,"Woobat":527,"Yamask":562,"Zebstrika":523,"Zekrom":644,"Zoroark":571,"Zorua":570,"Zweilous":634,"Amaura":698,"Aromatisse":683,"Aurorus":699,"Avalugg":713,"Barbaracle":689,"Bergmite":712,"Binacle":688,"Braixen":654,"Bunnelby":659,"Carbink":703,"Chesnaught":652,"Chespin":650,"Clauncher":692,"Clawitzer":693,"Dedenne":702,"Delphox":655,"Diancie":719,"Diggersby":660,"Doublade":680,"Dragalge":691,"Espurr":677,"Fennekin":653,"Fletchinder":662,"Fletchling":661,"Floette":670,"Florges":671,"Froakie":656,"Frogadier":657,"Furfrou":676,"Gogoat":673,"Goodra":706,"Goomy":704,"Gourgeist":711,"Greninja":658,"Hawlucha":701,"Heliolisk":695,"Helioptile":694,"Honedge":679,"Hoopa":720,"Inkay":686,"Klefki":707,"Litleo":667,"Malamar":687,"Meowstic":678,"Noibat":714,"Noivern":715,"Pancham":674,"Pangoro":675,"Phantump":708,"Pumpkaboo":710,"Pyroar":668,"Quilladin":651,"Scatterbug":664,"Skiddo":672,"Skrelp":690,"Sliggoo":705,"Slurpuff":685,"Spewpa":665,"Spritzee":682,"Swirlix":684,"Sylveon":700,"Talonflame":663,"Trevenant":709,"Tyrantrum":697,"Tyrunt":696,"Vivillon":666,"Volcanion":721,"Xerneas":716,"Yveltal":717,"Zygarde":718,"Araquanid":752,"Bewear":760,"Blacephalon":806,"Bounsweet":761,"Brionne":729,"Bruxish":779,"Buzzwole":794,"Celesteela":797,"Charjabug":737,"Comfey":764,"Cosmoem":790,"Cosmog":789,"Crabominable":740,"Crabrawler":739,"Cutiefly":742,"Dartrix":723,"Decidueye":724,"Dewpider":751,"Dhelmise":781,"Drampa":780,"Fomantis":753,"Golisopod":768,"Grubbin":736,"Gumshoos":735,"Guzzlord":799,"Hakamo-o":783,"Incineroar":727,"Jangmo-o":782,"Kartana":798,"Komala":775,"Kommo-o":784,"Litten":725,"Lunala":792,"Lurantis":754,"Lycanroc":745,"Magearna":801,"Mareanie":747,"Marshadow":802,"Melmetal":809,"Meltan":808,"Mimikyu":778,"Minior":774,"Morelull":755,"Mudbray":749,"Mudsdale":750,"Naganadel":804,"Necrozma":800,"Nihilego":793,"Oranguru":765,"Oricorio":741,"Palossand":770,"Passimian":766,"Pheromosa":795,"Pikipek":731,"Poipole":803,"Popplio":728,"Primarina":730,"Pyukumuku":771,"Ribombee":743,"Rockruff":744,"Rowlet":722,"Salandit":757,"Salazzle":758,"Sandygast":769,"Shiinotic":756,"Silvally":773,"Solgaleo":791,"Stakataka":805,"Steenee":762,"Stufful":759,"Tapu Bulu":787,"Tapu Fini":788,"Tapu Koko":785,"Tapu Lele":786,"Togedemaru":777,"Torracat":726,"Toucannon":733,"Toxapex":748,"Trumbeak":732,"Tsareena":763,"Turtonator":776,"Type: Null":772,"Vikavolt":738,"Wimpod":767,"Wishiwashi":746,"Xurkitree":796,"Yungoos":734,"Zeraora":807,"Alcremie":869,"Appletun":842,"Applin":840,"Arctovish":883,"Arctozolt":881,"Arrokuda":846,"Barraskewda":847,"Blipbug":824,"Boltund":836,"Calyrex":898,"Carkol":838,"Centiskorch":851,"Chewtle":833,"Cinderace":815,"Clobbopus":852,"Coalossal":839,"Copperajah":879,"Corviknight":823,"Corvisquire":822,"Cramorant":845,"Cufant":878,"Cursola":864,"Dottler":825,"Dracovish":882,"Dracozolt":880,"Dragapult":887,"Drakloak":886,"Drednaw":834,"Dreepy":885,"Drizzile":817,"Dubwool":832,"Duraludon":884,"Eiscue":875,"Eldegoss":830,"Eternatus":890,"Falinks":870,"Flapple":841,"Frosmoth":873,"Glastrier":896,"Gossifleur":829,"Grapploct":853,"Greedent":820,"Grimmsnarl":861,"Grookey":810,"Hatenna":856,"Hatterene":858,"Hattrem":857,"Impidimp":859,"Indeedee":876,"Inteleon":818,"Kubfu":891,"Milcery":868,"Morgrem":860,"Morpeko":877,"Mr. Rime":866,"Nickit":827,"Obstagoon":862,"Orbeetle":826,"Perrserker":863,"Pincurchin":871,"Polteageist":855,"Raboot":814,"Regidrago":895,"Regieleki":894,"Rillaboom":812,"Rolycoly":837,"Rookidee":821,"Runerigus":867,"Sandaconda":844,"Scorbunny":813,"Silicobra":843,"Sinistea":854,"Sirfetch’d":865,"Sizzlipede":850,"Skwovet":819,"Snom":872,"Sobble":816,"Spectrier":897,"Stonjourner":874,"Thievul":828,"Thwackey":811,"Toxel":848,"Toxtricity":849,"Urshifu":892,"Wooloo":831,"Yamper":835,"Zacian":888,"Zamazenta":889,"Zarude":893,"Basculegion":902,"Enamorus":905,"Kleavor":900,"Overqwil":904,"Sneasler":903,"Ursaluna":901,"Wyrdeer":899,"Annihilape":979,"Arboliva":930,"Archaludon":1018,"Arctibax":997,"Armarouge":936,"Baxcalibur":998,"Bellibolt":939,"Bombirdier":962,"Brambleghast":947,"Bramblin":946,"Brute Bonnet":986,"Capsakid":951,"Ceruledge":937,"Cetitan":975,"Cetoddle":974,"Charcadet":935,"Chi-Yu":1004,"Chien-Pao":1002,"Clodsire":980,"Crocalor":910,"Cyclizar":967,"Dachsbun":927,"Dipplin":1011,"Dolliv":929,"Dondozo":977,"Dudunsparce":982,"Espathra":956,"Farigiraf":981,"Fezandipiti":1016,"Fidough":926,"Finizen":963,"Flamigo":973,"Flittle":955,"Floragato":907,"Flutter Mane":987,"Frigibax":996,"Fuecoco":909,"Garganacl":934,"Gholdengo":1000,"Gimmighoul":999,"Glimmet":969,"Glimmora":970,"Gouging Fire":1020,"Grafaiai":945,"Great Tusk":984,"Greavard":971,"Houndstone":972,"Hydrapple":1019,"Iron Bundle":991,"Iron Boulder":1022,"Iron Crown":1023,"Iron Hands":992,"Iron Jugulis":993,"Iron Leaves":1010,"Iron Moth":994,"Iron Thorns":995,"Iron Treads":990,"Iron Valiant":1006,"Kilowattrel":941,"Kingambit":983,"Klawf":950,"Koraidon":1007,"Lechonk":915,"Lokix":920,"Mabosstiff":943,"Maschiff":942,"Maushold":925,"Meowscarada":908,"Miraidon":1008,"Munkidori":1015,"Nacli":932,"Naclstack":933,"Nymble":919,"Ogerpon":1017,"Oinkologne":916,"Okidogi":1014,"Orthworm":968,"Palafin":964,"Pawmi":921,"Pawmo":922,"Pawmot":923,"Pecharunt":1025,"Poltchageist":1012,"Quaquaval":914,"Quaxly":912,"Quaxwell":913,"Rabsca":954,"Raging Bolt":1021,"Rellor":953,"Revavroom":966,"Roaring Moon":1005,"Sandy Shocks":989,"Scovillain":952,"Scream Tail":985,"Shroodle":944,"Sinistcha":1013,"Skeledirge":911,"Slither Wing":988,"Smoliv":928,"Spidops":918,"Sprigatito":906,"Squawkabilly":931,"Tadbulb":938,"Tandemaus":924,"Tarountula":917,"Tatsugiri":978,"Terapagos":1024,"Ting-Lu":1003,"Tinkatink":957,"Tinkaton":959,"Tinkatuff":958,"Toedscool":948,"Toedscruel":949,"Varoom":965,"Veluza":976,"Walking Wake":1009,"Wattrel":940,"Wiglett":960,"Wo-Chien":1001,"Wugtrio":961,"Aegislash-Blade":681};
+// ポケモン徹底攻略 (ポケ徹) のチャンピオンズ図鑑ページ。
+// 末尾コード: メガ=m、メガX=mx、メガY=my、メスフォルム=f。
+// それ以外のフォルムは同番号の基本ページ (フォルムへのリンクがある) に寄せる
+function pokeTetsuURL(spec) {
+  const sp = effSpecies(spec);
+  const sd = gen.species.get(idOf(sp));
+  if (!sd) return null;
+  const num = DEX_NUM[sd.baseSpecies || sp];
+  if (!num) return null;
+  let suf = '';
+  if (sp.endsWith('-Mega-X')) suf = 'mx';
+  else if (sp.endsWith('-Mega-Y')) suf = 'my';
+  else if (sp.endsWith('-Mega')) suf = 'm';
+  else if (sp.endsWith('-F') && sd.baseSpecies && sp === sd.baseSpecies + '-F') suf = 'f';
+  return `https://yakkun.com/ch/zukan/n${num}${suf}`;
+}
+// pokedb (champs.pokedb.tokyo) の種族ページ。使用率データのコードを
+// 引くため、データに無い種族 (pokedb にページが無い) は null
+function pokedbURL(spec) {
+  if (!USAGE_SETS) return null;
+  const sp = effSpecies(spec);
+  const sets = USAGE_SETS.sets || USAGE_SETS;
+  let u = sets[idOf(sp)];
+  if (!u) { const base = gen.species.get(idOf(sp))?.baseSpecies; if (base && base !== sp) u = sets[idOf(base)]; }
+  if (!u || !u.code) return null;
+  const sm = /(\d+)/.exec((REG && REG.season) || '');
+  const rule = (REG && REG.rule) || 1;
+  return `https://champs.pokedb.tokyo/pokemon/show/${u.code}` + (sm ? `?season=${sm[1]}&rule=${rule}` : '');
+}
+function natureMark(spec, key) {
+  const ud = NAT_UPDOWN[spec.nature];
+  if (!ud || key === 'hp') return null;
+  if (ud[0] === key) return 'up';
+  if (ud[1] === key) return 'down';
+  return null;
+}
+const fmtPct = v => (Math.round(v * 10) / 10) % 1 === 0 ? String(Math.round(v)) : (Math.round(v * 10) / 10).toFixed(1);
+function koColor(n, guaranteed) { if (n === 1) return guaranteed ? 'g' : 'o'; if (n <= 3) return 'o'; return 'r'; }
+function koFmt(t) {
+  if (!t) return null;
+  let m;
+  // 'approx. ' 始まりや 'guaranteed OHKO after ...' のような後置句付きの形状もラベル化する
+  const s = t.replace(/^approx\. /, '');
+  if (/^guaranteed OHKO/.test(s)) return ['1HKO', 'g'];
+  if (/^possible OHKO/.test(s)) return ['1HKO', 'o'];
+  if ((m = s.match(/^([\d.]+)% chance to OHKO/))) return [`${fmtPct(+m[1])}% 1HKO`, 'g'];
+  if ((m = s.match(/^guaranteed (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], true)];
+  if ((m = s.match(/^([\d.]+)% chance to (\d+)HKO/))) return [`${fmtPct(+m[1])}% ${m[2]}HKO`, koColor(+m[2], false)];
+  if ((m = s.match(/^possible (\d+)HKO/))) return [`${m[1]}HKO`, koColor(+m[1], false)];
+  return [t, 'n'];
+}
+
+/* ---------- import / export ---------- */
+// レギュレーションの「特別な要素」(公式サイトのレギュレーション情報に
+// ある項目) によって、メガ進化・テラスタル・Zワザ・ダイマックスの
+// 可否が決まる。M-◯ の M はメガ進化を示す。regulation.json に特別な
+// 要素の情報が載るようになったらそちらを優先し、それまでは内蔵の
+// 判定 (M- で始まるレギュレーションはメガ進化のみ) でまかなう
+function regulationMechanics(reg) {
+  const se = REG && reg === REG.regulation ? (REG.specialElements || REG.mechanics) : null;
+  if (Array.isArray(se)) return { mega: se.includes('mega'), tera: se.includes('tera'), z: se.includes('z'), dynamax: se.includes('dynamax') };
+  if (se && typeof se === 'object') return { mega: !!se.mega, tera: !!se.tera, z: !!se.z, dynamax: !!se.dynamax };
+  if (typeof reg === 'string' && reg.startsWith('M-')) return { mega: true, tera: false, z: false, dynamax: false };
+  return null;
+}
+function exportText(spec) {
+  // Showdown の Teams.exportSet (sim/teams.ts) の出力形式に合わせる。
+  // ただし努力値は M-C の作法に合わせ、EVs: 行に SP の値をそのまま
+  // 書く (VGCPastes の M-C の paste はすべてこの形: 1能力 32 まで、
+  // 合計 66 までを EVs: に書く)。以前の SPs: 行は Showdown に無い
+  // フィールドで、読み込み時に無視されて努力値が落ちていた
+  const sp = effSpecies(spec);
+  let head = sp;
+  if (sp.endsWith('-F')) head += ' (F)';
+  else if (gen.species.get(idOf(sp + '-F'))) head += ' (M)';
+  if (spec.item) head += ' @ ' + spec.item;
+  const lines = [
+    head,
+    `Ability: ${spec.mega && spec.megaAbility ? spec.megaAbility : spec.ability}`,
+    'Level: 50',
+    // テラスタイプ行は、そのレギュレーションの特別な要素にテラスタル
+    // が含まれている場合だけ出す
+    ...(spec.teraType && ((m) => !m || m.tera)(regulationMechanics(currentRegulation())) ? [`Tera Type: ${spec.teraType}`] : []),
+  ];
+  const evParts = STATJ.filter(([k]) => (spec.sp[k] || 0) > 0)
+    .map(([k]) => `${spec.sp[k]} ${{ hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }[k]}`);
+  if (evParts.length) lines.push(`EVs: ${evParts.join(' / ')}`);
+  lines.push(`${spec.nature} Nature`);
+  for (const mv of spec.moves || []) if (mv) lines.push(`- ${mv}`);
+  return lines.join('\n');
+}
+function resolveSpecies(name) {
+  const t = z2h(name.trim());
+  if (!t) return null;
+  if (NAMES._ja2en && NAMES._ja2en[t]) return NAMES._ja2en[t];
+  const s = gen.species.get(idOf(t));
+  return s ? s.name : null;
+}
+let _moveFold2en = null;
+function hiraFold(s) { return String(s).replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)); }
+function resolveMove(name) {
+  if (!name || typeof name !== 'string') return null;
+  // NFKC (半角カナ→全角・全角英数→半角) + 末尾の感嘆符などを落としてから照合する。
+  // リーダー側の表記ゆれ (カタカナ化・記号混入) で技名が解決できず、
+  // 生文字列がそのまま技枠に入って「（技なし）」表示になるのを防ぐ
+  const t = z2h(name.normalize('NFKC').trim().replace(/[！!。]+$/, ''));
+  if (!t) return null;
+  if (NAMES._moveJa2en && NAMES._moveJa2en[t]) return NAMES._moveJa2en[t];
+  if (NAMES._moveJa2en) {
+    if (!_moveFold2en) { _moveFold2en = {}; for (const [ja, en] of Object.entries(NAMES._moveJa2en)) _moveFold2en[hiraFold(ja)] = en; }
+    const f = _moveFold2en[hiraFold(t)];
+    if (f) return f;
+  }
+  const m = gen.moves.get(idOf(t));
+  return m ? m.name : null;
+}
+// 相手パネルの技を正規化する: 解決できない名前は枠から外し (「（技なし）」の
+// 見た目で実在の技を押し出さない)、空いた枠は使用率型の技で補完する
+// 判明した技 (knownMoves) を、判明した順に上から詰めて並べる。
+// 残りの枠は現在の技 (使用率型など) で後ろに続ける。枠番号で持つ
+// moveSpec / moveZ は技名で引き直して付け替える
+function arrangeKnownFirst(spec) {
+  const known = (spec.knownMoves || []).filter(Boolean);
+  if (!known.length || !Array.isArray(spec.moves)) return;
+  const old = spec.moves;
+  const rest = old.filter(m => m && !known.includes(m));
+  const next = [...known, ...rest].slice(0, 4);
+  const remap = (obj) => {
+    if (!obj) return obj;
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const mv = old[+k];
+      const j = mv ? next.indexOf(mv) : -1;
+      if (j >= 0) out[j] = v;
+    }
+    return out;
+  };
+  spec.moveSpec = remap(spec.moveSpec);
+  spec.moveZ = remap(spec.moveZ);
+  spec.moves = next;
+}
+function sanitizeOppMoves(spec) {
+  const fixed = [];
+  for (const mv of spec.moves || []) { const r = mv ? resolveMove(mv) : null; if (r && !fixed.includes(r)) fixed.push(r); }
+  const u = usageFor(spec.species);
+  if (u) for (const mv of u.moves) { if (fixed.length >= 4) break; if (!fixed.includes(mv)) fixed.push(mv); }
+  spec.moves = fixed.slice(0, 4);
+  if (Array.isArray(spec.knownMoves)) {
+    spec.knownMoves = [...new Set(spec.knownMoves.map(mv => resolveMove(mv)).filter(Boolean))];
+  }
+}
+function resolveAbility(name) {
+  const t = z2h(name.trim());
+  if (NAMES._abilityJa2en && NAMES._abilityJa2en[t]) return NAMES._abilityJa2en[t];
+  const a = gen.abilities.get(idOf(t));
+  return a ? a.name : null;
+}
+// ---- Showdown の読み込み (sim/teams.ts の Teams.import /
+// parseExportedTeamLine / unpack を可能な限り再現する) ----
+// 対応形式: 書き出しテキスト形式・JSON 形式・packed 形式。
+// Champions 固有の拡張として、EVs 欄の SP 読み (全て 32 以下で合計 66
+// 以下なら SP として読む) と SPs: 行は残す。IV は Champions が固定の
+// ため読み捨てる
+const STAT_ID_BY_TOKEN = { hp: 'hp', atk: 'atk', def: 'def', spa: 'spa', spd: 'spd', spe: 'spe' };
+function parseStatLine(s) {
+  // Showdown の EVs/IVs 行: "252 Atk / 4 SpD" を [statId, value] の列にする
+  const parts = [];
+  for (const part of String(s).split('/')) {
+    const toks = part.trim().split(' ');
+    if (toks.length < 2) continue;
+    const k = STAT_ID_BY_TOKEN[idOf(toks[1])];
+    const v = parseInt(toks[0], 10);
+    if (k && !Number.isNaN(v)) parts.push([k, v]);
+  }
+  return parts;
+}
+function parseExportedTeamLine(line, isFirstLine, set) {
+  if (isFirstLine) {
+    // Showdown は ' @ ' で分割する。区切りに空白が無い手書き入力にも
+    // 対応するため、見つからなければ '@' でも分割する (拡張)
+    let item = '';
+    let at = line.indexOf(' @ ');
+    if (at >= 0) { item = line.slice(at + 3); line = line.slice(0, at); }
+    else { at = line.indexOf('@'); if (at >= 0) { item = line.slice(at + 1); line = line.slice(0, at); } }
+    if (item) {
+      item = item.trim();
+      if (idOf(item) === 'noitem') item = '';
+      if (item) set.item = resolveItem(item) || item;
+    }
+    if (line.endsWith(' (M)')) { set.gender = 'M'; line = line.slice(0, -4); }
+    if (line.endsWith(' (F)')) { set.gender = 'F'; line = line.slice(0, -4); }
+    if (line.endsWith(')') && line.includes('(')) {
+      const open = line.indexOf('(');
+      set.speciesRaw = line.slice(open + 1, -1).trim();
+      set.name = line.slice(0, open).trim();
+    } else {
+      set.speciesRaw = line.trim();
+      set.name = '';
+    }
+    return;
+  }
+  if (line.startsWith('Trait: ')) { const a = line.slice(7).trim(); set.ability = resolveAbility(a) || a; }
+  else if (line.startsWith('Ability: ')) { const a = line.slice(9).trim(); set.ability = resolveAbility(a) || a; }
+  else if (line === 'Shiny: Yes') set.shiny = true;
+  else if (line.startsWith('Level: ')) set.level = +line.slice(7);
+  else if (line.startsWith('Happiness: ')) set.happiness = +line.slice(11);
+  else if (line.startsWith('Pokeball: ')) { /* UI では使わない */ }
+  else if (line.startsWith('Hidden Power: ')) set.hpType = line.slice(14).trim();
+  else if (line.startsWith('Tera Type: ')) { const tt = TERA_TYPES.find(t => t.toLowerCase() === line.slice(11).replace(/[^a-zA-Z0-9]/g, '').toLowerCase()); if (tt) set.teraType = tt; }
+  else if (line === 'Gigantamax: Yes') set.gigantamax = true;
+  else if (line.startsWith('Dynamax Level: ')) { /* UI では使わない */ }
+  else if (line.startsWith('EVs: ')) set.evParts = parseStatLine(line.slice(5));
+  else if (line.startsWith('SPs: ')) set.spParts = parseStatLine(line.slice(5));
+  else if (line.startsWith('IVs: ')) { /* Champions は IV 固定のため読み捨てる */ }
+  else if (/^[A-Za-z]+ (N|n)ature/.test(line)) {
+    let ni = line.indexOf(' Nature');
+    if (ni === -1) ni = line.indexOf(' nature');
+    if (ni !== -1) { const n = line.slice(0, ni); if (n !== 'undefined') set.nature = n; }
+  }
+  else if (line.startsWith('-') || line.startsWith('~')) {
+    let mv = line.slice(line.charAt(1) === ' ' ? 2 : 1).trim();
+    if (mv.startsWith('Hidden Power [')) mv = 'Hidden Power ' + mv.slice(14, -1);
+    const r = resolveMove(mv) || (mv.startsWith('Hidden Power ') ? resolveMove('Hidden Power') : null);
+    if (r) set.moves.push(r);
+  }
+}
+// 解析途中のセットを UI の取り込み形式に確定させる。性別でフォルムが
+// 分かれる種族 (イダイトウ・イエッサン等) は、Showdown の検証器と同様に
+// 性別からフォルムを決める ((F) なら -F を優先)。キョダイマックスは
+// ダイマックスとして取り込む (キョダイマックス技は種族から自動で適用
+// されるため、専用フォルムにはしない)
+function finalizeImportedSet(set) {
+  if (!set || !set.speciesRaw) return null;
+  let species = null;
+  if (set.gender === 'F') species = resolveSpecies(set.speciesRaw + '-F') || resolveSpecies(set.speciesRaw);
+  else if (set.gender === 'M') species = resolveSpecies(set.speciesRaw) || resolveSpecies(set.speciesRaw + '-M');
+  else species = resolveSpecies(set.speciesRaw);
+  if (!species) return null;
+  const out = { species, moves: set.moves || [], sp: {} };
+  if (set.item) out.item = set.item;
+  if (set.ability) out.ability = set.ability;
+  if (set.nature) { const n = NATURES.find(x => idOf(x) === idOf(set.nature)); out.nature = n || set.nature; }
+  if (set.teraType) out.teraType = set.teraType;
+  if (set.gigantamax) out.dynamax = true;
+  if (set.spParts && set.spParts.length) for (const [k, v] of set.spParts) out.sp[k] = Math.min(32, v);
+  else if (set.evParts && set.evParts.length) {
+    const total = set.evParts.reduce((a, [, v]) => a + v, 0);
+    const asSp = set.evParts.every(([, v]) => v <= 32) && total <= 66;
+    for (const [k, v] of set.evParts) out.sp[k] = asSp ? Math.min(32, v) : Math.min(32, Math.round(v / 8));
+  }
+  return out;
+}
+function finalizeJsonSet(o) {
+  if (!o || typeof o !== 'object') return null;
+  const set = { moves: [], speciesRaw: o.species || '', gender: o.gender || '', gigantamax: !!o.gigantamax };
+  if (o.item) { const it = String(o.item); if (idOf(it) !== 'noitem') set.item = resolveItem(it) || it; }
+  if (o.ability) set.ability = resolveAbility(o.ability) || o.ability;
+  if (o.nature) set.nature = o.nature;
+  if (o.teraType) { const tt = TERA_TYPES.find(t => t.toLowerCase() === String(o.teraType).toLowerCase()); if (tt) set.teraType = tt; }
+  if (Array.isArray(o.moves)) for (const m of o.moves) { const r = resolveMove(m); if (r) set.moves.push(r); }
+  for (const [src, dst] of [['evs', 'evParts'], ['sps', 'spParts']]) {
+    if (o[src] && typeof o[src] === 'object') { set[dst] = []; for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) if (typeof o[src][k] === 'number') set[dst].push([k, o[src][k]]); }
+  }
+  return finalizeImportedSet(set);
+}
+// packed 形式 (Teams.unpack の再現)。名前類は英数字のみに詰められている
+// ため、各リゾルバの ID 照合で元に戻す
+function unpackShowdownTeam(buf) {
+  const team = [];
+  let i = 0;
+  for (let count = 0; count < 24; count++) {
+    const set = { moves: [] };
+    let j = buf.indexOf('|', i); if (j < 0) return null;
+    const name = buf.substring(i, j); i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    set.speciesRaw = buf.substring(i, j) || name; i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const itemRaw = buf.substring(i, j); i = j + 1;
+    if (itemRaw) set.item = resolveItem(itemRaw) || itemRaw;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const abilityRaw = buf.substring(i, j); i = j + 1;
+    if (['', '0', '1', 'H', 'S'].includes(abilityRaw)) {
+      if (abilityRaw) { const sd = gen.species.get(idOf(set.speciesRaw)); const ab = sd && sd.abilities ? sd.abilities[abilityRaw] : null; if (ab) set.ability = ab; }
+    } else set.ability = resolveAbility(abilityRaw) || abilityRaw;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const movesRaw = buf.substring(i, j); i = j + 1;
+    for (const m of movesRaw.split(',').slice(0, 24)) { if (!m) continue; const r = resolveMove(m); if (r) set.moves.push(r); }
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    const natureRaw = buf.substring(i, j); i = j + 1;
+    if (natureRaw) { const n = NATURES.find(x => idOf(x) === idOf(natureRaw)); if (n) set.nature = n; }
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    if (j !== i) { const evs = buf.substring(i, j).split(',', 6); const keys = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']; set.evParts = keys.map((k, ix) => [k, Number(evs[ix]) || 0]).filter(([, v]) => v > 0); }
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null;
+    if (i !== j) set.gender = buf.substring(i, j);
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null; // IVs (読み捨て)
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null; // shiny
+    i = j + 1;
+    j = buf.indexOf('|', i); if (j < 0) return null; // level
+    const afterLevel = j;
+    j = buf.indexOf(']', i);
+    let misc = null;
+    if (j < 0) { if (afterLevel + 1 < buf.length || i < buf.length) misc = buf.substring(afterLevel + 1).split(',', 6); }
+    else misc = buf.substring(afterLevel + 1, j).split(',', 6);
+    if (misc) {
+      if (misc[3]) set.gigantamax = true;
+      if (misc[5]) { const tt = TERA_TYPES.find(t => t.toLowerCase() === String(misc[5]).toLowerCase()); if (tt) set.teraType = tt; }
+    }
+    team.push(set);
+    if (j < 0) break;
+    i = j + 1;
+    if (i >= buf.length) break;
+  }
+  const out = team.map(finalizeImportedSet).filter(Boolean);
+  return out.length ? out : null;
+}
+function importShowdownTeam(buffer) {
+  if (!buffer || typeof buffer !== 'string') return [];
+  const trimmed = buffer.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr)) return arr.map(finalizeJsonSet).filter(Boolean);
+    } catch (e) { /* JSON でなければテキスト形式として続ける */ }
+  }
+  const lines = buffer.split('\n');
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const nonEmpty = lines.filter(l => l.trim() !== '');
+  if (nonEmpty.length === 1 && nonEmpty[0].includes('|')) {
+    const packed = unpackShowdownTeam(nonEmpty[0].trim());
+    if (packed) return packed;
+  }
+  const sets = [];
+  let cur = null;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line === '' || line === '---') cur = null;
+    else if (line.startsWith('===')) { /* チーム見出し行は読み飛ばす */ }
+    else if (!cur) { cur = { moves: [] }; sets.push(cur); parseExportedTeamLine(line, true, cur); }
+    else parseExportedTeamLine(line, false, cur);
+  }
+  return sets.map(finalizeImportedSet).filter(Boolean);
+}
+function parseSet(text) {
+  const sets = importShowdownTeam(text);
+  return sets.length ? sets[0] : null;
+}
+
+function parseTeam(text) {
+  // Showdown の読み込み (Teams.import) で解釈し、読めないセットは読み飛ばす
+  return importShowdownTeam(text).slice(0, 6);
+}
+
+/* ---------- displayed spec ---------- */
+const DS = side => state[side][state.sel[side]];
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/* ---------- custom dropdown (Showdex react-select reproduction) ---------- */
+const DDREG = {};
+let openDDId = null;
+let SPECIES_OPTIONS = [], MOVE_OPTIONS = [], ITEM_OPTIONS = [], ABILITY_OPTIONS = [];
+function regDD(id, cfg) { DDREG[id] = cfg; }
+function ddHTML(id) {
+  const d = DDREG[id];
+  if (!d) return '';
+  const opt = d.options.find(o => o.v === d.value);
+  const label = d.valueLabel || (opt ? opt.l : '');
+  // 使用率のある選択肢は、閉じた表示にも率を併記する (一覧と同じ % 表示)
+  const rateHtml = opt && opt.rate != null ? ` <span class="ddrate">${opt.rate}%</span>` : '';
+  return `<div class="sdd${d.highlight ? ' highlight' : ''}${d.bare ? ' bare' : ''}" data-sdd="${id}">
+    <div class="sdd-control" data-ddctl="${id}">
+      <div class="sdd-value${label ? '' : ' ph'}">${esc(label || d.placeholder || '')}${rateHtml}</div>
+      ${d.extra || ''}
+      ${d.clearable && d.value ? '<span class="sdd-clear" data-ddclear="' + id + '">✕</span>' : ''}
+      <span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+    </div></div>`;
+}
+// ひらがな→カタカナに寄せて、かなの種別を区別せず検索できるようにする
+const kanaFold = s => String(s).replace(/[ぁ-ゞ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
+function ddListHTML(d, query, focusIdx) {
+  const q = kanaFold(z2h(query || '')).toLowerCase();
+  // 区切り行 (divider) は検索で絞られても残し、選択・フォーカスの対象にはしない
+  const matched = d.options.filter(o => o.divider || !q || kanaFold(z2h(o.l)).toLowerCase().includes(q) || kanaFold(String(o.v)).toLowerCase().includes(q));
+  const list = matched.filter(o => !o.divider);
+  if (!matched.length) return { html: '<div class="sdd-empty">該当なし</div>', list };
+  let idx = -1;
+  const html = matched.map(o => {
+    if (o.divider) return `<div class="sdd-divider">${esc(o.l)}</div>`;
+    idx++;
+    return `<div class="sdd-opt${o.v === d.value ? ' selected' : ''}${idx === focusIdx ? ' focused' : ''}" data-ddopt="${esc(o.v)}" data-ddidx="${idx}">${esc(o.l)}${o.extra || ''}</div>`;
+  }).join('');
+  return { html, list };
+}
+function openDD(id) {
+  closeDD();
+  const d = DDREG[id];
+  const host = document.querySelector(`[data-sdd="${CSS.escape(id)}"]`);
+  if (!d || !host) return;
+  openDDId = id;
+  host.classList.add('open');
+  const ctl = host.querySelector('.sdd-control');
+  const cur = d.options.find(o => o.v === d.value);
+  ctl.innerHTML = `<input class="sdd-input" data-ddinput="${id}" placeholder="${esc(cur ? cur.l : (d.placeholder || ''))}">
+    ${d.extra || ''}
+    ${d.clearable && d.value ? '<span class="sdd-clear" data-ddclear="' + id + '">✕</span>' : ''}
+    <span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span>`;
+  const menu = document.createElement('div');
+  menu.className = 'sdd-menu';
+  menu.innerHTML = '<div class="sdd-list"></div>';
+  host.appendChild(menu);
+  const input = ctl.querySelector('.sdd-input');
+  let focusIdx = Math.max(0, d.options.filter(o => !o.divider).findIndex(o => o.v === d.value));
+  const paint = () => {
+    const { html, list } = ddListHTML(d, input.value, focusIdx);
+    menu.querySelector('.sdd-list').innerHTML = html;
+    menu._list = list;
+    const f = menu.querySelector('.sdd-opt.focused');
+    if (f) f.scrollIntoView({ block: 'nearest' });
+  };
+  paint();
+  input.focus();
+  input.addEventListener('input', () => { focusIdx = 0; paint(); });
+  input.addEventListener('keydown', e => {
+    const list = menu._list || [];
+    if (e.key === 'ArrowDown') { e.preventDefault(); focusIdx = Math.min(list.length - 1, focusIdx + 1); paint(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusIdx = Math.max(0, focusIdx - 1); paint(); }
+    else if (e.key === 'Enter') { e.preventDefault(); const o = list[focusIdx] || list[0]; if (o) pickDD(id, o.v); }
+    else if (e.key === 'Escape') { closeDD(); }
+  });
+}
+function closeDD() {
+  if (!openDDId) return;
+  const id = openDDId;
+  openDDId = null;
+  const host = document.querySelector(`[data-sdd="${CSS.escape(id)}"]`);
+  if (host) {
+    host.classList.remove('open');
+    const m = host.querySelector('.sdd-menu'); if (m) m.remove();
+    // 開いたときに入力欄へ差し替えた表示を、閉じた状態の値ラベルへ戻す
+    // (戻さないとプレースホルダの灰色文字が表示名として残ってしまう)
+    if (host.querySelector('.sdd-input') && DDREG[id]) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = ddHTML(id);
+      const ctl = tmp.querySelector('.sdd-control');
+      const old = host.querySelector('.sdd-control');
+      if (ctl && old) old.replaceWith(ctl);
+    }
+  }
+}
+function pickDD(id, v) {
+  markCalcSrc('user');
+  const d = DDREG[id];
+  closeDD();
+  if (d && d.onPick) d.onPick(v);
+}
+
+/* ---------- status popover ---------- */
+const STATUS_LIST = [['', '正常', 'OK', 'ok'], ['brn', 'やけど', 'BRN', 'brn'], ['par', 'まひ', 'PAR', 'par'], ['psn', 'どく', 'PSN', 'psn'], ['tox', 'もうどく', 'TOX', 'tox'], ['slp', 'ねむり', 'SLP', 'slp'], ['frz', 'こおり', 'FRZ', 'frz']];
+const STATUS_ABBR = { brn: 'BRN', par: 'PAR', psn: 'PSN', tox: 'TOX', slp: 'SLP', frz: 'FRZ' };
+let stPopEl = null;
+function closeStPop() { if (stPopEl) { stPopEl.remove(); stPopEl = null; } }
+function openStPop(side, anchor) {
+  closeStPop();
+  const spec = DS(side);
+  stPopEl = document.createElement('div');
+  stPopEl.className = 'stpop';
+  stPopEl.innerHTML = STATUS_LIST.map(([v, jaName, abbr, cls]) =>
+    `<button data-statuspick="${side}:${v}"><span class="stbadge ${cls}">${abbr}</span>${jaName}</button>`).join('');
+  document.body.appendChild(stPopEl);
+  const r = anchor.getBoundingClientRect();
+  stPopEl.style.left = (window.scrollX + r.left) + 'px';
+  stPopEl.style.top = (window.scrollY + r.bottom + 4) + 'px';
+}
+function statusBadgeHTML(spec) {
+  if ((spec.curHPPercent ?? 100) <= 0) return '<span class="stbadge fnt">RIP</span>';
+  if (spec.status) return `<span class="stbadge ${spec.status}">${STATUS_ABBR[spec.status] || ''}</span>`;
+  return '<span class="stbadge ok">OK</span>';
+}
+
+
+function dispStat(spec, key, raw, sideKey) {
+  if (key === 'hp') return [spec.dynamax ? raw.hp * 2 : raw.hp, spec.dynamax ? 'green' : ''];
+  let v = raw[key];
+  const b = spec.boosts[key] || 0;
+  if (b > 0) v = Math.floor(v * (2 + b) / 2); else if (b < 0) v = Math.floor(v * 2 / (2 - b));
+  // 特性・道具による補正: ゲーム式 (@smogon/calc の atMods/dfMods) に合わせ、
+  // ランク補正後の値に補正を 4096 固定小数点で連鎖させ、最後に pokeRound
+  // (.5 は切り下げ) で 1 回だけ丸める。特性→道具の順も calc と同じ
+  const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
+  let modChain = 4096;
+  const pushMod = m => { modChain = Math.floor((modChain * m + 2048) / 4096); };
+  // 天候による実数値補正: ゆきでは こおりタイプの防御、すなあらしでは
+  // いわタイプの特防が 1.5 倍になる (ゲーム内でもダメージ計算に効いている)
+  const effTypes = spec.terastallized && spec.teraType ? [spec.teraType] : ((gen.species.get(idOf(effSpecies(spec))) || {}).types || []);
+  if (key === 'def' && state.field.weather === 'Snow' && effTypes.includes('Ice')) pushMod(6144);
+  if (key === 'spd' && state.field.weather === 'Sand' && effTypes.includes('Rock')) pushMod(6144);
+  if (key === 'atk' && (ab === 'Huge Power' || ab === 'Pure Power')) pushMod(8192);
+  else if (key === 'atk' && ab === 'Gorilla Tactics') pushMod(6144);
+  if (key === 'def' && ab === 'Fur Coat') pushMod(8192);
+  if (key === 'spd' && ab === 'Ice Scales') pushMod(8192);
+  const itm = spec.itemLost ? '' : spec.item;
+  if (key === 'atk' && itm === 'Choice Band') pushMod(6144);
+  if (key === 'spa' && itm === 'Choice Specs') pushMod(6144);
+  if (modChain !== 4096) { const x = v * modChain / 4096; v = (x % 1 > 0.5) ? Math.ceil(x) : Math.floor(x); }
+  if (key === 'spe') {
+    if (itm === 'Choice Scarf') v = Math.floor(v * 1.5);
+    // 天候・フィールドで素早さが上がる特性 (ダメージ計算側では自動で
+    // 効いているため、実数値の表示にも合わせる)
+    const w = state.field.weather;
+    if (ab === 'Chlorophyll' && (w === 'Sun' || w === 'Harsh Sunshine')) v *= 2;
+    if (ab === 'Swift Swim' && (w === 'Rain' || w === 'Heavy Rain')) v *= 2;
+    if (ab === 'Sand Rush' && w === 'Sand') v *= 2;
+    if (ab === 'Slush Rush' && w === 'Snow') v *= 2;
+    if (ab === 'Surge Surfer' && state.field.terrain === 'Electric') v *= 2;
+    if (spec.unburden && ab === 'Unburden') v *= 2;
+    if (state.side[sideKey].tailwind) v *= 2;
+    // はやあし: 状態異常で 1.5 倍 (まひの素早さ低下は無効)
+    if (ab === 'Quick Feet' && spec.status) v = Math.floor(v * 1.5);
+    else if (spec.status === 'par') v = Math.floor(v / 2);
+  }
+  return [v, v > raw[key] ? 'green' : v < raw[key] ? 'red' : ''];
+}
+
+/* ---------- 状態プルダウン (てだすけの右隣): 継続効果のチェックボックス集 ---------- */
+const STATUS_DEFS = [
+  ['curse', 'のろい', 'のろい状態 (ターン終了時に最大HPの1/4のダメージ。KO% の計算にも反映されます)'],
+  ['seedDmg', 'やどりぎのタネ（ダメージ）', 'やどりぎのタネを植えられている (ターン終了時に最大HPの1/8のダメージを受ける。KO% の計算にも反映されます)'],
+  ['seedHeal', 'やどりぎのタネ（回復）', 'やどりぎのタネの吸収で回復する側 (ターン終了時に回復する。KO% の計算にも反映されます)'],
+  ['aquaring', 'アクアリング', 'ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます'],
+  ['ingrain', 'ねをはる', 'ターン終了時に最大HPの1/16回復。KO% の計算にも反映されます'],
+  ['octolock', 'たこがため', 'ターン終了ごとに防御・特防が1段階ずつ下がる。KO% の計算にも反映されます'],
+  ['bind', 'まとわりつく', 'バインド状態 (ターン終了時に最大HPの1/8のダメージ。KO% の計算にも反映されます)'],
+  ['saltcure', 'しおづけ', 'ターン終了時に最大HPの1/8 (はがね・みずタイプは1/4) のダメージ。KO% の計算にも反映されます'],
+  ['nightmare', 'あくむ', 'ねむり状態の間、ターン終了時に最大HPの1/4のダメージ。KO% の計算にも反映されます'],
+];
+function statusActiveCount(spec) { return STATUS_DEFS.reduce((n, d) => n + (spec[d[0]] ? 1 : 0), 0); }
+function statusPopHTML(side, spec) {
+  return `<div class="statuspop">${STATUS_DEFS.map(d => `<label class="statusrow" title="${d[2]}"><input type="checkbox" data-status="${side}:${d[0]}"${spec[d[0]] ? ' checked' : ''}> ${d[1]}</label>`).join('')}</div>`;
+}
+function statusDDHTML(side, spec) {
+  const n = statusActiveCount(spec);
+  return `<span class="statuswrap"><button class="tgl${n ? ' on' : ''}" data-vstatusbtn="${side}">状態 (${n})</button>${n ? `<button class="tgl statusx" data-statusclear="${side}" title="状態をすべて解除">✕</button>` : ''}${ui.statusPop === side ? statusPopHTML(side, spec) : ''}</span>`;
+}
+
+/* ---------- panel parts (1 vs 1, Showdex PlayerCalc structure) ---------- */
+function playerBar(side) {
+  const isOpp = side === 'opps';
+  const specs = state[side];
+  const rack = specs.map((spec, i) => {
+    const cls = ['picon', i === state.sel[side] ? 'sel' : '', state.active[side].includes(i) ? 'active' : '', (spec.curHPPercent ?? 100) <= 0 ? 'fnt' : ''].filter(Boolean).join(' ');
+    const eff = effSpecies(spec);
+    return `<button class="${cls}" data-icon="${side}:${i}" title="${esc(ja('species', eff))}">${spriteImg(eff, gen.species.get(idOf(eff))?.baseSpecies || eff, '')}${itemIconHTML(spec)}</button>`;
+  }).join('');
+  return `<div class="playerbar">
+    <div class="playerinfo">
+      <div class="username">${isOpp ? '相手' : '自分'}</div>
+      <div class="playeractions"><button class="tgl on" data-noop="1">AUTO</button></div>
+    </div>
+    <div class="rack">${presetRental[side] ? `<button class="rentalbtn" data-rentalcopy="${side}" title="レンタルコードをコピー">${esc(presetRental[side])}</button>` : ''}<span class="presetwrap"><button class="presetbtn" data-presetbtn="${side}" title="${esc(presetApplied[side] || 'プリセット')}"><span class="presetbtn-label">${esc(presetApplied[side] || 'プリセット')}</span><span class="sdd-chev"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 3.2 5 6.8 8.5 3.2" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg></span></button>${ui.presetPop === side ? presetPopHTML(side) : ''}</span>${`<span class="focuswrap"><span class="focuslab">フォーカス</span><span class="focussw" role="group" aria-label="フォーカス切り替え"><button type="button" data-focuspick="${side}:auto"${focusModeFor(side) === 'auto' ? ' class="on"' : ''}>自動</button><button type="button" data-focuspick="${side}:manual"${focusModeFor(side) === 'manual' ? ' class="on"' : ''}>手動</button></span></span>`}${rack}</div>
+  </div>`;
+}
+/* ---------- チームプリセット (サイドごとの構成の保存/切替/削除) ---------- */
+const PRESET_STORE_KEY = 'champions-calc-presets-v1';
+// プリセットは自分側・相手側で同一の 1 本のリストとして扱う (相互に
+// 書き換え可能)。保存形式は従来どおり mine/opps の両キーに同じ内容を
+// 入れる (共有先の presets.json の形式もそのまま)。読み込み・保存の
+// たびに名前で union して両キーを一致させる
+function unifyPresetLists(s) {
+  const seen = new Set(); const out = [];
+  for (const e of [...(s.mine || []), ...(s.opps || [])]) {
+    if (e && e.name && !seen.has(e.name)) { seen.add(e.name); out.push(e); }
+  }
+  s.mine = out; s.opps = out;
+  return s;
+}
+// プリセットの使用履歴 (lastUsed) の形を整える。不正な値は null に落とす
+function normLastUsedEntry(e) {
+  if (!e || typeof e !== 'object') return null;
+  if (e.kind === 'preset' && typeof e.name === 'string' && e.name) return { kind: 'preset', name: e.name };
+  if (e.kind === 'vgc' && e.teamId !== undefined && e.teamId !== null && String(e.teamId)) return { kind: 'vgc', teamId: String(e.teamId), label: typeof e.label === 'string' ? e.label : '' };
+  return null;
+}
+function normLastUsed(s) {
+  const lu = (s && s.lastUsed) || {};
+  return { mine: normLastUsedEntry(lu.mine), opps: normLastUsedEntry(lu.opps) };
+}
+function loadPresetStore() {
+  try { const s = JSON.parse(localStorage.getItem(PRESET_STORE_KEY) || 'null'); if (s && Array.isArray(s.mine) && Array.isArray(s.opps)) { unifyPresetLists(s); s.lastUsed = normLastUsed(s); return s; } } catch (e) { /* ignore */ }
+  return { mine: [], opps: [], lastUsed: { mine: null, opps: null } };
+}
+function savePresetStore(s, fromRemote) {
+  unifyPresetLists(s);
+  s.lastUsed = normLastUsed(s);
+  if (!fromRemote) s.updatedAt = new Date().toISOString();
+  try { localStorage.setItem(PRESET_STORE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+  if (!fromRemote) schedulePresetPush();
+}
+/* ---------- プリセットの共有 (localhost ⇔ デバック用ページ) ----------
+   正本はリポジトリの presets.json。updatedAt の新しい方を採用する。
+   localhost からの保存は serve.py (POST ./presets) 経由で、デバック用
+   ページからの保存はユーザーが入力した GitHub トークンで Contents API
+   へ直接送る。 */
+const PRESET_REMOTE_URL = 'https://raw.githubusercontent.com/nMfM1Ow5ot/champions-calc/main/presets.json';
+const PRESET_GH_API = 'https://api.github.com/repos/nMfM1Ow5ot/champions-calc/contents/presets.json';
+const GH_TOKEN_KEY = 'champions-calc-gh-token';
+let presetPushTimer = null;
+let presetSyncMsg = '';
+function isLocalOrigin() { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname || ''); } catch (e) { return false; } }
+function ghToken() { try { return localStorage.getItem(GH_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+function schedulePresetPush() {
+  if (presetPushTimer) clearTimeout(presetPushTimer);
+  presetPushTimer = setTimeout(() => { pushPresets().catch(() => { /* 失敗表示は次回ポップオーバーで */ }); }, 800);
+}
+async function pushPresets() {
+  const s = loadPresetStore();
+  const body = JSON.stringify({ v: 1, updatedAt: s.updatedAt || null, mine: s.mine, opps: s.opps, lastUsed: s.lastUsed || { mine: null, opps: null } });
+  if (isLocalOrigin()) {
+    const r = await fetch('./presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    presetSyncMsg = r.ok ? '共有済み' : '共有に失敗しました';
+  } else {
+    const tok = ghToken();
+    if (!tok) { presetSyncMsg = 'トークン未設定のため、このページ内のみに保存されています'; return; }
+    const cur = await fetch(PRESET_GH_API, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' } });
+    const sha = cur.ok ? (await cur.json()).sha : undefined;
+    const content = btoa(unescape(encodeURIComponent(body)));
+    const r = await fetch(PRESET_GH_API, { method: 'PUT', headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'presets sync', content, sha }) });
+    presetSyncMsg = r.ok ? '共有済み' : '共有に失敗しました (トークンをご確認ください)';
+  }
+  if (ui.presetPop) renderAll();
+}
+async function syncPresetsFromRemote() {
+  const local = loadPresetStore();
+  try {
+    const r = await fetch(PRESET_REMOTE_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) { if (local.mine.length || local.opps.length) schedulePresetPush(); return; }
+    const remote = await r.json();
+    if (!remote || !Array.isArray(remote.mine) || !Array.isArray(remote.opps)) return;
+    const rt = Date.parse(remote.updatedAt || '') || 0;
+    const lt = Date.parse(local.updatedAt || '') || 0;
+    if (rt > lt) savePresetStore({ mine: remote.mine, opps: remote.opps, updatedAt: remote.updatedAt, lastUsed: remote.lastUsed }, true);
+    else if (lt > rt && (local.mine.length || local.opps.length)) schedulePresetPush();
+  } catch (e) { /* オフライン等では何もしない */ }
+}
+function presetSyncHTML() {
+  const msg = presetSyncMsg ? `<div class="presetempty">${esc(presetSyncMsg)}</div>` : '';
+  if (isLocalOrigin()) return `<div class="presetempty">プリセットはデバック用ページと共有されます</div>${msg}`;
+  if (ghToken()) return `<div class="presetempty">プリセットは localhost と共有されます</div>${msg}`;
+  return `<div class="presetsync"><input type="password" class="presetnamein" data-presettoken placeholder="GitHub トークン" value="${esc(ui.presetDraft.token || '')}"><button class="tgl" data-presettokensave>保存</button></div>
+    <div class="presetempty">共有には GitHub トークン (このリポジトリの Contents の読み書き) が必要です</div>${msg}`;
+}
+function presetBuildOf(spec) {
+  return {
+    species: spec.species, megaSpecies: spec.megaSpecies || '', mega: !!spec.mega, megaAbility: spec.megaAbility || '',
+    ability: spec.ability || '', nature: spec.nature || 'Serious', sp: { ...(spec.sp || {}) }, item: spec.item || '',
+    moves: [...(spec.moves || [])], moveSpec: spec.moveSpec ? { ...spec.moveSpec } : undefined, moveZ: spec.moveZ ? { ...spec.moveZ } : undefined,
+    teraType: spec.teraType || '', terastallized: !!spec.terastallized, dynamax: !!spec.dynamax, kind: spec.kind || 'custom',
+  };
+}
+function specFromPresetBuild(b) {
+  return {
+    ...b, sp: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, ...(b.sp || {}) }, moves: [...(b.moves || [])],
+    origMoves: [...(b.moves || [])], knownMoves: [], corrected: [],
+    curHPPercent: 100, boosts: blankBoosts(), status: '',
+  };
+}
+function currentRegulation() { return (REG && REG.regulation) || null; }
+// 表示対象: 保存時のレギュレーションが現行と一致するもの (記録のない旧データは常に表示)
+function presetVisible(p) { const cur = currentRegulation(); return !p.regulation || !cur || p.regulation === cur; }
+function savePreset(side, name) {
+  const slots = state[side].filter(Boolean).map(presetBuildOf);
+  if (!slots.length) return;
+  const store = loadPresetStore();
+  const nm = String(name || '').trim() || `プリセット ${store[side].length + 1}`;
+  const rec = { name: nm, regulation: currentRegulation(), slots };
+  const ex = store[side].findIndex(p => p.name === nm);
+  if (ex >= 0) store[side][ex] = rec; else store[side].push(rec);
+  savePresetStore(store);
+}
+// 現在そのサイドに適用されているプリセット / VGCPastes チームの名前
+// (プリセットボタンに表示する)
+const presetApplied = { mine: '', opps: '' };
+// 適用中のチームプリセットに紐付くレンタルコード (VGCPastes 由来)。
+// コードがある時だけ、プリセットボタンの左横にコピーボタンを出す
+const presetRental = { mine: '', opps: '' };
+function renamePreset(side, idx, name) {
+  const nm = String(name || '').trim();
+  if (!nm) return false;
+  const store = loadPresetStore();
+  if (!store[side][idx]) return false;
+  const old = store[side][idx].name;
+  store[side][idx].name = nm;
+  for (const sd of ['mine', 'opps']) {
+    const lu = store.lastUsed && store.lastUsed[sd];
+    if (lu && lu.kind === 'preset' && lu.name === old) lu.name = nm;
+  }
+  savePresetStore(store);
+  if (presetApplied[side] === old) presetApplied[side] = nm;
+  return true;
+}
+function deletePreset(side, idx) {
+  const store = loadPresetStore();
+  if (idx < 0 || idx >= store[side].length) return;
+  const [gone] = store[side].splice(idx, 1);
+  if (gone) for (const sd of ['mine', 'opps']) {
+    const lu = store.lastUsed && store.lastUsed[sd];
+    if (lu && lu.kind === 'preset' && lu.name === gone.name) store.lastUsed[sd] = null;
+  }
+  savePresetStore(store);
+  if (gone && presetApplied[side] === gone.name) presetApplied[side] = '';
+}
+// プリセット適用の使用履歴を記録する (保存済みプリセットと VGCPastes
+// チームの適用だけが対象。インポートや単体ビルド適用は記録しない)
+function recordLastUsed(side, entry) {
+  const store = loadPresetStore();
+  store.lastUsed[side] = entry;
+  savePresetStore(store);
+}
+// 起動時の lastUsed 適用の状態。boardSeen は、このセッションで
+// state.json 由来の盤面が既に適用されたことを示す (その場合は上書きしない)
+const lastUsedStartup = { done: { mine: false, opps: false }, boardSeen: false };
+let initTeamReady = false;
+// ストアが最初に利用可能になった時点で1回だけ、履歴のプリセットを
+// 初期チームにする。以後の同期で履歴が変わっても再適用はしない
+function applyLastUsedStartup() {
+  if (!initTeamReady) return;
+  const store = loadPresetStore();
+  for (const side of ['mine', 'opps']) {
+    if (lastUsedStartup.done[side]) continue;
+    const lu = store.lastUsed ? store.lastUsed[side] : null;
+    if (!lu) { lastUsedStartup.done[side] = true; continue; }
+    if (lu.kind === 'vgc' && !VGC_TEAMS) { ensureVgcTeams(); continue; } // 判定は読み込み完了後 (ensureVgcTeams の完了時に再訪する)
+    lastUsedStartup.done[side] = true;
+    if (lastUsedStartup.boardSeen) continue; // state.json 由来の盤面が既に適用されている場合は上書きしない
+    if (lu.kind === 'preset') {
+      const idx = store[side].findIndex(p => p.name === lu.name);
+      if (idx >= 0) applyPreset(side, idx, { record: false });
+    } else if (lu.kind === 'vgc') {
+      applyVgcTeam(side, lu.teamId, { record: false });
+    }
+    // 参照先が存在しない場合は現行の初期状態のままとし、履歴は変更しない
+  }
+}
+function applyPreset(side, idx, opts) {
+  markCalcSrc('preset');
+  const store = loadPresetStore();
+  const p = store[side][idx];
+  if (!p) return;
+  const specs = p.slots.map(specFromPresetBuild).filter(s => s.species);
+  if (!specs.length) return;
+  state[side] = specs;
+  state.sel[side] = 0;
+  state.active[side] = [0, Math.min(1, specs.length - 1)];
+  if (side === 'opps') {
+    state.oppTeam = specs.map(s => s.species);
+    resetInference();
+    syncTeamContext();
+  }
+  ui.presetPop = null;
+  ui.presetRename = null;
+  presetApplied[side] = p.name || '';
+  presetRental[side] = ''; // 自前プリセットにはレンタルコードは無い
+  if (!opts || opts.record !== false) recordLastUsed(side, { kind: 'preset', name: p.name || '' });
+  applySetterAbility(specs[0]);
+  calcAll();
+}
+function presetIconsHTML(p) {
+  const imgs = (p.slots || []).map(b => {
+    const sp = b.mega && b.megaSpecies ? b.megaSpecies : b.species;
+    return spriteImg(sp, gen.species.get(idOf(sp))?.baseSpecies || sp, 'preseticon');
+  }).join('');
+  return `<span class="preseticons">${imgs}</span>`;
+}
+function presetPopHTML(side) {
+  const list = loadPresetStore()[side];
+  const q = (ui.presetDraft.search[side] || '').trim().toLowerCase();
+  const visReg = list.map((p, i) => ({ p, i })).filter(({ p }) => presetVisible(p));
+  const hidden = list.length - visReg.length;
+  const vis = visReg.filter(({ p }) => !q || String(p.name).toLowerCase().includes(q));
+  const renaming = ui.presetRename && ui.presetRename.side === side ? ui.presetRename.idx : -1;
+  const rows = vis.map(({ p, i }) => {
+    if (i === renaming) {
+      return `<div class="presetrow">${presetIconsHTML(p)}<input type="text" class="presetnamein" data-presetrename="${side}" value="${esc(ui.presetDraft.rename || p.name)}"><button class="tgl" data-presetrenamesave="${side}:${i}">変更</button><button class="presetdel" data-presetrenamecancel="1" title="キャンセル">×</button></div>`;
+    }
+    return `<div class="presetrow"><button class="presetname" data-presetload="${side}:${i}" title="このプリセットに切り替え">${presetIconsHTML(p)}<span class="presetnametext">${esc(p.name)}</span></button><button class="presetedit" data-presetedit="${side}:${i}" title="名前を変更">✎</button><button class="presetdel" data-presetdel="${side}:${i}" title="削除">×</button></div>`;
+  }).join('');
+  const draft = ui.presetDraft.save[side];
+  return `<span class="presetpop">
+    <div class="presetsave"><input type="text" class="presetnamein" data-presetname="${side}" placeholder="プリセット名" value="${esc(draft != null ? draft : `プリセット ${list.length + 1}`)}"><button class="tgl" data-presetsave="${side}">保存</button></div>
+    <div class="presetsave"><input type="text" class="presetnamein" data-presetsearch="${side}" placeholder="プリセット・チームを検索" value="${esc(ui.presetDraft.search[side] || '')}"></div>
+    ${rows || (q ? '<div class="presetempty">該当するプリセットはありません</div>' : '<div class="presetempty">保存されたプリセットはありません</div>')}
+    ${hidden ? `<div class="presetempty">他のレギュレーションのプリセットが ${hidden} 件あります</div>` : ''}
+    ${presetSyncHTML()}
+    ${vgcTeamRowsHTML(side, q)}
+  </span>`;
+}
+function presetBox(side) {
+  const spec = DS(side);
+  let dd = '';
+  if (side === 'mine') {
+    // 相手側と同じ型選択方式にする。登録済みの自チーム型は「カスタム」として
+    // 表示し、カスタムを選ぶとその種族の登録型に戻す
+    const vgcBuildsM = vgcBuildsFor(spec);
+    const vgcOpts = [...(vgcBuildsM.length ? [{ v: '__divider', l: 'from VGCPastes', divider: true }] : []), ...vgcBuildsM.map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }))];
+    regDD('preset:mine', {
+      options: [
+        { v: 'usage', l: '使用率トップ型 (pokedb)' },
+        { v: 'attacker', l: '火力特化型' },
+        { v: 'bulky', l: '耐久型' },
+        { v: 'none', l: '素の種族値' },
+        { v: 'custom', l: 'カスタム' },
+        ...vgcOpts,
+      ],
+      value: spec.kind || 'custom',
+      onPick: v => {
+        const keep = DS('mine');
+        if (v.startsWith('vgc:')) { applyVgcBuild('mine', vgcBuildsFor(keep)[+v.slice(4)], v); calcAll(); return; }
+        let ns;
+        if (v === 'custom') {
+          const pi = PRESETS.findIndex(p => p.species === keep.species);
+          ns = pi >= 0 ? presetSpec(pi) : { ...keep, kind: 'custom' };
+        } else {
+          ns = ownSpeciesSpec(keep.species, v);
+        }
+        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+        state.mine[state.sel.mine] = ns;
+        calcAll();
+      },
+    });
+    dd = ddHTML('preset:mine');
+  } else {
+    const vgcBuildsO = vgcBuildsFor(spec);
+    const vgcOpts = [...(vgcBuildsO.length ? [{ v: '__divider', l: 'from VGCPastes', divider: true }] : []), ...vgcBuildsO.map((e, i) => ({ v: 'vgc:' + i, l: e.build.label }))];
+    regDD('preset:opps', {
+      options: [
+        { v: 'usage', l: '使用率トップ型 (pokedb)' },
+        { v: 'attacker', l: '火力特化型' },
+        { v: 'bulky', l: '耐久型' },
+        { v: 'none', l: '素の種族値' },
+        { v: 'custom', l: tempTrainerSets[spec.species] ? tempTrainerSets[spec.species].trainer : 'カスタム' },
+        ...vgcOpts,
+      ],
+      value: spec.kind || 'usage',
+      valueLabel: (spec.kind === 'custom' && tempTrainerSets[spec.species]) ? tempTrainerSets[spec.species].trainer
+        : (spec.corrected && spec.corrected.length && oppTrainerName) ? oppTrainerName : '',
+      onPick: v => {
+        const keep = DS('opps');
+        if (v.startsWith('vgc:')) { applyVgcBuild('opps', vgcBuildsFor(keep)[+v.slice(4)], v); calcAll(); return; }
+        let ns;
+        if (v === 'custom' && tempTrainerSets[keep.species]) {
+          // 一時保持した推定型 (トレーナー名のカスタム) を再適用する
+          ns = specFromPresetBuild(tempTrainerSets[keep.species].build);
+          ns.kind = 'custom';
+        } else {
+          ns = oppSpec(keep.species, v);
+        }
+        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+        state.opps[state.sel.opps] = ns;
+        calcAll();
+      },
+    });
+    dd = ddHTML('preset:opps');
+  }
+  const imp = ui.importing[side];
+  const impAll = ui.importingAll[side];
+  return `<div class="presetbox">
+    <div class="presethead">
+      <div class="part"><span class="ddlabel" style="margin:0">SET</span><button class="tgl on" data-noop="1">AUTO</button></div>
+      <div class="part">
+        <button class="tgl" data-act="${side}:import">読み込み</button>
+        <button class="tgl" data-act="${side}:importall">すべて読み込み</button>
+        <button class="tgl" data-act="${side}:export">書き出し</button>
+        <button class="tgl" data-act="${side}:all">すべて書き出し</button>
+      </div>
+    </div>
+    ${dd}
+    ${imp ? `<textarea class="importbox" data-importbox="${side}" placeholder="Showdown形式のセットを貼り付け">${esc(imp === true ? '' : imp)}</textarea>
+      <button class="tgl applybtn" data-applyimport="${side}">この内容で読み込む</button>` : ''}
+    ${impAll ? `<textarea class="importbox" data-importallbox="${side}" placeholder="Showdown形式のチームを貼り付け（最大6体・空行区切り）">${esc(impAll === true ? '' : impAll)}</textarea>
+      <button class="tgl applybtn" data-applyimportall="${side}">この内容で全て読み込む</button>` : ''}
+  </div>`;
+}
+function pokeInfo(side) {
+  const spec = DS(side);
+  const eff = effSpecies(spec);
+  const sd = speciesData(spec);
+  let nameHTML;
+  if (side === 'opps') {
+    regDD('species:opps', {
+      options: SPECIES_OPTIONS, value: spec.species, bare: true,
+      valueLabel: biLabel(ja('species', eff), eff),
+      onPick: v => {
+        if (!v || v === spec.species) return;
+        const keep = DS('opps');
+        const ns = oppSpec(v, keep.kind || 'usage');
+        ns.curHPPercent = keep.curHPPercent; ns.boosts = keep.boosts; ns.status = keep.status;
+        state.opps[state.sel.opps] = ns;
+        state.oppTeam[state.sel.opps] = v;
+        applySetterAbility(ns);
+        calcAll();
+      },
+    });
+    nameHTML = ddHTML('species:opps');
+  } else {
+    regDD('species:mine', {
+      options: SPECIES_OPTIONS, value: spec.species, bare: true,
+      valueLabel: biLabel(ja('species', eff), eff),
+      onPick: v => {
+        if (!v || v === spec.species) return;
+        // 種族を変えたら HP・ランク・状態も含めてすべて初期化する
+        const ns = ownSpeciesSpec(v);
+        state.mine[state.sel.mine] = ns;
+        applySetterAbility(ns);
+        calcAll();
+      },
+    });
+    nameHTML = ddHTML('species:mine');
+  }
+  {
+    regDD(`tera:${side}`, {
+      options: TERA_TYPES.map(t => ({ v: t, l: biLabel(TYPE_JA[t] || t, t) })),
+      value: spec.teraType || (sd && sd.types && sd.types[0]) || 'Normal',
+      onPick: v => { spec.teraType = v; calcAll(); },
+    });
+  }
+  const hp = Math.max(0, Math.min(100, Math.round(spec.curHPPercent ?? 100)));
+  // テラスタイプのプルダウンはオフ時も (不可視で) 常に描画し、オン/オフで幅と高さが変わらないようにする
+  const teraDDHtml = ddHTML(`tera:${side}`).replace('class="sdd', spec.terastallized ? 'class="sdd' : 'class="sdd teraoff');
+  return `<div class="pokeinfo">
+    <div class="piconbox"><span class="spritewrap" data-forme="${side}" title="フォルム選択">${spriteImg(eff, sd?.baseSpecies || spec.species, '')}${ui.formePop === side ? formePopHTML(side) : ''}</span></div>
+    <div class="infomain">
+      <div class="firstline">${nameHTML}<span class="level">L50</span><span class="typesfield">${typeChips(spec)}</span><button class="tgl" data-poketetsu="${side}" title="ポケモン徹底攻略 (ポケ徹) でこのポケモンのページを開く">ポケ徹</button>${pokedbURL(spec) ? `<button class="tgl" data-pokedb="${side}" title="pokedb でこのポケモンのページを開く">pokedb</button>` : ''}</div>
+      <div class="terarow"><button class="tgl${spec.dynamax ? ' on' : ''}" data-dynamax="${side}">ダイマックス</button><button class="tgl${spec.terastallized ? ' on' : ''}" data-tera="${side}">テラスタル</button>${teraDDHtml}<button class="tgl${spec.hand ? ' on' : ''}" data-hand="${side}" title="てだすけ (このポケモンの技の威力が1.5倍)">てだすけ</button>${statusDDHTML(side, spec)}</div>
+      <div class="secondline">
+        <div class="hpbar"><i style="width:${hp}%"></i></div>
+        <span class="hpct"><input data-hpnum="${side}" type="number" min="0" max="100" value="${hp}">%</span>
+        <button class="statusbtn" data-statusbtn="${side}">${statusBadgeHTML(spec)}</button>
+      </div>
+    </div>
+    ${presetBox(side)}
+  </div>`;
+}
+function metaRow(side) {
+  const spec = DS(side);
+  const corr = f => side === 'opps' && (spec.corrected || []).includes(f);
+  const abs = abilitiesOf(spec);
+  // メガシンカ中はメガ後の特性のみ (メガ前の特性を混ぜない)
+  if (!spec.mega && spec.ability && !abs.includes(spec.ability)) abs.push(spec.ability);
+  if (spec.mega && spec.megaAbility && !abs.includes(spec.megaAbility)) abs.push(spec.megaAbility);
+  regDD(`ability:${side}`, {
+    options: abilityOptionsFor(spec, abs),
+    value: (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability, highlight: corr('特性'),
+    onPick: v => { if (spec.mega && spec.megaAbility) spec.megaAbility = v; else spec.ability = v; if (side === 'opps') markCorrected(spec, '特性'); calcAll(); },
+  });
+  regDD(`nature:${side}`, {
+    options: natureOptionsFor(spec),
+    value: spec.nature, highlight: corr('性格'),
+    onPick: v => { spec.nature = v; if (side === 'opps') { markCorrected(spec, '性格'); (spec.estManual ||= {}).nature = true; } calcAll(); },
+  });
+  regDD(`item:${side}`, {
+    options: itemOptionsFor(spec), value: spec.itemLost ? '' : (spec.item || ''), clearable: true, placeholder: 'なし',
+    valueLabel: !spec.itemLost && spec.item ? biLabel((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item, spec.item) : '',
+    highlight: corr('持ち物'),
+    onPick: v => { spec.item = v || ''; spec.itemLost = false; if (side === 'opps') markCorrected(spec, '持ち物'); calcAll(); },
+  });
+  return `<div class="metarow">
+    <div class="col"><div class="ddlabel">特性</div>${ddHTML(`ability:${side}`)}</div>
+    <div class="col"><div class="ddlabel">性格</div>${ddHTML(`nature:${side}`)}</div>
+    <div class="col"><div class="ddlabel">持ち物</div>${ddHTML(`item:${side}`)}</div>
+  </div>`;
+}
+// 推定の周辺分布の首位 (MAP と食い違う場合のみ) の併記
+function marginalNoteHTML(spec) {
+  const m = spec.estMarginal;
+  if (!m) return '';
+  const parts = [];
+  if (m.nature) parts.push(`性格は ${NAT_JA[m.nature.value] || m.nature.value} が首位 ${Math.round(m.nature.mass * 100)}%`);
+  if (m.item) parts.push(`持ち物は ${(NAMES._itemEn2ja || {})[idOf(m.item.value)] || m.item.value} が首位 ${Math.round(m.item.mass * 100)}%`);
+  if (!parts.length) return '';
+  return `<span class="marginalnote">推定の分布では${parts.join('、')}</span>`;
+}
+function oppInfoLine() {
+  const spec = DS('opps');
+  const rates = spec.usageRates || spec.rates;
+  if (spec.kind !== 'usage' || !rates) return `<div class="oppinfo">${marginalNoteHTML(spec)}</div>`;
+  const corr = spec.corrected || [];
+  const parts = [];
+  if (rates.ability && !corr.includes('特性')) parts.push(`特性 ${ja('abilities', spec.ability)} ${rates.ability}%`);
+  else if (rates.ability) parts.push(`特性 ${ja('abilities', spec.ability)}`);
+  if (rates.nature && !corr.includes('性格')) parts.push(`性格 ${NAT_JA[spec.nature] || spec.nature} ${rates.nature}%`);
+  else if (rates.nature) parts.push(`性格 ${NAT_JA[spec.nature] || spec.nature}`);
+  if (rates.item && !corr.includes('持ち物')) parts.push(`持ち物 ${spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : 'なし'} ${rates.item}%`);
+  else if (rates.item) parts.push(`持ち物 ${spec.item ? ((NAMES._itemEn2ja || {})[idOf(spec.item)] || spec.item) : 'なし'}`);
+  if (rates.patternLabel && !corr.includes('EV')) parts.push(`EV型 ${rates.patternLabel} ${rates.pattern || ''}%`);
+  const head = `pokedb 使用率トップ型${USAGE_SEASON ? `（${USAGE_SEASON}）` : ''}: `;
+  const corrLine = corr.length ? `<br><span class="corrected">判明情報で訂正済み: ${corr.map(c => c === 'EV' ? '努力値' : c).join('・')}</span>` : '';
+  const marg = marginalNoteHTML(spec);
+  return `<div class="oppinfo">${head}${parts.join(' / ')}${corrLine}${marg ? `<br>${marg}` : ''}</div>`;
+}
+function megaFormeOf(speciesEn) {
+  for (const suf of ['-Mega', '-Mega-X', '-Mega-Y', '-Mega-Z']) {
+    const c = gen.species.get(idOf(speciesEn + suf));
+    if (c) return c.name;
+  }
+  return null;
+}
+// その技が現在のフィールドで範囲技になるか (ワイドフォースはサイコフィールド+接地時のみ)
+function spreadCapable(side, moveName) {
+  if (!moveName) return false;
+  const md = moveData(moveName);
+  if (!md || md.category === 'Status') return false;
+  if (md.name === 'Expanding Force') {
+    if (state.field.terrain !== 'Psychic') return false;
+    const spec = DS(side);
+    const sd = gen.species.get(idOf(effSpecies(spec)));
+    if (!sd) return false;
+    if ((sd.types || []).includes('Flying')) return false;
+    const ab = (spec.mega && spec.megaAbility) ? spec.megaAbility : spec.ability;
+    if (ab === 'Levitate' || (spec.itemLost ? '' : spec.item) === 'Air Balloon') return false;
+    return true;
+  }
+  return md.target === 'allAdjacentFoes' || md.target === 'allAdjacent';
+}
+// 連続技のヒット数・積み技カウンタの指定 (core の moveData().spec が対象技の情報)
+// spec.moveSpec は技スロット番号 → 指定値。未指定なら core の既定 (現行挙動)
+function moveSpecOf(moveName) {
+  if (!moveName) return null;
+  const md = moveData(moveName);
+  return md && md.spec ? md.spec : null;
+}
+function mspecHTML(side, mi, ms, spec) {
+  const cur = spec.moveSpec && spec.moveSpec[mi] != null ? String(spec.moveSpec[mi]) : '';
+  const lab = { hits: 'ヒット', rageFist: '被弾', lastRespects: '味方' }[ms.kind] || '';
+  const unit = ms.kind === 'lastRespects' ? '体' : '回';
+  const title = { hits: '連続技のヒット数を指定（自動 = 既定の計算）', rageFist: 'ふんどのこぶし: 被弾回数を指定（自動 = 0回）', lastRespects: 'おはかまいり: 倒れた味方の数を指定（自動 = 0体）' }[ms.kind] || '';
+  let opts = '<option value="">自動</option>';
+  for (let n = ms.min; n <= ms.max; n++) opts += `<option value="${n}"${String(n) === cur ? ' selected' : ''}>${n}${unit}</option>`;
+  return `<span class="mspecwrap" title="${title}"><span class="mspeclab">${lab}</span><select class="mspecsel" data-mspec="${side}:${mi}">${opts}</select></span>`;
+}
+// calcMatchup の state.moveSpecs 用: {技名: 指定値} (指定のある技だけ)
+function buildMoveSpecs(spec) {
+  const out = {};
+  (spec.moves || []).forEach((mv, i) => {
+    if (mv && spec.moveSpec && spec.moveSpec[i] != null) out[mv] = spec.moveSpec[i];
+  });
+  return out;
+}
+// calcMatchup の state.moveZ 用: {技名: true} (Zワザ化する技だけ)
+function buildMoveZs(spec) {
+  const out = {};
+  (spec.moves || []).forEach((mv, i) => {
+    if (mv && spec.moveZ && spec.moveZ[i]) out[mv] = true;
+  });
+  return out;
+}
+// Z変化技の効果の表示文 (ダメージ計算には現れないため情報表示のみ)
+const Z_STAT_JA = { atk: 'こうげき', def: 'ぼうぎょ', spa: 'とくこう', spd: 'とくぼう', spe: 'すばやさ', accuracy: '命中率', evasion: '回避率' };
+const Z_EFFECT_JA = { heal: 'HP全回復', clearnegativeboost: '下がった能力を元に戻す', crit2: '急所ランク+2', curse: 'ゴースト: こうげき+1 / その他: HP全回復', redirect: '攻撃を引きつける', healreplacement: '控えのHP・状態異常を全回復' };
+function zFxText(fx) {
+  if (!fx) return '';
+  const parts = [];
+  if (fx.b) for (const [k, v] of Object.entries(fx.b)) parts.push(`${Z_STAT_JA[k] || k}+${v}`);
+  if (fx.e && Z_EFFECT_JA[fx.e]) parts.push(Z_EFFECT_JA[fx.e]);
+  return parts.join('・');
+}
+// その技を Zワザ化できる場合に {name, fx} を返す (できなければ null)
+function zInfoFor(spec, mv) {
+  if (!mv) return null;
+  const excl = exclusiveZMove(effSpecies(spec), spec.itemLost ? '' : spec.item, mv);
+  if (excl) return { name: excl, fx: Z_EXCLUSIVE_FX[excl] ? zFxText(Z_EXCLUSIVE_FX[excl]) : '' };
+  const md = moveData(mv);
+  if (md && md.zPower) return { name: zMoveNameOf(mv), fx: '' };
+  if (Z_STATUS[mv]) return { name: null, fx: zFxText(Z_STATUS[mv]) };
+  return null;
+}
+// 単体/全体の現在モード: 手動選択があればそれ、なければ相手の場の残数で決める
+function spreadMode(side, moveName) {
+  const sel = ui.spreadSel[side][moveName];
+  if (sel) return sel;
+  const foeSide = side === 'mine' ? 'opps' : 'mine';
+  const alive = (state.active[foeSide] || []).filter(i => (state[foeSide][i]?.curHPPercent ?? 100) > 0).length;
+  return alive >= 2 ? 'spread' : 'single';
+}
+function movesBox(side, res) {
+  const spec = DS(side);
+  const canMega = spec.megaSpecies || megaFormeOf(spec.species);
+  const megaSuffix = spec.mega && spec.megaSpecies ? (spec.megaSpecies.match(/-(X|Y|Z)$/)?.[1] || '') : '';
+  const head = `<div class="mvhead">技${canMega ? ` <button class="tgl${spec.mega ? ' on' : ''}" data-mega="${side}">メガ${megaSuffix}</button>` : ' <button class="tgl megares" style="visibility:hidden" aria-hidden="true" tabindex="-1">メガ</button>'}</div>
+    <div class="mvhead mid">ダメージ <button class="tgl${ui.crit[side] ? ' on' : ''}" data-crit="${side}">CRIT</button></div>
+    <div class="mvhead mid">KO %</div>`;
+  const rows = [0, 1, 2, 3].map(mi => {
+    const zi = zInfoFor(spec, spec.moves[mi]);
+    const zon = !!(spec.moveZ && spec.moveZ[mi]);
+    const zja = zi && zi.name ? (NAMES.moves[idOf(zi.name)] || zi.name) : '';
+    const zBtn = zi ? `<span class="zwrap"><button class="tgl${zon ? ' on' : ''}" data-zmove="${side}:${mi}" title="${esc(zi.name ? 'Zワザ: ' + zja + ' (' + zi.name + ')' : 'Zワザ')}">Z</button>${zon && zi.fx ? `<span class="zfx">${esc(zi.fx)}</span>` : ''}</span>` : '';
+    regDD(`move:${side}:${mi}`, {
+      options: moveOptionsFor(spec), value: spec.moves[mi] || '', clearable: true, placeholder: '（技なし）',
+      extra: (() => {
+        const mv0 = spec.moves[mi];
+        let out = '';
+        if (spreadCapable(side, mv0)) {
+          const mode = spreadMode(side, mv0);
+          out += `<span class="spreadtgl"><button data-spread="${side}:${mi}:single" class="${mode === 'single' ? 'on' : ''}">単体</button><button data-spread="${side}:${mi}:spread" class="${mode === 'spread' ? 'on' : ''}">全体</button></span>`;
+        }
+        const ms = moveSpecOf(mv0);
+        if (ms && !(spec.moveZ && spec.moveZ[mi])) out += mspecHTML(side, mi, ms, spec);
+        return out;
+      })(),
+      highlight: side === 'opps' && !!spec.moves[mi] && (spec.knownMoves || []).includes(spec.moves[mi]),
+      onPick: v => { const old = spec.moves[mi]; spec.moves[mi] = v || ''; if (spec.moveSpec) delete spec.moveSpec[mi]; if (spec.moveZ) delete spec.moveZ[mi]; if (side === 'opps') { markCorrected(spec, '技'); if (!Array.isArray(spec.knownMoves)) spec.knownMoves = []; if (v && !spec.knownMoves.includes(v)) spec.knownMoves.push(v); if (old && old !== v && !spec.moves.includes(old)) spec.knownMoves = spec.knownMoves.filter(m => m !== old); } calcAll(); },
+    });
+    const mr = res && res.moveResults ? res.moveResults[mi] : null;
+    const r = mr && mr.vs ? mr.vs[0] : null;
+    let dmg = '—', cls = '', ko = '', koStyle = '';
+    if (r) {
+      if (r.status) { dmg = 'N/A'; }
+      else if (r.immune) { dmg = 'IMMUNE'; cls = 'immune'; }
+      else if (r.error) { dmg = '—'; }
+      else {
+        dmg = `${fmtPct(r.minPct)} – ${fmtPct(r.maxPct)}%`;
+        // 乱数幅の内訳をホバーで吹き出し表示する。単発は 16 本のロール列、
+        // 複数ヒットは合計ダメージの分布 (各値と確率) を出す (MH-001)。
+        // 吹き出しの下段には反対の急所状態の範囲と内訳も併記する
+        const distTip = dist => dist.values.map((v, vi) => `${v}: ${Math.round(dist.counts[vi] / dist.total * 1000) / 10}%`).join(', ');
+        if (r.dist) {
+          let tip = distTip(r.dist);
+          if (r.alt && r.alt.dist && (r.alt.min !== r.min || r.alt.max !== r.max)) {
+            const altLbl = ui.crit[side] ? '通常' : '急所';
+            tip += `<span class="rolltip-alt"><span class="rolltip-altlab">${altLbl} ${fmtPct(r.alt.minPct)} – ${fmtPct(r.alt.maxPct)}%</span><br>${distTip(r.alt.dist)}</span>`;
+          }
+          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span>`;
+        }
+        else if (r.rolls && r.rolls.length > 1) {
+          let tip = r.rolls.join(', ');
+          if (r.alt && (r.alt.min !== r.min || r.alt.max !== r.max)) {
+            const altLbl = ui.crit[side] ? '通常' : '急所';
+            tip += `<span class="rolltip-alt"><span class="rolltip-altlab">${altLbl} ${fmtPct(r.alt.minPct)} – ${fmtPct(r.alt.maxPct)}%</span>${r.alt.rolls && r.alt.rolls.length > 1 ? '<br>' + r.alt.rolls.join(', ') : ''}</span>`;
+          }
+          dmg = `<span class="dmgwrap">${dmg}<span class="rolltip">${tip}</span></span>`;
+        }
+        const kf = koFmt(r.ko);
+        if (kf) { ko = kf[0]; const c = { g: '#4CAF50', o: '#FF9800', r: '#F44336' }[kf[1]]; if (c) koStyle = ` style="color:${c}"`; }
+      }
+    }
+    const foe = DS(side === 'mine' ? 'opps' : 'mine');
+    const mvName = spec.moves[mi];
+    // コピー内容は Showdown 公式計算機と同じ詳細説明文 (desc) を使う。
+    // 防御側の HP が削れている場合は、確定数だけ満タン前提で組み直した
+    // descFull を使う (画面表示の確定数は現在 HP 前提のまま)。
+    // 無効のときは desc が無いので短い形式でコピーできるようにする
+    let copyText = '';
+    if (r && !r.status && mvName) {
+      if (!r.immune && r.desc) copyText = r.descFull || r.desc;
+      else if (r.immune) copyText = `${ja('species', effSpecies(spec))} ${ja('moves', mvName)} vs ${ja('species', effSpecies(foe))}: IMMUNE`;
+    }
+    // ベイズ候補 (事後90%) を通じたダメージ幅。MAP 型の通常範囲より広い時だけ出す
+    let sub = '';
+    const cr = lastCalc && lastCalc.candRanges ? lastCalc.candRanges[side][mi] : null;
+    if (r && cr && !r.status && !r.immune && !r.error && (cr.lo < r.minPct - 0.05 || cr.hi > r.maxPct + 0.05)) {
+      sub = `<span class="candsub" title="相手の型候補（事後確率 ${Math.round((lastCalc.candRanges.acc || 0) * 100)}% 分）を通じたダメージ範囲">候補 ${fmtPct(cr.lo)}–${fmtPct(cr.hi)}%</span>`;
+    }
+    return `<div class="mvcell">${ddHTML(`move:${side}:${mi}`)}${zBtn}</div>
+      <button class="dmgbtn ${cls}" ${copyText ? `data-copy="${esc(copyText)}" title="クリックで計算結果をコピー"` : ''}>${dmg}${sub}</button>
+      <span class="ko"${koStyle}>${ko}</span>`;
+  }).join('');
+  return `<div class="movesbox"><div class="movesgrid">${head}${rows}</div></div>`;
+}
+function statsGrid(side, statArr) {
+  const spec = DS(side);
+  const heads = STATJ.map(([k, en]) => {
+    const m = natureMark(spec, k);
+    return `<div class="sghead ${m || ''}">${m === 'up' ? '+' : m === 'down' ? '-' : ''}${en}</div>`;
+  }).join('');
+  const total = STATJ.reduce((s, [k]) => s + (spec.sp[k] || 0), 0);
+  const over = total > 66;
+  const delta = total < 66 ? `<span class="delta">${66 - total}↓</span>` : over ? `<span class="delta over">${total - 66}↑</span>` : '';
+  const evRow = STATJ.map(([k]) => {
+    const est = side === 'opps' ? spec.estSp?.[k] : null;
+    if (est) {
+      const txt = est[0] === est[1] ? String(est[0]) : `${est[0]}-${est[1]}`;
+      return `<div class="evwrap"><input data-evest="${side}:${k}" class="estval estin" type="text" inputmode="numeric" style="${rangeFont(txt, 1, 3.6)}" title="推定 ${txt}（数値を入力して上書きできます）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}${movePredTitle(spec)}" value="${txt}"></div>`;
+    }
+    return `<div class="evwrap"><span class="evfield"><input data-ev="${side}:${k}" type="number" min="0" max="32" value="${spec.sp[k] || 0}" class="${(spec.sp[k] || 0) > 0 ? 'has' : ''}"></span></div>`;
+  }).join('');
+  const finals = STATJ.map(([k]) => {
+    if (!statArr) return '<div class="finalstat">—</div>';
+    const est = side === 'opps' ? spec.estStat?.[k] : null;
+    if (est) {
+      // 推定値も通常表示と同じ補正 (ランク・道具・特性・天候など) を通す。
+      // 推定の最大値を素の値として dispStat に渡し、補正後の実数値を表示する
+      const estRaw = {};
+      for (const [kk] of STATJ) estRaw[kk] = spec.estStat?.[kk] ? spec.estStat[kk][1] : (statArr ? statArr[kk] : 0);
+      const [bv, cn] = dispStat(spec, k, estRaw, side === 'mine' ? 'mine' : 'opp');
+      const txt = est[0] === est[1] ? String(bv) : `${bv}*`;
+      return `<input data-statest="${side}:${k}" class="finalstat estval estin${cn === 'green' ? ' pos' : cn === 'red' ? ' neg' : ''}" type="text" inputmode="numeric" style="${rangeFont(txt, 1.1, 3.3)}" title="推定 ${est[0]}-${est[1]}（数値を入力すると努力値を逆算して上書きします）${spec.estMapProb != null ? `・最有力候補の確率 ${Math.round(spec.estMapProb * 100)}%` : ''}${movePredTitle(spec)}" value="${txt}">`;
+    }
+    const [v, cn] = dispStat(spec, k, statArr, side === 'mine' ? 'mine' : 'opp');
+    return `<div class="finalstat ${cn === 'green' ? 'pos' : cn === 'red' ? 'neg' : ''}">${v}</div>`;
+  }).join('');
+  const boosts = STATJ.map(([k]) => {
+    if (k === 'hp') return '<div></div>';
+    const b = spec.boosts[k] || 0;
+    return `<div class="boostcell"><button class="bstbtn" data-boost="${side}:${k}:-1">−</button><span class="bstval ${b > 0 ? 'pos' : b < 0 ? 'neg' : ''}">${b > 0 ? '+' + b : b}</span><button class="bstbtn" data-boost="${side}:${k}:1">+</button></div>`;
+  }).join('');
+  return `<div class="statswrap"><div class="statsgrid">
+    <div></div>${heads}
+    <div class="sglabel ${over ? 'warn' : ''}">努力値${delta}</div>${evRow}
+    <div></div>${finals}
+    <div class="sglabel">ランク</div>${boosts}
+  </div></div>`;
+}
+function formePopHTML(side) {
+  const spec = DS(side);
+  const eff = effSpecies(spec);
+  const formes = formesOf(spec.species);
+  if (formes.length < 2) return '';
+  const base = formes[0];
+  const opts = formes.map(f => {
+    const label = biLabel((NAMES.species || {})[idOf(f)] || '', f);
+    return `<button class="formeopt ${f === eff ? 'sel' : ''}" data-formepick="${side}:${f}">${spriteImg(f, base, '')}<span>${esc(label)}</span></button>`;
+  }).join('');
+  return `<span class="formepop">${opts}</span>`;
+}
+function renderPanel(side) {
+  if (!DS(side)) {
+    return `<div class="playercalc">${playerBar(side)}<div class="oppinfo" style="margin-top:1.2rem">相手のチームはリセットされました。対戦が始まると自動で読み取ります。</div></div>`;
+  }
+  const res = !lastCalc ? null : side === 'mine' ? lastCalc.results[0] : lastCalc.oppResults[0];
+  const statArr = !lastCalc ? null : side === 'mine' ? lastCalc.stats.mine[0] : lastCalc.stats.opps[0];
+  return `<div class="playercalc">
+    ${playerBar(side)}
+    ${pokeInfo(side)}
+    ${metaRow(side)}
+    ${side === 'opps' ? oppInfoLine() : ''}
+    <div class="tables">${movesBox(side, res)}${statsGrid(side, statArr)}</div>
+  </div>`;
+}
+
+/* ---------- field ---------- */
+function sideChips(which) {
+  const s = state.side[which];
+  const defs = [['light', 'ひかりのかべ'], ['reflect', 'リフレクター'], ['veil', 'オーロラベール'], ['tailwind', 'おいかぜ'], ['guard', 'フレンドガード'], ['rock', 'ステルスロック']];
+  const sp = s.spikes || 0;
+  const ts = s.toxicSpikes || 0;
+  return defs.map(([k, label]) => `<button class="tgl primary${s[k] ? ' on' : ''}" data-sidechip="${which}:${k}">${label}</button>`).join('')
+    + `<button class="tgl primary${sp ? ' on' : ''}" data-spikechip="${which}">まきびし${sp ? '×' + sp : ''}</button>`
+    + `<button class="tgl primary${ts ? ' on' : ''}" data-toxicchip="${which}" title="どくびし (2層目で もうどく)">どくびし${ts ? '×' + ts : ''}</button>`;
+}
+function renderField() {
+  regDD('weather', {
+    options: [{ v: '', l: 'なし' }, { v: 'Sun', l: 'はれ (Sun)' }, { v: 'Rain', l: 'あめ (Rain)' }, { v: 'Sand', l: 'すなあらし (Sand)' }, { v: 'Snow', l: 'ゆき (Snow)' }, { v: 'Harsh Sunshine', l: 'つよいひざし (Harsh Sunshine)' }, { v: 'Heavy Rain', l: 'つよいあめ (Heavy Rain)' }, { v: 'Strong Winds', l: 'らんきりゅう (Strong Winds)' }],
+    value: state.field.weather || '', clearable: true,
+    onPick: v => { setFieldManual('weather', v); calcAll(); },
+  });
+  regDD('terrain', {
+    options: [{ v: '', l: 'なし' }, { v: 'Electric', l: 'エレキフィールド (Electric)' }, { v: 'Grassy', l: 'グラスフィールド (Grassy)' }, { v: 'Psychic', l: 'サイコフィールド (Psychic)' }, { v: 'Misty', l: 'ミストフィールド (Misty)' }],
+    value: state.field.terrain || '', clearable: true,
+    onPick: v => { setFieldManual('terrain', v); calcAll(); },
+  });
+  return `
+    <div class="frow"><div class="flabel">↑ 自分の場</div><div class="fchips">${sideChips('mine')}</div></div>
+    <div class="frow"><div class="flabel">天候</div><div class="fcontrol">${ddHTML('weather')}</div></div>
+    <div class="frow"><div class="flabel">フィールド</div><div class="fcontrol">${ddHTML('terrain')}</div></div>
+    <div class="frow"><div class="flabel">↓ 相手の場</div><div class="fchips">${sideChips('opp')}</div></div>`;
+}
+
+/* ---------- calc ---------- */
+function renderAll() {
+  // プリセット名の入力中は、再描画でフォーカスと入力位置が失われないよう退避する
+  const ae = document.activeElement;
+  let presetFocus = null;
+  if (ae && ae.matches && (ae.matches('[data-presetname]') || ae.matches('[data-presetrename]') || ae.matches('[data-presetsearch]'))) {
+    let sel = null;
+    try { sel = ae.selectionStart; } catch (e) { /* noop */ }
+    const attr = ae.matches('[data-presetrename]') ? 'presetrename' : (ae.matches('[data-presetsearch]') ? 'presetsearch' : 'presetname');
+    presetFocus = { attr, side: ae.dataset[attr], sel };
+  }
+  if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) {
+    try { document.activeElement.blur(); } catch (e) { /* noop */ }
+  }
+  openDDId = null;
+  closeStPop();
+  document.getElementById('playerMine').innerHTML = renderPanel('mine');
+  document.getElementById('fieldbar').innerHTML = renderField();
+  document.getElementById('playerOpp').innerHTML = renderPanel('opps');
+  if (presetFocus && ui.presetPop === presetFocus.side) {
+    const inp = document.querySelector(`[data-${presetFocus.attr}="${presetFocus.side}"]`);
+    if (inp) {
+      inp.focus();
+      if (presetFocus.sel != null) { try { inp.setSelectionRange(presetFocus.sel, presetFocus.sel); } catch (e) { /* noop */ } }
+    }
+  }
+  // プリセットのプルダウンが画面の左右にはみ出す場合は、収まるよう横にずらす
+  const presetPopEl = document.querySelector('.presetpop');
+  if (presetPopEl) {
+    const r = presetPopEl.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    let dx = 0;
+    if (r.left < 4) dx = 4 - r.left;
+    else if (r.right > vw - 4) dx = (vw - 4) - r.right;
+    if (dx) presetPopEl.style.transform = `translateX(${dx}px)`;
+  }
+}
+// プリセット名の下書き (再描画をまたいで入力内容を保持する)
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (!t || !t.closest) return;
+  const sn = t.closest('[data-presetname]');
+  if (sn) { ui.presetDraft.save[sn.dataset.presetname] = t.value; return; }
+  const rn = t.closest('[data-presetrename]');
+  if (rn) { ui.presetDraft.rename = t.value; return; }
+  const tk = t.closest('[data-presettoken]');
+  if (tk) { ui.presetDraft.token = t.value; return; }
+  const pq = t.closest('[data-presetsearch]');
+  if (pq) { ui.presetDraft.search[pq.dataset.presetsearch] = t.value; renderAll(); }
+});
+// 第2段: 選択中マッチアップについて、相手の事後上位候補を通じたダメージ幅。
+// 集計の実処理は推定エンジン側 (estimate_engine.mjs の candRanges)
+function computeCandRanges() {
+  const opp = DS('opps'), mine = DS('mine');
+  if (!opp || !mine) return { mine: [null, null, null, null], opps: [null, null, null, null], acc: 0 };
+  return estimator.candRanges({
+    mine, opp, field: state.field, side: state.side,
+    critMine: ui.crit.mine, critOpps: ui.crit.opps,
+    isSingleMine: mv => spreadCapable('mine', mv) && spreadMode('mine', mv) === 'single',
+    isSingleOpps: mv => spreadCapable('opps', mv) && spreadMode('opps', mv) === 'single',
+  });
+}
+
+function calcAll() {
+  ui.formePop = null;
+  if (!DS('mine') || !DS('opps')) { lastCalc = null; renderAll(); return; }
+  const atkSide = { isHelpingHand: !!DS('mine').hand, isSeeded: !!DS('opps').seedHeal };
+  const defSide = { isLightScreen: !!state.side.opp.light, isReflect: !!state.side.opp.reflect, isAuroraVeil: !!state.side.opp.veil, isFriendGuard: !!state.side.opp.guard, isSR: !!state.side.opp.rock, spikes: state.side.opp.spikes || 0, toxicSpikes: state.side.opp.toxicSpikes || 0, isSeeded: !!DS('opps').seedDmg };
+  const oppAtkSide = { isHelpingHand: !!DS('opps').hand, isSeeded: !!DS('mine').seedHeal };
+  const oppDefSide = { isLightScreen: !!state.side.mine.light, isReflect: !!state.side.mine.reflect, isAuroraVeil: !!state.side.mine.veil, isFriendGuard: !!state.side.mine.guard, isSR: !!state.side.mine.rock, spikes: state.side.mine.spikes || 0, toxicSpikes: state.side.mine.toxicSpikes || 0, isSeeded: !!DS('mine').seedDmg };
+  // 場に出ている2体の特性 (きんちょうかんによる きのみ無効化の判定用)
+  const effAbOf = s => s ? (s.mega && s.megaAbility ? s.megaAbility : s.ability) : '';
+  const fieldAbilities = {
+    mine: (state.active.mine || []).map(ix => state.mine[ix]).map(effAbOf).filter(Boolean),
+    opps: (state.active.opps || []).map(ix => state.opps[ix]).map(effAbOf).filter(Boolean),
+  };
+  const singleMoves = { mine: [], opps: [] };
+  for (const sd of ['mine', 'opps']) {
+    for (const mv of DS(sd).moves || []) {
+      if (mv && spreadCapable(sd, mv) && spreadMode(sd, mv) === 'single') singleMoves[sd].push(mv);
+    }
+  }
+  lastCalc = calcMatchup({
+    // KO% は相手の現在 HP を前提にする (Calcdex 本家と同じ仕様)。
+    // withCurHP でパネルの現在 HP を実数に変換して渡すと、@smogon/calc の
+    // kochance が defender.curHP() 基準で計算する。両方向とも同じ前提。
+    mine: [withCurHP(DS('mine'))], opps: [withCurHP(DS('opps'))],
+    fieldAbilities,
+    field: { weather: state.field.weather, terrain: state.field.terrain, attackerSide: atkSide, defenderSide: defSide, oppAttackerSide: oppAtkSide, oppDefenderSide: oppDefSide, tailwindMine: !!state.side.mine.tailwind, tailwindOpp: !!state.side.opp.tailwind },
+    crit: { mine: [ui.crit.mine], opps: [ui.crit.opps] },
+    singleMoves,
+    moveSpecs: { mine: [buildMoveSpecs(DS('mine'))], opps: [buildMoveSpecs(DS('opps'))] },
+    moveZ: { mine: [buildMoveZs(DS('mine'))], opps: [buildMoveZs(DS('opps'))] },
+  });
+  lastCalc.candRanges = computeCandRanges();
+  renderAll();
+  recordCalcLog();
+}
+
+/* ---------- import (adapted to displayed spec) ---------- */
+// paste がメガ形態そのもの (例: Gardevoir-Mega) で書かれていた場合の正規化。
+// 種族はベースに戻し、メガ形態は megaSpecies 側へ寄せて「メガ済み」として取り込む。
+// 種族欄にメガ形態が入ったままだと、メガボタンの表示条件 (ベース種族からメガ先を
+// 探す) が外れてボタンが消え、特性もメガ側に固定されてしまう。
+function normalizeMegaPaste(parsed) {
+  const sd = gen.species.get(idOf(parsed.species));
+  if (!sd || !sd.baseSpecies || sd.baseSpecies === parsed.species || !parsed.species.includes('-Mega')) return null;
+  const base = sd.baseSpecies;
+  const full = SPECIES_ABILITIES[base];
+  const bsd = gen.species.get(idOf(base));
+  const baseList = (full && full.length) ? [...full] : (bsd ? Object.values(bsd.abilities || {}) : []);
+  const out = {
+    species: base, megaSpecies: parsed.species, mega: true,
+    megaAbility: Object.values(sd.abilities || {})[0] || null,
+    ability: parsed.ability || baseList[0] || '', item: parsed.item || '',
+  };
+  if (parsed.ability && baseList.length && !baseList.includes(parsed.ability)) {
+    // paste の特性はメガ側の特性 (ベースではあり得ない) → メガ特性として保持し、
+    // ベース特性は候補の先頭を仮置きする
+    out.megaAbility = parsed.ability;
+    out.ability = baseList[0];
+  }
+  if (!out.item) out.item = stoneForForme(parsed.species) || '';
+  return out;
+}
+function applyImport(side, parsed) {
+  if (!parsed || !parsed.species) return;
+  const idx = state.sel[side];
+  const keep = state[side][idx];
+  const mp = normalizeMegaPaste(parsed);
+  const megaSpecies = mp ? mp.megaSpecies : (megaFromItem(parsed.item) || parsed.megaSpecies || null);
+  const megaAbility = mp ? mp.megaAbility : (megaSpecies ? (Object.values(gen.species.get(idOf(megaSpecies))?.abilities || {})[0] || null) : null);
+  state[side][idx] = {
+    species: mp ? mp.species : parsed.species, kind: 'custom',
+    sp: { ...parsed.sp }, nature: parsed.nature || keep.nature,
+    ability: mp ? mp.ability : (parsed.ability || keep.ability), item: mp ? mp.item : (parsed.item || ''),
+    moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
+    curHPPercent: keep.curHPPercent, boosts: keep.boosts, status: keep.status,
+    megaSpecies, megaAbility, mega: mp ? true : (!!megaSpecies && keep.mega),
+    teraType: parsed.teraType || '', terastallized: !!parsed.teraType, dynamax: !!parsed.dynamax,
+    knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
+    note: 'Imported set', corrected: ['読み込み'],
+  };
+  if (side === 'opps') state.oppTeam[idx] = mp ? mp.species : parsed.species;
+}
+function applyImportAll(side, list) {
+  if (!list.length) return;
+  list.forEach((parsed, idx) => {
+    const mp = normalizeMegaPaste(parsed);
+    const megaSpecies = mp ? mp.megaSpecies : (megaFromItem(parsed.item) || parsed.megaSpecies || null);
+    const megaAbility = mp ? mp.megaAbility : (megaSpecies ? (Object.values(gen.species.get(idOf(megaSpecies))?.abilities || {})[0] || null) : null);
+    state[side][idx] = {
+      species: mp ? mp.species : parsed.species, kind: 'custom',
+      sp: { ...parsed.sp }, nature: parsed.nature || 'Serious',
+      ability: mp ? mp.ability : (parsed.ability || abilitiesOf({ species: parsed.species })[0] || ''), item: mp ? mp.item : (parsed.item || ''),
+      moves: parsed.moves.slice(0, 4), origMoves: parsed.moves.slice(0, 4),
+      curHPPercent: 100, boosts: blankBoosts(), status: '',
+      megaSpecies, megaAbility, mega: mp ? true : false,
+      teraType: parsed.teraType || '', terastallized: !!parsed.teraType, dynamax: !!parsed.dynamax,
+      knownMoves: side === 'opps' ? parsed.moves.slice(0, 4) : [],
+      note: 'Imported set', corrected: ['読み込み'],
+    };
+    if (side === 'opps') state.oppTeam[idx] = mp ? mp.species : parsed.species;
+  });
+  // インポートした数より後ろのスロットは空きにする (読み込み前のチームを残さない)。
+  // 相手側は oppTeam も切り詰めないと、次の state.json 適用で旧メンバーが復活する
+  state[side].length = list.length;
+  if (side === 'opps') state.oppTeam.length = list.length;
+  state.sel[side] = 0;
+  state.active[side] = [0, Math.min(1, list.length - 1)];
+  faintLock[side].clear();
+  revivalPending[side] = 0;
+  if (side === 'opps') resetInference();
+}
+function megaFromItem(itemEn) {
+  if (!itemEn) return null;
+  // gen.items.get は ID 形式 (小文字) で引く必要がある (表示名では引けない)
+  const it = gen.items.get(idOf(itemEn));
+  if (it && it.megaStone) return Object.values(it.megaStone)[0];
+  return null;
+}
+
+/* ---------- events ---------- */
+document.addEventListener('mousedown', e => {
+  // 技のヒット数等のセレクタ (ネイティブ select) はドロップダウン操作を妨げない
+  if (e.target.closest && e.target.closest('[data-mspec]')) return;
+  const spb = e.target.closest('[data-spread]');
+  if (spb) {
+    e.preventDefault(); e.stopPropagation();
+    ui.spreadGuard = Date.now();
+    const [sd, mi, mode] = spb.dataset.spread.split(':');
+    const spec = DS(sd);
+    const mv = spec && spec.moves[+mi];
+    if (mv) ui.spreadSel[sd][mv] = mode;
+    calcAll();
+    return;
+  }
+  const clear = e.target.closest('[data-ddclear]');
+  if (clear) { e.preventDefault(); e.stopPropagation(); pickDD(clear.dataset.ddclear, ''); return; }
+  const opt = e.target.closest('[data-ddopt]');
+  if (opt) { e.preventDefault(); const host = opt.closest('[data-sdd]'); if (host) pickDD(host.dataset.sdd, opt.dataset.ddopt); return; }
+  const ctl = e.target.closest('[data-ddctl]');
+  if (ctl) {
+    const id = ctl.dataset.ddctl;
+    if (openDDId === id) { /* already open */ const inp = ctl.querySelector('.sdd-input'); if (e.target.closest && e.target.closest('.sdd-chev')) { e.preventDefault(); closeDD(); } else if (inp && e.target === inp && document.activeElement === inp) { e.preventDefault(); closeDD(); } else if (inp && e.target !== inp) { e.preventDefault(); inp.focus(); } }
+    else { e.preventDefault(); openDD(id); }
+    return;
+  }
+  if (!e.target.closest('.sdd')) closeDD();
+  if (!e.target.closest('.stpop') && !e.target.closest('[data-statusbtn]')) closeStPop();
+  if (ui.formePop && !e.target.closest('[data-forme]') && !e.target.closest('.formepop')) { ui.formePop = null; renderAll(); }
+  if (ui.presetPop && !e.target.closest('[data-presetbtn]') && !e.target.closest('.presetpop')) { ui.presetPop = null; renderAll(); }
+  if (ui.statusPop && !e.target.closest('[data-vstatusbtn]') && !e.target.closest('.statuspop') && !e.target.closest('[data-statusclear]')) { ui.statusPop = null; renderAll(); }
+});
+document.addEventListener('click', e => {
+  const t = e.target;
+  const icon = t.closest('[data-icon]');
+  if (icon) { const [side, i] = icon.dataset.icon.split(':'); state.sel[side] = +i; applySetterAbility(state[side][+i]); calcAll(); return; }
+  const fpick = t.closest('[data-focuspick]');
+  if (fpick) { const [fside, fmode] = fpick.dataset.focuspick.split(':'); setFocusMode(fside, fmode); renderAll(); return; }
+  const rcopy = t.closest('[data-rentalcopy]');
+  if (rcopy) {
+    const code = presetRental[rcopy.dataset.rentalcopy] || '';
+    if (code && navigator.clipboard) navigator.clipboard.writeText(code).catch(() => {});
+    const old = rcopy.textContent;
+    rcopy.textContent = 'コピー済み';
+    setTimeout(() => { rcopy.textContent = old; }, 1600);
+    return;
+  }
+  const cap = t.closest('[data-capture]');
+  if (cap) { captureTeam(cap.dataset.capture); return; }
+  const act = t.closest('[data-act]');
+  if (act) {
+    const [side, what] = act.dataset.act.split(':');
+    if (what === 'import') { ui.importing[side] = ui.importing[side] ? false : true; if (ui.importing[side]) ui.importingAll[side] = false; renderAll(); const ta = document.querySelector(`[data-importbox="${side}"]`); if (ta) ta.focus(); }
+    if (what === 'importall') { ui.importingAll[side] = ui.importingAll[side] ? false : true; if (ui.importingAll[side]) ui.importing[side] = false; renderAll(); const ta = document.querySelector(`[data-importallbox="${side}"]`); if (ta) ta.focus(); }
+    if (what === 'export') {
+      if (navigator.clipboard) navigator.clipboard.writeText(exportText(DS(side))).catch(() => {});
+      const old = act.textContent;
+      act.textContent = 'コピー済み';
+      setTimeout(() => { act.textContent = old; }, 1600);
+    }
+    if (what === 'all') {
+      const team = side === 'mine' ? state.mine : state.opps;
+      if (navigator.clipboard) navigator.clipboard.writeText(team.map(exportText).join('\n\n')).catch(() => {});
+      const old = act.textContent;
+      act.textContent = 'コピー済み';
+      setTimeout(() => { act.textContent = old; }, 1600);
+    }
+    return;
+  }
+  const ai = t.closest('[data-applyimport]');
+  if (ai) {
+    const side = ai.dataset.applyimport;
+    const ta = document.querySelector(`[data-importbox="${side}"]`);
+    const parsed = parseSet(ta ? ta.value : '');
+    ui.importing[side] = false;
+    applyImport(side, parsed);
+    calcAll();
+    return;
+  }
+  const aia = t.closest('[data-applyimportall]');
+  if (aia) {
+    const side = aia.dataset.applyimportall;
+    const ta = document.querySelector(`[data-importallbox="${side}"]`);
+    const list = parseTeam(ta ? ta.value : '');
+    ui.importingAll[side] = false;
+    applyImportAll(side, list);
+    calcAll();
+    return;
+  }
+  const fp = t.closest('[data-formepick]');
+  if (fp) {
+    const [side, forme] = fp.dataset.formepick.split(':');
+    const spec = DS(side);
+    const base = gen.species.get(idOf(spec.species))?.baseSpecies || spec.species;
+    if (forme === base) {
+      spec.mega = false;
+      if (spec.species !== base) {
+        // フォルム違い (イルカマン等) は種族自体をベースに戻す
+        spec.species = base;
+        spec.megaSpecies = undefined;
+        const list = speciesAbilities(spec);
+        if (list.length && !list.includes(spec.ability)) spec.ability = list[0];
+      }
+    }
+    else if (forme.includes('-Mega')) {
+      spec.megaSpecies = forme;
+      spec.mega = true;
+      const sd = gen.species.get(idOf(forme));
+      if (sd) spec.megaAbility = Object.values(sd.abilities)[0];
+      const stone = stoneForForme(forme);
+      if (stone) spec.item = stone;
+    } else {
+      spec.species = forme;
+      spec.mega = false;
+      spec.megaSpecies = undefined;
+      const list = speciesAbilities(spec);
+      if (list.length && !list.includes(spec.ability)) spec.ability = list[0];
+    }
+    ui.formePop = null;
+    calcAll();
+    return;
+  }
+  const fo = t.closest('[data-forme]');
+  if (fo) { const side = fo.dataset.forme; ui.formePop = ui.formePop === side ? null : side; renderAll(); return; }
+  const pb = t.closest('[data-presetbtn]');
+  if (pb) { const side = pb.dataset.presetbtn; ui.presetPop = ui.presetPop === side ? null : side; if (!ui.presetPop) ui.presetRename = null; if (ui.presetPop) ensureVgcTeams(); renderAll(); if (ui.presetPop) { const si = document.querySelector(`[data-presetsearch="${side}"]`); if (si) { si.focus(); try { si.setSelectionRange(si.value.length, si.value.length); } catch {} } } return; }
+  const vt = t.closest('[data-vgcteam]');
+  if (vt) { const [side, teamId] = vt.dataset.vgcteam.split(':'); applyVgcTeam(side, teamId); return; }
+  const psv = t.closest('[data-presetsave]');
+  if (psv) { const side = psv.dataset.presetsave; const inp = document.querySelector(`[data-presetname="${side}"]`); savePreset(side, ui.presetDraft.save[side] != null ? ui.presetDraft.save[side] : (inp ? inp.value : '')); delete ui.presetDraft.save[side]; renderAll(); return; }
+  const ptk = t.closest('[data-presettokensave]');
+  if (ptk) {
+    const tok = (ui.presetDraft.token || '').trim();
+    if (tok) { try { localStorage.setItem(GH_TOKEN_KEY, tok); } catch (e) { /* ignore */ } ui.presetDraft.token = ''; presetSyncMsg = 'トークンを保存しました'; schedulePresetPush(); }
+    renderAll();
+    return;
+  }
+  const ped = t.closest('[data-presetedit]');
+  if (ped) { const [side, idx] = ped.dataset.presetedit.split(':'); const cur = loadPresetStore()[side][+idx]; if (cur) { ui.presetRename = { side, idx: +idx }; ui.presetDraft.rename = cur.name; } renderAll(); return; }
+  const prs = t.closest('[data-presetrenamesave]');
+  if (prs) { const [side, idx] = prs.dataset.presetrenamesave.split(':'); if (renamePreset(side, +idx, ui.presetDraft.rename)) { ui.presetRename = null; ui.presetDraft.rename = ''; } renderAll(); return; }
+  const prc = t.closest('[data-presetrenamecancel]');
+  if (prc) { ui.presetRename = null; ui.presetDraft.rename = ''; renderAll(); return; }
+  const pld = t.closest('[data-presetload]');
+  if (pld) { const [side, idx] = pld.dataset.presetload.split(':'); applyPreset(side, +idx); return; }
+  const pdel = t.closest('[data-presetdel]');
+  if (pdel) { const [side, idx] = pdel.dataset.presetdel.split(':'); deletePreset(side, +idx); renderAll(); return; }
+  const mg = t.closest('[data-mega]');
+  if (mg) {
+    const spec = DS(mg.dataset.mega);
+    const formes = megaFormesOf(spec.species);
+    if (formes.length) {
+      if (!spec.mega) { spec.mega = true; spec.megaSpecies = formes[0]; }
+      else {
+        const i = formes.indexOf(spec.megaSpecies);
+        if (i >= 0 && i < formes.length - 1) spec.megaSpecies = formes[i + 1];
+        else spec.mega = false;
+      }
+      if (spec.mega) {
+        const sd = gen.species.get(idOf(spec.megaSpecies));
+        if (sd) spec.megaAbility = Object.values(sd.abilities)[0];
+        const stone = stoneForForme(spec.megaSpecies);
+        if (stone) spec.item = stone;
+      }
+    }
+    applySetterAbility(spec);
+    calcAll();
+    return;
+  }
+  const cr = t.closest('[data-crit]');
+  if (cr) { const side = cr.dataset.crit; ui.crit[side] = !ui.crit[side]; calcAll(); return; }
+  const tr = t.closest('[data-tera]');
+  if (tr) {
+    const spec = DS(tr.dataset.tera);
+    spec.terastallized = !spec.terastallized;
+    if (spec.terastallized && !spec.teraType) { const sd2 = speciesData(spec); spec.teraType = (sd2 && sd2.types && sd2.types[0]) || 'Normal'; }
+    calcAll();
+    return;
+  }
+  const dx = t.closest('[data-dynamax]');
+  if (dx) {
+    const spec = DS(dx.dataset.dynamax);
+    spec.dynamax = !spec.dynamax;
+    calcAll();
+    return;
+  }
+  const stb = t.closest('[data-vstatusbtn]');
+  if (stb) { ui.statusPop = ui.statusPop === stb.dataset.vstatusbtn ? null : stb.dataset.vstatusbtn; renderAll(); return; }
+  const stc = t.closest('[data-statusclear]');
+  if (stc) {
+    const spec = DS(stc.dataset.statusclear);
+    for (const [k] of STATUS_DEFS) spec[k] = false;
+    calcAll();
+    return;
+  }
+  const sti = t.closest('[data-status]');
+  if (sti) {
+    const [ssd, skey] = sti.dataset.status.split(':');
+    DS(ssd)[skey] = sti.checked;
+    calcAll();
+    return;
+  }
+  const hd = t.closest('[data-hand]');
+  if (hd) {
+    const spec = DS(hd.dataset.hand);
+    spec.hand = !spec.hand;
+    calcAll();
+    return;
+  }
+  const pt = t.closest('[data-poketetsu]');
+  if (pt) {
+    const url = pokeTetsuURL(DS(pt.dataset.poketetsu));
+    if (url) window.open(url, 'poketetsu', 'popup=yes,width=1100,height=800');
+    return;
+  }
+  const pdb = t.closest('[data-pokedb]');
+  if (pdb) {
+    const url = pokedbURL(DS(pdb.dataset.pokedb));
+    if (url) window.open(url, 'pokedb', 'popup=yes,width=1100,height=800');
+    return;
+  }
+  const zb = t.closest('[data-zmove]');
+  if (zb) {
+    const [zsd, zmi] = zb.dataset.zmove.split(':');
+    const spec = DS(zsd);
+    spec.moveZ = spec.moveZ || {};
+    if (spec.moveZ[+zmi]) delete spec.moveZ[+zmi]; else spec.moveZ[+zmi] = true;
+    calcAll();
+    return;
+  }
+  const spb = t.closest('[data-spread]');
+  if (spb) {
+    if (Date.now() - (ui.spreadGuard || 0) < 1000) return;
+    const [sd, mi, mode] = spb.dataset.spread.split(':');
+    const spec = DS(sd);
+    const mv = spec && spec.moves[+mi];
+    if (mv) ui.spreadSel[sd][mv] = mode;
+    calcAll();
+    return;
+  }
+  const bs = t.closest('[data-boost]');
+  if (bs) {
+    const [side, k, d] = bs.dataset.boost.split(':');
+    const spec = DS(side);
+    spec.boosts[k] = Math.max(-6, Math.min(6, (spec.boosts[k] || 0) + (+d)));
+    calcAll();
+    return;
+  }
+  const chip = t.closest('[data-sidechip]');
+  if (chip) {
+    const [which, k] = chip.dataset.sidechip.split(':');
+    state.side[which][k] = !state.side[which][k];
+    calcAll();
+    return;
+  }
+  const spk = t.closest('[data-spikechip]');
+  if (spk) {
+    const which = spk.dataset.spikechip;
+    state.side[which].spikes = ((state.side[which].spikes || 0) + 1) % 4;
+    calcAll();
+    return;
+  }
+  const tox = t.closest('[data-toxicchip]');
+  if (tox) {
+    const which = tox.dataset.toxicchip;
+    state.side[which].toxicSpikes = ((state.side[which].toxicSpikes || 0) + 1) % 3;
+    calcAll();
+    return;
+  }
+  const sb = t.closest('[data-statusbtn]');
+  if (sb) { openStPop(sb.dataset.statusbtn, sb); return; }
+  const sp = t.closest('[data-statuspick]');
+  if (sp) {
+    const [side, v] = sp.dataset.statuspick.split(':');
+    DS(side).status = v;
+    closeStPop();
+    calcAll();
+    return;
+  }
+  const cp = t.closest('[data-copy]');
+  if (cp) {
+    if (navigator.clipboard) navigator.clipboard.writeText(cp.dataset.copy);
+    cp.classList.add('copied');
+    setTimeout(() => cp.classList.remove('copied'), 700);
+    return;
+  }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.matches('[data-mspec]')) {
+    const [sd, mi] = t.dataset.mspec.split(':');
+    const spec = DS(sd);
+    if (spec) {
+      spec.moveSpec = spec.moveSpec || {};
+      if (t.value === '') delete spec.moveSpec[mi]; else spec.moveSpec[mi] = +t.value;
+      calcAll();
+    }
+    return;
+  }
+  if (t.matches('[data-hpnum]')) {
+    const spec = DS(t.dataset.hpnum);
+    spec.curHPPercent = Math.max(0, Math.min(100, Math.round(+t.value || 0)));
+    if (spec.curHPPercent > 0) faintLock[t.dataset.hpnum].delete(spec.species);
+    calcAll();
+    return;
+  }
+  if (t.matches('[data-ev]')) {
+    const [side, k] = t.dataset.ev.split(':');
+    const prevSide = state.sel[side];
+    setEv(side, k, t.value, false);
+    return;
+  }
+  if (t.matches('[data-evest]')) {
+    const [side, k] = t.dataset.evest.split(':');
+    commitEstEv(side, k, t.value);
+    return;
+  }
+  if (t.matches('[data-statest]')) {
+    const [side, k] = t.dataset.statest.split(':');
+    commitEstStat(side, k, t.value);
+    return;
+  }
+});
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t.matches && t.matches('[data-ev]') && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    const [side, k] = t.dataset.ev.split(':');
+    const spec = DS(side);
+    const step = (e.shiftKey ? 4 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+    setEv(side, k, (spec.sp[k] || 0) + step, true);
+  }
+  if (t.matches && t.matches('[data-hpnum]') && e.key === 'Enter') t.blur();
+  if (t.matches && t.matches('[data-evest]') && e.key === 'Enter') { const [side, k] = t.dataset.evest.split(':'); commitEstEv(side, k, t.value); }
+  if (t.matches && t.matches('[data-statest]') && e.key === 'Enter') { const [side, k] = t.dataset.statest.split(':'); commitEstStat(side, k, t.value); }
+});
+document.addEventListener('focusin', e => {
+  if (e.target.matches && (e.target.matches('[data-ev]') || e.target.matches('[data-evest]') || e.target.matches('[data-statest]'))) e.target.select();
+});
+$('applyjson').addEventListener('click', () => {
+  try { applyState(JSON.parse($('jsonin').value)); } catch (err) { /* ignore */ }
+});
+
+/* ---------- state.json 連携 ---------- */
+const lastActiveKey = { mine: '', opps: '' };
+// 行動順の証拠は、ペアの最初の技が発動する前 (実質ターン開始時点) の
+// ランク補正で評価する。パネルの現在値は、そのターンの技で変化した
+// 補正 (がんせきふうじの素早さ低下、くだけるよろいの上昇など) を
+// 含みうるため、前回処理時点のパネル補正の控えをターン開始分として
+// 保持し、技イベントの文脈ではそちらを渡す
+// (battle_20261122_171847 seq34/35: 補正後の値で全候補が矛盾し
+// speFlag が誤発火した)
+let turnStartBoosts = {};   // turn -> { 'mine:<species>' | 'opp:<species>': boosts }
+let prevPanelBoosts = null; // 前回の applyState 処理後のパネル補正の控え
+function snapshotPanelBoosts() {
+  const m = {};
+  for (const s of state.mine) if (s) m['mine:' + s.species] = { ...(s.boosts || {}) };
+  for (let pi = 0; pi < state.oppTeam.length; pi++) { const s = state.opps[pi]; if (s) m['opp:' + state.oppTeam[pi]] = { ...(s.boosts || {}) }; }
+  return m;
+}
+// 技イベント用の文脈: パネルのランク補正を、そのターンの開始時点の
+// 控えで置き換えたもの (控えが無いターンは現在値のまま)
+function estCtxAtTurnStart(turn) {
+  const ctx = estCtx();
+  const snap = typeof turn === 'number' ? turnStartBoosts[turn] : null;
+  if (!snap) return ctx;
+  for (const k of Object.keys(ctx.my)) { const b = snap['mine:' + k]; if (b) ctx.my[k] = { ...ctx.my[k], boosts: { ...b } }; }
+  for (const k of Object.keys(ctx.opp)) { const b = snap['opp:' + k]; if (b) ctx.opp[k] = { ...ctx.opp[k], boosts: { ...b } }; }
+  return ctx;
+}
+// フォーカス (選択中の1体) を盤面の読み取りに追随させるか。自分側と
+// 相手側で独立に設定する。'auto' = 交代で入ってきた方へ自動で移す /
+// 'manual' = クリックでのみ変わる
+const focusModes = { mine: 'manual', opps: 'manual' };
+try {
+  const raw = localStorage.getItem('champions-calc-focus');
+  if (raw === 'auto' || raw === 'manual') focusModes.mine = raw; // 旧形式 (自分側のみ) の移行
+  else if (raw) { const o = JSON.parse(raw); for (const s of ['mine', 'opps']) if (o && (o[s] === 'auto' || o[s] === 'manual')) focusModes[s] = o[s]; }
+} catch (e) {}
+function focusModeFor(side) { return focusModes[side] || 'manual'; }
+function setFocusMode(side, m) {
+  if (m !== 'auto' && m !== 'manual') return;
+  focusModes[side] = m;
+  try { localStorage.setItem('champions-calc-focus', JSON.stringify(focusModes)); } catch (e) {}
+}
+function applyRevealedPreserving(spec, rev) {
+  let fresh = oppSpec(spec.species, 'usage');
+  // フォルム違い (イルカマン(ヒーロー)等) には使用率データが無いため、
+  // ベース種族の使用率型を流用し種族だけ差し替える (想定型が毎回変わらないように)
+  if (!usageSpec(spec.species, USAGE_SETS)) {
+    const base = gen.species.get(idOf(spec.species))?.baseSpecies;
+    if (base && base !== spec.species && usageSpec(base, USAGE_SETS)) {
+      fresh = oppSpec(base, 'usage');
+      fresh.species = spec.species;
+    }
+  }
+  applyRevealed(fresh, rev);
+  for (const f of spec.corrected || []) {
+    if (f === '特性') fresh.ability = spec.ability;
+    if (f === '性格') fresh.nature = spec.nature;
+    if (f === '持ち物') { fresh.item = spec.item; fresh.megaSpecies = spec.megaSpecies; fresh.megaAbility = spec.megaAbility; fresh.mega = spec.mega; }
+    if (f === '技') fresh.moves = [...spec.moves];
+    if (f === 'EV') fresh.sp = { ...spec.sp };
+    if (!fresh.corrected.includes(f)) fresh.corrected.push(f);
+  }
+  // 手動で切り替えたメガシンカ状態は再構築で消さない
+  if (spec.mega && !fresh.mega) { fresh.mega = true; fresh.megaSpecies = spec.megaSpecies; fresh.megaAbility = spec.megaAbility; }
+  if (!fresh.megaSpecies && spec.megaSpecies) fresh.megaSpecies = spec.megaSpecies;
+  fresh.knownMoves = [...new Set([...(fresh.knownMoves || []), ...(spec.knownMoves || [])])];
+  fresh.curHPPercent = spec.curHPPercent; fresh.boosts = spec.boosts; fresh.status = spec.status; fresh.moveSpec = spec.moveSpec;
+  fresh.teraType = spec.teraType; fresh.terastallized = spec.terastallized;
+  fresh.moveZ = spec.moveZ;
+  fresh.dynamax = spec.dynamax;
+  fresh.ingrain = spec.ingrain;
+  fresh.aquaring = spec.aquaring;
+  fresh.seedDmg = spec.seedDmg;
+  fresh.seedHeal = spec.seedHeal;
+  fresh.hand = spec.hand;
+  fresh.octolock = spec.octolock;
+  fresh.curse = spec.curse;
+  fresh.bind = spec.bind;
+  fresh.saltcure = spec.saltcure;
+  fresh.nightmare = spec.nightmare;
+  if (spec.estManual) fresh.estManual = { ...spec.estManual };
+  if (spec.itemLost) fresh.itemLost = true;
+  if (spec.unburden) fresh.unburden = true;
+  sanitizeOppMoves(fresh);
+  arrangeKnownFirst(fresh);
+  return fresh;
+}
+// リーダーがメガシンカを検出したら、その枠をメガ種族として計算する
+function applyMegaFlag(spec, en) {
+  if (!en.mega || spec.mega) return;
+  spec.mega = true;
+  if (en.megaSpecies) spec.megaSpecies = en.megaSpecies;
+  if (!spec.megaSpecies) spec.megaSpecies = megaFormeOf(spec.species);
+  if (spec.megaSpecies) {
+    const msd = gen.species.get(idOf(spec.megaSpecies));
+    if (msd) spec.megaAbility = Array.isArray(msd.abilities) ? msd.abilities[0] : Object.values(msd.abilities || {})[0];
+  }
+}
+/* ---------- 相手の型推定エンジン ---------- */
+// reader が state.json に流すイベント (技の使用順と、ダメージ+その時の状況) を
+// 自チームの正確な数値と照らし合わせ、相手の実数値・努力値・性格の範囲を絞り込む。
+// モデル化できない要素 (未判明の持ち物・特性など) を含むイベントは、候補が
+// 空になった時点で矛盾として捨てるため、推定が壊れることはない。
+// 型推定エンジン (estimate_engine.mjs)。材料データは getData 経由で渡し、
+// 対戦の証拠は下記のアダプタが画面状態からスナップショットを作って渡す
+const estimator = createEstimator({
+  getData: () => ({ USAGE_SETS, POKEDB_PARSED, META_SETS, META_SETS_LOADED, NAMES, VGC_SETS: VGC_CORPUS, SPECIES_MOVES }),
+  effSpecies,
+});
+let infDirty = false;
+let autoSideTurn;
+function resetInference() {
+  sendInferenceLog(true); // 前の対戦分の最終送信 (送信は直列化され、実行中でも省略されない)
+  if (calcAutoPending) { const p = calcAutoPending; calcAutoPending = null; commitCalcRecord(p); }
+  sendCalcLog(true); // ダメ計ログも同様に最終送信する
+  estimator.reset();
+  calcLog = calcArchive[inferBucketKey()] || [];
+  calcLastSig = '';
+  curTurn = null;
+  turnStartBoosts = {};
+  prevPanelBoosts = null;
+  // 蓄積は対戦別アーカイブに残る。inferLog は現在の対戦分のアーカイブを
+  // 指し続けるため、同一対戦内のリセットで記録が切り捨てられることはない
+  inferLog = inferArchive[inferBucketKey()] || [];
+  infDirty = false;
+  // 新しい対戦では天候/フィールドの手動編集の保持も解除する
+  fieldHold.weather = null;
+  fieldHold.terrain = null;
+  // 対戦イベントから自動反映したサイドコンディション (おいかぜ・壁・てだすけ) の
+  // セットされたターン。新しい対戦では場の状態ごとリセットする
+  autoSideTurn = { mine: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 }, opp: { tailwind: -99, light: -99, reflect: -99, veil: -99, hand: -99 } };
+  state.side = { mine: { light: false, reflect: false, veil: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 }, opp: { light: false, reflect: false, veil: false, guard: false, tailwind: false, rock: false, spikes: 0, toxicSpikes: 0 } };
+}
+// 設置物 (ステルスロック/まきびし) をそのサイドから消す
+// 設置物 (ステルスロック/まきびし) をそのサイドから消す
+function clearSideHazardsUI(sideP) {
+  const sk = sideP === 'p1' ? 'mine' : 'opp';
+  if (state.side[sk].rock) { state.side[sk].rock = false; infDirty = true; }
+  if (autoSideTurn) autoSideTurn[sk].rock = -99;
+  if (state.side[sk].spikes) { state.side[sk].spikes = 0; infDirty = true; }
+  if (state.side[sk].toxicSpikes) { state.side[sk].toxicSpikes = 0; infDirty = true; }
+}
+// 技の使用イベントからサイドコンディションをチップ状態へ反映する
+// てだすけは単体対象のため、その側の場に出ている個体のフラグへ反映する
+function setAutoSide(sideP, key, turn) {
+  const sk = sideP === 'p1' ? 'mine' : 'opp';
+  if (key === 'hand') {
+    for (const ix of state.active[sk] || []) {
+      const spec = state[sk][ix];
+      if (spec && !spec.hand) { spec.hand = true; infDirty = true; }
+    }
+    autoSideTurn[sk].hand = turn;
+    return;
+  }
+  if (!state.side[sk][key]) { state.side[sk][key] = true; infDirty = true; }
+  autoSideTurn[sk][key] = turn;
+}
+// 効果ターンが切れた自動コンディションを落とす (おいかぜ4ターン / 壁5ターン / てだすけ当ターンのみ)。
+// 手動で付けたチップは autoSideTurn が -99 のままなので、ここでは落ちない
+function expireAutoSide(turn) {
+  const dur = { tailwind: 4, light: 5, reflect: 5, veil: 5, hand: 1 };
+  for (const sk of ['mine', 'opp']) for (const k of Object.keys(dur)) {
+    const s = autoSideTurn[sk][k];
+    if (s >= 0 && turn - s >= dur[k]) {
+      autoSideTurn[sk][k] = -99;
+      if (k === 'hand') {
+        for (const spec of state[sk]) if (spec && spec.hand) { spec.hand = false; infDirty = true; }
+      } else if (state.side[sk][k]) { state.side[sk][k] = false; infDirty = true; }
+    }
+  }
+}
+resetInference();
+// 相手チーム (判明している6体) を推定エンジンのチーム文脈へ渡す。
+// エンジン側の setTeamContext は対戦リセットでは消えないため、チームが
+// 変わったときだけ渡し直す (候補は種族ごとの初回構築時にしか作られないので、
+// イベント再生より前に呼ぶこと)。未判明・空なら null で補正なしになる
+let lastTeamContextKey = null;
+function syncTeamContext() {
+  const key = state.oppTeam.join('\n');
+  if (key === lastTeamContextKey) return;
+  lastTeamContextKey = key;
+  estimator.setTeamContext(state.oppTeam.length ? [...state.oppTeam] : null);
+}
+// 推定レンジ表示のはみ出し防止: 基準フォントで budget 文字分まで、超えたら比例縮小
+function rangeFont(txt, base, budget) {
+  const l = String(txt).length;
+  return l <= budget ? '' : `font-size:${(base * budget / l).toFixed(2)}rem;`;
+}
+function infMySpec(species, ev, isAtk) {
+  const spec = state.mine.find(x => x.species === species);
+  if (!spec) return null;
+  const mega = isAtk ? ev.atkMega : ev.defMega;
+  return { ...spec, mega: !!mega || !!spec.mega, megaSpecies: mega || spec.megaSpecies,
+    boosts: { ...(isAtk ? ev.atkB : ev.defB) }, status: (isAtk ? ev.atkS : ev.defS) || '',
+    curHPPercent: isAtk ? ev.atkHp : ev.defHp };
+}
+function infOppBase(species, ev, isAtk) {
+  const pi = state.oppTeam.indexOf(species);
+  const spec = pi >= 0 ? state.opps[pi] : oppSpec(species, 'usage');
+  if (!spec) return null;
+  const mega = isAtk ? ev.atkMega : ev.defMega;
+  return { ...spec, mega: !!mega, megaSpecies: mega || undefined,
+    boosts: { ...(isAtk ? ev.atkB : ev.defB) }, status: (isAtk ? ev.atkS : ev.defS) || '',
+    curHPPercent: isAtk ? ev.atkHp : ev.defHp, estSp: undefined, estStat: undefined, estNature: undefined };
+}
+// 推定に使う相手 spec の候補: 持ち物が未判明なら「持ち物なし」も併せて候補にする
+// (こだわり系・いのちのたま・とつげきチョッキ等の未判明補正で推定が外れるのを防ぐ)
+function infBases(species, ev, isAtk) {
+  const base = infOppBase(species, ev, isAtk);
+  if (!base) return [];
+  const pi = state.oppTeam.indexOf(species);
+  const panel = pi >= 0 ? state.opps[pi] : null;
+  const itemKnown = !!panel && (panel.corrected || []).includes('持ち物');
+  const out = [base];
+  if (!itemKnown && base.item) out.push({ ...base, item: '' });
+  return out;
+}
+/* ---------- 型推定エンジンへのアダプタ ----------
+   推定の実処理は estimate_engine.mjs 側にある。UI は画面状態から証拠の
+   スナップショットを作って渡し、返ってきた結果を表示・反映するだけに徹する */
+// 画面状態から、推定エンジンへ渡す証拠スナップショットを作る
+function estCtx() {
+  const my = {}, opp = {};
+  for (const s of state.mine) if (s) my[s.species] = s;
+  for (let pi = 0; pi < state.oppTeam.length; pi++) { const s = state.opps[pi]; if (s) opp[state.oppTeam[pi]] = s; }
+  return { my, opp, field: { weather: state.field.weather, terrain: state.field.terrain } };
+}
+function syncEstDirty() { if (estimator.takeDirty()) infDirty = true; }
+// 推論過程ログ: エンジンが推論更新のたびに積んだスナップショットを
+// applyState の処理後に受け取り、この対戦分として蓄積する (形式はエンジン定義)
+function drainInferenceLog() {
+  if (!estimator || typeof estimator.takeInferenceLog !== 'function') return;
+  let recs = null;
+  try { recs = estimator.takeInferenceLog(); } catch (e) { return; }
+  if (!recs || !recs.length) return;
+  const at = new Date().toISOString();
+  const bucket = inferBucketKey();
+  const arr = inferArchive[bucket] || (inferArchive[bucket] = []);
+  for (const r of recs) arr.push({ at, battle: lastBattleKey, ...r });
+  inferLog = arr;
+  sendInferenceLog(false);
+}
+// 推論過程ログを serve.py へ送る (POST /inference_log、上書き方式・全件再送)。
+// serve.py 側で logs/battle_<試合キー>_inference.json として保存され、
+// その試合のログ一式 (備考ゲート・暗号化) に同梱される
+function inferBattleKey() {
+  if (!inferLog.length) return null;
+  const key = String(inferLog[0].battle || '').replace(/^battle_/, '');
+  return /^[0-9]{8}_[0-9]{6}(_salvage)?$/.test(key) ? key : null;
+}
+// 実際の送信。実行時点のアーカイブ全件を送るため、キュー待ちの間に
+// 取り込まれた記録も漏れない。送れた対戦分のアーカイブは、現在の対戦
+// でなければ破棄する (現在の対戦分は以降の送信でも全件が要る)
+async function doSendInferenceLog(key) {
+  const host = (typeof location !== 'undefined' && location.hostname) || '';
+  if (host !== 'localhost' && host !== '127.0.0.1') return;
+  const records = inferArchive[key];
+  if (!records || !records.length) return;
+  inferSendAt = Date.now();
+  let ok = false;
+  try {
+    const res = await fetch('./inference_log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'inference-log', version: 1, battle: key, entries: records }) });
+    ok = !res || res.ok !== false;
+  } catch (e) { /* serve.py 未起動時は黙って諦める (次の更新で再送される) */ }
+  if (ok && key !== inferBucketKey()) delete inferArchive[key];
+}
+// 送信は全て直列化する。リセット時の最終送信 (force) は、直前の送信が
+// 実行中でも省略されず、必ず順番に実行される
+function sendInferenceLog(force) {
+  const key = inferBattleKey();
+  if (!key) return Promise.resolve();
+  if (!force && Date.now() - inferSendAt < 5000) return Promise.resolve();
+  if (!force && inferPendingKeys.has(key)) return Promise.resolve();
+  inferPendingKeys.add(key);
+  const p = inferSendChain.then(async () => { try { await doSendInferenceLog(key); } finally { inferPendingKeys.delete(key); } });
+  inferSendChain = p.catch(() => {});
+  return p;
+}
+/* ---------- 試合中のダメ計ログ (再計算の記録) ---------- */
+// パネルの入力スナップショット (計算を再現できる形で記録する)
+function calcPanelSnap(spec) {
+  if (!spec) return null;
+  const out = {
+    species: effSpecies(spec), nature: spec.nature || '',
+    ability: (spec.mega && spec.megaAbility) ? spec.megaAbility : (spec.ability || ''),
+    item: spec.itemLost ? '' : (spec.item || ''),
+    ...(spec.itemLost && spec.item ? { lostItem: spec.item } : {}),
+    sp: { ...spec.sp }, boosts: { ...spec.boosts }, status: spec.status || '',
+    hp: spec.curHPPercent ?? 100, moves: [...(spec.moves || [])],
+  };
+  if (spec.terastallized) out.tera = spec.teraType || '';
+  if (spec.dynamax) out.dynamax = true;
+  return out;
+}
+// 表示された計算結果 (両方向の各技のダメージ幅と KO 表記)
+function calcOutSnap(side) {
+  const res = lastCalc && (side === 'mine' ? lastCalc.results : lastCalc.oppResults);
+  const r0 = res && res[0];
+  const spec = DS(side);
+  if (!r0 || !r0.moveResults || !spec) return [];
+  const rows = [];
+  for (let mi = 0; mi < 4; mi++) {
+    const mv = spec.moves && spec.moves[mi];
+    if (!mv) continue;
+    const mr = r0.moveResults[mi];
+    const r = mr && mr.vs ? mr.vs[0] : null;
+    if (!r) { rows.push({ move: mv }); continue; }
+    if (r.status) { rows.push({ move: mv, status: true }); continue; }
+    if (r.immune) { rows.push({ move: mv, immune: true }); continue; }
+    if (r.error) { rows.push({ move: mv, error: true }); continue; }
+    rows.push({ move: mv, minPct: r.minPct, maxPct: r.maxPct, ko: r.ko || '' });
+  }
+  return rows;
+}
+function commitCalcRecord(rec) {
+  const bucket = inferBucketKey();
+  const arr = calcArchive[bucket] || (calcArchive[bucket] = []);
+  arr.push(rec);
+  if (arr.length > CALCLOG_MAX) {
+    // 上限超過分は自動再計算の古い記録から間引く (手動・プリセット・推定の記録を優先して残す)
+    let over = arr.length - CALCLOG_MAX;
+    for (let i = 0; i < arr.length && over > 0;) { if (arr[i].src === 'auto') { arr.splice(i, 1); over--; } else i++; }
+    while (arr.length > CALCLOG_MAX) arr.shift();
+  }
+  calcLog = arr;
+  calcLastAt = Date.now();
+  sendCalcLog(false);
+}
+// calcAll の末尾から呼ばれる。入力+出力が前回記録と同一なら残さず、
+// 自動再計算は短時間の連続を最新分だけに間引く
+function recordCalcLog() {
+  if (!lastCalc) return;
+  let src = 'auto';
+  if (calcSrcPending) { if (Date.now() - calcSrcPending.at < 3000) src = calcSrcPending.src; calcSrcPending = null; }
+  const rec = {
+    at: new Date().toISOString(), battle: lastBattleKey, turn: curTurn, src,
+    field: { weather: state.field.weather || '', terrain: state.field.terrain || '', mine: { ...state.side.mine }, opp: { ...state.side.opp } },
+    mine: calcPanelSnap(DS('mine')), opps: calcPanelSnap(DS('opps')),
+    out: { mine: calcOutSnap('mine'), opps: calcOutSnap('opps') },
+  };
+  const sig = JSON.stringify([rec.mine, rec.opps, rec.field, rec.out]);
+  if (sig === calcLastSig) { calcAutoPending = null; return; }
+  calcLastSig = sig;
+  if (src === 'auto' && Date.now() - calcLastAt < 1500) { calcAutoPending = rec; return; }
+  calcAutoPending = null;
+  commitCalcRecord(rec);
+}
+async function doSendCalcLog(key) {
+  const host = (typeof location !== 'undefined' && location.hostname) || '';
+  if (host !== 'localhost' && host !== '127.0.0.1') return;
+  const records = calcArchive[key];
+  if (!records || !records.length) return;
+  calcSendAt = Date.now();
+  let ok = false;
+  try {
+    const res = await fetch('./calclog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'calc-log', version: 1, battle: key, entries: records }) });
+    ok = !res || res.ok !== false;
+  } catch (e) { /* serve.py 未起動時は黙って諦める (次の更新で再送される) */ }
+  if (ok && key !== inferBucketKey()) delete calcArchive[key];
+}
+// 送信は推論過程ログと同様に直列化し、リセット時の最終送信が省略されないようにする
+function sendCalcLog(force) {
+  const key = inferBucketKey();
+  if (!key) return Promise.resolve();
+  if (!force && Date.now() - calcSendAt < 5000) return Promise.resolve();
+  if (!force && calcPendingKeys.has(key)) return Promise.resolve();
+  calcPendingKeys.add(key);
+  const p = calcSendChain.then(async () => { try { await doSendCalcLog(key); } finally { calcPendingKeys.delete(key); } });
+  calcSendChain = p.catch(() => {});
+  return p;
+}
+// エンジンが返した場への副作用の意図を、UI 側の状態へ適用する
+function applyEstIntent(it) {
+  if (it.t === 'side') setAutoSide(it.side, it.key, it.turn);
+  else if (it.t === 'spikes') {
+    const sk = it.side === 'p1' ? 'mine' : 'opp';
+    const nv = Math.min(3, (state.side[sk].spikes || 0) + 1);
+    if (nv !== state.side[sk].spikes) { state.side[sk].spikes = nv; infDirty = true; }
+  }
+  else if (it.t === 'toxicSpikes') {
+    const sk = it.side === 'p1' ? 'mine' : 'opp';
+    const nv = Math.min(2, (state.side[sk].toxicSpikes || 0) + 1);
+    if (nv !== state.side[sk].toxicSpikes) { state.side[sk].toxicSpikes = nv; infDirty = true; }
+  }
+  else if (it.t === 'clear') clearSideHazardsUI(it.side);
+  else if (it.t === 'court') {
+    const a = state.side.mine, b = state.side.opp;
+    const rk = a.rock; a.rock = b.rock; b.rock = rk;
+    const sp2 = a.spikes || 0; a.spikes = b.spikes || 0; b.spikes = sp2;
+    const ts2 = a.toxicSpikes || 0; a.toxicSpikes = b.toxicSpikes || 0; b.toxicSpikes = ts2;
+    const tt = autoSideTurn.mine.rock; autoSideTurn.mine.rock = autoSideTurn.opp.rock; autoSideTurn.opp.rock = tt;
+    infDirty = true;
+  }
+}
+function infProcessMove(ev) {
+  const intents = estimator.processMoveInf(ev, estCtxAtTurnStart(ev.turn));
+  for (const it of intents) applyEstIntent(it);
+}
+function bayesProcessMove(ev) { estimator.processMoveBayes(ev, estCtxAtTurnStart(ev.turn)); }
+// 行動前に倒された個体への先行証拠 (reader の spe イベント)。発火条件
+// (ターン開始から場に居続け、そのターン未行動で、この技で倒れた) は
+// reader 側で判定済み。文脈は行動順と同じくターン開始時点のパネル
+function faintOrderEv(ev) { return { turn: ev.turn, label: ev.fast, victimLabel: ev.slow, move: ev.move, victimMove: null }; }
+function infProcessFaintOrder(ev) {
+  if (typeof estimator.processFaintOrderInf !== 'function') return;
+  estimator.processFaintOrderInf(faintOrderEv(ev), estCtxAtTurnStart(ev.turn));
+}
+function bayesProcessFaintOrder(ev) {
+  if (typeof estimator.processFaintOrderBayes !== 'function') return;
+  estimator.processFaintOrderBayes(faintOrderEv(ev), estCtxAtTurnStart(ev.turn));
+}
+// 急所の後付け確定 (reader の crit イベント)。急所文は被ダメ行より後に
+// 来るため dmg イベントは crit:false で消費されがちで、reader 側の既出
+// イベント書き換えは消費済みの UI には届かない。そのため急所の確定は
+// 独立イベントとして末尾に届き、エンジンの後付け取り込み口へ、元の
+// ダメージ処理と同じ文脈で渡す (battle_20261122_201011 の切り分け)
+function infProcessCrit(ev) {
+  if (typeof estimator.processCritInf !== 'function') return;
+  const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const basesAtk = infBases(a, ev, true), basesDef = infBases(d, ev, false);
+  estimator.processCritInf(ev, { myAtk, myDef, basesAtk, basesDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    basesAtkTS: basesAtk.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)), basesDefTS: basesDef.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)) });
+}
+function bayesProcessCrit(ev) {
+  if (typeof estimator.processCritBayes !== 'function') return;
+  const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const baseAtk = infOppBase(a, ev, true), baseDef = infOppBase(d, ev, false);
+  estimator.processCritBayes(ev, { myAtk, myDef, baseAtk, baseDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    baseAtkTS: withTurnStartBoosts(baseAtk, 'opp:', ev.turn), baseDefTS: withTurnStartBoosts(baseDef, 'opp:', ev.turn) });
+}
+// パネルのランク補正を、そのターンの開始時点の控えで置き換えた控えを
+// 返す (控えが無ければ元のまま)。ダメージ計算そのものは現在値が正しい
+// ため、行動順の比較に使う側だけがこちらを使う
+function withTurnStartBoosts(spec, sideKey, turn) {
+  if (!spec) return spec;
+  const snap = typeof turn === 'number' ? turnStartBoosts[turn] : null;
+  if (!snap) return spec;
+  const b = snap[sideKey + spec.species];
+  return b ? { ...spec, boosts: { ...b } } : spec;
+}
+function infProcessDamage(ev) {
+  const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const basesAtk = infBases(a, ev, true), basesDef = infBases(d, ev, false);
+  estimator.processDamageInf(ev, { myAtk, myDef, basesAtk, basesDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    basesAtkTS: basesAtk.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)), basesDefTS: basesDef.map(s => withTurnStartBoosts(s, 'opp:', ev.turn)) });
+}
+function bayesProcessDamage(ev) {
+  const a = labelSpecies(ev.atk), d = labelSpecies(ev.def);
+  const myAtk = infMySpec(a, ev, true), myDef = infMySpec(d, ev, false);
+  const baseAtk = infOppBase(a, ev, true), baseDef = infOppBase(d, ev, false);
+  estimator.processDamageBayes(ev, { myAtk, myDef, baseAtk, baseDef,
+    myAtkTS: withTurnStartBoosts(myAtk, 'mine:', ev.turn), myDefTS: withTurnStartBoosts(myDef, 'mine:', ev.turn),
+    baseAtkTS: withTurnStartBoosts(baseAtk, 'opp:', ev.turn), baseDefTS: withTurnStartBoosts(baseDef, 'opp:', ev.turn) });
+}
+function infProcessAbility(ev) { estimator.processAbility(ev, estCtx()); }
+function syncBayesRevealed() {
+  // 同一種族が複数いる場合は1件に統合してから渡す。エンジンのエントリは
+  // 種族単位のため、別々のパネル状態を二重に渡すと技集合の追加と削除が
+  // 交互に記録され、推定が振動する (battle_20261122_070237: Milotic が
+  // ヘッダーに2体いた試合で moveSeen 58件・revealed 20件に氾濫した)
+  const bySpecies = new Map();
+  for (let pi = 0; pi < state.oppTeam.length; pi++) {
+    const spec = state.opps[pi];
+    if (!spec) continue;
+    const sp = state.oppTeam[pi];
+    const prev = bySpecies.get(sp);
+    if (!prev) {
+      bySpecies.set(sp, { species: sp, knownMoves: [...(spec.knownMoves || [])], itemLost: !!spec.itemLost, item: spec.item || '', ability: spec.ability, corrected: [...(spec.corrected || [])], mega: !!spec.mega });
+      continue;
+    }
+    for (const m of spec.knownMoves || []) if (!prev.knownMoves.includes(m)) prev.knownMoves.push(m);
+    for (const c of spec.corrected || []) if (!prev.corrected.includes(c)) prev.corrected.push(c);
+    if ((spec.corrected || []).includes('持ち物')) { prev.item = spec.item || ''; prev.itemLost = !!spec.itemLost; }
+    if ((spec.corrected || []).includes('特性')) prev.ability = spec.ability;
+    prev.itemLost = prev.itemLost || !!spec.itemLost;
+    prev.mega = prev.mega || !!spec.mega;
+  }
+  // 判明した持ち物の名前がある場合は、消費済み (itemLost) をエンジンへ
+  // 一緒に渡さない。エンジンの applyRevealed は itemLost が立つと名前を
+  // 捨てて「持ち物なし判明」として扱うため、消費と同時に判明した持ち物
+  // (オボンのみ等) が推定へ届かなかった (battle_20261123_062508 の
+  // Milotic: seq46 で item:'' の soft な記録になり、確定情報が落ちた)。
+  // 消費の反映はパネル側の itemLost が担い、計算からは既に外れている
+  for (const e of bySpecies.values()) {
+    if (e.item && (e.corrected || []).includes('持ち物')) e.itemLost = false;
+  }
+  estimator.applyRevealed([...bySpecies.values()]);
+}
+function bayesEntry(species) { return estimator.entry(species); }
+function bayesReset() { estimator.resetBayes(); }
+function bayesApply(ent, counts) { return estimator.applyCounts(ent, counts); }
+function bayesCandSpec(base, c) { return estimator.candSpec(base, c); }
+function bayesMoveUpdate(ent, species, moves) { return estimator.moveUpdate(ent, species, moves); }
+function bayesCover(species) { return estimator.cover(species); }
+function bayesView(spec) { return estimator.view(spec); }
+function estView(species) { return estimator.fallbackView(species); }
+
+// 推定セルのツールチップに付ける未判明技の予測 (上位3件、日本語名)
+let _moveEn2ja = null, _moveEn2jaSig = -1;
+function movePredTitle(spec) {
+  if (!spec.estMovePred || !spec.estMovePred.length) return '';
+  const sig = Object.keys(NAMES._moveJa2en || {}).length;
+  if (!_moveEn2ja || _moveEn2jaSig !== sig) { _moveEn2ja = {}; _moveEn2jaSig = sig; for (const [ja, en] of Object.entries(NAMES._moveJa2en || {})) _moveEn2ja[en] = ja; }
+  return '・未判明技の予測 ' + spec.estMovePred.slice(0, 3).map(x => `${_moveEn2ja[x.move] || x.move} ${Math.round(x.prob * 100)}%`).join(' / ');
+}
+// 推定を相手パネルの判明情報として反映する。
+// 計算用 SP は、推定レンジの中で実数値が最大になる候補の SP を使う
+// (相手を最も強い前提で計算する。性格が 1 つに定まっている場合はその
+//  性格の候補の中で、定まっていない場合はパネルの現在の性格の候補の
+//  中で最大になるものを選び、どちらの候補も無い能力は SP レンジの
+//  上限を使う)
+function attachEstimate(spec) {
+  // 主推定はベイズ (候補型×事後確率)。候補が無い種族・証拠が無い間は
+  // 従来の制約交差 (estView) にフォールバックする
+  let view = bayesView(spec);
+  if (!view) view = estView(spec.species);
+  // ユーザーが入力で上書きした能力は、以降の推定で上書きしない
+  if (view && spec.estManual) {
+    for (const k of Object.keys(spec.estManual)) {
+      if (spec.estManual[k]) { delete view.sp[k]; delete view.stat[k]; delete view.rows[k]; }
+    }
+  }
+  spec.estSp = view ? view.sp : null;
+  spec.estStat = view ? view.stat : null;
+  spec.estNature = view ? view.nature : null;
+  spec.estMapProb = view && view.bayes ? view.mapProb : null;
+  // MAP の確率が低い局面では、周辺分布の首位が MAP と食い違うものを併記用に保持する
+  spec.estMarginal = null;
+  if (view && view.bayes && view.marginals && view.mapProb < 0.5) {
+    const mg = {};
+    if (view.marginals.nature && view.marginals.nature.value && view.marginals.nature.value !== view.map.nature) mg.nature = view.marginals.nature;
+    if (view.map.item && view.marginals.item && view.marginals.item.value && view.marginals.item.value !== view.map.item) mg.item = view.marginals.item;
+    if (mg.nature || mg.item) spec.estMarginal = mg;
+  }
+  spec.estMovePred = view && view.bayes ? (view.movePred || null) : null;
+  if (!view) return;
+  if (view.bayes) {
+    // 性格は MAP 型のものを採用する (手動で直された場合はそちらを優先)。
+    // 計算用 SP は MAP 型のものをそのまま使わず、推定レンジの中で実数値が
+    // 最大になる候補の SP を能力ごとに使う (相手を最も強い前提で計算する、
+    // フォールバック側と同じ規約)。候補は事後 90% の信用集合から取り、
+    // パネルの性格と一致する候補を優先する
+    if (!spec.estManual || !spec.estManual.nature) { spec.nature = view.map.nature; markCorrected(spec, '性格'); }
+    const cov = bayesCover(spec.species);
+    const coverCands = cov && Array.isArray(cov.cover) ? cov.cover : [];
+    for (const k of Object.keys(view.sp)) {
+      const valOf = c => (spec.mega && c.valuesMega) ? c.valuesMega[k] : (c.values ? c.values[k] : null);
+      const withVal = coverCands.filter(c => valOf(c) != null);
+      const sameNature = withVal.filter(c => c.nature === spec.nature);
+      const pool = sameNature.length ? sameNature : withVal;
+      let best = null;
+      for (const c of pool) if (!best || valOf(c) > valOf(best)) best = c;
+      spec.sp[k] = best ? (best.sp[k] || 0) : view.sp[k][1];
+    }
+    markCorrected(spec, 'EV');
+    return;
+  }
+  if (view.nature) { spec.nature = view.nature; markCorrected(spec, '性格'); }
+  for (const k of Object.keys(view.sp)) {
+    const rows = view.rows[k] || [];
+    const byNature = rows.filter(r => r.nature === undefined || r.nature === spec.nature);
+    const pool = byNature.length ? byNature : rows;
+    let best = null;
+    for (const r of pool) if (!best || r.value > best.value) best = r;
+    spec.sp[k] = best ? best.sp : view.sp[k][1];
+    markCorrected(spec, 'EV');
+  }
+}
+// 推定セルの手動上書き: 努力値セルに数値を入れたら、その能力は推定の対象から外して固定する
+function commitEstEv(side, k, raw) {
+  const spec = state[side][state.sel[side]];
+  const t = String(raw).trim();
+  if (!/^\d+$/.test(t)) { calcAll(); return; }
+  spec.sp[k] = Math.min(32, Math.max(0, parseInt(t, 10) || 0));
+  (spec.estManual ||= {})[k] = true;
+  markCorrected(spec, 'EV');
+  // 推定表示はその場で外し、入力した値と計算後の実数値を通常表示で即時反映する
+  if (spec.estSp) delete spec.estSp[k];
+  if (spec.estStat) delete spec.estStat[k];
+  calcAll();
+}
+// 推定セルの手動上書き: 実数値セルに数値を入れたら、その実数値になる (性格, SP) を逆算して固定する。
+// 現在の性格で一致する SP があればそれを、無ければ一致する性格ごと切り替える。
+// どの組み合わせでも一致しない場合は、現在の性格のまま最も近い実数値になる SP にする
+function commitEstStat(side, k, raw) {
+  const spec = state[side][state.sel[side]];
+  const t = String(raw).trim().replace(/\*$/, '');
+  if (!/^\d+$/.test(t)) { calcAll(); return; }
+  const target = parseInt(t, 10);
+  const table = statTable(effSpecies(spec));
+  const rows = table ? table[k] : null;
+  if (!rows || !rows.length) { calcAll(); return; }
+  const cur = spec.sp[k] || 0;
+  const pickClosestSp = list => list.reduce((a, b) => (Math.abs(b.sp - cur) < Math.abs(a.sp - cur) || (Math.abs(b.sp - cur) === Math.abs(a.sp - cur) && b.sp > a.sp) ? b : a));
+  // 入力値は表示どおり補正後 (ランク等) の実数値なので、照合も表示と同じ
+  // 補正を通した値で行う
+  const xform = v => dispStat(spec, k, { hp: v, [k]: v }, side === 'mine' ? 'mine' : 'opp')[0];
+  let chosen = null, newNature = null;
+  const exactHere = rows.filter(r => xform(r.value) === target && r.nature === spec.nature);
+  if (exactHere.length) chosen = pickClosestSp(exactHere);
+  else {
+    const exactAny = rows.filter(r => xform(r.value) === target);
+    if (exactAny.length) { chosen = pickClosestSp(exactAny); newNature = chosen.nature; }
+    else {
+      const pool = rows.filter(r => r.nature === spec.nature);
+      chosen = pool.reduce((a, b) => (Math.abs(xform(b.value) - target) < Math.abs(xform(a.value) - target) || (Math.abs(xform(b.value) - target) === Math.abs(xform(a.value) - target) && b.sp > a.sp) ? b : a));
+    }
+  }
+  if (newNature && newNature !== spec.nature) { spec.nature = newNature; markCorrected(spec, '性格'); }
+  spec.sp[k] = chosen.sp;
+  (spec.estManual ||= {})[k] = true;
+  markCorrected(spec, 'EV');
+  if (spec.estSp) delete spec.estSp[k];
+  if (spec.estStat) delete spec.estStat[k];
+  calcAll();
+}
+
+// 自チーム暫定リスト (見せ合い選出画面で検出した自チーム編成) の適用。
+// state の mineTeam が現在のパネルの種族構成と矛盾する場合は、暫定
+// リストで上書きする。暫定リストで不明な型情報 (特性・持ち物・努力値
+// など) は、同種族の既存パネル → 読み込み済みの登録チーム (my_team)
+// → 既定の型 の順で補い、後続の更新が届くまではその値を使う
+// 一括再生時の自軍パネルの補完。新しい battle キーを、既に蓄積済みの
+// イベント列とともに初めて適用する場合に限り、state.mine が挙げる種族の
+// うちパネルに無いものを、登録プリセット (あれば) または使用率の型で
+// パネルへ補う。試合中に UI が無処理だった対戦では、パネルが登録チームの
+// まま再生が始まり、参照パネルを自軍に取る証拠処理 (ダメージ・行動順・
+// faintOrder) が全て落ちるため (battle_20261122_192108)。通常の試合中の
+// 適用では呼ばれない
+function supplementMineFromState(j) {
+  if (!Array.isArray(j.mine) || !j.mine.length) return false;
+  const wanted = [];
+  for (const en of j.mine) {
+    if (!en || !en.species) continue;
+    const sp = resolveSpecies(en.species) || en.species;
+    if (sp && !wanted.includes(sp)) wanted.push(sp);
+  }
+  const missing = wanted.filter(sp => !state.mine.some(s => s.species === sp));
+  if (!missing.length) return false;
+  let changed = false;
+  for (const sp of missing) {
+    // 末尾から、state.mine に名前の無い枠 (選択中の枠は除く) を差し替える
+    let idx = -1;
+    for (let i = state.mine.length - 1; i >= 0; i--) {
+      if (!wanted.includes(state.mine[i].species) && i !== state.sel.mine) { idx = i; break; }
+    }
+    if (idx < 0) break;
+    const pi = PRESETS.findIndex(p => p.species === sp);
+    state.mine[idx] = pi >= 0 ? presetSpec(pi) : ownSpeciesSpec(sp, 'usage');
+    changed = true;
+  }
+  if (changed) {
+    for (const sp of [...faintLock.mine]) if (!state.mine.some(s => s.species === sp)) faintLock.mine.delete(sp);
+    presetApplied.mine = '';
+  }
+  return changed;
+}
+// 自チーム暫定リスト (mineTeam) の適用スイッチ。2026-11-23 から一時
+// 無効化中 (質問・調査チャットからの委任によるユーザーの指示)。
+// 再有効化はこの値を true に戻すだけ。reader 側の state.json への
+// mineTeam 書き出しは対象外で、記録は続く
+let MINE_TEAM_PREVIEW_APPLY = false;
+function applyMineTeamPreview(list) {
+  if (!MINE_TEAM_PREVIEW_APPLY) return false;
+  const entries = [];
+  for (const en of list) {
+    const raw = typeof en === 'string' ? en : (en && en.species);
+    if (!raw) continue;
+    const sp = resolveSpecies(raw) || raw;
+    if (sp && !entries.some(e => e.species === sp)) entries.push({ species: sp, info: (en && typeof en === 'object') ? en : {} });
+  }
+  if (!entries.length) return false;
+  // 暫定リストで判明している項目をパネルへ反映する (後続の更新で情報が
+  // 増えた場合も、種族構成が同じまま取り込めるようにする)
+  const applyInfo = (spec, info) => {
+    let touched = false;
+    if (info.item) { const v = resolveItem(info.item) || info.item; if (spec.item !== v) { spec.item = v; touched = true; } }
+    if (info.ability) { const v = resolveAbility(info.ability) || info.ability; if (spec.ability !== v) { spec.ability = v; touched = true; } }
+    if (Array.isArray(info.moves) && info.moves.length) {
+      const v = info.moves.map(m => resolveMove(m) || m).filter(Boolean).slice(0, 4);
+      if (v.length && v.join('') !== (spec.moves || []).join('')) { spec.moves = v; touched = true; }
+    }
+    return touched;
+  };
+  const cur = state.mine.map(s => s.species);
+  if (cur.length === entries.length && cur.every((s, i) => s === entries[i].species)) {
+    let touched = false;
+    entries.forEach((e, i) => { if (applyInfo(state.mine[i], e.info)) touched = true; });
+    return touched;
+  }
+  const prevSelSpecies = state.mine[state.sel.mine] && state.mine[state.sel.mine].species;
+  const old = state.mine;
+  const rebuilt = entries.map(({ species, info }) => {
+    let spec = old.find(s => s.species === species) || null;
+    if (!spec) {
+      const pi = PRESETS.findIndex(p => p && p.species === species);
+      spec = pi >= 0 ? presetSpec(pi) : ownSpeciesSpec(species, 'usage');
+    }
+    applyInfo(spec, info);
+    return spec;
+  });
+  // 暫定リストは同定済みの種族だけが詰めて出されるため、未同定の枠は
+  // 「居ない」ことの主張ではない。同定済みが6体未満の間は、リストに
+  // 無い既存パネルを後ろに残して6体を保つ (同定が進めば順に置き換わる)
+  for (const s of old) {
+    if (rebuilt.length >= 6) break;
+    if (!rebuilt.some(r => r.species === s.species)) rebuilt.push(s);
+  }
+  state.mine = rebuilt;
+  for (const sp of [...faintLock.mine]) if (!rebuilt.some(r => r.species === sp)) faintLock.mine.delete(sp);
+  const si = state.mine.findIndex(s => s.species === prevSelSpecies);
+  state.sel.mine = si >= 0 ? si : 0;
+  lastActiveKey.mine = '';
+  presetApplied.mine = '';
+  return true;
+}
+function applyState(j) {
+  if (!j || typeof j !== 'object') return;
+  let changed = false;
+  if (j.battle) lastUsedStartup.boardSeen = true;
+  if (j.battlePhase === 'inBattle' || j.battlePhase === 'idle') {
+    flagPhase = j.battlePhase;
+    flagSeen = true;
+    if (j.flagMode) flagMode = j.flagMode;
+    renderFlagBtn();
+  }
+  // 試合 ID (state.json の battle) が変わったら、新しい対戦の開始が確定する。
+  // events 列の縮小だけに頼ると検知を外し、前の対戦のおいかぜ等が持ち越される
+  // ことがある (battle_20261121_132153 の件) ため、ID の変化でも確定させ、
+  // サイドコンディションと推定イベントを初期化する (HP 反映より前に行う)
+  const bkey = (typeof j.battle === 'string' && j.battle) ? j.battle : null;
+  const isNewBattleKey = !!bkey && bkey !== lastBattleKey;
+  if (bkey) {
+    if (lastBattleKey && bkey !== lastBattleKey) {
+      // 前の対戦は終わっている。保留中の版数リロードがあればここで反映し、
+      // 新しい対戦は新しい版で最初から読み直す
+      if (pendingReload) { location.reload(); return; }
+      confirmNewBattle();
+      resetInference();
+      // 推定のリセットだけでは、パネル側に蓄積した判明情報 (判明技・
+      // 訂正済み・持ち物喪失) は消えない。次の相手にも同じ種族がいると、
+      // チーム差し替え時のパネル再利用でそれが残り、前の対戦の判明技が
+      // 新しい対戦の証拠として再投入されてしまうため、パネルも作り直す
+      // (battle_20261122_075240: 前戦で判明した Incineroar の
+      // Flare Blitz が、本戦では未登場のまま証拠化した)
+      state.opps = state.oppTeam.map(sp => oppSpec(sp, 'usage'));
+      lastEventCount = 0;
+      changed = true;
+    }
+    lastBattleKey = bkey;
+  }
+  // events 列が縮んだ = 新しい対戦のイベント列が始まった合図。保留中の
+  // リセットをここで確定し、ひんしロックを解除する (HP 反映より前に行う)。
+  // inference.seen は oppReset の resetInference で 0 に戻ってしまうため、
+  // 縮小判定には専用の lastEventCount を使う
+  if (Array.isArray(j.events) && j.events.length < lastEventCount) confirmNewBattle();
+  // さいきのいのりの使用を先に拾う (同じ state.json で復活した HP が届いてもロック解除できるよう、HP 反映より前に数える)
+  if (Array.isArray(j.events) && typeof inference !== 'undefined' && inference) {
+    const from = j.events.length < lastEventCount ? 0 : lastEventCount;
+    for (let i = from; i < j.events.length; i++) {
+      const ev = j.events[i];
+      if (ev && ev.k === 'mv' && ev.move === 'Revival Blessing' && typeof ev.label === 'string') {
+        if (ev.label.startsWith('p1')) revivalPending.mine++;
+        else if (ev.label.startsWith('p2')) revivalPending.opps++;
+      }
+    }
+  }
+  if (typeof j.oppTrainer === 'string' && j.oppTrainer && j.oppTrainer !== oppTrainerName) {
+    oppTrainerName = j.oppTrainer;
+    changed = true;
+  }
+  if (j.oppReset) {
+    resetInference();
+    oppTrainerName = '';
+    // ここではパネルもロックも消さない。リーダーは試合終了後の画面を
+    // 選出画面と誤検出して oppReset を送ることがあり、そのまま全消しすると
+    // 前の対戦のひんしが HP100% で蘇って見える。新しい対戦の開始が確認
+    // できたら (別チームの出現 / events のリスタート) confirmNewBattle()
+    // でロックを解除し、パネルは oppTeam 側の差し替えで作り直す
+    battleResetPending = true;
+    changed = true;
+  }
+  if (Array.isArray(j.mineTeam) && j.mineTeam.length) {
+    if (applyMineTeamPreview(j.mineTeam)) changed = true;
+  }
+  // 一括再生 (新しい battle キーを蓄積済みイベントと初めて適用) のときだけ、
+  // state.mine の種族で自軍パネルを補う。通常の試合中の適用には影響しない
+  if (isNewBattleKey && Array.isArray(j.events) && j.events.length) {
+    if (supplementMineFromState(j)) changed = true;
+  }
+  if (Array.isArray(j.mine)) {
+    const idxs = [];
+    for (const en of j.mine) {
+      if (!en) continue;
+      const spName = resolveSpecies(en.species) || en.species;
+      const pi = state.mine.findIndex(s => s.species === spName);
+      if (pi < 0) continue;
+      if (typeof en.curHPPercent === 'number') {
+        if (en.curHPPercent <= 0) { state.mine[pi].curHPPercent = 0; faintLock.mine.add(spName); }
+        else if (!faintLock.mine.has(spName)) state.mine[pi].curHPPercent = en.curHPPercent;
+        else if (revivalPending.mine > 0 && en.curHPPercent <= 55) { revivalPending.mine--; faintLock.mine.delete(spName); state.mine[pi].curHPPercent = en.curHPPercent; }
+      }
+      if (typeof en.status === 'string') state.mine[pi].status = en.status;
+      // boosts キーが無い = 場に出ている以上ランクは 0 (reader は非0の時だけ送る)。
+      // キーが無い時に旧値を残すと、交代でリセットされたはずのランクが
+      // 再登場時に蘇ってしまうため、欠落は 0 として扱う
+      state.mine[pi].boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
+      state.mine[pi].unburden = !!en.unburden;
+      // 持ち物の消費・喪失は対戦中ずっと有効 (交代しても戻らない) ため、一度立ったら維持する
+      if (en.itemLost) state.mine[pi].itemLost = true;
+      applyMegaFlag(state.mine[pi], en);
+      idxs.push(pi); changed = true;
+    }
+    // 場に出ていないポケモンの かるわざ は解除されたものとして扱う (交代でリセットされるため)
+    state.mine.forEach((s, i) => { if (!idxs.includes(i)) s.unburden = false; });
+    if (idxs.length) {
+      const key = idxs.join(',');
+      if (key !== lastActiveKey.mine) {
+        const prevActive = state.active.mine || [];
+        state.active.mine = idxs.slice(0, 2);
+        // フォーカス自動: 新しく場に出た (交代で入った) 方があれば、その
+        // うちアイコン列で最も左の1体へフォーカスを移す。手動では移さない
+        if (focusModeFor('mine') === 'auto') {
+          const entered = idxs.filter(i => !prevActive.includes(i));
+          if (entered.length) state.sel.mine = Math.min(...entered);
+        }
+        lastActiveKey.mine = key;
+      }
+    }
+  }
+  if (Array.isArray(j.oppTeam) && j.oppTeam.length) {
+    const names = j.oppTeam.map(s => (s ? resolveSpecies(s) || s : null)).filter(Boolean).slice(0, 6);
+    if (names.length && names.join() !== state.oppTeam.join()) {
+      if (battleResetPending && state.oppTeam.length && names.every(n => state.oppTeam.includes(n))) {
+        // リセット保留中に届いた、今のチームの部分集合 (誤検出リセットに伴う
+        // 部分的な再同定など): パネルとひんしロックはそのまま保持する
+      } else if (battleResetPending) {
+        // 別チームが現れた = 新しい対戦の開始が確定。ロックを解除して
+        // 全パネルを作り直す (前戦のパネルは引き継がない)
+        confirmNewBattle();
+        state.oppTeam = names;
+        state.opps = names.map(sp => oppSpec(sp, 'usage'));
+        if (state.sel.opps >= names.length) state.sel.opps = 0;
+        state.active.opps = [0, Math.min(1, names.length - 1)];
+        lastActiveKey.opps = '';
+        changed = true;
+      } else {
+        const old = {};
+        state.oppTeam.forEach((sp, i) => { old[sp] = state.opps[i]; });
+        state.oppTeam = names;
+        state.opps = names.map(sp => old[sp] || oppSpec(sp, 'usage'));
+        for (const sp of [...faintLock.opps]) if (!names.includes(sp)) faintLock.opps.delete(sp);
+        if (state.sel.opps >= names.length) state.sel.opps = 0;
+        state.active.opps = [0, Math.min(1, names.length - 1)];
+        lastActiveKey.opps = '';
+        changed = true;
+      }
+    }
+    syncTeamContext();
+  }
+  if (Array.isArray(j.opps)) {
+    const idxs = [];
+    for (const en of j.opps) {
+      if (!en) continue;
+      const spName = resolveSpecies(en.species) || en.species;
+      let pi = state.oppTeam.indexOf(spName);
+      if (pi < 0 && state.oppTeam.length < 6) {
+        state.oppTeam.push(spName);
+        state.opps.push(oppSpec(spName, 'usage'));
+        pi = state.oppTeam.length - 1;
+      }
+      if (pi < 0) continue;
+      let spec = state.opps[pi];
+      if (en.revealed) { spec = applyRevealedPreserving(spec, en.revealed); state.opps[pi] = spec; }
+      if (typeof en.curHPPercent === 'number') {
+        if (en.curHPPercent <= 0) { spec.curHPPercent = 0; faintLock.opps.add(spName); }
+        else if (!faintLock.opps.has(spName)) spec.curHPPercent = en.curHPPercent;
+        else if (revivalPending.opps > 0 && en.curHPPercent <= 55) { revivalPending.opps--; faintLock.opps.delete(spName); spec.curHPPercent = en.curHPPercent; }
+      }
+      if (typeof en.status === 'string') spec.status = en.status;
+      // mine 側と同様、boosts 欠落は 0 として扱う (交代リセットの反映漏れ防止)
+      spec.boosts = Object.assign(blankBoosts(), (en.boosts && typeof en.boosts === 'object') ? en.boosts : {});
+      spec.unburden = !!en.unburden;
+      if (en.itemLost) spec.itemLost = true;
+      applyMegaFlag(spec, en);
+      idxs.push(pi); changed = true;
+    }
+    // 場に出ていないポケモンの かるわざ は解除されたものとして扱う (交代でリセットされるため)
+    state.opps.forEach((s, i) => { if (!idxs.includes(i)) s.unburden = false; });
+    if (idxs.length) {
+      const key = idxs.join(',');
+      if (key !== lastActiveKey.opps) {
+        const prevActive = state.active.opps || [];
+        state.active.opps = idxs.slice(0, 2);
+        // 自分側と同規則: フォーカス自動のときだけ、新しく場に出た方の
+        // うち最も左の1体へフォーカスを移す
+        if (focusModeFor('opps') === 'auto') {
+          const entered = idxs.filter(i => !prevActive.includes(i));
+          if (entered.length) state.sel.opps = Math.min(...entered);
+        }
+        lastActiveKey.opps = key;
+      }
+    }
+  }
+  if (j.oppRevealed && typeof j.oppRevealed === 'object') {
+    // 場に出ていない相手について判明した分も、その項目だけ随時反映する
+    for (const [spRaw, rev] of Object.entries(j.oppRevealed)) {
+      if (!rev) continue;
+      const spName = resolveSpecies(spRaw) || spRaw;
+      const pi = state.oppTeam.indexOf(spName);
+      if (pi < 0) continue;
+      state.opps[pi] = applyRevealedPreserving(state.opps[pi], rev);
+      changed = true;
+    }
+  }
+  if (j.field && typeof j.field === 'object') {
+    for (const k of ['weather', 'terrain']) {
+      if (!(k in j.field)) continue;
+      const inc = j.field[k];
+      fieldSeen[k] = inc;
+      const hold = fieldHold[k];
+      if (hold) {
+        if (hold.base === undefined) { hold.base = inc; continue; }
+        if (inc === hold.base) continue; // 実盤面は編集時点のまま → 編集値を維持
+        fieldHold[k] = null; // 実盤面が実際に変わった → 保持を解除して実値を優先
+      }
+      if (state.field[k] !== inc) { state.field[k] = inc; changed = true; }
+    }
+  }
+  if (Array.isArray(j.events)) {
+    if (j.events.length < estimator.getSeen()) resetInference();
+    // 1件の不良イベントで対戦全体の推論が止まらないよう、取り込みは
+    // 1つずつ例外から守り、ポインタはイベントごとに進める。失敗した
+    // 取り込みは recordUiError で記録に残す (battle_20261123_060833 の
+    // ターン4で Weather Ball 以降の証拠が無音で欠落した件の手当て)
+    const guardEv = (ev, i, fn) => {
+      try { fn(); } catch (e) {
+        recordUiError({ where: 'event', index: i, kind: ev && ev.k, turn: ev && ev.turn, move: (ev && ev.move) || null, message: errText(e), stack: errStack(e) });
+      }
+    };
+    for (let i = estimator.getSeen(); i < j.events.length; i++) {
+      const ev = j.events[i];
+      if (ev && typeof ev === 'object') {
+        if (typeof ev.turn === 'number') { expireAutoSide(ev.turn); if (curTurn === null || ev.turn > curTurn) curTurn = ev.turn; if (prevPanelBoosts && !turnStartBoosts[ev.turn]) turnStartBoosts[ev.turn] = prevPanelBoosts; }
+        if (ev.k === 'mv') { guardEv(ev, i, () => infProcessMove(ev)); guardEv(ev, i, () => bayesProcessMove(ev)); }
+        else if (ev.k === 'dmg') { guardEv(ev, i, () => infProcessDamage(ev)); guardEv(ev, i, () => bayesProcessDamage(ev)); }
+        else if (ev.k === 'ab') { guardEv(ev, i, () => infProcessAbility(ev)); }
+        else if (ev.k === 'spe') { guardEv(ev, i, () => infProcessFaintOrder(ev)); guardEv(ev, i, () => bayesProcessFaintOrder(ev)); }
+        else if (ev.k === 'crit') { guardEv(ev, i, () => infProcessCrit(ev)); guardEv(ev, i, () => bayesProcessCrit(ev)); }
+      }
+      estimator.setSeen(i + 1);
+    }
+    lastEventCount = j.events.length;
+    syncEstDirty();
+    if (infDirty) { infDirty = false; changed = true; }
+  }
+  prevPanelBoosts = snapshotPanelBoosts();
+  // 判明情報の反映はイベント処理の後に行う。先に反映すると、同じ書き出しで
+  // 届いた判明情報のスナップショットが前回分のターンで刻印されてしまう
+  // (battle_20261122_054802: ムーンフォースの moveSeen が T3 刻印・実際は T4)
+  syncBayesRevealed();
+  syncTeamContext();
+  drainInferenceLog();
+  const estSigBefore = state.opps.map(s => s ? JSON.stringify([s.estStat || null, s.estSp || null, s.estMarginal || null]) : '');
+  for (const spec of state.opps) if (spec) attachEstimate(spec);
+  // 推定・判明で形になった相手の型を、トレーナー名のカスタムとして
+  // 一時保持する (次の試合の開始が確定するまで SET から再適用できる)
+  if (oppTrainerName) {
+    for (const spec of state.opps) {
+      if (spec && ((spec.corrected && spec.corrected.length) || spec.estSp)) tempTrainerSets[spec.species] = { trainer: oppTrainerName, build: presetBuildOf(spec) };
+    }
+  }
+  if (state.opps.some((s, i) => s && JSON.stringify([s.estStat || null, s.estSp || null, s.estMarginal || null]) !== estSigBefore[i])) markCalcSrc('estimate');
+  if (changed) calcAll();
+}
+let lastStateText = '';
+let uiVersionSeen = null;
+// 対戦中の版数変化では即リロードしない (battle_20261122_054802: 対戦中の
+// push による自動リロードで推定セッションが再開せず、記録が途絶えた)。
+// 対戦中は保留し、次の対戦の開始時 (試合キーの変化) か、state.json が
+// 10分間変化しなかった時点で反映する。通知をクリックすれば即反映する
+let pendingReload = false;
+let lastStateChangeAt = Date.now();
+function renderReloadNote() {
+  const el = typeof document !== 'undefined' && document.getElementById ? document.getElementById('reloadNote') : null;
+  if (!el) return;
+  el.hidden = !pendingReload;
+  if (pendingReload) el.textContent = '新しい版があります。対戦終了後に自動で反映します（クリックで今すぐ反映）';
+}
+function noteVersionChange(v) {
+  if (uiVersionSeen === null) { uiVersionSeen = v; return 'none'; }
+  if (!v || v === uiVersionSeen) return 'none';
+  if (lastBattleKey) { pendingReload = true; renderReloadNote(); return 'deferred'; }
+  return 'reload';
+}
+function resetVersionState() { uiVersionSeen = null; pendingReload = false; renderReloadNote(); }
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
+  const t = e.target && e.target.closest ? e.target.closest('[data-reloadnow]') : null;
+  if (t) location.reload();
+});
+async function poll() {
+  try {
+    const rv = await fetch('./ui_version.txt', { cache: 'no-store' });
+    if (rv.ok) {
+      const v = (await rv.text()).trim();
+      if (noteVersionChange(v) === 'reload') { location.reload(); return; }
+      fillRevLine();
+    }
+  } catch (e) { /* ローカルコピーのみで動作 */ }
+  try {
+    const r = await fetch('./state.json', { cache: 'no-store' });
+    if (r.ok) {
+      const txt = await r.text();
+      if (txt !== lastStateText) {
+        lastStateText = txt; lastStateChangeAt = Date.now();
+        // 例外は外側の catch で静かに飲まず、記録に残す (止まった理由を
+        // 後日の成果物で追えるようにする)
+        try { applyState(JSON.parse(txt)); } catch (e) { recordUiError({ where: 'applyState', message: errText(e), stack: errStack(e) }); }
+      }
+    }
+  } catch (e) { /* not running under a server */ }
+  if (pendingReload && Date.now() - lastStateChangeAt > 10 * 60 * 1000) { location.reload(); return; }
+}
+
+/* ---------- デバッグ送信: 押下時点のキャッシュと UI の出力状況をチャットへ送る ---------- */
+function debugSnapshot() {
+  const seen = new WeakSet();
+  const ser = (k, v) => {
+    if (typeof v === 'function') return undefined;
+    if (v && typeof v === 'object') { if (seen.has(v)) return '[circular]'; seen.add(v); }
+    if (typeof v === 'string' && v.length > 4000) return v.slice(0, 4000) + '…(truncated)';
+    return v;
+  };
+  const snap = {
+    kind: 'ui-debug', version: 1,
+    at: new Date().toISOString(),
+    uiVersion: uiVersionSeen,
+    layout: document.documentElement.dataset.layout || null,
+    theme: document.documentElement.dataset.theme || null,
+    url: location.href,
+    readerState: (() => { try { return lastStateText ? JSON.parse(lastStateText) : null; } catch (e) { return lastStateText; } })(),
+    uiState: state,
+    uiFlags: ui,
+    loadStatus: JSON.parse(JSON.stringify(loadStatus)),
+    uiErrors,
+    calc: lastCalc,
+    estimator: (() => { try { return estimator._debug(); } catch (e) { return null; } })(),
+    inferenceLog: inferLog,
+    rendered: {
+      tables: (document.querySelector('.tables') || {}).innerText || '',
+      midbar: (document.querySelector('.midbar') || {}).innerText || '',
+    },
+  };
+  let body = JSON.stringify(snap, ser);
+  if (body.length > 900000) { snap.estimator = { note: 'サイズ超過のため省略' }; body = JSON.stringify(snap, ser); }
+  return body;
+}
+async function sendDebugSnapshot() {
+  const st = document.getElementById('dbgStatus');
+  const body = debugSnapshot();
+  const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (local) {
+    try {
+      const r = await fetch('./debug_report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      if (!r.ok) throw new Error('status ' + r.status);
+      if (st) st.textContent = '送信しました ' + new Date().toLocaleTimeString('ja-JP');
+    } catch (e) {
+      if (st) st.textContent = '送信できませんでした';
+    }
+    return;
+  }
+  // Mac が無い環境 (スマホ等): スナップショットをファイルとして共有/保存し、
+  // このチャットへ添付して送れる形にする
+  const d = new Date(); const p2 = n => String(n).padStart(2, '0');
+  const fname = `debug_ui_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}.json`;
+  try {
+    const file = new File([body], fname, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'champions_calc デバッグスナップショット' });
+      if (st) st.textContent = '共有しました';
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') { if (st) st.textContent = ''; return; }
+  }
+  try {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+    a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (st) st.textContent = 'ファイルを保存しました。このチャットに添付してください';
+  } catch (e) {
+    try { await navigator.clipboard.writeText(body); if (st) st.textContent = 'コピーしました。このチャットに貼り付けてください'; }
+    catch (e2) { if (st) st.textContent = '送信できませんでした'; }
+  }
+}
+document.getElementById('dbgSend')?.addEventListener('click', sendDebugSnapshot);
+document.getElementById('battleFlagBtn')?.addEventListener('click', pressBattleFlag);
+renderFlagBtn();
+// 仕様差分 (バランス調整) の切り替え: 選択は保存し、適用は core の差分レイヤーへ
+function renderSpecSel() {
+  const sel = document.getElementById('specSel');
+  if (!sel) return;
+  const cur = activeSpecPatch() ? activeSpecPatch().id : '';
+  sel.innerHTML = '<option value="">現行仕様</option>' + specPatchVersions().map(v => `<option value="${v.id}">${v.label || v.id}</option>`).join('');
+  sel.value = cur;
+}
+// 保存済みの仕様選択が無い場合の既定: レギュレーション側の対応バージョン
+// (シーズン切り替えに既定の仕様が追随する。保存済み選択が常に優先)
+function defaultSpecPatchId(reg) {
+  try { if (localStorage.getItem('champions-calc-specpatch')) return null; } catch (e) { /* 読めなければ既定を使う */ }
+  return (reg && reg.specPatch) || null;
+}
+document.getElementById('specSel')?.addEventListener('change', e => {
+  const id = e.target.value || '';
+  try { localStorage.setItem('champions-calc-specpatch', id); } catch (err) { /* 保存できなくても切り替えは行う */ }
+  applySpecPatch(id || null);
+  resetInference();
+  calcAll();
+});
+
+/* ---------- init ---------- */
+// タイトル下の rev 表示は版番号の正本である ui_rev.txt の値を出す。
+// ui_version.txt は同期側が書く変更検知用の指紋 (ハッシュ) で、表示に
+// 使うと版数らしくない文字列になるため、検知 (noteVersionChange) 専用
+// とする。表示は読み込み時点の ui_rev.txt で固定する (新しい版が同期
+// されても、リロードで反映されるまでは実行中の版数を出し続ける)。
+// ui_rev.txt がどうしても読めない場合だけ、最後の手段として指紋を出す
+let uiRevText = '';
+let revFetchTries = 0;
+async function fillRevLine() {
+  if (uiRevText) return;
+  if (revFetchTries >= 300) {
+    const el = document.getElementById('revLine');
+    if (el && !el.textContent && uiVersionSeen) el.textContent = 'rev ' + uiVersionSeen;
+    return;
+  }
+  revFetchTries++;
+  try {
+    const r = await fetch('./ui_rev.txt', { cache: 'no-store' });
+    if (!r.ok) return;
+    const t = (await r.text()).trim();
+    if (!t) return;
+    uiRevText = t;
+    const el = document.getElementById('revLine');
+    if (el) el.textContent = 'rev ' + t;
+  } catch (e) {}
+}
+fillRevLine();
+const LOADER_ITEMS_JA = regDataLoader('items_ja', '持ち物名', true, async () => {
+  const { json: ij, source } = await fetchCriticalJson('data/items_ja.json');
+  if (!ij || typeof ij !== 'object' || !Object.keys(ij).length) throw new Error('items_ja: bad shape');
+  if (loadStatus.items_ja) loadStatus.items_ja.source = source;
+  ITEM_MAPS = ij; applyItemMaps();
+});
+const LOADER_VGC_CORPUS = regDataLoader('vgc_pastes', 'VGCPastesコーパス', true, async () => {
+  const { json: vc, source } = await fetchCriticalJson('data/vgc_pastes.json');
+  if (!vc || !Array.isArray(vc.sets)) throw new Error('vgc_pastes: bad shape');
+  if (loadStatus.vgc_pastes) loadStatus.vgc_pastes.source = source;
+  VGC_CORPUS = vc;
+});
+const LOADER_META_SETS = regDataLoader('meta_sets', '対戦データ', true, async () => {
+  try {
+    const { json: ms, source } = await fetchCriticalJson('data/meta_sets.json');
+    if (ms && Array.isArray(ms.sets)) META_SETS = ms; else throw new Error('meta_sets: bad shape');
+    if (loadStatus.meta_sets) loadStatus.meta_sets.source = source;
+  } finally { META_SETS_LOADED = true; }
+});
+const LOADER_POKEDB = regDataLoader('pokedb_parsed', '使用率分布', true, async () => {
+  const { json: pd, source } = await fetchCriticalJson('data/pokedb_parsed.json');
+  if (!pd || typeof pd !== 'object') throw new Error('pokedb_parsed: bad shape');
+  if (loadStatus.pokedb_parsed) loadStatus.pokedb_parsed.source = source;
+  POKEDB_PARSED = pd;
+});
+(async function init() {
+  // state.json の取り込みはデータ読み込みの完了を待たずに即開始する
+  // (選出画面・試合開始直後の反映を速くするため)
+  poll();
+  setInterval(poll, 200);
+  syncPresetsFromRemote().then(() => applyLastUsedStartup());
+  // データファイル群は並列に読み込む (逐次読みだと全て揃うまで時間がかかるため)
+  await Promise.all([
+    (async () => { try {
+      const r = await fetch('./data/names_ja.json');
+      if (r.ok) {
+        NAMES = await r.json();
+        // 公式の日本語名がない特性 (CAP) はカタカナ表記で補う (英名のみの表示をなくす)
+        if (NAMES.abilities) for (const [en, jaName] of Object.entries(ABILITY_JA_EXTRA)) { const k = idOf(en); if (NAMES.abilities[k] === en) NAMES.abilities[k] = jaName; }
+        NAMES._ja2en = {};
+        NAMES._indexSpecies = (await (await fetch('./data/names_index.json')).json()).species;
+        // 同じJA名に複数のフォルムがある場合は先勝ち (索引は基本フォルムが先頭)
+        for (const e of NAMES._indexSpecies) { const k = z2h(e.ja); if (!(k in NAMES._ja2en)) NAMES._ja2en[k] = e.en; }
+        NAMES._moveJa2en = {};
+        for (const [id, jaName] of Object.entries(NAMES.moves)) { const mv = [...gen.moves].find(m => idOf(m.name) === id); if (mv) NAMES._moveJa2en[z2h(jaName)] = mv.name; }
+        _moveFold2en = null; _moveEn2ja = null; // 逆引きキャッシュを作り直させる (itemJa2en と同種の固定化防止)
+        NAMES._abilityJa2en = {};
+        for (const [id, jaName] of Object.entries(NAMES.abilities)) { const ab = [...gen.abilities].find(a => idOf(a.name) === id); if (ab) NAMES._abilityJa2en[z2h(jaName)] = ab.name; }
+        applyItemMaps(); // 持ち物名マップは独立ローダー (LOADER_ITEMS_JA) が読み込む
+      }
+    } catch (e) { /* names are optional */ } })(),
+    (async () => { try {
+      const u = await (await fetch('./data/usage_sets.json')).json();
+      USAGE_SETS = u.sets || {};
+      USAGE_SEASON = u.season || '';
+      // 読み込み前に仮の型で作られていた相手パネルは、使用率型で作り直す。
+      // その際、既に反映済みの HP・状態・判明情報などは引き継ぐ
+      state.opps = state.oppTeam.map((sp, i) => {
+        const old = state.opps[i];
+        if (!old || old.species !== sp) return oppSpec(sp, 'usage');
+        if (!old.noUsage) return old;
+        const fresh = oppSpec(sp, 'usage');
+        fresh.curHPPercent = old.curHPPercent; fresh.boosts = old.boosts; fresh.status = old.status; fresh.moveSpec = old.moveSpec;
+        fresh.knownMoves = old.knownMoves || [];
+        if (old.estManual) fresh.estManual = old.estManual;
+        for (const f of old.corrected || []) {
+          if (f === '特性') fresh.ability = old.ability;
+          if (f === '性格') fresh.nature = old.nature;
+          if (f === '持ち物') { fresh.item = old.item; fresh.megaSpecies = old.megaSpecies; fresh.megaAbility = old.megaAbility; fresh.mega = old.mega; }
+          if (f === '技') fresh.moves = [...old.moves];
+          if (f === 'EV') fresh.sp = { ...old.sp };
+          if (!fresh.corrected.includes(f)) fresh.corrected.push(f);
+        }
+        if (old.mega && !fresh.mega) { fresh.mega = true; fresh.megaSpecies = old.megaSpecies; fresh.megaAbility = old.megaAbility; }
+        sanitizeOppMoves(fresh);
+        arrangeKnownFirst(fresh);
+        return fresh;
+      });
+    } catch (e) { /* usage sets optional */ } })(),
+    (async () => { try {
+      const sa = await (await fetch('./data/species_abilities.json')).json();
+      SPECIES_ABILITIES = sa || {};
+    } catch (e) { /* species abilities optional */ } })(),
+    runDataLoader(LOADER_ITEMS_JA),
+    runDataLoader(LOADER_POKEDB),
+    runDataLoader(LOADER_META_SETS),
+    (async () => { try {
+      const vg = await (await fetch('./data/vgcpastes_sets.json')).json();
+      if (vg && vg.species) VGC_SETS = vg;
+    } catch (e) { /* vgcpastes sets optional */ } })(),
+    runDataLoader(LOADER_VGC_CORPUS),
+    (async () => { try {
+      const cd = await (await fetch('./data/champions_dex.json')).json();
+      CHAMP = { species: new Set(cd.species || []), items: new Set(cd.items || []), moves: new Set(cd.moves || []) };
+    } catch (e) { /* champions dex optional */ } })(),
+    (async () => { try {
+      const rg = await (await fetch('./data/regulation.json')).json();
+      if (rg) REG = rg;
+      if (rg && rg.regulation) { const el = document.getElementById('regname'); if (el) el.textContent = 'レギュレーション' + rg.regulation; }
+    } catch (e) { /* regulation optional */ } })(),
+    (async () => { try {
+      SPECIES_MOVES = await (await fetch('./data/species_moves.json')).json();
+    } catch (e) { /* species moves optional (初期技の補完用) */ } })(),
+    (async () => { try {
+      const sp = await (await fetch('./data/spec_patches.json')).json();
+      setSpecPatchData(sp);
+      let saved = '';
+      try { saved = localStorage.getItem('champions-calc-specpatch') || ''; } catch (e) { /* ignore */ }
+      if (saved) applySpecPatch(saved);
+    } catch (e) { /* spec patches optional (無い場合は現行仕様のみ) */ } finally { renderSpecSel(); } })(),
+  ]);
+  if (missingCriticalLoaders().length) scheduleDataRetry();
+  // dropdown option lists
+  // 保存済みの仕様選択が無ければ、レギュレーションの既定 (シーズン対応) を適用する
+  { const defId = defaultSpecPatchId(REG); if (defId) applySpecPatch(defId); renderSpecSel(); }
+  // 種族は実装範囲に絞らない (レギュレーション変更で他種族が解禁されても
+  // そのまま選べるように、全ポケモンを候補にする)。候補の正本は champions_dex
+  // の species (全種族・フォルム) で、データ push の前後で表示が欠けないよう
+  // 名前索引にある種族との和集合にする。技・持ち物・特性も同様に全て候補にする
+  const en2ja = {};
+  for (const e of (NAMES._indexSpecies || [])) if (!(e.en in en2ja)) en2ja[e.en] = e.ja;
+  const speciesEns = new Set(Object.values(NAMES._ja2en || {}));
+  if (CHAMP && CHAMP.species) for (const en of CHAMP.species) speciesEns.add(en);
+  SPECIES_OPTIONS = [...speciesEns]
+    .map(en => ({ v: en, l: biLabel(en2ja[en] || (NAMES.species || {})[idOf(en)] || '', en) }))
+    .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  // 技・持ち物・特性はレギュレーションのスコープで絞らず全て選択可能にする
+  // (ユニバース = champions_dex / calc の全データ)。ただし Zワザ・ダイマックス
+  // わざは仕組み側の技で、名前で直接選ぶとダミー威力 (Z=1 / Max=10) で計算され
+  // てしまうため、技プルダウンからは外す (Z / ダイマックスのトグルで使う)。
+  // 相手型の自動補完 (fallbackMovesFor) は従来どおりレギュレーション範囲を使う。
+  const mechMoves = new Set([...gen.moves].filter(m => m.isZ || m.isMax).map(m => m.name));
+  // 技 ID をキーに構築する (日本語名キーだと めざめるパワー のタイプ別バリアント
+  // のように同名で潰れてしまう。英名併記で区別できる)
+  const moveById = new Map([...gen.moves].map(m => [idOf(m.name), m]));
+  MOVE_OPTIONS = [{ v: '', l: '（技なし）' }].concat(
+    Object.entries(NAMES.moves || {})
+      .map(([id, jaName]) => { const mv = moveById.get(id); return mv && !mechMoves.has(mv.name) ? { v: mv.name, l: biLabel(jaName, mv.name) } : null; })
+      .filter(Boolean)
+      .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
+  ITEM_OPTIONS = [{ v: '', l: 'なし' }].concat(
+    [...gen.items].map(it => it.name)
+      .map(en => ({ v: en, l: biLabel((NAMES._itemEn2ja || {})[idOf(en)] || en, en) }))
+      .sort((a, b) => a.l.localeCompare(b.l, 'ja')));
+  ABILITY_OPTIONS = Object.keys(NAMES.abilities || {})
+    .map(id => { const a = gen.abilities.get(id); return a && a.name ? { v: a.name, l: biLabel(NAMES.abilities[id] || a.name, a.name) } : null; })
+    .filter(Boolean)
+    .sort((a, b) => a.l.localeCompare(b.l, 'ja'));
+  await loadMyTeam();
+  initTeamReady = true;
+  applyLastUsedStartup();
+  calcAll();
+  // データが揃った状態で最新の state.json を反映し直す
+  lastStateText = '';
+  poll();
+})();
+
+;globalThis.__T = { bayesEntry, bayesReset, bayesApply, bayesCandSpec, bayesView,
+  applyState, get state() { return state; }, get estimator() { return estimator; },
+  getMeta: () => META_SETS, getVgc: () => VGC_CORPUS,
+  dataReady: () => !!(POKEDB_PARSED && USAGE_SETS && META_SETS_LOADED) };
