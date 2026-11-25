@@ -4,7 +4,7 @@ User approved limited PV16-C; no production changes, no Codex, no paid APIs, no 
 
 ## Rechecked evidence
 - Prior qualitative report: PV16-PokeAPI-icon-pilot-v0.1.md, blob a487006927a7569e7216ff503c9658cfd02d3a85. Three species, two layouts of one recording, six development queries. Same-recording observations, some labels provisional, rights unknown, quarantine maintained.
-- Public icon files retrieved via GitHub connector (61,546 B total). All four PNG signatures, IHDR 128x128, 8-bit RGBA; returned Git blob identifiers match earlier report:
+- Public icon files retrieved via GitHub connector (62,946 B total). All four PNG signatures, IHDR 128x128, 8-bit RGBA; returned Git blob identifiers match earlier report:
   - icons/812.png 99abd84beb658aa72e2582648263aeb4d2de8d08 17550 B
   - icons/727.png 81a5991d0cc745e40b830d3c573ca318babd55ac 14504 B
   - icons/637.png 05051bb4903170e7e6f2475e1b10214596130a29 15280 B
