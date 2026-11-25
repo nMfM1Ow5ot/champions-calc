@@ -1,0 +1,173 @@
+{
+ "header": {
+  "p1": {
+   "set_match": 6,
+   "of": 6,
+   "order_exact": true
+  },
+  "p2": {
+   "set_match": 6,
+   "of": 6,
+   "order_exact": true
+  }
+ },
+ "lines_total": {
+  "tp": 72,
+  "fp": 24,
+  "fn": 23,
+  "precision": 0.75,
+  "recall": 0.7579,
+  "f1": 0.7539
+ },
+ "lines_by_category": {
+  "switch": {
+   "tp": 3,
+   "fp": 7,
+   "fn": 5,
+   "precision": 0.3,
+   "recall": 0.375,
+   "f1": 0.3333
+  },
+  "move": {
+   "tp": 19,
+   "fp": 0,
+   "fn": 2,
+   "precision": 1.0,
+   "recall": 0.9048,
+   "f1": 0.95
+  },
+  "damage": {
+   "tp": 12,
+   "fp": 2,
+   "fn": 2,
+   "precision": 0.8571,
+   "recall": 0.8571,
+   "f1": 0.8571
+  },
+  "heal": {
+   "tp": 7,
+   "fp": 1,
+   "fn": 1,
+   "precision": 0.875,
+   "recall": 0.875,
+   "f1": 0.875
+  },
+  "boost": {
+   "tp": 10,
+   "fp": 3,
+   "fn": 5,
+   "precision": 0.7692,
+   "recall": 0.6667,
+   "f1": 0.7143
+  },
+  "unboost": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 2,
+   "precision": 0.5,
+   "recall": 0.5,
+   "f1": 0.5
+  },
+  "ability": {
+   "tp": 1,
+   "fp": 1,
+   "fn": 2,
+   "precision": 0.5,
+   "recall": 0.3333,
+   "f1": 0.4
+  },
+  "item": {
+   "tp": 8,
+   "fp": 2,
+   "fn": 1,
+   "precision": 0.8,
+   "recall": 0.8889,
+   "f1": 0.8421
+  },
+  "status": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0
+  },
+  "faint": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0
+  },
+  "weather": {
+   "tp": 1,
+   "fp": 1,
+   "fn": 1,
+   "precision": 0.5,
+   "recall": 0.5,
+   "f1": 0.5
+  },
+  "field": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0
+  },
+  "forme": {
+   "tp": 0,
+   "fp": 2,
+   "fn": 2,
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1": 0.0
+  },
+  "effectiveness": {
+   "tp": 5,
+   "fp": 0,
+   "fn": 0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0
+  },
+  "message": {
+   "tp": 0,
+   "fp": 3,
+   "fn": 0,
+   "precision": 0.0,
+   "recall": 1.0,
+   "f1": 0.0
+  },
+  "turn": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0
+  },
+  "other": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0
+  }
+ },
+ "turn_consistency": {
+  "same_turn": 72,
+  "wrong_turn": 14,
+  "missing": 9,
+  "of": 95,
+  "rate": 0.7579
+ },
+ "strict_sequence": {
+  "lcs": 82,
+  "truth_lines": 102,
+  "output_lines": 103,
+  "rate": 0.8039
+ }
+}
