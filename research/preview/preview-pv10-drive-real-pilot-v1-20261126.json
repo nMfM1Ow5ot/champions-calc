@@ -1,0 +1,79 @@
+{
+  "schema": "pv10-drive-access-real-pilot-v1",
+  "date": "2026-11-26",
+  "status": "ACCESS_VERIFIED_REAL_PILOT_COMPLETE_LIMITED",
+  "prior": "4a8fe481c6e00ea6d96e506408614b69c783fd33",
+  "scope": "Research only; no production changes, sharing changes, or user actions.",
+  "access": {
+    "method": "Authenticated direct paginated folder listing, then raw file fetch with inline base64 disabled; actual video bytes mounted in execution container.",
+    "priorFailure": "Search query returned folders but omitted files. Direct listing returned original and four split recordings. Exact cause of search omission not established.",
+    "originalCount": 1,
+    "splitCount": 4,
+    "downloadPermissionAllFive": true,
+    "downloadedSegments": 2,
+    "totalBytes": 352381470,
+    "originalNotDownloaded": true,
+    "otherSegmentsNotDownloaded": true
+  },
+  "execution": {
+    "collectorCommit": "c01f9406a7c6f46c7202a2c7497a025dbe41119d",
+    "collectorSHA256": "2ef3044f5cf83c72f0490ed2a0c530f7fd1cf8e595e537bc66abd3d2270170e6",
+    "detectorSHA256": "25f5489c117ed05a921e3e76dd871aa0ae4be1332d68fd521af735b9b9d62076",
+    "samplingHz": 2,
+    "maxSamples": 300,
+    "opencv": "4.13.0",
+    "segments": [
+      {
+        "position": 4,
+        "bytes": 167826581,
+        "durationSeconds": 140.1195,
+        "dimensions": [
+          1920,
+          1080
+        ],
+        "nominalFPS": 60,
+        "frames": 8407,
+        "samples": 281,
+        "positiveSamples": 0,
+        "runs": 0,
+        "crops": 0,
+        "features": 0,
+        "elapsedSeconds": 19.32,
+        "review": "15 representative timestamps at 10-second spacing show active battle and result scenes; no preview seen in these samples, not exhaustive manual ground truth."
+      },
+      {
+        "position": 1,
+        "bytes": 184554889,
+        "durationSeconds": 140.1375,
+        "dimensions": [
+          1920,
+          1080
+        ],
+        "nominalFPS": 60,
+        "frames": 8408,
+        "samples": 281,
+        "positiveSamples": 130,
+        "runs": 24,
+        "crops": 144,
+        "features": 144,
+        "uniqueCropDigests": 144,
+        "uniqueDescriptors": 144,
+        "elapsedSeconds": 21.54,
+        "review": "Visual inspection of all 24 emitted frames: 22 show the same apparent opponent preview lineup (15–86.5 nominal seconds); two show in-battle command menus (112 and 122 nominal seconds). Thus 132 preview candidate crops and 12 false-scene candidate crops, not validated individual crop accuracy. All remain quarantined."
+      }
+    ]
+  },
+  "registered": 0,
+  "limitations": [
+    "One apparent lineup in a single recording; no independent species label checks, no ground truth for all sampled frames, no overall sensitivity/specificity estimate.",
+    "Candidate run count is inflated by intermittent geometry detection; unique SHA-256 is not meaningful appearance independence.",
+    "First and last split segments must not be treated as independent matches; middle segments not scanned.",
+    "Decode end or error is not distinguished by collector; samples consistent with nominal frame counts, not proof of exhaustive decoding.",
+    "No raw recordings, crops, trainer identifiers, lineups, Drive identifiers or bearer URLs committed."
+  ],
+  "next": [
+    "Reuse same downloaded first split if accessible; add scene gating to exclude battle command menus and merge intermittent detections within a verified battle.",
+    "Check crop quality and label evidence independently; use PV09 metadata admission gate; keep reference vs holdout groups separate.",
+    "Do not download original or remaining splits without a concrete research need."
+  ]
+}
