@@ -1,0 +1,85 @@
+{
+  "schema": "pv-encrypted-asset-survey-v1",
+  "date": "2026-11-26",
+  "status": "METADATA_VERIFIED_LOCAL_REUSE_PROMISING_RAW_VALIDATION_PENDING",
+  "index": {
+    "path": "logs_enc/index.json",
+    "blob": "ae4325f40897e2dcf3a95a08fde9543108237b1f",
+    "entries": 981,
+    "jpegEntries": 390,
+    "uniqueNames": 390,
+    "uniqueRecordedPlaintextDigests": 376,
+    "validRecordedDigests": 390,
+    "duplicateGroups": 13,
+    "duplicateExtraEntries": 14,
+    "duplicateGroupsCrossNamedSource": 0,
+    "uploadDateCounts": {
+      "2026-11-21": 101,
+      "2026-11-22": 212,
+      "2026-11-23": 77
+    },
+    "battleImages": 382,
+    "battleImageDigestCount": 369,
+    "battleFilenameGroups": 30,
+    "battleWithDebug01": 28,
+    "previewTestImages": 8,
+    "previewTestDigestCount": 7,
+    "pairedJSON": {
+      "battle": 381,
+      "previewTest": 8
+    },
+    "otherEntries": {
+      "json": 441,
+      "log": 97,
+      "txt": 34,
+      "jsonl": 19
+    }
+  },
+  "sourceAudit": {
+    "commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "reader": "reader.swift:3740-3868,11423; debugCapture(kind: preview_id) persists selected preview evidence and classifier outputs, event kind and state in companion JSON; preview class exempt from class-specific count but total guard and missing image still possible. Capture is event-triggered, not random sample.",
+    "previewTest": "preview_test.sh: manually captured JPEG and detection JSON in logs; serve.py session-controlled upload.",
+    "encryption": "serve.py:275-290,523-532,1488-1530; openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -a -pass file:<local credential file>; default digest SHA-256 in modern OpenSSL. Index stores plaintext SHA-256. No actual credentials read, printed or transferred.",
+    "syntheticTest": {
+      "openssl": "3.5.5",
+      "dummyRandomCredentialLocalOnly": true,
+      "roundtrip": true,
+      "wrongCredentialRejectedByDigest": true,
+      "modifiedCiphertextRejectedByDigest": true,
+      "actualAssetDecryption": false
+    }
+  },
+  "priorOverlap": {
+    "checked": [
+      "PV01 record",
+      "PV04 record",
+      "OCR V13 first record"
+    ],
+    "exactRecordedImageDigestMatches": [
+      0,
+      0,
+      0
+    ],
+    "qualification": "Only published digest literals compared; no proof of distinct battles or pixel/source provenance."
+  },
+  "recommendation": [
+    "Prefer original local logs matching index hashes, no decryption if present.",
+    "If missing, use authorized local OpenSSL with original credential file; inspect paired JSON metadata first to identify preview_id; prioritize small pilot one paired image+JSON; verify plaintext digest before parsing or viewing; never expose secret or publish raw images.",
+    "Identify capture time, battle identity, exact form label evidence independent of recognizer, reference-bank provenance and rights; group linked battles and near duplicates; freeze holdout split before tuning. Do not treat predicted picks as ground truth.",
+    "30 filename groups and 8 named preview test images are candidate assets, not verified independent previews. No proof these are the exact manually supplied Muse attachments."
+  ],
+  "resources": {
+    "newImageDownloads": 0,
+    "actualDecryption": 0,
+    "paidAPI": 0,
+    "productionChanges": 0,
+    "rawPublication": 0
+  },
+  "limitations": [
+    "Index entries not independently checked against all ciphertext objects, digest values are recorded not recomputed.",
+    "Current encryption source at pinned revision may not match every historical asset; verify with original OpenSSL version and sample digest.",
+    "Actual key availability and local logs not verified; no user credential retrieval attempted.",
+    "No independent recognition accuracy or exact reference coverage established; no global ledger update."
+  ],
+  "reference": "https://docs.openssl.org/3.5/man1/openssl-enc/"
+}
