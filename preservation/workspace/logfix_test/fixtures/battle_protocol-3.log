@@ -1,0 +1,82 @@
+|gametype|doubles
+|poke|p1|Blastoise
+|poke|p1|Gardevoir
+|poke|p1|Sneasler
+|poke|p1|Indeedee-F
+|poke|p1|Armarouge
+|poke|p1|Whimsicott
+|poke|p2|Charizard
+|poke|p2|Garchomp
+|poke|p2|Incineroar
+|poke|p2|Farigiraf
+|poke|p2|Aromatisse
+|poke|p2|Venusaur
+|start
+|switch|p1a: Gardevoir|Gardevoir|100/100
+|switch|p1b: Indeedee-F|Indeedee-F|100/100
+|-fieldstart|move: Psychic Terrain
+|-ability|p1b: Indeedee-F|Psychic Surge
+|switch|p2a: Venusaur|Venusaur|100/100
+|switch|p2b: Sylveon|Sylveon|100/100
+|turn|1
+|-item|p1a: Gardevoir|Gardevoirite
+|detailschange|p1a: Gardevoir|Gardevoir-Mega
+|-mega|p1a: Gardevoir|Gardevoir|Gardevoirite
+|move|p1b: Indeedee-F|Follow Me
+|-singleactivate|p1b: Indeedee-F|move: Follow Me
+|move|p1a: Gardevoir|Expanding Force
+|-damage|p2a: Venusaur|1/100
+|-damage|p2b: Sylveon|45/100
+|-supereffective|p2a: Venusaur
+|-item|p2a: Venusaur|Focus Sash
+|-activate|p2a: Venusaur|item: Focus Sash
+|move|p2a: Venusaur|Sludge Bomb
+|-damage|p1b: Indeedee-F|96/177
+|move|p2b: Sylveon|Yawn
+|-message|イエッサンのねわけ眠気を誘った！
+|turn|2
+|move|p2b: Sylveon|Detect
+|-boost|p1a: Sneasler|def|1
+|-boost|p1a: Sneasler|spd|1
+|move|p1a: Gardevoir|Expanding Force
+|-activate|p2b: Sylveon|move: Protect
+|-damage|p2a: Venusaur|0/100
+|faint|p2a: Venusaur
+|-supereffective|p2a: Venusaur
+|switch|p2a: Farigiraf|Farigiraf|100/100
+|switch|p1b: Sneasler|Sneasler|157/157
+|turn|3
+|move|p1b: Sneasler|Dire Claw
+|-damage|p2a: Farigiraf|58/100
+|move|p1a: Gardevoir|Expanding Force
+|switch|p2b: Garchomp|Garchomp|22/100
+|-damage|p2a: Farigiraf|28/100
+|-resisted|p2a: Farigiraf
+|-heal|p2a: Farigiraf|53/100
+|move|p2a: Farigiraf|Trick Room
+|-message|あいて相手のリキキリンは時空をゆがめた！
+|turn|4
+|move|p2b: Garchomp|Protect
+|move|p2a: Farigiraf|Psychic
+|switch|p1b: Indeedee-F|Indeedee-F|55/177
+|-resisted|p1b: Indeedee-F
+|-unboost|p1b: Indeedee-F|def|1
+|-unboost|p1b: Indeedee-F|spd|1
+|move|p1a: Gardevoir|Hyper Voice
+|-damage|p2a: Farigiraf|13/100
+|turn|5
+|move|p2a: Farigiraf|Thunderbolt
+|-damage|p1a: Gardevoir|111/145
+|move|p1b: Indeedee-F|Psychic
+|switch|p2b: Sylveon|Sylveon|4/100
+|-crit|p1a: Gardevoir
+|-message|慧所にたった！
+|move|p1a: Gardevoir|Hyper Voice
+|-damage|p2a: Farigiraf|0/100
+|-damage|p2b: Sylveon|0/100
+|faint|p2a: Farigiraf
+|faint|p2b: Sylveon
+|-fieldend|move: Psychic Terrain
+|switch|p2b: Garchomp|Garchomp|22/100
+|turn|6
+|win|Ren
