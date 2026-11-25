@@ -1,0 +1,114 @@
+{
+  "schema": "pv12-quality-selection-validation-v1",
+  "date": "2026-11-26",
+  "status": "DEVELOPMENT_PASS_ADMISSION_BLOCKED",
+  "scope": "Research only, reuse cached frames and recordings; no new downloads, paid services, user actions, or production changes.",
+  "prior": "ead72fd0742771291acd58e4ebbcf5a8ebcb9f56",
+  "code": {
+    "commit": "dc83c3222f3b3553e889564c4b6e553f2e463edc",
+    "blob": "27dcaa037abcbfeeda1ac24e2592155818a2ebbd",
+    "sha256": "ea7a54391c67513d410037f76352d3cb10fc10099a66ccd481a378d637690e99",
+    "readbackBlobMatchesExecuted": true,
+    "detectorSHA256": "b817730ee5f5fb7320c7f1246ff7fb9aa30efee1b94526bfbbc06e8cf960a32a"
+  },
+  "input": {
+    "cachedFramesVerified": 24,
+    "cachedCropsVerified": 144,
+    "acceptedPreviewFrames": 22,
+    "rejectedCommandFrames": 2,
+    "layoutFrameCounts": [
+      3,
+      19
+    ],
+    "apparentBattles": 1,
+    "sourceRecordingDigests": [
+      "952fe95358842e2af367b13fef06c15cf98202ed44ce0c4ca804c64a1de0a581",
+      "c4f3158d84d5840f13181ad565433b93cd4b6603fbb655b11f1ca08028dad883"
+    ]
+  },
+  "method": {
+    "crop": "PV11 fixed panels. Compare old nominal 52% right boundary to widened right boundary at 63%; widened crop starts x+4,y+3 and trims bottom 3. This is a right-boundary proxy on expanded crops, not a full old-vs-new segmentation trial.",
+    "foreground": "Pixelwise temporal median by layout and slot; non-red mask ((R-G<45 or R-B<15) and max channel>45), trim first/last 3 rows; largest connected component. Imperfect proxy, especially red/dark/disconnected parts.",
+    "score": "Foreground mean absolute BGR deviation from median plus 0.25 times background deviation; choose observed original image with minimum score, tie by run index. Laplacian mean squared response recorded as diagnostic only. No synthetic median reference registered."
+  },
+  "result": {
+    "expandedCandidates": 132,
+    "groups": 12,
+    "representatives": 12,
+    "representativeDigestsReverified": 12,
+    "oldRightBoundaryCrossingGroups": 6,
+    "newRightBoundaryTouchGroups": 0,
+    "groupsWithLowerScoreThanFirst": 12,
+    "meanFirstScore": 5.044530625144641,
+    "meanSelectedScore": 3.788859156270822,
+    "meanFirstLaplacianEnergy": 899.5229828168858,
+    "meanSelectedLaplacianEnergy": 985.7714525476912,
+    "elapsedSeconds": 1.982,
+    "selfTests": {
+      "detect_right_crossing": true,
+      "select_stable_original": true,
+      "reject_empty_proxy": true
+    }
+  },
+  "labels": {
+    "visualHypotheses": 6,
+    "baseSpeciesCorroboratedByBattleNameplate": 3,
+    "visualOnlyUncorroboratedBaseSpecies": 3,
+    "evidenceFrames": 3,
+    "exactFormAndColorVariantVerification": "not complete",
+    "note": "Same-recording evidence from a different observation channel, not independent battles. Individual labels, lineups and evidence images kept local, not published."
+  },
+  "admission": {
+    "selectedQuarantined": 12,
+    "registered": 0,
+    "blockers": [
+      "No independently approved roster/form mapping or verified battle ID",
+      "Rights unresolved",
+      "No full label evidence for all six slots",
+      "PV09 admission gate integration and new extractor compatibility not validated",
+      "Independent recognition evaluation missing"
+    ]
+  },
+  "limitations": [
+    "One apparent battle, two layouts; 3 frames in first layout, 19 in second. Not independent accuracy evaluation.",
+    "Score reduction is in-sample by construction; not proof of general image quality or classification gains. Largest non-red component misses red/disconnected portions and bright overlay artifacts; 0 touches does not prove no clipping. Fixed width/offset and thresholds fitted on existing frames; not universal.",
+    "The selected images are local derivative crops, not validated descriptors compatible with production PV01/Swift extraction. No expanded descriptor generation or ranking test in this stage.",
+    "PV11 imported before hash check, local trusted environment only; manifest path and content assumptions not a hostile-input security boundary.",
+    "No raw frames, crop images, lineups, personal identifiers, private folder IDs or local evidence names published."
+  ],
+  "references": [
+    "https://legacy-docs.opencv.org/4.x/d4/d86/group__imgproc__filter.html",
+    "https://docs.mbari.org/triton-video-sampling/algorithm/metrics/",
+    "https://dataeval.readthedocs.io/en/latest-known-good/concepts/BlurStatistics.html"
+  ],
+  "todo": [
+    {
+      "id": "PV-10",
+      "status": "PARTIAL",
+      "detail": "Real access and collection established; no dictionary release."
+    },
+    {
+      "id": "PV-11",
+      "status": "DEVELOPMENT_PASS",
+      "detail": "Independent scene and grouping validation pending."
+    },
+    {
+      "id": "PV-12",
+      "status": "DEVELOPMENT_PASS_ADMISSION_BLOCKED",
+      "detail": "Quality diagnostic and representative selection complete on cached data; labels partly corroborated, no registration."
+    },
+    {
+      "id": "PV-13",
+      "status": "PROPOSED",
+      "detail": "Compare crop/segmentation and descriptor choices with fixed held-out reference bank; independent label and rights audit; integrate admission gate only after evidence."
+    }
+  ],
+  "principles": {
+    "review": "All 32 principles and current personalization reviewed; explicit exceptions recorded.",
+    "exceptions": [
+      "No quantitative upfront resource estimate; pilot reused small cache.",
+      "Global TODO ledger update pending, research TODO recorded.",
+      "No independent external validation or full admission integration; production unchanged."
+    ]
+  }
+}
