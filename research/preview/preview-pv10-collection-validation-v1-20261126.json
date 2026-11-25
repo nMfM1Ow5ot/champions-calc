@@ -1,0 +1,68 @@
+{
+  "schema": "pv10-collection-validation-v1",
+  "date": "2026-11-26",
+  "status": "PILOT_PASS_REAL_RECORDINGS_BLOCKED",
+  "scope": "Offline research, candidate generation only; production unchanged",
+  "assets": {
+    "existingDetector": {
+      "commit": "0470b8d9d09d8a86f60e39bf64823189e43b81d1",
+      "blob": "60a5c75d28d38d3c18a8de478af14bbc46bd90cf",
+      "sha256": "25f5489c117ed05a921e3e76dd871aa0ae4be1332d68fd521af735b9b9d62076"
+    },
+    "priorGate": "837ca325ed9ed99146edc0339412987787800e88",
+    "libraryProjectSearch": "No accessible raw recording found by title search",
+    "drive": "Existing recording folder and split subfolder found; child listing returned no accessible videos. This is not proof folders are empty.",
+    "local": "No game recordings accessible in execution container; no encrypted repository logs accessed",
+    "newRecordings": 0,
+    "newPaidServices": 0
+  },
+  "implementation": {
+    "collectorCommit": "c01f9406a7c6f46c7202a2c7497a025dbe41119d",
+    "collectorBlob": "e6b0e5a7b3ece3b832d18f0d9048f868d7b192bb",
+    "localCollectorBlob": "e6b0e5a7b3ece3b832d18f0d9048f868d7b192bb",
+    "collectorSHA256": "2ef3044f5cf83c72f0490ed2a0c530f7fd1cf8e595e537bc66abd3d2270170e6",
+    "testCommit": "b1d2e429af6a1a946d7cd5ccd7bafb727325eca8",
+    "opencv": "4.13.0",
+    "numpy": "2.3.5",
+    "protocol": "2 Hz nominal sampling, 300 sample budget, 2 consecutive positive sampled frames; emit first sample only per contiguous detection run; 1920x1080 exact only. All output quarantine, no self-labeling."
+  },
+  "synthetic": {
+    "frames": 36,
+    "fps": 4,
+    "samples": 18,
+    "positive": 12,
+    "candidateRuns": 2,
+    "candidateCrops": 12,
+    "features": 12,
+    "registered": 0,
+    "checks": [
+      "two positive runs",
+      "12 crops",
+      "all labels null and quarantined",
+      "crop hashes",
+      "frame hashes",
+      "sample budget",
+      "no overwrite",
+      "unsupported size rejected",
+      "isolated detection rejected"
+    ],
+    "allPassed": true,
+    "execution": "Executed collector locally with inline synthetic regression equivalent to committed test logic; committed test file itself not executed."
+  },
+  "limitations": [
+    "No real-game accuracy, scene detection recall, registration or label verification established.",
+    "Sampled-run identity is not battle identity. Split recordings can duplicate battles; same-source grouping uses recording digest only. Exact or near image duplicate clustering not implemented.",
+    "Fixed geometry; arbitrary resolution, variable frame rate, timestamp accuracy, decode errors, scene transitions without negative frames and actual crop quality not validated. Nominal timestamps only.",
+    "Detector imported before digest check; not a security sandbox. Output directory may remain partial after exception; only completed manifest is eligible for subsequent review.",
+    "Rights status unknown by default; use local-only with permitted recordings. No raw images or Drive identifiers published."
+  ],
+  "next": [
+    "Obtain access to existing permitted recording bytes without uploading raw assets to public GitHub; use local batch run on a small real clip.",
+    "Check metadata and variable frame rate with ffprobe, test layout and detection recall on real frames, map source splits to common battle group.",
+    "Validate independent slot labels, crop quality, duplicate clusters and PV09 admission before any research bank release."
+  ],
+  "references": [
+    "https://ffmpeg.org/ffprobe.html",
+    "https://legacy-docs.opencv.org/4.x/d4/d15/group__videoio__flags__base.html"
+  ]
+}
