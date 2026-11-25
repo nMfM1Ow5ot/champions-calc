@@ -1,0 +1,151 @@
+{
+  "schema": "ocr-independent-battle-pilot-v13",
+  "date": "2026-11-26",
+  "scope": "Frozen v12 recognition and v13 scoring; limited independent research pilot, no production acceptance",
+  "provenance": {
+    "batch_sha256": "2db95b239b07905068a01f7b50fc92ac69b0638a68083bbe7cfd5720c58e29d4",
+    "parts": [
+      {
+        "name": "part1.mov",
+        "archive_sha256": "047ba124e9791dcfac860ae734b49bb0bdfc955a67d0da43e32fbe53398a6cf3",
+        "video_sha256": "47e9bc7f3ecfe8f6c5cff482d9e03b756b25ad08f56d8bdd6042ade98cef5134",
+        "frames": 6,
+        "elapsed_seconds": 2.653
+      },
+      {
+        "name": "part2.mov",
+        "archive_sha256": "23552c7c8aee6279586b181ad755492a7f79ea83c7a6a684458d65559a9bc0e8",
+        "video_sha256": "58996d2353906c42f9ee479c5dab152c973deb9adb598d9ea01b8a8eab1f94c1",
+        "frames": 6,
+        "elapsed_seconds": 1.688
+      }
+    ],
+    "battle_count": 1,
+    "independence": "New battle relative to development examples, supported by user's recording provenance and visually different registered team/opponent. Parts are correlated, not separate battles.",
+    "recognition_commit": "ac31bb2662af52ac73d1441eb7920fa2b407b097",
+    "scorer_commit": "1aea369429900805fe4855da412207372864770d",
+    "protocol_commit": "e406b5946f1eb083c634f510f1b822eec46217c6",
+    "local_frozen_source_sha256_matches": 8,
+    "dictionary_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "dictionary_blob": "e6116f0eef415212da809c7f8a64fbd8e84f4c9b",
+    "dictionary_scope": "All five actual species-name queries evaluated against 1253 unique normalized labels via GitHub connector; local replay uses union of bounded edit-distance candidates; all queries accounted for. No move queries; full-dictionary Python CLI not run."
+  },
+  "execution": {
+    "frames_verified": 12,
+    "ocr_success": 12,
+    "coordinate_boxes_verified": 183,
+    "regression_pass": 76,
+    "regression_total": 76,
+    "scorer_pass": 12,
+    "scorer_total": 12,
+    "ocr_sum_seconds": 1.5079959630966187,
+    "ocr_median_seconds": 0.11186850070953369,
+    "reported_part_elapsed_sum_seconds": 4.341,
+    "confirmed_events": 0,
+    "additional_ocr_calls": 0
+  },
+  "reference": {
+    "method": "Image-only visual reference recorded locally before inspecting OCR output for new frames, single reviewer",
+    "screen_composition": {
+      "team_list": 3,
+      "team_selection_or_ready": 3,
+      "black_transition": 1,
+      "battle_intro": 1,
+      "weather_and_ability_message": 1,
+      "communication_wait": 1,
+      "battle_animation": 2
+    },
+    "scores": {
+      "hp": {
+        "correct": 2,
+        "wrong": 0,
+        "missing": 2,
+        "spurious": 0,
+        "precision": 1,
+        "recall": 0.5
+      },
+      "move": {
+        "correct": 0,
+        "wrong": 0,
+        "missing": 0,
+        "spurious": 0,
+        "precision": null,
+        "recall": null
+      },
+      "pp": {
+        "correct": 0,
+        "wrong": 0,
+        "missing": 0,
+        "spurious": 0,
+        "precision": null,
+        "recall": null
+      },
+      "message_kind": {
+        "correct": 0,
+        "wrong": 0,
+        "missing": 0,
+        "spurious": 0,
+        "precision": null,
+        "recall": null,
+        "excluded_frames": 1
+      },
+      "screen": {
+        "correct": 1,
+        "wrong": 0,
+        "missing": 0,
+        "spurious": 0,
+        "precision": 1,
+        "recall": 1,
+        "excluded_frames": 11
+      }
+    },
+    "hp_split": {
+      "own": {
+        "correct": 0,
+        "visible": 2
+      },
+      "opponent": {
+        "correct": 2,
+        "visible": 2
+      }
+    }
+  },
+  "disposition": {
+    "limited_pilot": "PASS_WITH_COVERAGE_LIMITATIONS",
+    "production": "NOT_GRANTED",
+    "reason": "Provenance and safety checks pass, at least one evaluable target, zero wrong/spurious scored candidates; omissions reported per frozen protocol. No coverage of supported message or move/PP positive examples."
+  },
+  "limitations": [
+    "Only one additional battle, 12 correlated samples, only one visible HP frame. No statistical accuracy guarantee.",
+    "Three selection frames contain no opponent name text; icon recognition outside current scope.",
+    "One frame shows weather and ability text outside current message grammar; not counted as successful recognition.",
+    "Two own HP strings malformed; no confirmed value. All emitted candidates remain unconfirmed.",
+    "No live event deduplication, production integration or broad dictionary legality validation.",
+    "Raw screenshots, transcripts, reference labels and player names not published."
+  ],
+  "todo": [
+    {
+      "id": "OCR-01",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "OCR-02",
+      "status": "COMPLETE_CONDITIONAL"
+    },
+    {
+      "id": "OCR-03",
+      "status": "PARTIAL",
+      "detail": "Selective HP ROI fallback remains untested; improve using existing data after recording baseline."
+    },
+    {
+      "id": "OCR-04",
+      "status": "PARTIAL",
+      "detail": "Independent pilot completed for observed classes; move/PP and supported battle message coverage missing. Additional existing part3/part4 may extend coverage on same battle, not another independent battle."
+    },
+    {
+      "id": "OCR-05",
+      "status": "PENDING",
+      "detail": "Production acceptance not granted."
+    }
+  ]
+}
