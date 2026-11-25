@@ -1,0 +1,106 @@
+{
+  "schema": "pv11-scene-dedup-validation-v1",
+  "date": "2026-11-26",
+  "status": "DEVELOPMENT_PASS_INDEPENDENT_VALIDATION_PENDING",
+  "scope": "Research only, reused previously retrieved recordings and cached frames; no downloads, paid APIs, production modifications or new dictionary registrations.",
+  "prior": "9c24a162c8371d9590411f0f12f3704ec9db2515",
+  "code": {
+    "commit": "8e1217da0c481f9370336d53e2db172c5b892bb3",
+    "blob": "1578a63c391d787dbb5601a835ee1c87fd0f6932",
+    "sha256": "b817730ee5f5fb7320c7f1246ff7fb9aa30efee1b94526bfbbc06e8cf960a32a",
+    "readbackBlobMatchesExecuted": true,
+    "opencv": "4.13.0",
+    "numpy": "2.3.5",
+    "calibrationFrameSHA256": "0e450dcd058fdf2d1978273d79bc917ea0f031ec2312a073b8980f5e0dbc81eb"
+  },
+  "method": {
+    "layout": "Two fixed 1920x1080 Japanese ranked doubles layouts fitted on cached preview frames; binary bright-title mask NCC >= .75 and minimum red border occupancy >= .90 across six panels, reject if zero or multiple layout matches.",
+    "dedup": "Two consecutive positive samples with slot appearance consistency start provisional episode. Anchor signature six 24x24 normalized BGR crops; all slot mean absolute distances <= .30; break if dissimilar or gap > 5 seconds. No inferred battle identity.",
+    "samplingHz": 2,
+    "sampleBudgetPerSegment": 300
+  },
+  "cachedDevelopment": {
+    "priorTrueScene": 22,
+    "priorFalseScene": 2,
+    "newTrueScene": 22,
+    "newFalseScene": 0,
+    "notIndependent": true
+  },
+  "segments": [
+    {
+      "position": 1,
+      "sha256": "952fe95358842e2af367b13fef06c15cf98202ed44ce0c4ca804c64a1de0a581",
+      "samples": 281,
+      "decoded": 281,
+      "oldPositive": 130,
+      "oldRuns": 24,
+      "newPositive": 149,
+      "newEpisodes": 1,
+      "nominalStartSeconds": 15,
+      "nominalEndSeconds": 89,
+      "layoutCounts": [
+        19,
+        130
+      ],
+      "minPositiveHeader": 0.8255172967910767,
+      "maxRejectedHeader": 0.6163593530654907,
+      "minPositiveRed": 1,
+      "maxPositiveGapSeconds": 0.5,
+      "seconds": 18.87586925100004
+    },
+    {
+      "position": 4,
+      "sha256": "c4f3158d84d5840f13181ad565433b93cd4b6603fbb655b11f1ca08028dad883",
+      "samples": 281,
+      "decoded": 281,
+      "oldPositive": 0,
+      "oldRuns": 0,
+      "newPositive": 0,
+      "newEpisodes": 0,
+      "maxRejectedHeader": 0.6430984139442444,
+      "seconds": 18.987668285000154
+    }
+  ],
+  "synthetic": {
+    "bridge_short_gap": true,
+    "split_dissimilar": true,
+    "split_long_gap": true,
+    "reject_isolated": true
+  },
+  "execution": "Initial combined scan timed out after first segment printed; separate scans completed and first-segment counts reproduced. Full per-sample results retained locally, not published; no raw frames, glyph template, names or lineups committed.",
+  "limitations": [
+    "One apparent battle; cached positive and negative frames used in method development; segment 4 shares same source recording. No exhaustive per-sampled-frame ground truth; no recall or general accuracy claim. 149 positives contiguous, so actual real short-gap bridging not demonstrated; synthetic tests only.",
+    "Fixed resolution, two layout offsets, Japanese UI title, local calibration frame dependency; no arbitrary localization or resolution support. Thresholds exploratory; red background can dominate appearance signature. No tested distinct similar teams or rapid rematches; never use provisional episode ID as battle ID.",
+    "No cross-file merging, no VFR exact timing, no complete decode-end versus decode-error distinction. No image generation, label confirmation or PV09 integration in PV11. Existing detector imported but not used by new fixed-layout gate; could remove unnecessary import in later revision."
+  ],
+  "references": [
+    "https://docs.opencv.org/4.x/de/da9/tutorial_template_matching.html",
+    "https://www.sciencedirect.com/science/article/pii/S0306457311000306"
+  ],
+  "todo": [
+    {
+      "id": "PV-10",
+      "status": "PARTIAL",
+      "detail": "Real video access and candidate crops complete; no label or registration."
+    },
+    {
+      "id": "PV-11",
+      "status": "DEVELOPMENT_PASS",
+      "detail": "Freeze candidate parameters, verify on independent games and multiple layouts."
+    },
+    {
+      "id": "PV-12",
+      "status": "PROPOSED",
+      "detail": "Independent crop quality and label evidence, within-battle diverse frame selection, unknowns and PV09 gate integration."
+    }
+  ],
+  "production": "unchanged",
+  "principles": {
+    "review": "32 principles and personalization reviewed; limitations explicitly stated.",
+    "exceptions": [
+      "Global TODO ledger not updated; local research TODO recorded.",
+      "Resource usage estimated qualitatively before execution; no precise upfront compute estimate.",
+      "Standalone code and local experiments checked but not independently audited; no general accuracy conclusion."
+    ]
+  }
+}
