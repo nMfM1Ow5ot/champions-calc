@@ -1,0 +1,37 @@
+# PV-01–15 integrated research audit v1
+Date: 2026-11-26. Scope: static review of frozen repository snapshot 2422149d68180a504ea5e9a381f37debac8e4513 versus f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4, and isolated synthetic counterexamples. Not an external independent audit or new end-to-end pixel evaluation.
+
+## Disposition
+DEVELOPMENT_RESEARCH_COMPLETE_WITH_LIMITATIONS; PRODUCTION_NOT_APPROVED; INDEPENDENT_ACCEPTANCE_BLOCKED. Retain research code and frozen candidate ranking. Do not promote top-ranked labels to hard logical constraints or assign calibrated probability from distance scores. No production files changed in audited comparison. 60 commits include OCR research, not all PV; preview 38 added files (20 code/test, 18 JSON/MD records). No new video download or paid API in this audit.
+
+## Evidence by stage
+| Stage | Result | Limitation |
+|---|---|---|
+| PV01 | 4/4 preview geometry, 0/21 negative candidates; 24/24 slots | Fitted geometry, not scene classification; two battles |
+| PV02–03 | 48/48 type cells; soft median rank top1 5/6 top2 6/6 | Development, only one ranking battle |
+| PV04 | Different lineup, manually cropped; type 12/12, fused top1 4/6 top3 6/6 | Not whole-frame, reference overlap not excluded |
+| PV05 | 204 queries: base/augmented appearance top1 18/136; oracle types 117/187 | Same descriptor family, source strings not battle IDs |
+| PV06 | External sprite metadata survey; 9 decoded images | Rights, aliases, matched full pixel bank unresolved |
+| PV07–08 | Hellinger appearance top1 149 vs 136/204, top3 163 vs 154; oracle types top1 187 both | Same 204 queries; 3-label pixel pilot ceiling; no independent HOG advantage |
+| PV09 | 578 descriptors, 284 heuristic candidate labels, 219 without non-shiny extra references, 6 cross-label exact descriptor groups | All 578 lack explicit image SHA, battle ID, extractor, label evidence, rights; heuristic roster not authoritative |
+| PV10 | 352381470 bytes in two previously downloaded split videos; 144 crops | 12 false-scene crops; zero new registrations |
+| PV11 | 24 emitted runs to 1 provisional episode; 22/22 cached positives retained, 2/2 false candidates rejected | Same one development battle; no exhaustive truth, fixed Japanese 1080p layouts |
+| PV12 | 132 expanded crops, 12 representatives, right-boundary proxy 6/12 to 0/12; score 5.045 to 3.789 | Same group minimization; no proof of classification improvement; 3 base species corroborated |
+| PV13 | Legacy 52% 5/12, Hellinger 52% 11/12, wide 63% 10/12, nonred 6/12 | Manual transfer without automated checksum; frozen reference extraction mismatch possible |
+| PV14 | Hellinger margin 127/204 accepted with 8/204 simulated unknown false accepts; post-hoc absolute cap .50 gives 105/204, zero simulated false accepts | Not independently calibrated; unknown exact label removal only |
+| PV15 | 24/24 type cells, soft rank 12/12, accepted 4/12, zero of six corroborated images accepted; gate v2 22/22 synthetic | Same single battle/two layouts, provisional exact forms, no full team acceptance, production Swift not verified |
+
+## New findings and isolated corrective prototypes
+A1 (major): PV09 gate only checks direct shared keys. Synthetic records A(reference,s1,b1), B(holdout,s2,b1), C(reference,s1,b2) link transitively. Existing gate accepts C and quarantines A/B; connected-component quarantine prototype rejects all three. Requires integrating with actual verified provenance and near-duplicate linkage; recursive union-find implementation is a small-scale prototype.
+A2 (major): PV15 glyph integration maps records to type only and converts null to blank. Unreadable icon with null is incorrectly treated as observed blank; complete-type logic can apply a penalty to incomplete types. Preserve status and disable full-set fusion when unknown; prototype tested. Also bind predictions to exact frame/slot/cell ID, validate count/order, avoid empty-layout vacuous success. Current prototypes not integrated with existing programs or production. No change to past observed 12-image aggregate (no unknown icon in that run).
+A3 (major): Reference coverage and legality: distinguish biological species and form labels; 284 is a heuristic candidate count, not approved M-C roster. Same-descriptor forms are ambiguity sets, not proven image equivalence. Need rights and source/label evidence before new dictionary insertion.
+A4 (major): Data dependence and reproducibility. 204-query experiments use same bank and source-name holdout; 12-image experiments one battle, two layouts. PV04 is limited different-lineup component evidence, not independent full-pipeline acceptance. Do not pool samples across reports. PV13 transfer not hash-verified; PV15 FNV checks and local SHA values do not establish cryptographic binding across environments or icon-to-row association. Standalone CLIs and Swift numerical equivalence remain unverified. Earlier blanket statement all previous ZIPs same battle too strong; OCR extension record identifies a distinct OCR battle, but availability/unused preview labels not established.
+A5 (major): PV15 v2 acceptance gate only validates declarations and separate confidence bounds, not actual evidence signatures or independent sampling. Coverage empirical; policy unapproved. Separate known/unknown/negative tests and complete team coverage necessary. Score margins and absolute cap not probabilities; avoid forced unique label.
+A6 (operational): no end-to-end performance/latency on target Mac, no measured effect on win rate or total historical token/time/monetary cost. No exact ROI. Global TODO master update not verified.
+
+Prototype commit 40036f7411446a454024bd809f9f4fc337256c1f: nine isolated checks passed in connector JS; content readback matched. Not integrated or standalone CLI-tested.
+
+## Priority / cost-effectiveness
+High value: (1) acquire eligible independent previews using existing OCR assets where authorized; freeze labels/provenance and split before rank evaluation, (2) approve roster/form mapping and rights; actual metadata + byte checks and component quarantine, (3) single-process reproducible evaluation preserving unknown state, production Swift equivalence, complete team outcomes and real negative/unknown challenges, (4) calibrate acceptance on development data and preapprove separate acceptance policy before independent test. Low value: further thresholds or feature tuning on same 12 images or repeated 204 descriptors; bulk asset acquisition before rights/mapping/pilot; deep model before matching references and comparative evidence. No further PV algorithm tuning recommended until new evidence.
+Candidate freeze proposal: old 52% extractor, Hellinger appearance ranking, soft type penalty .25 only when complete reliable type set (otherwise no full-set penalty), margin >.10 and absolute cap <=.50 as research comparator not production threshold, preserve ambiguity and abstention. Keep legacy comparator. No change to existing code or policy authorized by this audit.
+TODO: PV01–15 development archived with limitations, independent PV acceptance BLOCKED. Fix A1/A2 and row binding before any pilot integration. Verify actual authorized archive/preview labels; run standalone/production-equivalent harness; approve representative sample plan and thresholds. If no asset access, pause PV and allocate resources to other project research. All 32 principles reviewed; exact historical cost not available, global ledger not updated, no independent audit or production tests.
