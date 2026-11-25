@@ -1,0 +1,93 @@
+{
+  "schema": "pv15-final-disposition-v1",
+  "date": "2026-11-26",
+  "status": "DEVELOPMENT_CLOSED_INDEPENDENT_ACCEPTANCE_BLOCKED",
+  "priorRecords": [
+    "7fc4abf89a80518a27071a6443a70cf79720dcda",
+    "4531285bfa5e83df5c6d3ec672529f82eb86652d"
+  ],
+  "audit": {
+    "v1OriginalTests": 13,
+    "v1Passed": 13,
+    "counterexample": "v1 returns ELIGIBLE_FOR_HUMAN_REVIEW for synthetic positive fixture with unknownTrials=1, negativeSceneTrials=1; no independent-group minimum or separate statistical upper bound.",
+    "v2Commit": "6e3fabd6d81576c7b9eb51b648270f7d5e44345d",
+    "v2Blob": "e4169f3e9efce2f6b16ea44505179d7829bcec10",
+    "v2Tests": 22,
+    "v2Passed": 22,
+    "execution": "JS functions directly executed in connector runtime; readback v2 content exactly matched; standalone CLI not run.",
+    "v2Limits": "Per-cohort duplicate detection and declared config digest binding, not cryptographic verification of actual config bytes, provenance or approval signature. Independence and representativeness require external audit. Individual one-sided bounds, not simultaneous confidence. Challenge group outcomes must reflect any false accept in the group. Empirical team coverage, no lower confidence bound."
+  },
+  "diagnostic": {
+    "n": 12,
+    "oneDevelopmentBattle": true,
+    "iconCellMatches": 24,
+    "legacyTop1": 5,
+    "hellingerTop1": 11,
+    "fusedTop1": 12,
+    "accepted": 4,
+    "corroboratedBaseImagesAccepted": 0,
+    "corroboratedBaseImages": 6,
+    "independentEligibleBattles": 0,
+    "localPrivateTransferSHA256Rechecked": true,
+    "productionSwiftEquivalent": false
+  },
+  "assets": {
+    "driveProjectFolderRelisted": true,
+    "additionalVideoDownloads": 0,
+    "libraryRawAccessPreviouslyDenied": true,
+    "unusedIndependentAssetsNotEstablished": true
+  },
+  "decision": {
+    "production": "NOT_APPROVED",
+    "dictionaryRegistration": 0,
+    "thresholdChange": false,
+    "researchRecommendation": "Retain Hellinger and soft type fusion as frozen candidates; do not use a top-ranked label as a deterministic observation. Stop repeat tuning until independent assets and acceptance policy are available.",
+    "acceptancePolicyApproved": false
+  },
+  "statisticalReference": {
+    "formula": "1-0.05^(1/n), zero events in n independent representative Bernoulli groups",
+    "reference": "https://pubmed.ncbi.nlm.nih.gov/6827763/",
+    "nist": "https://itl.nist.gov/div898/software/dataplot/refman2/auxillar/exacbici.htm",
+    "examples": [
+      {
+        "n": 59,
+        "upper": 0.049507609888227
+      },
+      {
+        "n": 299,
+        "upper": 0.009969146792899286
+      }
+    ],
+    "note": "Examples not approved thresholds; challenge groups assessed separately."
+  },
+  "todo": [
+    {
+      "id": "PV15-development",
+      "status": "COMPLETE_WITH_LIMITATIONS"
+    },
+    {
+      "id": "PV15-independent-acceptance",
+      "status": "BLOCKED",
+      "requires": [
+        "unused representative M-C battle images with independent exact labels and provenance",
+        "actual production-equivalent implementation",
+        "unknown and negative challenge cohorts",
+        "approved pre-specified acceptance criteria"
+      ]
+    }
+  ],
+  "resources": {
+    "newVideoBytes": 0,
+    "paidAPIs": 0,
+    "rawImagePublication": 0,
+    "productionChanges": 0
+  },
+  "principles": {
+    "review": "32 principles reviewed; standard Japanese plain style, glossary in parentheses, buttons, links, explicit limits.",
+    "exceptions": [
+      "Historical quantitative preflight estimates incomplete.",
+      "Standalone CLI execution and actual independent validation incomplete.",
+      "Global ledger update tracked separately; not assumed successful."
+    ]
+  }
+}
