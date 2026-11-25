@@ -1,0 +1,116 @@
+{
+  "schema": "ocr-pilot-acceptance-protocol-v13",
+  "date": "2026-11-26",
+  "scope": "Research pilot only; no production acceptance or state updates",
+  "frozen": {
+    "recognition_commit": "ac31bb2662af52ac73d1441eb7920fa2b407b097",
+    "collector_commit": "08399134933443067482708b5b3ffa81653479c0",
+    "scorer_commit": "1aea369429900805fe4855da412207372864770d",
+    "scorer_blob": "e88d7cb58a394e1baa6e434b39e506339d3201e7",
+    "scorer_sha256": "7a59bf78e45f328095cd7d4f5c4f635fbd27cfaea41c894272cc2282ec9282ee",
+    "dictionary_commit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+    "dictionary_blob": "e6116f0eef415212da809c7f8a64fbd8e84f4c9b",
+    "stone_scope": "One observed stone label in v12; other stone cases must not be treated as verified."
+  },
+  "verification": {
+    "scorer_tests": {
+      "pass": 12,
+      "total": 12
+    },
+    "development_frames": 9,
+    "source_archives": [
+      "087f39b87299e8281f86ff34c3b48dafa2f83e644ea88ed9c934b0e852d3c999",
+      "f98b007155d4af6443927a335bfe796115dda939c7f236b5e78bc615a3c49237"
+    ],
+    "dictionary": {
+      "species_unique_normalized": 1253,
+      "moves_unique_normalized": 926,
+      "observed_distinct_queries": 13,
+      "matching_queries": 13,
+      "compared_fields": [
+        "best_distance",
+        "best_candidates",
+        "candidate_count",
+        "status"
+      ],
+      "method": "Connector full dictionary exhaustive bounded edit distance; Python replay observed-neighborhood fixture agrees on every actual query. Direct raw download failed DNS; no full dictionary Python CLI replay. Dictionary includes entries beyond M-C; not a legality master."
+    },
+    "scores": {
+      "hp": {
+        "correct": 13,
+        "missing": 2,
+        "wrong": 0,
+        "spurious": 0
+      },
+      "move": {
+        "correct": 4,
+        "missing": 0,
+        "wrong": 0,
+        "spurious": 0
+      },
+      "pp": {
+        "correct": 2,
+        "missing": 2,
+        "wrong": 0,
+        "spurious": 0
+      },
+      "message_kind": {
+        "correct": 4,
+        "missing": 0,
+        "wrong": 0,
+        "spurious": 0
+      },
+      "screen": {
+        "correct": 3,
+        "missing": 0,
+        "wrong": 0,
+        "spurious": 0,
+        "excluded_out_of_scope_frames": 6
+      }
+    }
+  },
+  "protocol": {
+    "steps": [
+      "Verify archive and frame hashes, original normalized coordinate agreement, complete OCR pass coverage, source independence by visible battle continuity and user provenance.",
+      "Keep v12 frozen. Build reference from images before inspecting candidate output for new frames. Record ambiguous labels as unscorable rather than guess.",
+      "Use full pinned species/move dictionary where accessible; otherwise enumerate all actual queries using connector and demonstrate equivalence to local replay; report any unmatched or unverified queries.",
+      "Score each visible HP pair, move name, complete PP pair, message class and supported screen class by frame and slot. Empty reference mapping means no target visible; null means unscorable or out-of-scope with separately recorded reason. An ambiguous or missing candidate is abstention. Report all excluded predictions, unsupported message types, and denominators.",
+      "Report incorrect and spurious candidates separately from omissions. Precision=c/(c+w+s), recall=c/(c+w+m); zero denominator is undefined.",
+      "For a limited research pilot, require intact input provenance, independent battle, no state emission, zero wrong/spurious scored candidates and at least one evaluable target. Any missing coverage remains explicitly unverified; omission rates are reported, not silently accepted. If a required check fails, no unconditional pilot pass. Zero errors on six images is not proof of production safety.",
+      "Production acceptance is not granted by this protocol; quantitative production thresholds, diverse battles, temporal event handling, full grammar/geometry and runtime integration remain separate."
+    ],
+    "status": "Predeclared before inspecting the new recording",
+    "privacy": "No raw frames, trainer identifiers, transcripts or local reference records published; only aggregate metrics and protocol."
+  },
+  "todo": [
+    {
+      "id": "OCR-01",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "OCR-02",
+      "status": "COMPLETE_CONDITIONAL"
+    },
+    {
+      "id": "OCR-03",
+      "status": "PARTIAL",
+      "detail": "Regression and scoring automated; selective recognition fallback still untested."
+    },
+    {
+      "id": "OCR-04",
+      "status": "WAITING_FOR_RECORDING",
+      "detail": "New independent battle, fixed six-frame collector; full dictionary equivalence must be checked for new queries."
+    },
+    {
+      "id": "OCR-05",
+      "status": "PENDING",
+      "detail": "Production validation and integration not authorized or performed."
+    }
+  ],
+  "limitations": [
+    "Single reviewer development labels; not blinded independent benchmark.",
+    "Scorer evaluates unique candidate projection, not calibrated confidence, candidate sets or complete event semantics.",
+    "Supported screen classes only; six development frames excluded from screen score, not demonstrated correct classifications.",
+    "Six new frames may not cover each class; no statistical guarantee or production acceptance threshold adopted."
+  ]
+}
