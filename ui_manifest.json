@@ -15,15 +15,15 @@
   "data/meta_sets.json": "b54373e03e837cab2bdde7d1095b994591d8fd71c72c9a6c7e70959882da2245",
   "data/names_index.json": "0420f57263c48714dd3ab0be4285f645386a25a0d5b7edb0f42eabc6ca09ff6a",
   "data/names_ja.json": "6f900267d7914eef7feacd0487fb0fa354e2cb4cadadbff37e5b6c9a08e2c7bf",
-  "data/pokedb_parsed.json": "024aae46027092d60c670c980f92f83ef724746c3ad6220db2df77ed0522f9ed",
+  "data/pokedb_parsed.json": "0bced2e6b820aa6274480a2ba4b2db640bc754614eb7eb1d5b11362ab975c9a0",
   "data/preview_features.json": "a41f47f1ca37141eba23119f7a0ba54e1e0d75301d145cf908e2c24de84e0074",
-  "data/regulation.json": "b6163fff3bfec9a3661bfd0904c1e6e9d51f8ef6bf442b41a1ce5521f2cee47b",
+  "data/regulation.json": "a36cb89fee75309c66b20164bc56824869afde481c5a46f5b5e2d341a227e6fb",
   "data/spec_patches.json": "c6dc628c70e0078f72ea3891d6bf8c7ced14a1d40c25213cd91f2097f5c53f98",
   "data/species_abilities.json": "60de98a5b4c4294fcbf6b1f7a530a32de31d86f0784f5be492d4ef5f261d49c0",
   "data/species_moves.json": "03c0f240de9d9a66cefc65c9e1ea155ccf120c9b4f91d6e46296ca29b6b0d181",
   "data/species_types.json": "ce11f9ae2d01f8a6061b473ed9260b61c95c1c3d58c40e5231cfde9df05623ec",
   "data/type_icons.json": "50e97aa157aa028294b97961f98213726d4832529743317ba7cc15c64f7534ed",
-  "data/usage_sets.json": "b3220acfd9faaec6ad7d9dfc003524d5918e9aadf567336ebd5180b28b16cd2d",
+  "data/usage_sets.json": "a98f14bd1504c9203a93515f135bcd9c999cdfec935263b6f4dda1101746e22a",
   "data/vgc_pastes.json": "b5a279918910d78d2944dc552fab71b383252f7d532164d87885e88cfe4695df",
   "data/vgc_pastes_stats.json": "163236f7a77dd4151fae2fde73998aeca123c0437d52bd84ce3b75c7cb29aa33",
   "data/vgcpastes_sets.json": "b4ef40781d33ab4dbdcd850c688276b214a81bbc11e4d65ce7414fa3babd13f9",
@@ -58,5 +58,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261125_0016"
+ "rev": "20261126_0010"
 }
