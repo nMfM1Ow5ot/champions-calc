@@ -1,0 +1,73 @@
+|gametype|doubles
+|poke|p1|Blastoise
+|poke|p1|Gardevoir
+|poke|p1|Sneasler
+|poke|p1|Indeedee-F
+|poke|p1|Armarouge
+|poke|p1|Whimsicott
+|poke|p2|Absol
+|poke|p2|Milotic
+|poke|p2|Sneasler
+|poke|p2|Delphox
+|poke|p2|Simisage
+|poke|p2|Sandaconda
+|start
+|switch|p1a: Gardevoir|Gardevoir|100/100
+|switch|p1b: Indeedee-F|Indeedee-F|100/100
+|-fieldstart|move: Psychic Terrain
+|-ability|p1b: Indeedee-F|Psychic Surge
+|switch|p2a: Sneasler|Sneasler|100/100
+|switch|p2b: Absol|Absol|100/100
+|turn|1
+|-item|p1a: Gardevoir|Gardevoirite
+|detailschange|p1a: Gardevoir|Gardevoir-Mega
+|-mega|p1a: Gardevoir|Gardevoir|Gardevoirite
+|-item|p2b: Absol|Absolite Z
+|detailschange|p2b: Absol|Absol-Mega
+|-mega|p2b: Absol|Absol|Absolite Z
+|move|p1b: Indeedee-F|Follow Me
+|-singleactivate|p1b: Indeedee-F|move: Follow Me
+|move|p2b: Absol|Night Slash
+|-supereffective|p1b: Indeedee-F
+|faint|p1b: Indeedee-F
+|move|p2a: Sneasler|Dire Claw
+|-damage|p1a: Gardevoir|0/145
+|faint|p1a: Gardevoir
+|-supereffective|p1a: Gardevoir
+|-boost|p2a: Sneasler|spd|1
+|-message|オオニューラのとくぼう特防が上がつた！
+|switch|p1a: Sneasler|Sneasler|157/157
+|switch|p1b: Armarouge|Armarouge|161/161
+|-damage|p2b: Absol|83/100
+|turn|2
+|move|p1a: Sneasler|Rock Tomb
+|-unboost|p2b: Absol|spe|1
+|-damage|p2b: Absol|37/100
+|move|p2a: Sneasler|Dire Claw
+|-damage|p1a: Sneasler|102/157
+|-resisted|p1a: Sneasler
+|move|p2b: Absol|Night Slash
+|-damage|p1b: Armarouge|1/161
+|-supereffective|p1b: Armarouge
+|-item|p1b: Armarouge|Focus Sash
+|-activate|p1b: Armarouge|item: Focus Sash
+|-unboost|p1b: Armarouge|def|1
+|-boost|p1b: Armarouge|spe|2
+|move|p1b: Armarouge|Expanding Force
+|-damage|p2a: Sneasler|0/100
+|-supereffective|p2a: Sneasler
+|faint|p2a: Sneasler
+|faint|p1a: Sneasler
+|switch|p2a: Delphox|Delphox|100/100
+|-item|p1b: Armarouge|Focus Sash
+|-ability|p1b: Armarouge|Weak Armor
+|move|p2b: Absol|Sucker Punch
+|-activate|p1b: Armarouge|move: Psychic Terrain
+|-damage|p2b: Absol|0/100
+|faint|p2b: Absol
+|-resisted|p2a: Delphox
+|-damage|p2a: Delphox|46/100
+|move|p2a: Delphox|Psychic
+|-supereffective|p1a: Sneasler
+|switch|p2b: Milotic|Milotic|100/100
+|win|Carlos
