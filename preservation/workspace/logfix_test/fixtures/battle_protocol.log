@@ -1,0 +1,149 @@
+|gametype|doubles
+|poke|p1|Blastoise
+|poke|p1|Gardevoir
+|poke|p1|Sneasler
+|poke|p1|Indeedee-F
+|poke|p1|Armarouge
+|poke|p1|Whimsicott
+|poke|p2|Metagross
+|poke|p2|Rillaboom
+|poke|p2|Kommo-o
+|poke|p2|Kleavor
+|poke|p2|Charizard
+|poke|p2|Gliscor
+|start
+|switch|p1a: Indeedee-F|Indeedee-F|100/100
+|switch|p1b: Armarouge|Armarouge|100/100
+|-fieldstart|move: Psychic Terrain
+|-ability|p1a: Indeedee-F|Psychic Surge
+|-message|下か不態議な感じになった！
+|switch|p2a: Kleavor|Kleavor|100/100
+|switch|p2b: Metagross|Metagross|100/100
+|turn|1
+|move|p2b: Metagross|Protect
+|move|p2a: Kleavor|X-Scissor
+|-damage|p1a: Indeedee-F|137/177
+|-supereffective|p1a: Indeedee-F
+|-damage|p2a: Kleavor|83/100
+|faint|p1a: Indeedee-F
+|move|p1b: Armarouge|Armor Cannon
+|switch|p1a: Sneasler|Sneasler|100/100
+|-boost|p1a: Sneasler|spd|1
+|turn|2
+|-damage|p2b: Metagross|83/100
+|-heal|p2b: Metagross|100/100
+|-item|p2b: Metagross|Metagrossite
+|detailschange|p2b: Metagross|Metagross-Mega
+|-mega|p2b: Metagross|Metagross|Metagrossite
+|move|p1a: Sneasler|Close Combat
+|-damage|p2a: Kleavor|2/100
+|-unboost|p1a: Sneasler|def|1
+|-unboost|p1a: Sneasler|spd|1
+|move|p2a: Kleavor|X-Scissor
+|-damage|p1b: Armarouge|52/161
+|-unboost|p1b: Armarouge|def|1
+|-boost|p1b: Armarouge|spe|2
+|move|p1b: Armarouge|Armor Cannon
+|-damage|p2b: Metagross|0/100
+|-supereffective|p2b: Metagross
+|faint|p2b: Metagross
+|-unboost|p1b: Armarouge|def|1
+|-unboost|p1b: Armarouge|spd|1
+|-fieldstart|move: Grassy Terrain
+|switch|p2b: Rillaboom|Rillaboom|100/100
+|-ability|p2b: Rillaboom|Grassy Surge
+|turn|3
+|move|p1a: Sneasler|Protect
+|move|p1b: Armarouge|Protect
+|-activate|p1b: Armarouge|move: Protect
+|-activate|p1b: Armarouge|move: Protect
+|move|p2b: Rillaboom|Grassy Glide
+|-heal|p1b: Armarouge|62/161
+|-message|グレンアルマのたいりょくかいふく体力が回復した！
+|switch|p2a: Kommo-o|Kommo-o|100/100
+|turn|4
+|switch|p1a: Gardevoir|Gardevoir|100/100
+|move|p2b: Rillaboom|Grassy Glide
+|-damage|p1b: Armarouge|0/161
+|faint|p1b: Armarouge
+|-heal|p1b: Armarouge|161/161
+|-resisted|p1b: Armarouge
+|-damage|p1b: Armarouge|0/161
+|faint|p1b: Armarouge
+|move|p2a: Kommo-o|Clangorous Soul
+|-damage|p2a: Kommo-o|70/100
+|-message|あいて相手のジャラランガのかいふく袱力か回復した！
+|-heal|p2a: Kommo-o|77/100
+|switch|p1a: Sneasler|Sneasler|157/157
+|-heal|p2a: Kommo-o|78/100
+|switch|p1a: Gardevoir|Gardevoir|145/145
+|switch|p1b: Sneasler|Sneasler|157/157
+|turn|5
+|-message|Esragivはゴリランダーを引っごめた！
+|-item|p1a: Gardevoir|Gardevoirite
+|detailschange|p1a: Gardevoir|Gardevoir-Mega
+|-mega|p1a: Gardevoir|Gardevoir|Gardevoirite
+|move|p2a: Kommo-o|Protect
+|-activate|p2a: Kommo-o|move: Protect
+|move|p1b: Sneasler|Dire Claw
+|switch|p2b: Kleavor|Kleavor|0/100
+|-resisted|p2b: Kleavor
+|-message|慧箭に当たった！
+|move|p1a: Gardevoir|Expanding Force
+|-heal|p2a: Kommo-o|84/100
+|-message|あいてジャラランガの相手のたいりよくかいふく体力が回復した！
+|-heal|p2a: Kommo-o|90/100
+|switch|p2b: Rillaboom|Rillaboom|100/100
+|turn|6
+|move|p1a: Gardevoir|Protect
+|-activate|p1a: Gardevoir|move: Protect
+|move|p2b: Rillaboom|Fake Out
+|-activate|p1a: Gardevoir|move: Protect
+|move|p2a: Kommo-o|Clanging Scales
+|-damage|p1b: Sneasler|43/157
+|-unboost|p2a: Kommo-o|def|1
+|-unboost|p1b: Sneasler|def|1
+|move|p1b: Sneasler|Dire Claw
+|-damage|p2b: Rillaboom|5/100
+|-supereffective|p2b: Rillaboom
+|-heal|p2a: Kommo-o|95/100
+|-heal|p1b: Sneasler|51/157
+|-message|オオニューラのたいりよくがいふく体力が回復した！
+|-heal|p2b: Rillaboom|11/100
+|-heal|p2a: Kommo-o|100/100
+|-heal|p1b: Sneasler|52/157
+|turn|7
+|move|p1b: Sneasler|Protect
+|move|p2b: Rillaboom|Grassy Glide
+|-damage|p1a: Gardevoir|30/145
+|-damage|p1a: Gardevoir|27/145
+|move|p2a: Kommo-o|Clanging Scales
+|move|p1a: Gardevoir|Hyper Voice
+|-damage|p2b: Rillaboom|0/100
+|faint|p2b: Rillaboom
+|-heal|p1b: Sneasler|53/157
+|-heal|p1b: Sneasler|61/157
+|-message|オオニューラのかいふくたいりよく体力が回復した！
+|-heal|p1a: Gardevoir|30/145
+|-message|あしもと足下の草が消え去った！
+|-heal|p1a: Gardevoir|36/145
+|turn|8
+|move|p2a: Kommo-o|Clanging Scales
+|-damage|p1b: Sneasler|0/157
+|faint|p1b: Sneasler
+|-crit|p1b: Sneasler
+|-unboost|p2a: Kommo-o|def|1
+|-message|あいてジャラランガの相手の防が下がった！
+|move|p1a: Gardevoir|Expanding Force
+|-damage|p2a: Kommo-o|24/100
+|-supereffective|p2a: Kommo-o
+|-heal|p2a: Kommo-o|30/100
+|turn|9
+|move|p2a: Kommo-o|Aura Sphere
+|-damage|p1a: Gardevoir|20/145
+|-resisted|p1a: Gardevoir
+|move|p1a: Gardevoir|Expanding Force
+|-damage|p2a: Kommo-o|0/100
+|-supereffective|p2a: Kommo-o
+|faint|p2a: Kommo-o
+|win|Ren
