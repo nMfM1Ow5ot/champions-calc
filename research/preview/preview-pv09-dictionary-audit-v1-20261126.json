@@ -1,0 +1,321 @@
+{
+  "schema": "pv09-dictionary-audit-v1",
+  "date": "2026-11-26",
+  "status": "COMPLETE_DESCRIPTOR_AUDIT_RAW_INGEST_BLOCKED",
+  "sourceCommit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+  "inputBlobs": [
+    "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "cf4df343979e930a47e3a71e083a3943e013895f"
+  ],
+  "scriptCommit": "d723427177d8e479537530a776fa37bc9cc03a9c",
+  "execution": "Audit function and synthetic tests run in connector JavaScript; standalone Node wrapper not run.",
+  "result": {
+    "regulationEntries": 370,
+    "uniqueRegulationLabels": 370,
+    "featureLabels": 370,
+    "eligibleHeuristic": 284,
+    "descriptorCount": 578,
+    "baseCount": 370,
+    "templateCount": 208,
+    "templateTags": {
+      "frame": 187,
+      "shiny": 4,
+      "pattern": 17
+    },
+    "baseWithoutProvenance": 370,
+    "templateWithSourceString": 208,
+    "descriptorsWithImageSha256": 0,
+    "descriptorsWithBattleId": 0,
+    "descriptorsWithExtractorVersion": 0,
+    "descriptorsWithLabelEvidence": 0,
+    "descriptorsWithRightsStatus": 0,
+    "eligibleByDistinctNonShinySourceCount": {
+      "0": 219,
+      "1": 30,
+      "2": 9,
+      "3": 7,
+      "4": 6,
+      "5": 4,
+      "6": 1,
+      "7": 3,
+      "8": 1,
+      "10": 1,
+      "12": 1,
+      "15": 1,
+      "19": 1
+    },
+    "errorsByCode": {},
+    "warningsByCode": {},
+    "errorLabels": [],
+    "warningLabels": [],
+    "exactDescriptorDuplicateGroups": 6,
+    "exactCrossLabelGroups": 6,
+    "exactDuplicateCrossLabels": [
+      [
+        "Pikachu",
+        "Pikachu-Alola",
+        "Pikachu-Hoenn",
+        "Pikachu-Kalos",
+        "Pikachu-Original",
+        "Pikachu-Partner",
+        "Pikachu-Sinnoh",
+        "Pikachu-Unova",
+        "Pikachu-World"
+      ],
+      [
+        "Greninja",
+        "Greninja-Bond"
+      ],
+      [
+        "Vivillon",
+        "Vivillon-Fancy",
+        "Vivillon-Pokeball"
+      ],
+      [
+        "Polteageist",
+        "Polteageist-Antique"
+      ],
+      [
+        "Sinistcha",
+        "Sinistcha-Masterpiece"
+      ],
+      [
+        "Meowstic-F-Mega",
+        "Meowstic-M-Mega"
+      ]
+    ],
+    "pairs": {
+      "sameHashSameLabel": 0,
+      "sameHashCrossLabel": 43,
+      "near8SameLabel": 0,
+      "near8CrossLabel": 52,
+      "near16SameLabel": 2,
+      "near16CrossLabel": 54,
+      "near8CrossLabelWithColorShape": 49
+    },
+    "eligibleStrongSimilarityLabelPairs": [
+      [
+        "Pikachu / Pikachu-Alola",
+        1
+      ],
+      [
+        "Pikachu / Pikachu-Hoenn",
+        1
+      ],
+      [
+        "Pikachu / Pikachu-Kalos",
+        1
+      ],
+      [
+        "Pikachu / Pikachu-Original",
+        1
+      ],
+      [
+        "Pikachu / Pikachu-Partner",
+        1
+      ],
+      [
+        "Pikachu / Pikachu-Sinnoh",
+        1
+      ],
+      [
+        "Pikachu / Pikachu-Unova",
+        1
+      ],
+      [
+        "Pikachu / Pikachu-World",
+        1
+      ],
+      [
+        "Gourgeist / Gourgeist-Large",
+        1
+      ],
+      [
+        "Gourgeist / Gourgeist-Small",
+        1
+      ],
+      [
+        "Gourgeist / Gourgeist-Super",
+        1
+      ],
+      [
+        "Gourgeist-Large / Gourgeist-Small",
+        1
+      ],
+      [
+        "Gourgeist-Large / Gourgeist-Super",
+        1
+      ],
+      [
+        "Gourgeist-Small / Gourgeist-Super",
+        1
+      ],
+      [
+        "Vivillon / Vivillon-Fancy",
+        1
+      ],
+      [
+        "Vivillon / Vivillon-Pokeball",
+        1
+      ],
+      [
+        "Vivillon-Fancy / Vivillon-Pokeball",
+        1
+      ],
+      [
+        "Pikachu-Alola / Pikachu-Hoenn",
+        1
+      ],
+      [
+        "Pikachu-Alola / Pikachu-Kalos",
+        1
+      ],
+      [
+        "Pikachu-Alola / Pikachu-Original",
+        1
+      ],
+      [
+        "Pikachu-Alola / Pikachu-Partner",
+        1
+      ],
+      [
+        "Pikachu-Alola / Pikachu-Sinnoh",
+        1
+      ],
+      [
+        "Pikachu-Alola / Pikachu-Unova",
+        1
+      ],
+      [
+        "Pikachu-Alola / Pikachu-World",
+        1
+      ],
+      [
+        "Pikachu-Hoenn / Pikachu-Kalos",
+        1
+      ],
+      [
+        "Pikachu-Hoenn / Pikachu-Original",
+        1
+      ],
+      [
+        "Pikachu-Hoenn / Pikachu-Partner",
+        1
+      ],
+      [
+        "Pikachu-Hoenn / Pikachu-Sinnoh",
+        1
+      ],
+      [
+        "Pikachu-Hoenn / Pikachu-Unova",
+        1
+      ],
+      [
+        "Pikachu-Hoenn / Pikachu-World",
+        1
+      ],
+      [
+        "Pikachu-Kalos / Pikachu-Original",
+        1
+      ],
+      [
+        "Pikachu-Kalos / Pikachu-Partner",
+        1
+      ],
+      [
+        "Pikachu-Kalos / Pikachu-Sinnoh",
+        1
+      ],
+      [
+        "Pikachu-Kalos / Pikachu-Unova",
+        1
+      ],
+      [
+        "Pikachu-Kalos / Pikachu-World",
+        1
+      ],
+      [
+        "Pikachu-Original / Pikachu-Partner",
+        1
+      ],
+      [
+        "Pikachu-Original / Pikachu-Sinnoh",
+        1
+      ],
+      [
+        "Pikachu-Original / Pikachu-Unova",
+        1
+      ],
+      [
+        "Pikachu-Original / Pikachu-World",
+        1
+      ],
+      [
+        "Pikachu-Partner / Pikachu-Sinnoh",
+        1
+      ],
+      [
+        "Pikachu-Partner / Pikachu-Unova",
+        1
+      ],
+      [
+        "Pikachu-Partner / Pikachu-World",
+        1
+      ],
+      [
+        "Pikachu-Sinnoh / Pikachu-Unova",
+        1
+      ],
+      [
+        "Pikachu-Sinnoh / Pikachu-World",
+        1
+      ],
+      [
+        "Pikachu-Unova / Pikachu-World",
+        1
+      ],
+      [
+        "Polteageist / Polteageist-Antique",
+        1
+      ],
+      [
+        "Sinistcha / Sinistcha-Masterpiece",
+        1
+      ]
+    ],
+    "formReview": [
+      "Aegislash-Blade",
+      "Greninja-Ash"
+    ]
+  },
+  "tests": {
+    "missing": true,
+    "invalidHash": true,
+    "missingSource": true,
+    "invalidTag": true,
+    "gender": true,
+    "crossDuplicate": true,
+    "sameHash": true
+  },
+  "thresholds": {
+    "hueSumTolerance": 0.002,
+    "hammingBits": [
+      8,
+      16
+    ],
+    "strongCrossLabel": {
+      "hamming": 8,
+      "hellinger": 0.15,
+      "logAspect": 0.1,
+      "density": 0.1
+    }
+  },
+  "limitations": [
+    "No original image bytes: duplicate flags concern descriptors only; no label correctness, pixel quality, source independence, permission or extractor equivalence established.",
+    "Heuristic form filter is not registration master; Greninja-Ash and Aegislash-Blade need explicit review.",
+    "Source strings are not battle identifiers; near-duplicate cutoffs are exploratory.",
+    "Existing source names, raw images and trainer identifiers omitted from report."
+  ],
+  "production": "unchanged"
+}
