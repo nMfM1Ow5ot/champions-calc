@@ -1,0 +1,167 @@
+{
+  "schema": "pv14-frozen-open-set-stress-v1",
+  "date": "2026-11-26",
+  "status": "RETROSPECTIVE_COMPLETE_INDEPENDENT_ACCEPTANCE_BLOCKED",
+  "prior": "5311986751a955f597d7470a8fc1cae1889658cd",
+  "sourceCommit": "f43460ad3d93ac4591a8e1e8bb924b6050c7f5a4",
+  "inputs": [
+    "16052f6a51447db3fc41fe2e2debdf1a795bd01c",
+    "bfeba203f6cd0d891d56ae60a5ec4f761209cb6b",
+    "cf4df343979e930a47e3a71e083a3943e013895f"
+  ],
+  "codeCommit": "c12b0c10599726ea7aa37ae7ba2188c53f241ee8",
+  "protocol": "PV08 fixed source-string holdout; all base refs remain; 204 nonshiny templates. Frozen legacy .15 and Hellinger .10 strict score margins previously explored PV08; no fitting here. Simulated unknown removes exact target label (all its refs), keeps other forms and all other candidates. No automatic type arm because raw frames unavailable for this bank. Source strings not proven independent battles. Joint margin only is NOT agreement. Exact descriptor overlap check not image provenance proof.",
+  "result": {
+    "candidateCount": 284,
+    "queries": 204,
+    "labels": 65,
+    "sourceGroups": 49,
+    "methods": [
+      {
+        "name": "legacy",
+        "gap": 0.15
+      },
+      {
+        "name": "hellinger",
+        "gap": 0.1
+      }
+    ],
+    "summary": {
+      "legacy": {
+        "n": 204,
+        "top1": 136,
+        "top3": 154,
+        "accepted": 99,
+        "wrongAccepted": 0,
+        "unknownFalseAccepted": 0,
+        "sourceGroups": 49
+      },
+      "hellinger": {
+        "n": 204,
+        "top1": 149,
+        "top3": 163,
+        "accepted": 127,
+        "wrongAccepted": 0,
+        "unknownFalseAccepted": 8,
+        "sourceGroups": 49
+      }
+    },
+    "groupStats": {
+      "legacy": {
+        "n": 49,
+        "anyAccepted": 47,
+        "anyWrongAccepted": 0,
+        "anyUnknownFalseAccepted": 0,
+        "macroTop1": 0.7646258503401361,
+        "macroCoverage": 0.6204081632653061,
+        "macroUnknownFAR": 0
+      },
+      "hellinger": {
+        "n": 49,
+        "anyAccepted": 48,
+        "anyWrongAccepted": 0,
+        "anyUnknownFalseAccepted": 7,
+        "macroTop1": 0.8095238095238094,
+        "macroCoverage": 0.7170068027210884,
+        "macroUnknownFAR": 0.027891156462585033
+      }
+    },
+    "byDistinctOtherSources": {
+      "0": {
+        "legacy": {
+          "n": 30,
+          "top1": 5,
+          "top3": 9,
+          "accepted": 1,
+          "wrongAccepted": 0,
+          "unknownFalseAccepted": 0,
+          "sourceGroups": 15
+        },
+        "hellinger": {
+          "n": 30,
+          "top1": 2,
+          "top3": 6,
+          "accepted": 2,
+          "wrongAccepted": 0,
+          "unknownFalseAccepted": 0,
+          "sourceGroups": 15
+        }
+      },
+      "1": {
+        "legacy": {
+          "n": 18,
+          "top1": 8,
+          "top3": 11,
+          "accepted": 6,
+          "wrongAccepted": 0,
+          "unknownFalseAccepted": 0,
+          "sourceGroups": 15
+        },
+        "hellinger": {
+          "n": 18,
+          "top1": 12,
+          "top3": 12,
+          "accepted": 9,
+          "wrongAccepted": 0,
+          "unknownFalseAccepted": 0,
+          "sourceGroups": 15
+        }
+      },
+      "2+": {
+        "legacy": {
+          "n": 156,
+          "top1": 123,
+          "top3": 134,
+          "accepted": 92,
+          "wrongAccepted": 0,
+          "unknownFalseAccepted": 0,
+          "sourceGroups": 49
+        },
+        "hellinger": {
+          "n": 156,
+          "top1": 135,
+          "top3": 145,
+          "accepted": 116,
+          "wrongAccepted": 0,
+          "unknownFalseAccepted": 8,
+          "sourceGroups": 49
+        }
+      }
+    },
+    "jointMarginOnly": {
+      "knownAccepted": 99,
+      "knownWrongEither": 0,
+      "unknownAccepted": 0
+    },
+    "exactDescriptorOverlap": {
+      "queriesWithAny": 0,
+      "withCrossLabel": 0,
+      "withBase": 0
+    },
+    "unknownWinnerSamePrefix": {
+      "legacy": 0,
+      "hellinger": 0
+    },
+    "scoreRanges": {
+      "legacy": {
+        "knownAcceptedMin": -0.2753630081008765,
+        "knownAcceptedMax": 0.1553979935944832,
+        "unknownAcceptedMin": null,
+        "unknownAcceptedMax": null
+      },
+      "hellinger": {
+        "knownAcceptedMin": 0.11016361691745107,
+        "knownAcceptedMax": 0.6987950608325039,
+        "unknownAcceptedMin": 0.5087390198851977,
+        "unknownAcceptedMax": 0.6251455377983235
+      }
+    }
+  },
+  "limitations": [
+    "Same descriptor dataset used in prior PV07/08; not independent or calibration-free evaluation.",
+    "Unknown removal simulates absent label only, not unseen image domains or natural unknown distribution. Prefix-based form count is heuristic. No new video acquired because existing split segments share original; prior Library archives not established as unused.",
+    "No full roster legality, raw frame, automatic type, six-slot, production Swift or end-to-end validation.",
+    "Code function executed on connector; standalone Node wrapper not independently executed. No raw data or source IDs published."
+  ],
+  "production": "unchanged"
+}
