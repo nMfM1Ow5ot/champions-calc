@@ -62,7 +62,6 @@ final class OBSFrameSource: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
             out.alwaysDiscardsLateVideoFrames=true
             out.videoSettings=[kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA]
             s.beginConfiguration()
-            if s.canSetSessionPreset(.inputPriority) { s.sessionPreset = .inputPriority }
             guard s.canAddInput(input), s.canAddOutput(out) else {
                 s.commitConfiguration(); setStatus("OBS session input/output unavailable"); return
             }
