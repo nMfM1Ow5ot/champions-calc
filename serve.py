@@ -1652,9 +1652,24 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                        p.lower().startswith(".env.") or
                        p.lower().endswith((".pem", ".key", ".p12", ".pfx"))
                        for p in parts)
-        if (os.path.commonpath([root, resolved]) != root or
-                resolved in protected or blocked(os.path.abspath(target)) or
-                blocked(resolved)):
+        def unsafe(path):
+            resolved = os.path.realpath(path)
+            if (os.path.commonpath([root, resolved]) != root or
+                    resolved in protected or blocked(os.path.abspath(path)) or
+                    blocked(resolved)):
+                return True
+            for secret in protected:
+                try:
+                    if os.path.samefile(path, secret):
+                        return True
+                except OSError:
+                    pass
+            return False
+        candidates = [target]
+        if os.path.isdir(target):
+            candidates.extend(os.path.join(target, name)
+                              for name in ("index.html", "index.htm"))
+        if any(unsafe(path) for path in candidates):
             self.send_error(404)
             return None
         return super().send_head()
