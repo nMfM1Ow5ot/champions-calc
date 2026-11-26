@@ -1,4 +1,4 @@
-"""Run a bounded isolated trial, sample only its own process group, print aggregates."""
+"""Run a bounded isolated trial, sample only its own process tree, print aggregates."""
 import json, math, os, signal, subprocess, time, re, sys
 from pathlib import Path
 from collections import Counter
