@@ -166,7 +166,8 @@ def empty():
     return {"frames":0,"unique_pixels":set(),"shapes":Counter(),"routes":Counter(),
         "v2_reasons":Counter(),"affine_reasons":Counter(),"viewports":Counter(),
         "fixed_failures":Counter(),"outputs":Counter(),"geometry_ms":[],
-        "rank":{m:Counter() for m in METHODS},"crop_pair":Counter()}
+        "rank":{m:Counter() for m in METHODS},"crop_pair":Counter(),
+        "labeled_slots_total":0,"eligible_labeled_slots":0,"gate_cross":Counter(),"fixed_failures_by_route":Counter()}
 def mark_rank(stats,rr,truths,s):
     # Development labels only. Exact forms in first5; elsewhere existing base normalization.
     counts=Counter()
@@ -193,6 +194,13 @@ def study(stats,im,s=None,banks=None):
     stats["geometry_ms"].append(d["geometry_ms"])
     for key in ("fixed_color_ok","fixed_row_ok","fixed_column_ok"):
         if d[key] is False:stats["fixed_failures"][key]+=1
+    if s is not None:
+        count=sum(q["truth"]!="?" for q in s["slots"])
+        stats["labeled_slots_total"]+=count
+        if banks is not None:stats["eligible_labeled_slots"]+=count
+    for key in ("fixed_color_ok","fixed_row_ok","fixed_column_ok"):
+        if d[key] is False:stats["fixed_failures_by_route"][d["current_route"]+"__"+key]+=1
+    stats["gate_cross"][d["current_route"]+"__"+("affine_candidate" if outputs["affine_full"] is not None else "affine_held")]+=1
     local_rank={}
     for method,image in outputs.items():
         if image is None:continue
@@ -213,6 +221,9 @@ def finish(s):
         "shapes":dict(s["shapes"]),"current_routes":dict(s["routes"]),
         "v2_reasons":dict(s["v2_reasons"]),"affine_reasons":dict(s["affine_reasons"]),
         "viewports":dict(s["viewports"]),"fixed_failure_counts":dict(s["fixed_failures"]),
+        "fixed_failures_by_current_route":dict(s["fixed_failures_by_route"]),"gate_cross":dict(s["gate_cross"]),
+        "labeled_slots_total":s["labeled_slots_total"],"eligible_labeled_slots":s["eligible_labeled_slots"],
+        "rank_counts_including_held_as_misses":{m:{"denominator":s["eligible_labeled_slots"],**{k:s["rank"][m][k] for k in ("top1","top3","top5")}} for m in METHODS},
         "candidate_counts":{m:s["outputs"][m] for m in METHODS},
         "rank_on_output_only":{m:dict(s["rank"][m]) for m in METHODS},
         "paired_crop_comparison":dict(s["crop_pair"]),
@@ -281,6 +292,7 @@ summary={"schema":"pv16-scene-geometry-study-v0.1",
     "reconnect_phase_labels_not_independent_truth":True,
     "whole_match_444_raw_frames_available":False,
     "rank_counts_conditional_on_output_not_accuracy_of_all_inputs":True,
+    "rank_counts_including_held_use_common_eligible_denominator":True,
     "independent_accuracy_measured":False,"false_positive_rate_measured":False,
     "production_modified":False,"private_ids_exported":False}
 print(json.dumps(summary,indent=2,allow_nan=False))
