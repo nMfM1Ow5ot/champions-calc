@@ -96,7 +96,9 @@ final class OBSFrameSource: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         let deadline=now()+timeout
         repeat {
             ensure(options)
-            if let b=take() {
+            let auth=AVCaptureDevice.authorizationStatus(for:.video)
+            if auth == .denied || auth == .restricted || Bundle.main.object(forInfoDictionaryKey:"NSCameraUsageDescription") == nil { return getStatus() }
+            if auth == .authorized, let b=take() {
                 let im=CIImage(cvPixelBuffer:b)
                 guard let rgb=CGColorSpace(name:CGColorSpace.sRGB),
                       let cg=context.createCGImage(im,from:im.extent,format:.RGBA8,colorSpace:rgb),
@@ -104,8 +106,6 @@ final class OBSFrameSource: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                 do { try png.write(to:URL(fileURLWithPath:path),options:.atomic); return nil }
                 catch { return "OBS PNG write failed" }
             }
-            let auth=AVCaptureDevice.authorizationStatus(for:.video)
-            if auth == .denied || auth == .restricted || Bundle.main.object(forInfoDictionaryKey:"NSCameraUsageDescription") == nil { return getStatus() }
             Thread.sleep(forTimeInterval:0.025)
         } while now()<deadline
         return "OBS fresh frame timeout: " + getStatus()
