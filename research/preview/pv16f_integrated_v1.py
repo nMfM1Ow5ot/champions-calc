@@ -148,13 +148,26 @@ class Boundary:
             raise ValueError("invalid points")
         object.__setattr__(self,"features",f);object.__setattr__(self,"points",p)
 
-def propose(rank,ids,contract,boundary=None,context_valid=False):
+def _propose(rank,ids,contract,boundary=None,context_valid=False):
     validate_contract(contract,ids,contract.aggregation)
     if boundary is None or not rank:return {"would_accept":False,"accepted":False,"reason":"missing calibration or rank"}
     if not isinstance(boundary,Boundary) or boundary.contract_digest!=contract.digest:
         raise ValueError("calibration contract mismatch")
     # Only a research proposal; context validity and label provenance external.
     return coverage.propose(rank,ids,boundary.features,boundary.points,context_valid=context_valid)
+
+def propose_slot(result,ids,slot,boundary=None,context_valid=False):
+    """Take scores and contract from the same result envelope; caller verifies provenance."""
+    if result.get("accepted") is not False or type(slot) is not int or not 0<=slot<6 or len(result["slots"])!=6:
+        raise ValueError("invalid result or slot")
+    contract=result["contract"]
+    validate_contract(contract,ids,contract.aggregation)
+    row=result["slots"][slot]
+    if contract.aggregation=="mean_distance":
+        if not isinstance(row,dict) or row.get("accepted") is not False:
+            raise ValueError("invalid fused slot")
+        row=row["rank"]
+    return _propose(row,ids,contract,boundary,context_valid)
 
 def team_candidate(slots,ids,groups,rule_verified=False):
     """Minimize sum of original distances with at most one ID per verified group.
