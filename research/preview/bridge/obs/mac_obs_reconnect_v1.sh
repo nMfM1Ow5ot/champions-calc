@@ -220,7 +220,11 @@ def group(name):
             "first_frame_ms":round(good[0]["phase_elapsed_ms"]+good[0]["capture_ms"],3) if good else None,
             "first_visible_ms":round(visible[0]["phase_elapsed_ms"]+visible[0]["capture_ms"],3) if visible else None,
             "generation_start":q[0]["before"]["generation"] if q else None,
-            "generation_end":q[-1]["after"]["generation"] if q else None}
+            "generation_end":q[-1]["after"]["generation"] if q else None,
+            "sequence_start":q[0]["before"]["sequence"] if q else None,
+            "sequence_end":q[-1]["after"]["sequence"] if q else None,
+            "callback_sequence_advance":int(q[-1]["after"]["sequence"])-int(q[0]["before"]["sequence"]) if q else None,
+            "error_counts":{e:sum(x.get("error")==e for x in q) for e in sorted({x["error"] for x in q if isinstance(x.get("error"),str)})}}
 b,o,n=(group(s) for s in ("baseline","stopped","restarted"))
 contract=bool(rows) and all((not x["success"] and not x["file_exists"]) or (x["success"] and x["consumption_advanced"] and x.get("decoded")) for x in rows)
 base_hashes={x.get("pixel_sha256") for x in rows if x["phase"]=="baseline" and x["success"]}
@@ -231,7 +235,8 @@ if not r["completed"] or not r["shutdown"] or not r["state_paths_absent"] or not
 elif b["visible_candidates"]!=3 or n["visible_candidates"]<3:
     result="GAME_LAYOUT_RECOVERY_NOT_ESTABLISHED"
 elif o["frames"]==0 and o["attempts"]>=2:
-    result="CALLBACK_GAP_AND_LAYOUT_RECOVERY_CANDIDATE"
+    result=("CALLBACK_GAP_AND_LAYOUT_RECOVERY_CANDIDATE" if o["callback_sequence_advance"]==0
+            else "NO_FRAME_WITH_CALLBACK_ACTIVITY_AND_LAYOUT_RECOVERY_CANDIDATE")
 elif o["visible_candidates"]==0 and o["frames"]>0:
     result="NON_GAME_OUTPUT_AND_LAYOUT_RECOVERY_CANDIDATE"
 else:
