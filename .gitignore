@@ -1,0 +1,10 @@
+# Local credentials and encryption keys
+**/github_log_token.txt
+**/team_key.txt
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
