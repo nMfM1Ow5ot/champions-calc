@@ -1637,6 +1637,32 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def send_head(self):
+        # Temporary protection: preserve existing public asset routes.
+        # Check both the requested path and its resolved filesystem target.
+        target = self.translate_path(self.path)
+        root = os.path.realpath(self.directory)
+        resolved = os.path.realpath(target)
+        protected = {os.path.realpath(LOG_TOKEN_PATH),
+                     os.path.realpath(LOG_KEY_PATH)}
+        def blocked(path):
+            parts = os.path.relpath(path, root).split(os.sep)
+            return any(p.lower() in {".git", ".env", "github_log_token.txt",
+                                     "team_key.txt"} or
+                       p.lower().startswith(".env.") or
+                       p.lower().endswith((".pem", ".key", ".p12", ".pfx"))
+                       for p in parts)
+        if (os.path.commonpath([root, resolved]) != root or
+                resolved in protected or blocked(os.path.abspath(target)) or
+                blocked(resolved)):
+            self.send_error(404)
+            return None
+        return super().send_head()
+
+    def list_directory(self, path):
+        self.send_error(403)
+        return None
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
