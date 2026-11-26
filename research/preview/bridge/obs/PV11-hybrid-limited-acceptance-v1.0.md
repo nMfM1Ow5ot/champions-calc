@@ -1,0 +1,21 @@
+# PV11 hybrid F v1 — limited acceptance and independent-admission hold
+2026-11-26 JST. User explicitly accepts implementation/regression only and holds independent validation. Aggregate-only; no private lineup, images, paths, candidate IDs, primary evidence or secrets.
+## Scope and evidence
+Frozen module commit 4708ca9c368f041fe91272f557e3accbe4b965ee, blob d31584b12f688c7cf97ae5e1c059222f2e665d0e. Mac validation launcher 5606eb555d63908ed61554f07710deb2a72866c5, blob 931e914982a12a4070b4b6483dec1332a6329ac0. User-submitted anonymous-pv11-hybrid-validation-v1.json reviewed; no independent GPT rerun. All 11 module contract checks and 6 regression checks true; pinned sources/assets verified; local calibration unchanged. Candidate-only; no scene authentication or accepted observation.
+| Cohort | Samples | Full | PV11 fixed visible | Held | Equivalent canvas and rank contract |
+|---|---:|---:|---:|---:|---:|
+| Development canonical |29|29|0|0|29|
+| Development original |29|29|0|0|29|
+| Recording part 1 |281|13|136|132|281|
+| Recording part 4 |281|0|0|281|281|
+| Prior positive |1|1|0|0|1|
+| Prior negative |1|0|0|1|1|
+| Reconnect baseline |3|3|0|0|3|
+| Reconnect stopped |14|0|0|14|14|
+| Reconnect restarted |20|13|0|7|20|
+| Total |659|88|136|435|659|
+224 candidate frames all six nonempty; this is coverage, not correctness. Held equivalence included; 659 is not 659 independent samples. Rank equivalence is to prior F implementation, not truth. Known negative scenes 112/122 s held; historical preview 149/149 ranked, other 413 held, zero recording decode errors. Prior recording identity not authenticated. Geometry-only median/P95 ms canonical 0.978/1.334, original 31.226/34.318, recording 1 2.743/3.840, recording 4 2.059/2.749. Not rank/capture/IPC/production latency. F remains research module, no deployment.
+## Independent admission G0–G5
+Recovered prior v1.2 archive and both inner expected SHA-256 from private canonical P-09. Previous validation found archive outer digest match; local evidence inventory v1 stopped at line 147 assertion after ZIP and both member checks, after private index creation. Correction v1.1 commit 122ba747535f482d0a156de478264d586ad2d872 (blob 6c02b7eb7c600e0f1544028adc7ad72b3878b7f8), user-submitted anonymous-holdout-evidence-v1.1.json: G0 outer and two inner verified, 376 catalog rows, 7 requested, 7/7 expected battle IDs matched, 7/7 six-slot and scene verified declarations; 0/7 recognized normalized preview class; 7 component states unknown. Likely raw-schema/enum mismatch in inventory, not evidence of actual target misidentification or changed lineage; prior G1/G2 limited review reused, not superseded by unsupported inference. Sixteen declared components, three historical near-duplicate pairs separate in declared graph, none resolved at original evidence level. Rights approved 0/7; primary evidence label/rights/usage verification false. Prior local reference index reused, new metadata files examined 0, walk errors 1, no target references or filename candidates found within limited search. Does not prove absence of evidence on Mac. No original image bytes read, no private paths/labels in submitted JSON. 0 admitted. Previous v1.2 catalog declared candidate 143, 7 preview candidates; 42 slots reported by Muse (27 battle record,15 visual), not independently verified. G3 complete usage/provenance and duplicate lineage; G4 rights/label evidence; G5 frozen eligible cohort and acceptance thresholds remain unfulfilled. No holdout tuning or rank evaluation.
+## Disposition
+Limited acceptance of F implementation and regression explicitly confirmed by user. Independent performance validation and adoption held; no repeat of completed regression required for this scope. If separately authorized, resolve raw schema using authenticated source, obtain locally mapped primary evidence for seven candidates and three near-duplicate pairs (Muse local verification recommended), verify usage up to frozen F configuration and rights, freeze eligible groups and thresholds before evaluation. No additional matches, Codex, production change or publication of private information. F live IPC, production load/noninterference, independent species/form accuracy and false-positive rate not measured. Prior holds and priorities maintained.
