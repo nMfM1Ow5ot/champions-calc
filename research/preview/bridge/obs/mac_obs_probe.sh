@@ -9,18 +9,18 @@ D=$(mktemp -d "$ROOT/pv16-obs-probe.XXXXXX")
 chmod 700 "$D"
 cd "$D"
 REPO=nMfM1Ow5ot/champions-calc
-REF=f7bb3f41162e95ec147dd6f61b4b7801c67a0df1
+REF=85528d89a6b4631147e1a89011864dd113939b8b
 fetch() {
   gh api -H 'Accept: application/vnd.github.raw+json' "repos/$REPO/contents/$1?ref=$REF" > "$2"
   test "$(git hash-object "$2")" = "$3"
 }
-fetch reader.swift reader.swift f4ad7d2c750fc3bfc2211602ed5e5c1181688131
+fetch reader.swift reader.swift 30dd105a551da0f96d10a527abd889cae88f7874
 while read -r name blob; do
   fetch "research/preview/bridge/obs/$name" "$name" "$blob"
 done <<'BLOBS'
 CaptureInputPolicy.swift e5d6e571498f0b6425d026aa3549857160189b4c
 test_capture_policy.swift e68c1c1722c6540e5e96d75198f68e045f7f64ea
-OBSFrameSource.swift a6dc01b7f8b1093a0252a550572a1953a17266b6
+OBSFrameSource.swift 3f0331f3b3e459702d9b572ef5a198cc31b1b271
 OBSProbe.swift 14ec8f3a33f72a2888a053970270b600a5d125a3
 OBSInfo.plist 6fc92ed007144c29b7efcfd775a9d97c8c3d0eaf
 BLOBS

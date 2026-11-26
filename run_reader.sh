@@ -21,7 +21,7 @@ if [ "$OBS_MODE" -eq 1 ]; then
   trap 'rm -rf -- "$OBS_ROOT"' EXIT
   prepare_obs() {
     # This research launcher must not silently compile a synced production reader.
-    [ "$(git hash-object reader.swift)" = "f4ad7d2c750fc3bfc2211602ed5e5c1181688131" ] || return 2
+    [ "$(git hash-object reader.swift)" = "30dd105a551da0f96d10a527abd889cae88f7874" ] || return 2
     [ "$(git hash-object "$OBS_PLIST")" = "6fc92ed007144c29b7efcfd775a9d97c8c3d0eaf" ] || return 2
     mkdir -p "$OBS_APP/Contents/MacOS" || return 2
     cp "$OBS_PLIST" "$OBS_APP/Contents/Info.plist" || return 2
