@@ -1,0 +1,321 @@
+{
+  "schema": "fi-r3-synthetic-model-v0.1",
+  "scope": "deterministic synthetic in-memory JS model; no OS IPC, actual cryptographic digest, PNG decoding, Swift, Python, assets, UI or filesystem release transaction",
+  "total": 78,
+  "passed": 78,
+  "failed": 0,
+  "results": [
+    {
+      "name": "ready",
+      "pass": true
+    },
+    {
+      "name": "request prefix and mock digest",
+      "pass": true
+    },
+    {
+      "name": "ranked response",
+      "pass": true
+    },
+    {
+      "name": "held response",
+      "pass": true
+    },
+    {
+      "name": "fallback routes 0/1",
+      "pass": true
+    },
+    {
+      "name": "ready reject release_set_id",
+      "pass": true
+    },
+    {
+      "name": "ready reject worker_uuid",
+      "pass": true
+    },
+    {
+      "name": "ready reject calibration_digest",
+      "pass": true
+    },
+    {
+      "name": "ready reject mapping_digest",
+      "pass": true
+    },
+    {
+      "name": "ready reject score_kind",
+      "pass": true
+    },
+    {
+      "name": "ready reject status",
+      "pass": true
+    },
+    {
+      "name": "ready reject payload_bytes",
+      "pass": true
+    },
+    {
+      "name": "request reject width",
+      "pass": true
+    },
+    {
+      "name": "request reject height",
+      "pass": true
+    },
+    {
+      "name": "request reject capture_generation",
+      "pass": true
+    },
+    {
+      "name": "request reject frame_seq",
+      "pass": true
+    },
+    {
+      "name": "request reject request_uuid",
+      "pass": true
+    },
+    {
+      "name": "request reject encoding",
+      "pass": true
+    },
+    {
+      "name": "request reject frame_sha256",
+      "pass": true
+    },
+    {
+      "name": "request reject source_profile_id",
+      "pass": true
+    },
+    {
+      "name": "request reject semantic_session",
+      "pass": true
+    },
+    {
+      "name": "request reject payload_bytes",
+      "pass": true
+    },
+    {
+      "name": "result echo launch_uuid",
+      "pass": true
+    },
+    {
+      "name": "result echo capture_generation",
+      "pass": true
+    },
+    {
+      "name": "result echo frame_seq",
+      "pass": true
+    },
+    {
+      "name": "result echo request_uuid",
+      "pass": true
+    },
+    {
+      "name": "result echo captured_monotonic_ns",
+      "pass": true
+    },
+    {
+      "name": "result echo source_profile_id",
+      "pass": true
+    },
+    {
+      "name": "result echo frame_sha256",
+      "pass": true
+    },
+    {
+      "name": "result echo asset_digest",
+      "pass": true
+    },
+    {
+      "name": "error envelope",
+      "pass": true
+    },
+    {
+      "name": "F invalid accepted:true",
+      "pass": true
+    },
+    {
+      "name": "F invalid scene_authenticated:true",
+      "pass": true
+    },
+    {
+      "name": "F invalid route:\"held\"",
+      "pass": true
+    },
+    {
+      "name": "F invalid reason:\"pv11_layout_2\"",
+      "pass": true
+    },
+    {
+      "name": "F invalid slots:[null,null,null,null,null]",
+      "pass": true
+    },
+    {
+      "name": "F invalid slots:[[[\"mock-x\",0]],null,null,null",
+      "pass": true
+    },
+    {
+      "name": "F invalid slots:[[[\"mock-a\",0.2],[\"mock-b\",0.1",
+      "pass": true
+    },
+    {
+      "name": "F invalid slots:[[[\"mock-a\",0.1],[\"mock-a\",0.2",
+      "pass": true
+    },
+    {
+      "name": "F invalid types:[[\"none\",\"UNKNOWN\"],[\"none\",\"U",
+      "pass": true
+    },
+    {
+      "name": "F invalid recovered:[false,true,false,false,false,",
+      "pass": true
+    },
+    {
+      "name": "wrong held shape",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON {\"a\":1,\"a\":2}",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON {\"a\":1,\"\\u0061\":2}",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON {\"a\":1e999}",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON {\"a\":\"\\ud800\"}",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON {\"a\":1}x",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON [1]",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON {\"a\":01}",
+      "pass": true
+    },
+    {
+      "name": "strict mock JSON {\"a\":NaN}",
+      "pass": true
+    },
+    {
+      "name": "truncated frames",
+      "pass": true
+    },
+    {
+      "name": "oversize header",
+      "pass": true
+    },
+    {
+      "name": "tampered payload",
+      "pass": true
+    },
+    {
+      "name": "trailing payload",
+      "pass": true
+    },
+    {
+      "name": "new frame before semantic binding",
+      "pass": true
+    },
+    {
+      "name": "first preview boundary invalidates old pending",
+      "pass": true
+    },
+    {
+      "name": "OCR unknown / untrusted",
+      "pass": true
+    },
+    {
+      "name": "cancel and rematch",
+      "pass": true
+    },
+    {
+      "name": "discontinuity",
+      "pass": true
+    },
+    {
+      "name": "deadline inclusive",
+      "pass": true
+    },
+    {
+      "name": "closed late response",
+      "pass": true
+    },
+    {
+      "name": "duplicate content",
+      "pass": true
+    },
+    {
+      "name": "shadow never applies",
+      "pass": true
+    },
+    {
+      "name": "queue pressure exact terminal accounting",
+      "pass": true
+    },
+    {
+      "name": "queue expiry and cancellation",
+      "pass": true
+    },
+    {
+      "name": "withdraw retraction and fact preservation",
+      "pass": true
+    },
+    {
+      "name": "partial snapshot replaces old candidates",
+      "pass": true
+    },
+    {
+      "name": "stale and duplicate revision",
+      "pass": true
+    },
+    {
+      "name": "same revision different digest",
+      "pass": true
+    },
+    {
+      "name": "wrong session ignored",
+      "pass": true
+    },
+    {
+      "name": "invalid candidate duplicate",
+      "pass": true
+    },
+    {
+      "name": "withdrawal cannot contain candidates",
+      "pass": true
+    },
+    {
+      "name": "consumer restart and unavailable",
+      "pass": true
+    },
+    {
+      "name": "release stage failure preserves pointer",
+      "pass": true
+    },
+    {
+      "name": "release boundary gates exhaustive combinations",
+      "pass": true
+    },
+    {
+      "name": "mixed release rejected and rollback",
+      "pass": true
+    },
+    {
+      "name": "coherent release handshake",
+      "pass": true
+    },
+    {
+      "name": "unsafe rollback blocked",
+      "pass": true
+    }
+  ]
+}
