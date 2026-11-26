@@ -1,0 +1,9 @@
+# PV16-F provisional research closure v1.0
+2026-11-26 JST. User requested provisional completion of team-preview recognition research. Status: PROVISIONALLY_COMPLETE_RESEARCH; FORMAL_ACCEPTANCE_PENDING; PRODUCTION_ADOPTION_NOT_APPROVED.
+## Basis
+- Residual research: 110f2205d37b817cbd72910c109e5cb09b3865ac; integrated recognizer v2 development Top1 171/173, complete 26/28, type compatibility 163/164, 21/21 Linux contract tests. Historical labels include provisional base-species labels.
+- Scene gate v2: 3b9dff02c91016439d7559bfce7b5850b9a552c3; synthetic shifts 230/232, flat overlays rejected 232/232, texture overlays rejected 0/29.
+- Real-video integration: 505374bb8ab14fd8ada90a7b2a1cbec972dbf64b; two historical recordings, first hit 12/12 slots both paths; active scene detection legacy 9/9 vs new 7/9, waiting 2/4 vs 0/4, other scene rejection 9/9 both. Matched passing frames 41/42 vs 42/42; full denominator legacy 62/66 vs new 42/66 including holds. Do not replace legacy adapter on this evidence.
+## Disposition
+Pause further tuning and standalone team-preview research; preserve all versions and private evidence. No automatic confirmed observations, no main/production changes. Remaining issues deferred to later integration/independent acceptance: actual scene-state coverage, verified viewport/coordinate correction, realistic occlusion/unknown negatives, calibration and genuinely independent samples (eligible n=0), disputed label, verified legality mapping, Mac replay of v2. Reopen only on meaningful evidence, integration requirement, or explicit user decision. Research resource allocation decision is not evidence of formal performance acceptance.
+Central ledger/dashboard synchronization not performed in this record; F-R6 remains pending. No Codex or new experiment.
