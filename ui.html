@@ -202,6 +202,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .statusrow:hover{background:rgba(127,127,127,.15)}
 .statusrow input{margin:0}
 .presetsave{display:flex; gap:.4rem}
+.presetresults,.presetvgcresults{display:contents}
 .presetnamein{flex:1; min-width:0; background:var(--panel); border:1px solid rgba(127,127,127,.35); border-radius:.4rem; color:var(--ink); padding:.3rem .45rem; font:inherit}
 .presetrow{display:flex; align-items:center; gap:.4rem}
 .presetname{flex:1; min-width:0; display:flex; align-items:center; gap:.4rem; text-align:left; background:none; border:none; color:var(--ink); cursor:pointer; padding:.3rem; border-radius:.4rem; font:inherit}
@@ -817,6 +818,9 @@ function confirmNewBattle() {
 const revivalPending = { mine: 0, opps: 0 };
 let lastStateJson = '';
 const ui = { importing: {}, importingAll: {}, crit: { mine: false, opps: false }, formePop: null, presetPop: null, statusPop: null, presetDraft: { save: {}, rename: '', token: '', search: {} }, presetRename: null, spreadSel: { mine: {}, opps: {} } };
+const presetImeSessions = new Map();
+const presetTextAttrs = ['data-presetsearch', 'data-presetname', 'data-presetrename', 'data-presettoken'];
+const presetActionNotice = { mine: '', opps: '' };
 
 function blankBoosts() { return { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }; }
 let PRESETS = TEAM_PRESETS; // my_team.json があれば読み取り登録した自チームに差し替わる
@@ -1964,15 +1968,18 @@ async function pushPresets() {
   if (ui.presetPop) renderAll();
 }
 async function syncPresetsFromRemote() {
-  const local = loadPresetStore();
   try {
     const r = await fetch(PRESET_REMOTE_URL + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) { if (local.mine.length || local.opps.length) schedulePresetPush(); return; }
+    if (!r.ok) { const local = loadPresetStore(); if (local.mine.length || local.opps.length) schedulePresetPush(); return; }
     const remote = await r.json();
     if (!remote || !Array.isArray(remote.mine) || !Array.isArray(remote.opps)) return;
+    const local = loadPresetStore(); // re-read after the asynchronous fetch
     const rt = Date.parse(remote.updatedAt || '') || 0;
     const lt = Date.parse(local.updatedAt || '') || 0;
-    if (rt > lt) savePresetStore({ mine: remote.mine, opps: remote.opps, updatedAt: remote.updatedAt, lastUsed: remote.lastUsed }, true);
+    if (rt > lt) {
+      savePresetStore({ mine: remote.mine, opps: remote.opps, updatedAt: remote.updatedAt, lastUsed: remote.lastUsed }, true);
+      if (ui.presetPop) renderAll();
+    }
     else if (lt > rt && (local.mine.length || local.opps.length)) schedulePresetPush();
   } catch (e) { /* オフライン等では何もしない */ }
 }
@@ -2001,15 +2008,32 @@ function specFromPresetBuild(b) {
 function currentRegulation() { return (REG && REG.regulation) || null; }
 // 表示対象: 保存時のレギュレーションが現行と一致するもの (記録のない旧データは常に表示)
 function presetVisible(p) { const cur = currentRegulation(); return !p.regulation || !cur || p.regulation === cur; }
-function savePreset(side, name) {
-  const slots = state[side].filter(Boolean).map(presetBuildOf);
-  if (!slots.length) return;
+function presetListStamp(list) {
+  return JSON.stringify([currentRegulation(), list]);
+}
+function presetListForAction(side, expected) {
   const store = loadPresetStore();
+  if (expected !== undefined && presetListStamp(store[side]) !== expected) {
+    presetActionNotice[side] = '一覧が更新されました。操作をやり直してください。';
+    return null;
+  }
+  if (expected !== undefined) presetActionNotice[side] = '';
+  return store;
+}
+function presetListSnapshot(button) {
+  return button.closest('.presetpop')?.querySelector('[data-presetresults]')?.dataset.presetlist ?? null;
+}
+function savePreset(side, name, expected) {
+  const slots = state[side].filter(Boolean).map(presetBuildOf);
+  if (!slots.length) return false;
+  const store = presetListForAction(side, expected);
+  if (!store) return false;
   const nm = String(name || '').trim() || `プリセット ${store[side].length + 1}`;
   const rec = { name: nm, regulation: currentRegulation(), slots };
   const ex = store[side].findIndex(p => p.name === nm);
   if (ex >= 0) store[side][ex] = rec; else store[side].push(rec);
   savePresetStore(store);
+  return true;
 }
 // 現在そのサイドに適用されているプリセット / VGCPastes チームの名前
 // (プリセットボタンに表示する)
@@ -2017,11 +2041,17 @@ const presetApplied = { mine: '', opps: '' };
 // 適用中のチームプリセットに紐付くレンタルコード (VGCPastes 由来)。
 // コードがある時だけ、プリセットボタンの左横にコピーボタンを出す
 const presetRental = { mine: '', opps: '' };
-function renamePreset(side, idx, name) {
+function renamePreset(side, idx, name, expected) {
   const nm = String(name || '').trim();
   if (!nm) return false;
-  const store = loadPresetStore();
-  if (!store[side][idx]) return false;
+  const store = presetListForAction(side, expected);
+  if (!store || !store[side][idx]) return false;
+  const edit = ui.presetRename;
+  if (expected !== undefined && (!edit || edit.side !== side || edit.idx !== idx ||
+      edit.record !== JSON.stringify(store[side][idx]))) {
+    presetActionNotice[side] = '名称変更対象が更新されました。再度編集してください。';
+    return false;
+  }
   const old = store[side][idx].name;
   store[side][idx].name = nm;
   for (const sd of ['mine', 'opps']) {
@@ -2032,8 +2062,9 @@ function renamePreset(side, idx, name) {
   if (presetApplied[side] === old) presetApplied[side] = nm;
   return true;
 }
-function deletePreset(side, idx) {
-  const store = loadPresetStore();
+function deletePreset(side, idx, expected) {
+  const store = presetListForAction(side, expected);
+  if (!store) return;
   if (idx < 0 || idx >= store[side].length) return;
   const [gone] = store[side].splice(idx, 1);
   if (gone) for (const sd of ['mine', 'opps']) {
@@ -2076,12 +2107,13 @@ function applyLastUsedStartup() {
   }
 }
 function applyPreset(side, idx, opts) {
-  markCalcSrc('preset');
-  const store = loadPresetStore();
+  const store = presetListForAction(side, opts?.expectedList);
+  if (!store) return false;
   const p = store[side][idx];
-  if (!p) return;
+  if (!p) return false;
   const specs = p.slots.map(specFromPresetBuild).filter(s => s.species);
-  if (!specs.length) return;
+  if (!specs.length) return false;
+  markCalcSrc('preset');
   state[side] = specs;
   state.sel[side] = 0;
   state.active[side] = [0, Math.min(1, specs.length - 1)];
@@ -2097,6 +2129,7 @@ function applyPreset(side, idx, opts) {
   if (!opts || opts.record !== false) recordLastUsed(side, { kind: 'preset', name: p.name || '' });
   applySetterAbility(specs[0]);
   calcAll();
+  return true;
 }
 function presetIconsHTML(p) {
   const imgs = (p.slots || []).map(b => {
@@ -2105,28 +2138,49 @@ function presetIconsHTML(p) {
   }).join('');
   return `<span class="preseticons">${imgs}</span>`;
 }
-function presetPopHTML(side) {
-  const list = loadPresetStore()[side];
+function presetRowsHTML(side, list = loadPresetStore()[side]) {
   const q = (ui.presetDraft.search[side] || '').trim().toLowerCase();
   const visReg = list.map((p, i) => ({ p, i })).filter(({ p }) => presetVisible(p));
   const hidden = list.length - visReg.length;
   const vis = visReg.filter(({ p }) => !q || String(p.name).toLowerCase().includes(q));
-  const renaming = ui.presetRename && ui.presetRename.side === side ? ui.presetRename.idx : -1;
+  const edit = ui.presetRename?.side === side ? ui.presetRename : null;
+  const validEdit = edit && list[edit.idx] && edit.record === JSON.stringify(list[edit.idx]);
+  const renaming = validEdit ? edit.idx : -1;
   const rows = vis.map(({ p, i }) => {
     if (i === renaming) {
-      return `<div class="presetrow">${presetIconsHTML(p)}<input type="text" class="presetnamein" data-presetrename="${side}" value="${esc(ui.presetDraft.rename || p.name)}"><button class="tgl" data-presetrenamesave="${side}:${i}">変更</button><button class="presetdel" data-presetrenamecancel="1" title="キャンセル">×</button></div>`;
+      return `<div class="presetrow">${presetIconsHTML(p)}<input type="text" class="presetnamein" data-presetrename="${side}" value="${esc(ui.presetDraft.rename)}"><button class="tgl" data-presetrenamesave="${side}:${i}">変更</button><button class="presetdel" data-presetrenamecancel="1" title="キャンセル">×</button></div>`;
     }
     return `<div class="presetrow"><button class="presetname" data-presetload="${side}:${i}" title="このプリセットに切り替え">${presetIconsHTML(p)}<span class="presetnametext">${esc(p.name)}</span></button><button class="presetedit" data-presetedit="${side}:${i}" title="名前を変更">✎</button><button class="presetdel" data-presetdel="${side}:${i}" title="削除">×</button></div>`;
   }).join('');
+  const conflict = edit && !validEdit ? '名称変更対象が更新されました。再度編集してください。' : '';
+  const notice = presetActionNotice[side] || conflict;
+  return `<div class="presetresults" data-presetresults="${side}" data-presetlist="${esc(presetListStamp(list))}">
+    ${notice ? `<div class="presetempty" role="status">${esc(notice)}</div>` : ''}
+    ${rows || (q ? '<div class="presetempty">該当するプリセットはありません</div>' : '<div class="presetempty">保存されたプリセットはありません</div>')}
+    ${hidden ? `<div class="presetempty">他のレギュレーションのプリセットが ${hidden} 件あります</div>` : ''}
+  </div>`;
+}
+function presetPopHTML(side) {
+  const list = loadPresetStore()[side];
+  const q = (ui.presetDraft.search[side] || '').trim().toLowerCase();
   const draft = ui.presetDraft.save[side];
   return `<span class="presetpop">
     <div class="presetsave"><input type="text" class="presetnamein" data-presetname="${side}" placeholder="プリセット名" value="${esc(draft != null ? draft : `プリセット ${list.length + 1}`)}"><button class="tgl" data-presetsave="${side}">保存</button></div>
     <div class="presetsave"><input type="text" class="presetnamein" data-presetsearch="${side}" placeholder="プリセット・チームを検索" value="${esc(ui.presetDraft.search[side] || '')}"></div>
-    ${rows || (q ? '<div class="presetempty">該当するプリセットはありません</div>' : '<div class="presetempty">保存されたプリセットはありません</div>')}
-    ${hidden ? `<div class="presetempty">他のレギュレーションのプリセットが ${hidden} 件あります</div>` : ''}
+    ${presetRowsHTML(side, list)}
     ${presetSyncHTML()}
-    ${vgcTeamRowsHTML(side, q)}
+    <div class="presetvgcresults" data-vgcresults="${side}">${vgcTeamRowsHTML(side, q)}</div>
   </span>`;
+}
+function refreshPresetSearch(side) {
+  if (ui.presetPop !== side) return;
+  const own = document.querySelector(`[data-presetresults="${side}"]`);
+  const vgc = document.querySelector(`[data-vgcresults="${side}"]`);
+  if (!own || !vgc) return;
+  const q = (ui.presetDraft.search[side] || '').trim().toLowerCase();
+  own.outerHTML = presetRowsHTML(side);
+  vgc.innerHTML = vgcTeamRowsHTML(side, q);
+  layoutPresetPop();
 }
 function presetBox(side) {
   const spec = DS(side);
@@ -2619,34 +2673,213 @@ function renderField() {
 }
 
 /* ---------- calc ---------- */
-function renderAll() {
-  // プリセット名の入力中は、再描画でフォーカスと入力位置が失われないよう退避する
-  const ae = document.activeElement;
-  let presetFocus = null;
-  if (ae && ae.matches && (ae.matches('[data-presetname]') || ae.matches('[data-presetrename]') || ae.matches('[data-presetsearch]'))) {
-    let sel = null;
-    try { sel = ae.selectionStart; } catch (e) { /* noop */ }
-    const attr = ae.matches('[data-presetrename]') ? 'presetrename' : (ae.matches('[data-presetsearch]') ? 'presetsearch' : 'presetname');
-    presetFocus = { attr, side: ae.dataset[attr], sel };
+function presetTextAttr(t) {
+  return t instanceof HTMLInputElement ? presetTextAttrs.find(a => t.hasAttribute(a)) : undefined;
+}
+function rememberPresetText(t) {
+  const a = presetTextAttr(t);
+  if (a === 'data-presetname') ui.presetDraft.save[t.dataset.presetname] = t.value;
+  else if (a === 'data-presetrename') ui.presetDraft.rename = t.value;
+  else if (a === 'data-presettoken') ui.presetDraft.token = t.value;
+  else if (a === 'data-presetsearch') {
+    const side = t.dataset.presetsearch;
+    const changed = (ui.presetDraft.search[side] ?? '') !== t.value;
+    ui.presetDraft.search[side] = t.value;
+    return changed;
   }
-  if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) {
+  return false;
+}
+// Preserve the connected ancestor chain: never detach or move the live IME input.
+function replaceSiblingsKeeping(keep, fresh) {
+  const parent = keep.parentNode;
+  for (const node of Array.from(parent.childNodes)) if (node !== keep) node.remove();
+  let before = true;
+  for (const node of Array.from(fresh.parentNode.childNodes)) {
+    if (node === fresh) { before = false; continue; }
+    parent.insertBefore(node, before ? keep : null);
+  }
+}
+function renderPanelProtected(root, side) {
+  const session = Array.from(presetImeSessions.values()).find(s => root.contains(s.wrap));
+  const html = renderPanel(side);
+  if (!session) { root.innerHTML = html; return; }
+  session.dirty = true;
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const keep = session.wrap;
+  const fresh = template.content.querySelector('.presetwrap');
+  const rack = keep.parentElement, bar = rack?.parentElement;
+  const nextRack = fresh?.parentElement, nextBar = nextRack?.parentElement;
+  if (!rack?.matches('.rack') || !bar?.matches('.playerbar') ||
+      !bar.parentElement?.matches('.playercalc') || bar.parentElement.parentElement !== root ||
+      !nextRack?.matches('.rack') || !nextBar?.matches('.playerbar') ||
+      !nextBar.parentElement?.matches('.playercalc')) {
+    session.fallback = true;
+    return;
+  }
+  replaceSiblingsKeeping(bar, nextBar);
+  replaceSiblingsKeeping(rack, nextRack);
+  replaceSiblingsKeeping(keep, fresh);
+}
+// At settlement preserve the input even if a late final input event follows compositionend.
+function reconcilePresetInput(wrap, freshWrap, input, freshInput) {
+  const pairs = [];
+  let a = input, b = freshInput;
+  while (a && b && a !== wrap && b !== freshWrap) {
+    if (a.tagName !== b.tagName || a.className !== b.className) return false;
+    pairs.push([a, b]);
+    a = a.parentElement;
+    b = b.parentElement;
+  }
+  if (a !== wrap || b !== freshWrap) return false;
+  for (const [keep, fresh] of pairs.reverse()) {
+    replaceSiblingsKeeping(keep, fresh);
+    if (keep.hasAttribute('data-presetresults')) keep.dataset.presetlist = fresh.dataset.presetlist;
+  }
+  return true;
+}
+function refreshPresetWrap(session) {
+  const template = document.createElement('template');
+  template.innerHTML = playerBar(session.side);
+  const fresh = template.content.querySelector('.presetwrap');
+  if (!fresh || !session.wrap.isConnected) return false;
+  const ae = document.activeElement;
+  const input = session.wrap.contains(ae) && presetTextAttr(ae) ? ae : session.input;
+  const attr = presetTextAttr(input);
+  const next = attr ? fresh.querySelector(`[${attr}]`) : null;
+  if (next && session.wrap.contains(input) && reconcilePresetInput(session.wrap, fresh, input, next)) {
+    layoutPresetPop();
+    return true;
+  }
+  const selection = input === ae && attr ? [ae.selectionStart, ae.selectionEnd, ae.selectionDirection] : null;
+  session.wrap.replaceWith(fresh);
+  if (selection && next && ui.presetPop === session.side) {
+    next.focus({ preventScroll: true });
+    try { next.setSelectionRange(...selection); } catch (e) { /* noop */ }
+  }
+  layoutPresetPop();
+  return true;
+}
+function schedulePresetImeFinish(session) {
+  if (!session.ended || session.timer !== null || session.pointer !== null) return;
+  session.timer = setTimeout(() => {
+    session.timer = null;
+    if (presetImeSessions.get(session.wrap) !== session || !session.ended ||
+        session.pointer !== null) return;
+    if (session.input.isConnected) session.searchDirty = rememberPresetText(session.input) || session.searchDirty;
+    presetImeSessions.delete(session.wrap);
+    for (const button of session.disabled) button.disabled = false;
+    if (!session.wrap.isConnected) return;
+    if (session.fallback) { renderAll(); return; }
+    const renameFocused = session.wrap.contains(document.activeElement) &&
+      document.activeElement.matches('[data-presetrename]');
+    if (session.dirty || (session.searchDirty && renameFocused)) {
+      if (!refreshPresetWrap(session)) renderAll();
+    } else if (session.searchDirty) refreshPresetSearch(session.side);
+  }, 0);
+}
+function endPresetIme(session) {
+  if (!session.ended) {
+    session.ended = true;
+    if (session.input.isConnected) session.searchDirty = rememberPresetText(session.input) || session.searchDirty;
+  }
+  schedulePresetImeFinish(session);
+}
+document.addEventListener('compositionstart', e => {
+  const input = e.target;
+  if (!presetTextAttr(input)) return;
+  const wrap = input.closest('.presetwrap');
+  if (!wrap) return;
+  let session = presetImeSessions.get(wrap);
+  if (!session) {
+    const side = wrap.closest('#playerMine') ? 'mine' : 'opps';
+    session = { wrap, side, input, generation: 0, ended: false, dirty: false, fallback: false,
+      searchDirty: false, timer: null, pointer: null, disabled: [] };
+    presetImeSessions.set(wrap, session);
+    for (const button of wrap.querySelectorAll('button:not(:disabled)')) {
+      button.disabled = true;
+      session.disabled.push(button);
+    }
+  }
+  session.generation++;
+  session.input = input;
+  session.ended = false;
+});
+document.addEventListener('compositionend', e => {
+  const session = presetImeSessions.get(e.target.closest?.('.presetwrap'));
+  if (session?.input === e.target) endPresetIme(session);
+});
+document.addEventListener('focusout', e => {
+  const session = presetImeSessions.get(e.target.closest?.('.presetwrap'));
+  if (!session || session.input !== e.target) return;
+  const generation = session.generation;
+  setTimeout(() => {
+    if (presetImeSessions.get(session.wrap) === session &&
+        session.generation === generation && session.input === e.target) endPresetIme(session);
+  }, 0);
+});
+document.addEventListener('pointerdown', e => {
+  for (const session of presetImeSessions.values()) {
+    session.pointer = e.pointerId;
+    if (!session.wrap.contains(e.target) && !session.ended &&
+        document.activeElement === session.input) session.input.blur();
+  }
+}, true);
+function releasePresetImePointer(e) {
+  for (const session of presetImeSessions.values()) {
+    if (session.pointer === e.pointerId) {
+      session.pointer = null;
+      schedulePresetImeFinish(session);
+    }
+  }
+}
+window.addEventListener('pointerup', releasePresetImePointer, true);
+window.addEventListener('pointercancel', releasePresetImePointer, true);
+window.addEventListener('pointermove', e => {
+  if (e.buttons === 0) releasePresetImePointer(e);
+}, true);
+window.addEventListener('blur', () => {
+  for (const session of presetImeSessions.values()) {
+    session.pointer = null;
+    if (document.activeElement !== session.input) endPresetIme(session);
+    else schedulePresetImeFinish(session);
+  }
+});
+window.addEventListener('storage', e => {
+  if ((e.key === PRESET_STORE_KEY || e.key === null) && ui.presetPop) renderAll();
+});
+function renderAll() {
+  const ae = document.activeElement;
+  for (const [wrap, session] of presetImeSessions) {
+    if (!wrap.isConnected) { clearTimeout(session.timer); presetImeSessions.delete(wrap); }
+  }
+  const protectedFocus = Array.from(presetImeSessions.keys()).some(wrap => wrap.contains(ae));
+  const attr = presetTextAttr(ae);
+  const focusSide = attr ? (ae.closest('#playerMine') ? 'mine' : 'opps') : null;
+  const selection = attr ? [ae.selectionStart, ae.selectionEnd, ae.selectionDirection] : null;
+  if (!protectedFocus && document.activeElement && document.activeElement !== document.body && document.activeElement.blur) {
     try { document.activeElement.blur(); } catch (e) { /* noop */ }
   }
   openDDId = null;
   closeStPop();
-  document.getElementById('playerMine').innerHTML = renderPanel('mine');
+  renderPanelProtected(document.getElementById('playerMine'), 'mine');
   document.getElementById('fieldbar').innerHTML = renderField();
-  document.getElementById('playerOpp').innerHTML = renderPanel('opps');
-  if (presetFocus && ui.presetPop === presetFocus.side) {
-    const inp = document.querySelector(`[data-${presetFocus.attr}="${presetFocus.side}"]`);
+  renderPanelProtected(document.getElementById('playerOpp'), 'opps');
+  if (!protectedFocus && attr && ui.presetPop === focusSide) {
+    const root = document.getElementById(focusSide === 'mine' ? 'playerMine' : 'playerOpp');
+    const inp = root.querySelector(`[${attr}]`);
     if (inp) {
-      inp.focus();
-      if (presetFocus.sel != null) { try { inp.setSelectionRange(presetFocus.sel, presetFocus.sel); } catch (e) { /* noop */ } }
+      inp.focus({ preventScroll: true });
+      try { inp.setSelectionRange(...selection); } catch (e) { /* noop */ }
     }
   }
+  layoutPresetPop();
+}
+function layoutPresetPop() {
   // プリセットのプルダウンが画面の左右にはみ出す場合は、収まるよう横にずらす
-  const presetPopEl = document.querySelector('.presetpop');
-  if (presetPopEl) {
+  for (const presetPopEl of document.querySelectorAll('.presetpop')) {
+    if (presetImeSessions.has(presetPopEl.closest('.presetwrap'))) continue;
+    presetPopEl.style.transform = '';
     const r = presetPopEl.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
     let dx = 0;
@@ -2655,18 +2888,20 @@ function renderAll() {
     if (dx) presetPopEl.style.transform = `translateX(${dx}px)`;
   }
 }
-// プリセット名の下書き (再描画をまたいで入力内容を保持する)
+// Store only committed text; search rendering never replaces the search input.
 document.addEventListener('input', e => {
   const t = e.target;
-  if (!t || !t.closest) return;
-  const sn = t.closest('[data-presetname]');
-  if (sn) { ui.presetDraft.save[sn.dataset.presetname] = t.value; return; }
-  const rn = t.closest('[data-presetrename]');
-  if (rn) { ui.presetDraft.rename = t.value; return; }
-  const tk = t.closest('[data-presettoken]');
-  if (tk) { ui.presetDraft.token = t.value; return; }
-  const pq = t.closest('[data-presetsearch]');
-  if (pq) { ui.presetDraft.search[pq.dataset.presetsearch] = t.value; renderAll(); }
+  if (!presetTextAttr(t)) return;
+  const session = presetImeSessions.get(t.closest('.presetwrap'));
+  if (e.isComposing) return;
+  if (session?.input === t && !session.ended) {
+    // Recovery when an explicit compositionend was lost.
+    if (e.isComposing === false && e.inputType && !/CompositionText$/.test(e.inputType)) endPresetIme(session);
+    return;
+  }
+  const changed = rememberPresetText(t);
+  if (session) session.searchDirty = session.searchDirty || changed;
+  else if (changed) refreshPresetSearch(t.dataset.presetsearch);
 });
 // 第2段: 選択中マッチアップについて、相手の事後上位候補を通じたダメージ幅。
 // 集計の実処理は推定エンジン側 (estimate_engine.mjs の candRanges)
@@ -2834,6 +3069,10 @@ document.addEventListener('mousedown', e => {
 });
 document.addEventListener('click', e => {
   const t = e.target;
+  const protectedWrap = t.closest?.('.presetwrap');
+  if (presetImeSessions.has(protectedWrap) && t.closest('button')) {
+    e.preventDefault(); return;
+  }
   const icon = t.closest('[data-icon]');
   if (icon) { const [side, i] = icon.dataset.icon.split(':'); state.sel[side] = +i; applySetterAbility(state[side][+i]); calcAll(); return; }
   const fpick = t.closest('[data-focuspick]');
@@ -2929,7 +3168,7 @@ document.addEventListener('click', e => {
   const vt = t.closest('[data-vgcteam]');
   if (vt) { const [side, teamId] = vt.dataset.vgcteam.split(':'); applyVgcTeam(side, teamId); return; }
   const psv = t.closest('[data-presetsave]');
-  if (psv) { const side = psv.dataset.presetsave; const inp = document.querySelector(`[data-presetname="${side}"]`); savePreset(side, ui.presetDraft.save[side] != null ? ui.presetDraft.save[side] : (inp ? inp.value : '')); delete ui.presetDraft.save[side]; renderAll(); return; }
+  if (psv) { const side = psv.dataset.presetsave; const inp = document.querySelector(`[data-presetname="${side}"]`); if (savePreset(side, ui.presetDraft.save[side] != null ? ui.presetDraft.save[side] : (inp ? inp.value : ''), presetListSnapshot(psv))) delete ui.presetDraft.save[side]; renderAll(); return; }
   const ptk = t.closest('[data-presettokensave]');
   if (ptk) {
     const tok = (ui.presetDraft.token || '').trim();
@@ -2938,15 +3177,15 @@ document.addEventListener('click', e => {
     return;
   }
   const ped = t.closest('[data-presetedit]');
-  if (ped) { const [side, idx] = ped.dataset.presetedit.split(':'); const cur = loadPresetStore()[side][+idx]; if (cur) { ui.presetRename = { side, idx: +idx }; ui.presetDraft.rename = cur.name; } renderAll(); return; }
+  if (ped) { const [side, idx] = ped.dataset.presetedit.split(':'); const store = presetListForAction(side, presetListSnapshot(ped)); const cur = store?.[side][+idx]; if (cur) { ui.presetRename = { side, idx: +idx, record: JSON.stringify(cur) }; ui.presetDraft.rename = cur.name; } renderAll(); return; }
   const prs = t.closest('[data-presetrenamesave]');
-  if (prs) { const [side, idx] = prs.dataset.presetrenamesave.split(':'); if (renamePreset(side, +idx, ui.presetDraft.rename)) { ui.presetRename = null; ui.presetDraft.rename = ''; } renderAll(); return; }
+  if (prs) { const [side, idx] = prs.dataset.presetrenamesave.split(':'); if (renamePreset(side, +idx, ui.presetDraft.rename, presetListSnapshot(prs))) { ui.presetRename = null; ui.presetDraft.rename = ''; } renderAll(); return; }
   const prc = t.closest('[data-presetrenamecancel]');
   if (prc) { ui.presetRename = null; ui.presetDraft.rename = ''; renderAll(); return; }
   const pld = t.closest('[data-presetload]');
-  if (pld) { const [side, idx] = pld.dataset.presetload.split(':'); applyPreset(side, +idx); return; }
+  if (pld) { const [side, idx] = pld.dataset.presetload.split(':'); if (!applyPreset(side, +idx, { expectedList: presetListSnapshot(pld) })) renderAll(); return; }
   const pdel = t.closest('[data-presetdel]');
-  if (pdel) { const [side, idx] = pdel.dataset.presetdel.split(':'); deletePreset(side, +idx); renderAll(); return; }
+  if (pdel) { const [side, idx] = pdel.dataset.presetdel.split(':'); deletePreset(side, +idx, presetListSnapshot(pdel)); renderAll(); return; }
   const mg = t.closest('[data-mega]');
   if (mg) {
     const spec = DS(mg.dataset.mega);
