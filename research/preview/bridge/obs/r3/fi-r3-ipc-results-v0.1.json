@@ -1,0 +1,147 @@
+{
+  "schema": "fi-r3-ipc-stub-v0.1",
+  "platform": "linux",
+  "python": "3.13.5",
+  "swift": "Swift version 6.2.1 (swift-6.2.1-RELEASE)",
+  "total": 17,
+  "passed": 17,
+  "tests": [
+    {
+      "mode": "normal",
+      "status": "ok",
+      "expected": "ok",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "stderr_flood",
+      "status": "ok",
+      "expected": "ok",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "ready_wrong",
+      "status": "contract",
+      "expected": "contract",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "ready_hang",
+      "status": "timeout",
+      "expected": "timeout",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "write_stall",
+      "status": "timeout",
+      "expected": "timeout",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "crash",
+      "status": "eof",
+      "expected": "eof",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "hang",
+      "status": "timeout",
+      "expected": "timeout",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "stop",
+      "status": "timeout",
+      "expected": "timeout",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": true
+    },
+    {
+      "mode": "partial_header",
+      "status": "eof",
+      "expected": "eof",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "oversize",
+      "status": "size",
+      "expected": "size",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "partial_body",
+      "status": "eof",
+      "expected": "eof",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "duplicate",
+      "status": "contract",
+      "expected": "contract",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "invalid_utf8",
+      "status": "contract",
+      "expected": "contract",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "wrong_frame",
+      "status": "contract",
+      "expected": "contract",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "wrong_worker",
+      "status": "contract",
+      "expected": "contract",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "wrong_digest",
+      "status": "contract",
+      "expected": "contract",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    },
+    {
+      "mode": "error",
+      "status": "worker_error",
+      "expected": "worker_error",
+      "passed": true,
+      "reaped": true,
+      "kill_escalated": false
+    }
+  ],
+  "note": "Sanitized transcription of actual Linux result; durations intentionally omitted (process lifetime not IPC latency)."
+}
