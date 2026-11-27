@@ -54,9 +54,10 @@
   "tests/test_r1d_replay.mjs": "ce5005915de05960aad5bcd5c7323bb90dab1123a3a103da760ab6aa4f468965",
   "tests/test_r1f_verification.mjs": "03aba1933380b298a2e97e5cdf44a38befdf21f37be33650f2084260a0a2be70",
   "tests/test_r1g1_fixes.mjs": "dc039fd2dfb54ad15c0f4e77e03cc4a94b2a1f4ba23987ee39f4f554ad5caab2",
+  "tests/ui_harness.mjs": "6d665a71da28b4f51644c816c009da45a22da50b333786783280aa8640a89841",
   "ui.html": "499ae73a76b117bf8b44b7f05da6dd9e0b648b775ffe13cf9486a4d483ed0e63",
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261127_0010"
+ "rev": "20261128_0015"
 }
