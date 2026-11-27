@@ -24,9 +24,9 @@
   "data/species_types.json": "ce11f9ae2d01f8a6061b473ed9260b61c95c1c3d58c40e5231cfde9df05623ec",
   "data/type_icons.json": "50e97aa157aa028294b97961f98213726d4832529743317ba7cc15c64f7534ed",
   "data/usage_sets.json": "f9fc41f6c22051b57c857f40c2d4e352c540bb2bee7047da968db121f0b7dc2f",
-  "data/vgc_pastes.json": "a89505a0b351b275f91531ad00d2d38c89e997eb29e8d4eb6d3c0d46ae3a64af",
-  "data/vgc_pastes_stats.json": "163236f7a77dd4151fae2fde73998aeca123c0437d52bd84ce3b75c7cb29aa33",
-  "data/vgcpastes_sets.json": "b4ef40781d33ab4dbdcd850c688276b214a81bbc11e4d65ce7414fa3babd13f9",
+  "data/vgc_pastes.json": "05f2540659b5bbb8545802837226e78b3a1c2810984102fb15b72c83ea970fe2",
+  "data/vgc_pastes_stats.json": "d981f954f925306f9fe943d1f3a3dee44ebaa1af03566a2d2f89f139c5bee81e",
+  "data/vgcpastes_sets.json": "bb1b8a973098cc2b336e792bf3c9150252fda1e79233f6d7f2bfe62e431bcbb3",
   "estimate_engine.mjs": "21780d0c78f133277c8ee9803fa8b02a9cac89e1c8e75795405a326a09f7c885",
   "fetch_champions_dex.mjs": "278d7db46a15a6a78318839bebe4fbd4843af90e6a80b5f4677cdda0cd641a65",
   "fetch_meta_sets.mjs": "89de530081166f8ada6b99ed1a1d1500c0a6071384b433f5160cf7d669e31852",
@@ -59,5 +59,5 @@
   "update_data.sh": "8a39071d4db0c923bd59655c3d5dc659e90af45330872ce598dd60a26328d41e",
   "使い方メモ.txt": "94ae689fd0ea827308cbf6c4d3c003c16fb1bf712313cf1ad903d6fb7add3a3f"
  },
- "rev": "20261128_0017"
+ "rev": "20261128_0018"
 }
