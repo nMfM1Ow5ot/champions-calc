@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated": "2026-11-25",
+ "updated": "2026-11-28",
  "regulation": "M-C",
  "species": {
   "Abomasnow-Mega": {
@@ -1513,12 +1513,12 @@
   "Arcanine-Hisui": {
    "species": "Arcanine",
    "forme": "Arcanine-Hisui",
-   "count": 71,
-   "teams": 71,
+   "count": 74,
+   "teams": 74,
    "items": [
     [
      "Focus Sash",
-     65
+     68
     ],
     [
      "Choice Scarf",
@@ -1536,11 +1536,11 @@
    "natures": [
     [
      "Jolly",
-     65
+     67
     ],
     [
      "Adamant",
-     5
+     6
     ],
     [
      "Brave",
@@ -1550,7 +1550,7 @@
    "abilities": [
     [
      "Rock Head",
-     62
+     65
     ],
     [
      "Intimidate",
@@ -1560,23 +1560,23 @@
    "moves": [
     [
      "Flare Blitz",
-     71
+     74
     ],
     [
      "Protect",
-     68
+     71
     ],
     [
      "Head Smash",
-     65
+     68
     ],
     [
      "Extreme Speed",
-     64
+     66
     ],
     [
      "Rock Slide",
-     12
+     13
     ],
     [
      "Close Combat",
@@ -1605,7 +1605,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 38
+     "count": 39
     },
     {
      "sp": {
@@ -1616,7 +1616,18 @@
       "spd": 1,
       "spe": 32
      },
-     "count": 14
+     "count": 15
+    },
+    {
+     "sp": {
+      "hp": 1,
+      "atk": 32,
+      "def": 1,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 7
     },
     {
      "sp": {
@@ -1628,17 +1639,6 @@
       "spe": 32
      },
      "count": 7
-    },
-    {
-     "sp": {
-      "hp": 1,
-      "atk": 32,
-      "def": 1,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 6
     },
     {
      "sp": {
@@ -1700,12 +1700,12 @@
   "Archaludon": {
    "species": "Archaludon",
    "forme": null,
-   "count": 113,
-   "teams": 113,
+   "count": 116,
+   "teams": 116,
    "items": [
     [
      "Leftovers",
-     102
+     105
     ],
     [
      "Choice Scarf",
@@ -1747,7 +1747,7 @@
     ],
     [
      "Calm",
-     27
+     30
     ],
     [
      "Timid",
@@ -1761,7 +1761,7 @@
    "abilities": [
     [
      "Stamina",
-     104
+     107
     ],
     [
      "Sturdy",
@@ -1775,23 +1775,23 @@
    "moves": [
     [
      "Electro Shot",
-     111
+     114
     ],
     [
      "Protect",
-     109
+     112
     ],
     [
      "Dragon Pulse",
-     96
+     98
     ],
     [
      "Flash Cannon",
-     58
+     57
     ],
     [
      "Snarl",
-     33
+     37
     ],
     [
      "Aura Sphere",
@@ -1799,7 +1799,7 @@
     ],
     [
      "Draco Meteor",
-     14
+     15
     ],
     [
      "Steel Beam",
@@ -1829,6 +1829,17 @@
       "spe": 0
      },
      "count": 7
+    },
+    {
+     "sp": {
+      "hp": 30,
+      "atk": 0,
+      "def": 1,
+      "spa": 1,
+      "spd": 19,
+      "spe": 15
+     },
+     "count": 4
     },
     {
      "sp": {
@@ -1882,17 +1893,6 @@
       "spa": 0,
       "spd": 25,
       "spe": 10
-     },
-     "count": 3
-    },
-    {
-     "sp": {
-      "hp": 30,
-      "atk": 0,
-      "def": 1,
-      "spa": 1,
-      "spd": 19,
-      "spe": 15
      },
      "count": 3
     },
@@ -2393,8 +2393,8 @@
   "Basculegion": {
    "species": "Basculegion",
    "forme": null,
-   "count": 175,
-   "teams": 175,
+   "count": 181,
+   "teams": 181,
    "items": [
     [
      "Life Orb",
@@ -2402,47 +2402,47 @@
     ],
     [
      "Choice Scarf",
-     57
+     56
     ],
     [
      "Focus Sash",
-     36
+     40
     ],
     [
      "Mystic Water",
-     11
+     12
     ],
     [
      "Sitrus Berry",
-     6
+     7
     ],
     [
      "Colbur Berry",
      4
     ],
     [
-     "Rindo Berry",
+     "Kasib Berry",
      2
     ],
     [
-     "Kasib Berry",
-     1
+     "Rindo Berry",
+     2
     ]
    ],
    "natures": [
     [
      "Adamant",
-     106
+     109
     ],
     [
      "Jolly",
-     69
+     72
     ]
    ],
    "abilities": [
     [
      "Adaptability",
-     171
+     177
     ],
     [
      "Swift Swim",
@@ -2452,27 +2452,27 @@
    "moves": [
     [
      "Last Respects",
-     175
+     181
     ],
     [
      "Aqua Jet",
-     166
+     172
     ],
     [
      "Wave Crash",
-     143
+     145
     ],
     [
      "Protect",
-     117
+     124
     ],
     [
      "Flip Turn",
-     53
+     52
     ],
     [
      "Liquidation",
-     31
+     35
     ],
     [
      "Soak",
@@ -2513,7 +2513,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 33
+     "count": 36
     },
     {
      "sp": {
@@ -2535,7 +2535,29 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 6
+     "count": 8
+    },
+    {
+     "sp": {
+      "hp": 0,
+      "atk": 32,
+      "def": 1,
+      "spa": 0,
+      "spd": 1,
+      "spe": 32
+     },
+     "count": 4
+    },
+    {
+     "sp": {
+      "hp": 13,
+      "atk": 18,
+      "def": 7,
+      "spa": 0,
+      "spd": 18,
+      "spe": 10
+     },
+     "count": 4
     },
     {
      "sp": {
@@ -2550,23 +2572,12 @@
     },
     {
      "sp": {
-      "hp": 13,
-      "atk": 18,
-      "def": 7,
-      "spa": 0,
-      "spd": 18,
-      "spe": 10
-     },
-     "count": 3
-    },
-    {
-     "sp": {
       "hp": 0,
-      "atk": 32,
-      "def": 1,
+      "atk": 28,
+      "def": 14,
       "spa": 0,
-      "spd": 1,
-      "spe": 32
+      "spd": 0,
+      "spe": 24
      },
      "count": 3
     },
@@ -2594,28 +2605,6 @@
     },
     {
      "sp": {
-      "hp": 4,
-      "atk": 18,
-      "def": 4,
-      "spa": 0,
-      "spd": 15,
-      "spe": 25
-     },
-     "count": 3
-    },
-    {
-     "sp": {
-      "hp": 0,
-      "atk": 28,
-      "def": 14,
-      "spa": 0,
-      "spd": 0,
-      "spe": 24
-     },
-     "count": 2
-    },
-    {
-     "sp": {
       "hp": 0,
       "atk": 32,
       "def": 14,
@@ -2633,6 +2622,17 @@
       "spa": 0,
       "spd": 0,
       "spe": 27
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 0,
+      "atk": 27,
+      "def": 11,
+      "spa": 0,
+      "spd": 0,
+      "spe": 28
      },
      "count": 2
     }
@@ -2938,18 +2938,18 @@
   "Baxcalibur-Mega": {
    "species": "Baxcalibur",
    "forme": "Baxcalibur-Mega",
-   "count": 25,
-   "teams": 25,
+   "count": 24,
+   "teams": 24,
    "items": [
     [
      "Baxcalibrite",
-     25
+     24
     ]
    ],
    "natures": [
     [
      "Adamant",
-     21
+     20
     ],
     [
      "Jolly",
@@ -2963,7 +2963,7 @@
    "abilities": [
     [
      "Thermal Exchange",
-     24
+     23
     ],
     [
      "Ice Body",
@@ -2973,14 +2973,14 @@
    "moves": [
     [
      "Protect",
-     25
-    ],
-    [
-     "Ice Shard",
      24
     ],
     [
      "Glaive Rush",
+     23
+    ],
+    [
+     "Ice Shard",
      23
     ],
     [
@@ -2989,7 +2989,7 @@
     ],
     [
      "Icicle Crash",
-     7
+     6
     ],
     [
      "Dragon Dance",
@@ -3013,10 +3013,6 @@
     ],
     [
      "Iron Head",
-     1
-    ],
-    [
-     "Scale Shot",
      1
     ]
    ],
@@ -3338,18 +3334,18 @@
   "Blastoise-Mega": {
    "species": "Blastoise",
    "forme": "Blastoise-Mega",
-   "count": 15,
-   "teams": 15,
+   "count": 14,
+   "teams": 14,
    "items": [
     [
      "Blastoisinite",
-     15
+     14
     ]
    ],
    "natures": [
     [
      "Modest",
-     11
+     10
     ],
     [
      "Quiet",
@@ -3371,29 +3367,29 @@
     ],
     [
      "Mega Launcher",
-     2
+     1
     ]
    ],
    "moves": [
     [
      "Water Spout",
-     12
-    ],
-    [
-     "Protect",
      11
     ],
     [
-     "Shell Smash",
-     8
+     "Protect",
+     10
     ],
     [
      "Dark Pulse",
      7
     ],
     [
-     "Terrain Pulse",
+     "Shell Smash",
      7
+    ],
+    [
+     "Terrain Pulse",
+     6
     ],
     [
      "Aura Sphere",
@@ -3415,17 +3411,6 @@
    "spPatterns": [
     {
      "sp": {
-      "hp": 22,
-      "atk": 0,
-      "def": 0,
-      "spa": 25,
-      "spd": 0,
-      "spe": 19
-     },
-     "count": 3
-    },
-    {
-     "sp": {
       "hp": 2,
       "atk": 0,
       "def": 0,
@@ -3443,6 +3428,17 @@
       "spa": 32,
       "spd": 0,
       "spe": 0
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 22,
+      "atk": 0,
+      "def": 0,
+      "spa": 25,
+      "spd": 0,
+      "spe": 19
      },
      "count": 2
     },
@@ -3755,42 +3751,42 @@
   "Camerupt-Mega": {
    "species": "Camerupt",
    "forme": "Camerupt-Mega",
-   "count": 13,
-   "teams": 13,
+   "count": 15,
+   "teams": 15,
    "items": [
     [
      "Cameruptite",
-     13
+     15
     ]
    ],
    "natures": [
     [
      "Quiet",
-     13
+     15
     ]
    ],
    "abilities": [
     [
      "Solid Rock",
-     13
+     15
     ]
    ],
    "moves": [
     [
      "Ancient Power",
-     13
+     15
     ],
     [
      "Earth Power",
-     13
+     15
     ],
     [
      "Heat Wave",
-     13
+     15
     ],
     [
      "Protect",
-     12
+     14
     ],
     [
      "Fire Blast",
@@ -3807,7 +3803,7 @@
       "spd": 0,
       "spe": 0
      },
-     "count": 7
+     "count": 9
     },
     {
      "sp": {
@@ -4192,18 +4188,18 @@
   "Charizard-Mega-Y": {
    "species": "Charizard",
    "forme": "Charizard-Mega-Y",
-   "count": 108,
-   "teams": 108,
+   "count": 112,
+   "teams": 112,
    "items": [
     [
      "Charizardite Y",
-     108
+     112
     ]
    ],
    "natures": [
     [
      "Modest",
-     62
+     66
     ],
     [
      "Timid",
@@ -4221,7 +4217,7 @@
    "abilities": [
     [
      "Blaze",
-     95
+     99
     ],
     [
      "Solar Power",
@@ -4235,15 +4231,15 @@
    "moves": [
     [
      "Heat Wave",
-     107
+     111
     ],
     [
      "Protect",
-     107
+     111
     ],
     [
      "Weather Ball",
-     102
+     107
     ],
     [
      "Ancient Power",
@@ -4251,19 +4247,15 @@
     ],
     [
      "Solar Beam",
-     40
+     43
     ],
     [
      "Hurricane",
-     20
+     21
     ],
     [
      "Sunny Day",
      3
-    ],
-    [
-     "Overheat",
-     2
     ],
     [
      "Dragon Pulse",
@@ -4279,6 +4271,10 @@
     ],
     [
      "Helping Hand",
+     1
+    ],
+    [
+     "Overheat",
      1
     ],
     [
@@ -4304,7 +4300,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 5
+     "count": 4
     },
     {
      "sp": {
@@ -4385,6 +4381,28 @@
     },
     {
      "sp": {
+      "hp": 30,
+      "atk": 0,
+      "def": 31,
+      "spa": 1,
+      "spd": 0,
+      "spe": 4
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 9,
+      "spa": 1,
+      "spd": 24,
+      "spe": 0
+     },
+     "count": 2
+    },
+    {
+     "sp": {
       "hp": 32,
       "atk": 0,
       "def": 9,
@@ -4402,28 +4420,6 @@
       "spa": 12,
       "spd": 0,
       "spe": 20
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 0,
-      "spa": 1,
-      "spd": 25,
-      "spe": 8
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 12,
-      "atk": 0,
-      "def": 14,
-      "spa": 15,
-      "spd": 1,
-      "spe": 24
      },
      "count": 2
     }
@@ -4656,26 +4652,26 @@
   "Corviknight": {
    "species": "Corviknight",
    "forme": null,
-   "count": 8,
-   "teams": 8,
+   "count": 7,
+   "teams": 7,
    "items": [
     [
      "Psychic Seed",
      4
     ],
     [
-     "Leftovers",
+     "Sitrus Berry",
      2
     ],
     [
-     "Sitrus Berry",
-     2
+     "Leftovers",
+     1
     ]
    ],
    "natures": [
     [
      "Careful",
-     4
+     3
     ],
     [
      "Impish",
@@ -4689,21 +4685,21 @@
    "abilities": [
     [
      "Mirror Armor",
-     8
+     7
     ]
    ],
    "moves": [
     [
      "Bulk Up",
-     7
+     6
     ],
     [
      "Roost",
-     7
+     6
     ],
     [
      "Brave Bird",
-     6
+     5
     ],
     [
      "Body Press",
@@ -4714,11 +4710,11 @@
      3
     ],
     [
-     "Tailwind",
-     3
+     "Iron Head",
+     2
     ],
     [
-     "Iron Head",
+     "Tailwind",
      2
     ],
     [
@@ -4801,17 +4797,6 @@
       "spa": 0,
       "spd": 15,
       "spe": 8
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 19,
-      "atk": 11,
-      "def": 5,
-      "spa": 0,
-      "spd": 5,
-      "spe": 26
      },
      "count": 1
     }
@@ -5581,18 +5566,18 @@
   "Dragonite-Mega": {
    "species": "Dragonite",
    "forme": "Dragonite-Mega",
-   "count": 34,
-   "teams": 34,
+   "count": 35,
+   "teams": 35,
    "items": [
     [
      "Dragoninite",
-     34
+     35
     ]
    ],
    "natures": [
     [
      "Modest",
-     31
+     32
     ],
     [
      "Timid",
@@ -5606,25 +5591,25 @@
     ],
     [
      "Multiscale",
-     13
+     14
     ]
    ],
    "moves": [
     [
      "Dragon Pulse",
-     34
+     35
     ],
     [
      "Protect",
-     30
+     31
     ],
     [
      "Tailwind",
-     30
+     31
     ],
     [
      "Heat Wave",
-     28
+     29
     ],
     [
      "Flamethrower",
@@ -5705,6 +5690,17 @@
     },
     {
      "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 1,
+      "spa": 15,
+      "spd": 1,
+      "spe": 17
+     },
+     "count": 1
+    },
+    {
+     "sp": {
       "hp": 9,
       "atk": 0,
       "def": 0,
@@ -5768,29 +5764,18 @@
       "spe": 32
      },
      "count": 1
-    },
-    {
-     "sp": {
-      "hp": 8,
-      "atk": 0,
-      "def": 0,
-      "spa": 26,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 1
     }
    ]
   },
   "Drampa": {
    "species": "Drampa",
    "forme": null,
-   "count": 5,
-   "teams": 5,
+   "count": 6,
+   "teams": 6,
    "items": [
     [
      "Expert Belt",
-     2
+     3
     ],
     [
      "Life Orb",
@@ -5804,7 +5789,7 @@
    "natures": [
     [
      "Modest",
-     3
+     4
     ],
     [
      "Quiet",
@@ -5814,16 +5799,20 @@
    "abilities": [
     [
      "Cloud Nine",
-     5
+     6
     ]
    ],
    "moves": [
     [
      "Dragon Pulse",
-     5
+     6
     ],
     [
      "Flamethrower",
+     5
+    ],
+    [
+     "Earth Power",
      4
     ],
     [
@@ -5831,12 +5820,8 @@
      4
     ],
     [
-     "Earth Power",
-     3
-    ],
-    [
      "Thunderbolt",
-     2
+     3
     ],
     [
      "Grass Knot",
@@ -5858,6 +5843,17 @@
       "spe": 0
      },
      "count": 2
+    },
+    {
+     "sp": {
+      "hp": 2,
+      "atk": 0,
+      "def": 0,
+      "spa": 32,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 1
     },
     {
      "sp": {
@@ -6026,16 +6022,16 @@
   "Espathra": {
    "species": "Espathra",
    "forme": null,
-   "count": 7,
-   "teams": 7,
+   "count": 9,
+   "teams": 9,
    "items": [
     [
      "Electric Seed",
-     5
+     6
     ],
     [
      "Grassy Seed",
-     1
+     2
     ],
     [
      "Twisted Spoon",
@@ -6045,11 +6041,11 @@
    "natures": [
     [
      "Timid",
-     5
+     6
     ],
     [
      "Bold",
-     1
+     2
     ],
     [
      "Modest",
@@ -6059,25 +6055,25 @@
    "abilities": [
     [
      "Speed Boost",
-     7
+     9
     ]
    ],
    "moves": [
     [
      "Calm Mind",
-     7
+     9
     ],
     [
      "Protect",
-     7
+     9
     ],
     [
      "Baton Pass",
-     6
+     8
     ],
     [
      "Lumina Crash",
-     6
+     8
     ],
     [
      "Expanding Force",
@@ -6089,6 +6085,28 @@
     ]
    ],
    "spPatterns": [
+    {
+     "sp": {
+      "hp": 20,
+      "atk": 0,
+      "def": 20,
+      "spa": 0,
+      "spd": 14,
+      "spe": 12
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 31,
+      "atk": 0,
+      "def": 20,
+      "spa": 0,
+      "spd": 14,
+      "spe": 1
+     },
+     "count": 1
+    },
     {
      "sp": {
       "hp": 28,
@@ -6108,17 +6126,6 @@
       "spa": 0,
       "spd": 9,
       "spe": 15
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 20,
-      "atk": 0,
-      "def": 20,
-      "spa": 0,
-      "spd": 14,
-      "spe": 12
      },
      "count": 1
     },
@@ -6171,12 +6178,12 @@
   "Excadrill": {
    "species": "Excadrill",
    "forme": null,
-   "count": 45,
-   "teams": 45,
+   "count": 46,
+   "teams": 46,
    "items": [
     [
      "Focus Sash",
-     39
+     40
     ],
     [
      "Life Orb",
@@ -6194,17 +6201,17 @@
    "natures": [
     [
      "Adamant",
-     35
+     37
     ],
     [
      "Jolly",
-     10
+     9
     ]
    ],
    "abilities": [
     [
      "Sand Rush",
-     43
+     44
     ],
     [
      "Mold Breaker",
@@ -6214,31 +6221,31 @@
    "moves": [
     [
      "Iron Head",
-     45
+     46
     ],
     [
      "Protect",
-     44
+     45
     ],
     [
      "High Horsepower",
-     41
+     43
     ],
     [
      "Rock Slide",
-     34
+     33
     ],
     [
      "Earthquake",
      13
     ],
     [
-     "Swords Dance",
+     "Rock Tomb",
      2
     ],
     [
-     "Rock Tomb",
-     1
+     "Swords Dance",
+     2
     ]
    ],
    "spPatterns": [
@@ -6251,7 +6258,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 23
+     "count": 24
     },
     {
      "sp": {
@@ -6324,12 +6331,12 @@
   "Farigiraf": {
    "species": "Farigiraf",
    "forme": null,
-   "count": 99,
-   "teams": 99,
+   "count": 103,
+   "teams": 103,
    "items": [
     [
      "Sitrus Berry",
-     69
+     72
     ],
     [
      "Colbur Berry",
@@ -6344,6 +6351,10 @@
      4
     ],
     [
+     "Focus Sash",
+     2
+    ],
+    [
      "Psychic Seed",
      2
     ],
@@ -6353,10 +6364,6 @@
     ],
     [
      "Electric Seed",
-     1
-    ],
-    [
-     "Focus Sash",
      1
     ],
     [
@@ -6383,19 +6390,19 @@
    "natures": [
     [
      "Bold",
-     39
+     40
     ],
     [
      "Relaxed",
-     16
+     17
     ],
     [
      "Modest",
-     13
+     14
     ],
     [
      "Calm",
-     11
+     12
     ],
     [
      "Quiet",
@@ -6413,41 +6420,41 @@
    "abilities": [
     [
      "Armor Tail",
-     99
+     103
     ]
    ],
    "moves": [
     [
      "Trick Room",
-     94
-    ],
-    [
-     "Protect",
-     60
+     98
     ],
     [
      "Psychic",
-     60
+     64
+    ],
+    [
+     "Protect",
+     61
     ],
     [
      "Helping Hand",
-     51
+     54
     ],
     [
      "Thunderbolt",
      34
     ],
     [
+     "Hyper Voice",
+     25
+    ],
+    [
      "Expanding Force",
      23
     ],
     [
-     "Hyper Voice",
-     23
-    ],
-    [
      "Imprison",
-     15
+     16
     ],
     [
      "Twin Beam",
@@ -6455,7 +6462,7 @@
     ],
     [
      "Nasty Plot",
-     4
+     5
     ],
     [
      "Roar",
@@ -6567,6 +6574,50 @@
     },
     {
      "sp": {
+      "hp": 31,
+      "atk": 0,
+      "def": 22,
+      "spa": 0,
+      "spd": 13,
+      "spe": 0
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 31,
+      "atk": 0,
+      "def": 15,
+      "spa": 0,
+      "spd": 20,
+      "spe": 0
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 24,
+      "spa": 0,
+      "spd": 10,
+      "spe": 0
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 0,
+      "atk": 0,
+      "def": 1,
+      "spa": 32,
+      "spd": 1,
+      "spe": 32
+     },
+     "count": 2
+    },
+    {
+     "sp": {
       "hp": 29,
       "atk": 0,
       "def": 17,
@@ -6586,72 +6637,28 @@
       "spe": 16
      },
      "count": 2
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 2,
-      "spa": 32,
-      "spd": 0,
-      "spe": 0
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 29,
-      "atk": 0,
-      "def": 14,
-      "spa": 0,
-      "spd": 23,
-      "spe": 0
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 31,
-      "atk": 0,
-      "def": 21,
-      "spa": 0,
-      "spd": 14,
-      "spe": 0
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 25,
-      "atk": 0,
-      "def": 30,
-      "spa": 0,
-      "spd": 11,
-      "spe": 0
-     },
-     "count": 2
     }
    ]
   },
   "Floette-Mega": {
    "species": "Floette",
    "forme": "Floette-Mega",
-   "count": 124,
-   "teams": 124,
+   "count": 129,
+   "teams": 129,
    "items": [
     [
      "Floettite",
-     124
+     129
     ]
    ],
    "natures": [
     [
      "Modest",
-     90
+     96
     ],
     [
      "Timid",
-     29
+     28
     ],
     [
      "Bold",
@@ -6665,7 +6672,7 @@
    "abilities": [
     [
      "Flower Veil",
-     114
+     119
     ],
     [
      "Fairy Aura",
@@ -6679,27 +6686,27 @@
    "moves": [
     [
      "Protect",
-     124
+     129
     ],
     [
      "Dazzling Gleam",
-     118
+     120
     ],
     [
      "Calm Mind",
-     91
+     95
     ],
     [
      "Moonblast",
-     87
+     91
     ],
     [
      "Draining Kiss",
-     41
+     45
     ],
     [
      "Light of Ruin",
-     35
+     36
     ]
    ],
    "spPatterns": [
@@ -6712,18 +6719,18 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 5
+     "count": 6
     },
     {
      "sp": {
-      "hp": 4,
+      "hp": 12,
       "atk": 0,
-      "def": 8,
-      "spa": 32,
+      "def": 27,
+      "spa": 5,
       "spd": 0,
       "spe": 22
      },
-     "count": 5
+     "count": 4
     },
     {
      "sp": {
@@ -6738,14 +6745,14 @@
     },
     {
      "sp": {
-      "hp": 12,
+      "hp": 4,
       "atk": 0,
-      "def": 27,
-      "spa": 5,
+      "def": 8,
+      "spa": 32,
       "spd": 0,
       "spe": 22
      },
-     "count": 3
+     "count": 4
     },
     {
      "sp": {
@@ -6757,6 +6764,39 @@
       "spe": 20
      },
      "count": 3
+    },
+    {
+     "sp": {
+      "hp": 28,
+      "atk": 0,
+      "def": 14,
+      "spa": 15,
+      "spd": 0,
+      "spe": 9
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 20,
+      "atk": 0,
+      "def": 22,
+      "spa": 5,
+      "spd": 0,
+      "spe": 19
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 0,
+      "atk": 0,
+      "def": 2,
+      "spa": 32,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 2
     },
     {
      "sp": {
@@ -6799,39 +6839,6 @@
       "spa": 6,
       "spd": 0,
       "spe": 9
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 17,
-      "atk": 0,
-      "def": 22,
-      "spa": 5,
-      "spd": 0,
-      "spe": 22
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 10,
-      "atk": 0,
-      "def": 26,
-      "spa": 15,
-      "spd": 0,
-      "spe": 15
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 13,
-      "spa": 5,
-      "spd": 0,
-      "spe": 16
      },
      "count": 2
     }
@@ -6960,6 +6967,17 @@
     },
     {
      "sp": {
+      "hp": 7,
+      "atk": 0,
+      "def": 0,
+      "spa": 32,
+      "spd": 0,
+      "spe": 27
+     },
+     "count": 1
+    },
+    {
+     "sp": {
       "hp": 32,
       "atk": 0,
       "def": 0,
@@ -7023,25 +7041,14 @@
       "spe": 32
      },
      "count": 1
-    },
-    {
-     "sp": {
-      "hp": 20,
-      "atk": 0,
-      "def": 4,
-      "spa": 12,
-      "spd": 0,
-      "spe": 30
-     },
-     "count": 1
     }
    ]
   },
   "Gallade": {
    "species": "Gallade",
    "forme": null,
-   "count": 4,
-   "teams": 4,
+   "count": 3,
+   "teams": 3,
    "items": [
     [
      "Focus Sash",
@@ -7054,44 +7061,40 @@
     [
      "Sitrus Berry",
      1
-    ],
-    [
-     "White Herb",
-     1
     ]
    ],
    "natures": [
     [
-     "Adamant",
+     "Brave",
      2
     ],
     [
-     "Brave",
-     2
+     "Adamant",
+     1
     ]
    ],
    "abilities": [
     [
      "Sharpness",
-     4
+     3
     ]
    ],
    "moves": [
     [
      "Psycho Cut",
-     4
+     3
     ],
     [
      "Sacred Sword",
-     4
+     3
     ],
     [
      "Wide Guard",
-     4
+     3
     ],
     [
      "Trick Room",
-     3
+     2
     ],
     [
      "Poison Jab",
@@ -7108,7 +7111,7 @@
       "spd": 0,
       "spe": 0
      },
-     "count": 3
+     "count": 2
     },
     {
      "sp": {
@@ -7181,8 +7184,8 @@
   "Garchomp": {
    "species": "Garchomp",
    "forme": null,
-   "count": 97,
-   "teams": 97,
+   "count": 101,
+   "teams": 101,
    "items": [
     [
      "Choice Scarf",
@@ -7190,7 +7193,7 @@
     ],
     [
      "Life Orb",
-     29
+     31
     ],
     [
      "Haban Berry",
@@ -7198,6 +7201,10 @@
     ],
     [
      "Roseli Berry",
+     2
+    ],
+    [
+     "Sitrus Berry",
      2
     ],
     [
@@ -7220,15 +7227,15 @@
    "natures": [
     [
      "Adamant",
-     56
+     57
     ],
     [
      "Jolly",
-     38
+     40
     ],
     [
      "Impish",
-     2
+     3
     ],
     [
      "Modest",
@@ -7238,49 +7245,49 @@
    "abilities": [
     [
      "Rough Skin",
-     97
+     101
     ]
    ],
    "moves": [
     [
      "Dragon Claw",
-     87
+     90
     ],
     [
      "Earthquake",
-     81
+     85
     ],
     [
      "Rock Slide",
-     79
+     81
     ],
     [
      "Stomping Tantrum",
-     74
+     75
     ],
     [
      "Protect",
-     33
+     35
     ],
     [
      "Rock Tomb",
-     13
+     14
     ],
     [
      "Dragon Tail",
-     5
+     6
+    ],
+    [
+     "Poison Jab",
+     4
     ],
     [
      "Dragon Rush",
      3
     ],
     [
-     "Poison Jab",
-     3
-    ],
-    [
      "Stealth Rock",
-     2
+     3
     ],
     [
      "Breaking Swipe",
@@ -7329,6 +7336,17 @@
     },
     {
      "sp": {
+      "hp": 14,
+      "atk": 20,
+      "def": 0,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 9
+    },
+    {
+     "sp": {
       "hp": 6,
       "atk": 28,
       "def": 0,
@@ -7340,14 +7358,14 @@
     },
     {
      "sp": {
-      "hp": 14,
-      "atk": 20,
-      "def": 0,
+      "hp": 0,
+      "atk": 31,
+      "def": 3,
       "spa": 0,
       "spd": 0,
       "spe": 32
      },
-     "count": 8
+     "count": 3
     },
     {
      "sp": {
@@ -7411,17 +7429,6 @@
       "def": 0,
       "spa": 0,
       "spd": 2,
-      "spe": 32
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 0,
-      "atk": 31,
-      "def": 3,
-      "spa": 0,
-      "spd": 0,
       "spe": 32
      },
      "count": 2
@@ -7519,12 +7526,12 @@
   "Garchomp-Mega-Z": {
    "species": "Garchomp",
    "forme": "Garchomp-Mega-Z",
-   "count": 71,
-   "teams": 71,
+   "count": 72,
+   "teams": 72,
    "items": [
     [
      "Garchompite Z",
-     71
+     72
     ]
    ],
    "natures": [
@@ -7534,7 +7541,7 @@
     ],
     [
      "Timid",
-     13
+     14
     ],
     [
      "Rash",
@@ -7544,7 +7551,7 @@
    "abilities": [
     [
      "Rough Skin",
-     66
+     67
     ],
     [
      "Sand Veil",
@@ -7558,11 +7565,11 @@
    "moves": [
     [
      "Protect",
-     71
+     72
     ],
     [
      "Power Gem",
-     61
+     62
     ],
     [
      "Draco Meteor",
@@ -7570,7 +7577,7 @@
     ],
     [
      "Earth Power",
-     43
+     44
     ],
     [
      "Flamethrower",
@@ -7578,7 +7585,7 @@
     ],
     [
      "Dragon Pulse",
-     26
+     27
     ],
     [
      "Earthquake",
@@ -7603,7 +7610,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 21
+     "count": 22
     },
     {
      "sp": {
@@ -7731,18 +7738,18 @@
   "Gardevoir-Mega": {
    "species": "Gardevoir",
    "forme": "Gardevoir-Mega",
-   "count": 57,
-   "teams": 57,
+   "count": 55,
+   "teams": 55,
    "items": [
     [
      "Gardevoirite",
-     57
+     55
     ]
    ],
    "natures": [
     [
      "Modest",
-     45
+     43
     ],
     [
      "Timid",
@@ -7756,11 +7763,11 @@
    "abilities": [
     [
      "Trace",
-     35
+     32
     ],
     [
      "Synchronize",
-     10
+     11
     ],
     [
      "Telepathy",
@@ -7774,19 +7781,19 @@
    "moves": [
     [
      "Hyper Voice",
-     57
+     55
     ],
     [
      "Expanding Force",
-     55
+     53
     ],
     [
      "Protect",
-     55
+     53
     ],
     [
      "Trick Room",
-     22
+     21
     ],
     [
      "Calm Mind",
@@ -7805,12 +7812,12 @@
      4
     ],
     [
-     "Aura Sphere",
+     "Moonblast",
      3
     ],
     [
-     "Moonblast",
-     3
+     "Aura Sphere",
+     2
     ],
     [
      "Encore",
@@ -7871,17 +7878,6 @@
       "spa": 15,
       "spd": 0,
       "spe": 4
-     },
-     "count": 3
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 9,
-      "spa": 25,
-      "spd": 0,
-      "spe": 0
      },
      "count": 3
     },
@@ -7961,6 +7957,17 @@
       "spe": 1
      },
      "count": 2
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 9,
+      "spa": 25,
+      "spd": 0,
+      "spe": 0
+     },
+     "count": 2
     }
    ]
   },
@@ -8037,22 +8044,22 @@
   "Gengar-Mega": {
    "species": "Gengar",
    "forme": "Gengar-Mega",
-   "count": 41,
-   "teams": 41,
+   "count": 43,
+   "teams": 43,
    "items": [
     [
      "Gengarite",
-     41
+     43
     ]
    ],
    "natures": [
     [
      "Modest",
-     22
+     23
     ],
     [
      "Timid",
-     18
+     19
     ],
     [
      "Calm",
@@ -8062,7 +8069,7 @@
    "abilities": [
     [
      "Cursed Body",
-     39
+     41
     ],
     [
      "Shadow Tag",
@@ -8072,19 +8079,19 @@
    "moves": [
     [
      "Protect",
-     41
+     43
     ],
     [
      "Shadow Ball",
-     41
+     43
     ],
     [
      "Sludge Bomb",
-     33
+     35
     ],
     [
      "Perish Song",
-     30
+     31
     ],
     [
      "Substitute",
@@ -8097,6 +8104,10 @@
     [
      "Disable",
      4
+    ],
+    [
+     "Focus Blast",
+     1
     ],
     [
      "Imprison",
@@ -8193,6 +8204,28 @@
      "sp": {
       "hp": 32,
       "atk": 0,
+      "def": 0,
+      "spa": 2,
+      "spd": 21,
+      "spe": 11
+     },
+     "count": 1
+    },
+    {
+     "sp": {
+      "hp": 0,
+      "atk": 0,
+      "def": 0,
+      "spa": 29,
+      "spd": 5,
+      "spe": 32
+     },
+     "count": 1
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
       "def": 11,
       "spa": 0,
       "spd": 16,
@@ -8221,40 +8254,18 @@
       "spe": 8
      },
      "count": 1
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 0,
-      "spa": 0,
-      "spd": 25,
-      "spe": 9
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 0,
-      "spa": 2,
-      "spd": 19,
-      "spe": 13
-     },
-     "count": 1
     }
    ]
   },
   "Gholdengo": {
    "species": "Gholdengo",
    "forme": null,
-   "count": 136,
-   "teams": 136,
+   "count": 139,
+   "teams": 139,
    "items": [
     [
      "Life Orb",
-     110
+     113
     ],
     [
      "Focus Sash",
@@ -8292,11 +8303,11 @@
    "natures": [
     [
      "Modest",
-     91
+     93
     ],
     [
      "Timid",
-     44
+     45
     ],
     [
      "Calm",
@@ -8306,29 +8317,29 @@
    "abilities": [
     [
      "Good as Gold",
-     136
+     139
     ]
    ],
    "moves": [
     [
      "Make It Rain",
-     135
+     138
     ],
     [
      "Shadow Ball",
-     135
+     138
     ],
     [
      "Protect",
-     129
+     132
     ],
     [
      "Nasty Plot",
-     114
+     116
     ],
     [
      "Power Gem",
-     19
+     20
     ],
     [
      "Thunderbolt",
@@ -8354,6 +8365,17 @@
    "spPatterns": [
     {
      "sp": {
+      "hp": 7,
+      "atk": 0,
+      "def": 0,
+      "spa": 27,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 18
+    },
+    {
+     "sp": {
       "hp": 17,
       "atk": 0,
       "def": 0,
@@ -8365,17 +8387,6 @@
     },
     {
      "sp": {
-      "hp": 7,
-      "atk": 0,
-      "def": 0,
-      "spa": 27,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 17
-    },
-    {
-     "sp": {
       "hp": 2,
       "atk": 0,
       "def": 0,
@@ -8383,7 +8394,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 14
+     "count": 15
     },
     {
      "sp": {
@@ -8644,18 +8655,18 @@
   "Glimmora-Mega": {
    "species": "Glimmora",
    "forme": "Glimmora-Mega",
-   "count": 22,
-   "teams": 22,
+   "count": 23,
+   "teams": 23,
    "items": [
     [
      "Glimmoranite",
-     22
+     23
     ]
    ],
    "natures": [
     [
      "Modest",
-     13
+     14
     ],
     [
      "Timid",
@@ -8665,7 +8676,7 @@
    "abilities": [
     [
      "Toxic Debris",
-     20
+     21
     ],
     [
      "Adaptability",
@@ -8675,19 +8686,19 @@
    "moves": [
     [
      "Earth Power",
-     22
+     23
     ],
     [
      "Power Gem",
-     22
+     23
     ],
     [
      "Spiky Shield",
-     22
+     23
     ],
     [
      "Sludge Bomb",
-     20
+     21
     ],
     [
      "Sludge Wave",
@@ -8708,22 +8719,22 @@
     },
     {
      "sp": {
-      "hp": 0,
-      "atk": 0,
-      "def": 0,
-      "spa": 32,
-      "spd": 2,
-      "spe": 32
-     },
-     "count": 2
-    },
-    {
-     "sp": {
       "hp": 1,
       "atk": 0,
       "def": 0,
       "spa": 32,
       "spd": 1,
+      "spe": 32
+     },
+     "count": 3
+    },
+    {
+     "sp": {
+      "hp": 0,
+      "atk": 0,
+      "def": 0,
+      "spa": 32,
+      "spd": 2,
       "spe": 32
      },
      "count": 2
@@ -8957,12 +8968,12 @@
   "Golisopod-Mega": {
    "species": "Golisopod",
    "forme": "Golisopod-Mega",
-   "count": 97,
-   "teams": 97,
+   "count": 96,
+   "teams": 96,
    "items": [
     [
      "Golisopite",
-     97
+     96
     ]
    ],
    "natures": [
@@ -8972,7 +8983,7 @@
     ],
     [
      "Brave",
-     26
+     25
     ],
     [
      "Careful",
@@ -8986,7 +8997,7 @@
    "abilities": [
     [
      "Emergency Exit",
-     96
+     95
     ],
     [
      "Tough Claws",
@@ -8996,7 +9007,7 @@
    "moves": [
     [
      "Leech Life",
-     88
+     87
     ],
     [
      "Iron Head",
@@ -9004,7 +9015,7 @@
     ],
     [
      "Protect",
-     71
+     70
     ],
     [
      "Sucker Punch",
@@ -9012,7 +9023,7 @@
     ],
     [
      "Swords Dance",
-     29
+     28
     ],
     [
      "Close Combat",
@@ -9031,12 +9042,12 @@
      11
     ],
     [
-     "Aqua Jet",
+     "U-turn",
      7
     ],
     [
-     "U-turn",
-     7
+     "Aqua Jet",
+     6
     ],
     [
      "Bulk Up",
@@ -9069,7 +9080,7 @@
       "spd": 2,
       "spe": 0
      },
-     "count": 38
+     "count": 37
     },
     {
      "sp": {
@@ -9080,7 +9091,7 @@
       "spd": 9,
       "spe": 0
      },
-     "count": 9
+     "count": 8
     },
     {
      "sp": {
@@ -9140,6 +9151,17 @@
     {
      "sp": {
       "hp": 32,
+      "atk": 31,
+      "def": 0,
+      "spa": 0,
+      "spd": 1,
+      "spe": 2
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 32,
       "atk": 30,
       "def": 0,
       "spa": 0,
@@ -9180,29 +9202,18 @@
       "spe": 7
      },
      "count": 1
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 30,
-      "def": 1,
-      "spa": 0,
-      "spd": 2,
-      "spe": 1
-     },
-     "count": 1
     }
    ]
   },
   "Grapploct": {
    "species": "Grapploct",
    "forme": null,
-   "count": 6,
-   "teams": 6,
+   "count": 7,
+   "teams": 7,
    "items": [
     [
      "Black Belt",
-     4
+     5
     ],
     [
      "Expert Belt",
@@ -9216,7 +9227,7 @@
    "natures": [
     [
      "Brave",
-     4
+     5
     ],
     [
      "Adamant",
@@ -9226,25 +9237,25 @@
    "abilities": [
     [
      "Technician",
-     6
+     7
     ]
    ],
    "moves": [
     [
      "Storm Throw",
-     6
+     7
     ],
     [
      "Detect",
-     5
+     6
     ],
     [
      "Mach Punch",
-     5
+     6
     ],
     [
      "Sucker Punch",
-     4
+     5
     ],
     [
      "Bulk Up",
@@ -9273,7 +9284,7 @@
       "spd": 2,
       "spe": 0
      },
-     "count": 5
+     "count": 6
     },
     {
      "sp": {
@@ -9346,18 +9357,18 @@
   "Grimmsnarl": {
    "species": "Grimmsnarl",
    "forme": null,
-   "count": 26,
-   "teams": 26,
+   "count": 28,
+   "teams": 28,
    "items": [
     [
      "Light Clay",
-     26
+     28
     ]
    ],
    "natures": [
     [
      "Careful",
-     10
+     11
     ],
     [
      "Sassy",
@@ -9365,7 +9376,7 @@
     ],
     [
      "Impish",
-     6
+     7
     ],
     [
      "Calm",
@@ -9375,25 +9386,25 @@
    "abilities": [
     [
      "Prankster",
-     26
+     28
     ]
    ],
    "moves": [
     [
      "Light Screen",
-     26
+     28
     ],
     [
      "Parting Shot",
-     25
+     27
     ],
     [
      "Reflect",
-     25
+     27
     ],
     [
      "Spirit Break",
-     25
+     26
     ],
     [
      "Fake Out",
@@ -9401,7 +9412,7 @@
     ],
     [
      "Foul Play",
-     1
+     2
     ]
    ],
    "spPatterns": [
@@ -9414,7 +9425,7 @@
       "spd": 15,
       "spe": 0
      },
-     "count": 4
+     "count": 5
     },
     {
      "sp": {
@@ -9459,6 +9470,17 @@
       "spe": 0
      },
      "count": 2
+    },
+    {
+     "sp": {
+      "hp": 30,
+      "atk": 0,
+      "def": 15,
+      "spa": 0,
+      "spd": 20,
+      "spe": 1
+     },
+     "count": 1
     },
     {
      "sp": {
@@ -9523,17 +9545,6 @@
       "spa": 0,
       "spd": 10,
       "spe": 1
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 18,
-      "spa": 0,
-      "spd": 16,
-      "spe": 0
      },
      "count": 1
     }
@@ -9647,12 +9658,12 @@
   "Hatterene": {
    "species": "Hatterene",
    "forme": null,
-   "count": 14,
-   "teams": 14,
+   "count": 12,
+   "teams": 12,
    "items": [
     [
      "Life Orb",
-     13
+     11
     ],
     [
      "Babiri Berry",
@@ -9662,31 +9673,31 @@
    "natures": [
     [
      "Quiet",
-     14
+     12
     ]
    ],
    "abilities": [
     [
      "Magic Bounce",
-     14
+     12
     ]
    ],
    "moves": [
     [
      "Expanding Force",
-     14
+     12
     ],
     [
      "Trick Room",
-     14
+     12
     ],
     [
      "Dazzling Gleam",
-     13
+     11
     ],
     [
      "Protect",
-     11
+     9
     ],
     [
      "Magic Powder",
@@ -9722,7 +9733,7 @@
       "spd": 0,
       "spe": 0
      },
-     "count": 4
+     "count": 3
     },
     {
      "sp": {
@@ -9753,17 +9764,6 @@
       "def": 0,
       "spa": 32,
       "spd": 1,
-      "spe": 0
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 0,
-      "spa": 32,
-      "spd": 0,
       "spe": 0
      },
      "count": 1
@@ -10100,8 +10100,8 @@
   "Hydreigon": {
    "species": "Hydreigon",
    "forme": null,
-   "count": 8,
-   "teams": 8,
+   "count": 7,
+   "teams": 7,
    "items": [
     [
      "Choice Scarf",
@@ -10110,10 +10110,6 @@
     [
      "Focus Sash",
      2
-    ],
-    [
-     "Haban Berry",
-     1
     ]
    ],
    "natures": [
@@ -10123,27 +10119,27 @@
     ],
     [
      "Timid",
-     2
+     1
     ]
    ],
    "abilities": [
     [
      "Levitate",
-     8
+     7
     ]
    ],
    "moves": [
     [
      "Dark Pulse",
-     8
+     7
     ],
     [
      "Draco Meteor",
-     8
+     7
     ],
     [
      "Snarl",
-     7
+     6
     ],
     [
      "Earth Power",
@@ -10159,10 +10155,6 @@
     ],
     [
      "Flash Cannon",
-     1
-    ],
-    [
-     "Protect",
      1
     ],
     [
@@ -10196,45 +10188,34 @@
       "spe": 32
      },
      "count": 1
-    },
-    {
-     "sp": {
-      "hp": 4,
-      "atk": 0,
-      "def": 1,
-      "spa": 32,
-      "spd": 1,
-      "spe": 28
-     },
-     "count": 1
     }
    ]
   },
   "Incineroar": {
    "species": "Incineroar",
    "forme": null,
-   "count": 255,
-   "teams": 255,
+   "count": 263,
+   "teams": 263,
    "items": [
     [
      "Sitrus Berry",
-     163
+     164
     ],
     [
      "Chople Berry",
-     35
+     38
     ],
     [
      "Passho Berry",
-     18
+     19
+    ],
+    [
+     "Charcoal",
+     8
     ],
     [
      "White Herb",
      8
-    ],
-    [
-     "Charcoal",
-     7
     ],
     [
      "Rocky Helmet",
@@ -10253,15 +10234,19 @@
      2
     ],
     [
+     "Expert Belt",
+     2
+    ],
+    [
      "Grassy Seed",
      2
     ],
     [
-     "Bright Powder",
+     "Black Belt",
      1
     ],
     [
-     "Expert Belt",
+     "Bright Powder",
      1
     ],
     [
@@ -10272,15 +10257,15 @@
    "natures": [
     [
      "Careful",
-     92
+     98
     ],
     [
      "Impish",
-     75
+     74
     ],
     [
      "Adamant",
-     35
+     36
     ],
     [
      "Sassy",
@@ -10288,11 +10273,11 @@
     ],
     [
      "Brave",
-     14
+     15
     ],
     [
      "Relaxed",
-     10
+     11
     ],
     [
      "Jolly",
@@ -10306,33 +10291,33 @@
    "abilities": [
     [
      "Intimidate",
-     255
+     263
     ]
    ],
    "moves": [
     [
      "Fake Out",
-     252
+     260
     ],
     [
      "Flare Blitz",
-     242
+     250
     ],
     [
      "Parting Shot",
-     240
+     248
     ],
     [
      "Throat Chop",
-     109
+     110
     ],
     [
      "Darkest Lariat",
-     72
+     74
     ],
     [
      "Protect",
-     31
+     32
     ],
     [
      "Snarl",
@@ -10340,15 +10325,15 @@
     ],
     [
      "Helping Hand",
-     16
+     20
     ],
     [
      "Close Combat",
-     12
+     11
     ],
     [
      "Taunt",
-     6
+     7
     ],
     [
      "Assurance",
@@ -10411,6 +10396,28 @@
     },
     {
      "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 13,
+      "spa": 0,
+      "spd": 20,
+      "spe": 1
+     },
+     "count": 4
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 18,
+      "spa": 0,
+      "spd": 10,
+      "spe": 6
+     },
+     "count": 4
+    },
+    {
+     "sp": {
       "hp": 2,
       "atk": 32,
       "def": 0,
@@ -10444,6 +10451,17 @@
     },
     {
      "sp": {
+      "hp": 32,
+      "atk": 25,
+      "def": 5,
+      "spa": 0,
+      "spd": 4,
+      "spe": 0
+     },
+     "count": 3
+    },
+    {
+     "sp": {
       "hp": 30,
       "atk": 0,
       "def": 16,
@@ -10474,55 +10492,22 @@
       "spe": 0
      },
      "count": 3
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 32,
-      "def": 0,
-      "spa": 0,
-      "spd": 2,
-      "spe": 0
-     },
-     "count": 3
-    },
-    {
-     "sp": {
-      "hp": 31,
-      "atk": 0,
-      "def": 21,
-      "spa": 0,
-      "spd": 12,
-      "spe": 2
-     },
-     "count": 3
-    },
-    {
-     "sp": {
-      "hp": 31,
-      "atk": 0,
-      "def": 20,
-      "spa": 0,
-      "spd": 13,
-      "spe": 2
-     },
-     "count": 3
     }
    ]
   },
   "Indeedee": {
    "species": "Indeedee",
    "forme": null,
-   "count": 40,
-   "teams": 40,
+   "count": 41,
+   "teams": 41,
    "items": [
     [
      "Choice Scarf",
-     20
+     19
     ],
     [
      "Focus Sash",
-     16
+     18
     ],
     [
      "Twisted Spoon",
@@ -10536,7 +10521,7 @@
    "natures": [
     [
      "Timid",
-     26
+     27
     ],
     [
      "Modest",
@@ -10546,29 +10531,29 @@
    "abilities": [
     [
      "Psychic Surge",
-     40
+     41
     ]
    ],
    "moves": [
     [
      "Expanding Force",
-     40
+     41
     ],
     [
      "Trick Room",
-     18
+     20
     ],
     [
      "Imprison",
-     16
+     17
     ],
     [
      "Protect",
-     15
+     16
     ],
     [
      "Trick",
-     15
+     14
     ],
     [
      "Mystical Fire",
@@ -10580,11 +10565,11 @@
     ],
     [
      "Dazzling Gleam",
-     10
+     9
     ],
     [
      "Helping Hand",
-     6
+     7
     ],
     [
      "Encore",
@@ -10640,7 +10625,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 5
+     "count": 6
     },
     {
      "sp": {
@@ -10713,12 +10698,12 @@
   "Indeedee-F": {
    "species": "Indeedee",
    "forme": "Indeedee-F",
-   "count": 158,
-   "teams": 158,
+   "count": 154,
+   "teams": 154,
    "items": [
     [
      "Rocky Helmet",
-     78
+     77
     ],
     [
      "Psychic Seed",
@@ -10726,7 +10711,7 @@
     ],
     [
      "Colbur Berry",
-     27
+     25
     ],
     [
      "Sitrus Berry",
@@ -10755,20 +10740,16 @@
     [
      "Tanga Berry",
      1
-    ],
-    [
-     "Wide Lens",
-     1
     ]
    ],
    "natures": [
     [
      "Relaxed",
-     77
+     74
     ],
     [
      "Bold",
-     71
+     70
     ],
     [
      "Calm",
@@ -10782,7 +10763,7 @@
    "abilities": [
     [
      "Psychic Surge",
-     155
+     151
     ],
     [
      "Synchronize",
@@ -10792,15 +10773,15 @@
    "moves": [
     [
      "Follow Me",
-     158
+     154
     ],
     [
      "Helping Hand",
-     138
+     134
     ],
     [
      "Trick Room",
-     123
+     119
     ],
     [
      "Psychic",
@@ -10812,11 +10793,11 @@
     ],
     [
      "Terrain Pulse",
-     30
+     28
     ],
     [
      "Imprison",
-     12
+     11
     ],
     [
      "Fake Out",
@@ -10831,11 +10812,11 @@
      4
     ],
     [
-     "Sing",
-     4
+     "Dazzling Gleam",
+     3
     ],
     [
-     "Dazzling Gleam",
+     "Sing",
      3
     ],
     [
@@ -10869,7 +10850,7 @@
       "spd": 2,
       "spe": 0
      },
-     "count": 106
+     "count": 102
     },
     {
      "sp": {
@@ -10994,6 +10975,53 @@
     }
    ]
   },
+  "Kangaskhan": {
+   "species": "Kangaskhan",
+   "forme": null,
+   "count": 1,
+   "teams": 1,
+   "items": [
+    [
+     "Silk Scarf",
+     1
+    ]
+   ],
+   "natures": [
+    [
+     "Adamant",
+     1
+    ]
+   ],
+   "abilities": [
+    [
+     "Scrappy",
+     1
+    ]
+   ],
+   "moves": [
+    [
+     "Fake Out",
+     1
+    ],
+    [
+     "Last Resort",
+     1
+    ]
+   ],
+   "spPatterns": [
+    {
+     "sp": {
+      "hp": 11,
+      "atk": 32,
+      "def": 0,
+      "spa": 0,
+      "spd": 0,
+      "spe": 23
+     },
+     "count": 1
+    }
+   ]
+  },
   "Kangaskhan-Mega": {
    "species": "Kangaskhan",
    "forme": "Kangaskhan-Mega",
@@ -11052,28 +11080,28 @@
   "Kingambit": {
    "species": "Kingambit",
    "forme": null,
-   "count": 235,
-   "teams": 235,
+   "count": 241,
+   "teams": 241,
    "items": [
     [
      "Chople Berry",
-     102
+     107
     ],
     [
      "Life Orb",
-     56
+     58
     ],
     [
      "Focus Sash",
-     46
+     45
     ],
     [
      "Black Glasses",
-     24
+     23
     ],
     [
      "Occa Berry",
-     6
+     7
     ],
     [
      "Shuca Berry",
@@ -11083,7 +11111,7 @@
    "natures": [
     [
      "Adamant",
-     223
+     229
     ],
     [
      "Brave",
@@ -11093,29 +11121,29 @@
    "abilities": [
     [
      "Defiant",
-     235
+     241
     ]
    ],
    "moves": [
     [
      "Sucker Punch",
-     232
+     238
     ],
     [
      "Kowtow Cleave",
-     230
+     236
     ],
     [
      "Iron Head",
-     158
+     163
     ],
     [
      "Protect",
-     128
+     130
     ],
     [
      "Low Kick",
-     124
+     129
     ],
     [
      "Swords Dance",
@@ -11144,7 +11172,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 32
+     "count": 31
     },
     {
      "sp": {
@@ -11155,7 +11183,7 @@
       "spd": 19,
       "spe": 0
      },
-     "count": 13
+     "count": 12
     },
     {
      "sp": {
@@ -11188,7 +11216,7 @@
       "spd": 0,
       "spe": 1
      },
-     "count": 10
+     "count": 9
     },
     {
      "sp": {
@@ -11199,7 +11227,7 @@
       "spd": 0,
       "spe": 0
      },
-     "count": 6
+     "count": 7
     },
     {
      "sp": {
@@ -11237,6 +11265,17 @@
     {
      "sp": {
       "hp": 32,
+      "atk": 15,
+      "def": 2,
+      "spa": 0,
+      "spd": 8,
+      "spe": 9
+     },
+     "count": 4
+    },
+    {
+     "sp": {
+      "hp": 32,
       "atk": 32,
       "def": 0,
       "spa": 0,
@@ -11253,17 +11292,6 @@
       "spa": 0,
       "spd": 0,
       "spe": 17
-     },
-     "count": 4
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 25,
-      "def": 3,
-      "spa": 0,
-      "spd": 5,
-      "spe": 1
      },
      "count": 4
     }
@@ -11417,20 +11445,20 @@
   "Kommo-o": {
    "species": "Kommo-o",
    "forme": null,
-   "count": 31,
-   "teams": 31,
+   "count": 32,
+   "teams": 32,
    "items": [
     [
      "Leftovers",
      19
     ],
     [
-     "Life Orb",
+     "Focus Sash",
      5
     ],
     [
-     "Focus Sash",
-     4
+     "Life Orb",
+     5
     ],
     [
      "Dragon Fang",
@@ -11448,7 +11476,7 @@
    "natures": [
     [
      "Modest",
-     25
+     26
     ],
     [
      "Timid",
@@ -11458,7 +11486,7 @@
    "abilities": [
     [
      "Soundproof",
-     24
+     25
     ],
     [
      "Bulletproof",
@@ -11472,15 +11500,15 @@
    "moves": [
     [
      "Clanging Scales",
-     31
+     32
     ],
     [
      "Aura Sphere",
-     28
+     29
     ],
     [
      "Protect",
-     27
+     28
     ],
     [
      "Clangorous Soul",
@@ -11492,7 +11520,7 @@
     ],
     [
      "Vacuum Wave",
-     4
+     5
     ]
    ],
    "spPatterns": [
@@ -11522,9 +11550,9 @@
      "sp": {
       "hp": 1,
       "atk": 0,
-      "def": 0,
+      "def": 1,
       "spa": 32,
-      "spd": 1,
+      "spd": 0,
       "spe": 32
      },
      "count": 3
@@ -11533,12 +11561,12 @@
      "sp": {
       "hp": 1,
       "atk": 0,
-      "def": 1,
+      "def": 0,
       "spa": 32,
-      "spd": 0,
+      "spd": 1,
       "spe": 32
      },
-     "count": 2
+     "count": 3
     },
     {
      "sp": {
@@ -11908,46 +11936,42 @@
   "Lycanroc-Dusk": {
    "species": "Lycanroc",
    "forme": "Lycanroc-Dusk",
-   "count": 4,
-   "teams": 4,
+   "count": 3,
+   "teams": 3,
    "items": [
     [
      "Focus Sash",
-     4
+     3
     ]
    ],
    "natures": [
     [
      "Adamant",
      3
-    ],
-    [
-     "Jolly",
-     1
     ]
    ],
    "abilities": [
     [
      "Tough Claws",
-     4
+     3
     ]
    ],
    "moves": [
     [
      "Accelerock",
-     4
+     3
     ],
     [
      "Close Combat",
-     4
+     3
     ],
     [
      "Protect",
-     4
+     3
     ],
     [
      "Rock Slide",
-     4
+     3
     ]
    ],
    "spPatterns": [
@@ -11978,17 +12002,6 @@
       "hp": 0,
       "atk": 32,
       "def": 2,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 2,
-      "atk": 32,
-      "def": 0,
       "spa": 0,
       "spd": 0,
       "spe": 32
@@ -12355,18 +12368,18 @@
   "Mawile-Mega": {
    "species": "Mawile",
    "forme": "Mawile-Mega",
-   "count": 12,
-   "teams": 12,
+   "count": 13,
+   "teams": 13,
    "items": [
     [
      "Mawilite",
-     12
+     13
     ]
    ],
    "natures": [
     [
      "Brave",
-     11
+     12
     ],
     [
      "Adamant",
@@ -12376,7 +12389,7 @@
    "abilities": [
     [
      "Hyper Cutter",
-     10
+     11
     ],
     [
      "Intimidate",
@@ -12394,18 +12407,22 @@
     ],
     [
      "Sucker Punch",
-     11
+     12
     ],
     [
      "Iron Head",
-     8
+     9
     ],
     [
      "Rock Slide",
-     4
+     5
     ],
     [
      "Fire Fang",
+     1
+    ],
+    [
+     "Swords Dance",
      1
     ]
    ],
@@ -12419,7 +12436,7 @@
       "spd": 2,
       "spe": 0
      },
-     "count": 6
+     "count": 7
     },
     {
      "sp": {
@@ -12536,12 +12553,12 @@
   "Meganium-Mega": {
    "species": "Meganium",
    "forme": "Meganium-Mega",
-   "count": 6,
-   "teams": 6,
+   "count": 7,
+   "teams": 7,
    "items": [
     [
      "Meganiumite",
-     6
+     7
     ]
    ],
    "natures": [
@@ -12551,13 +12568,13 @@
     ],
     [
      "Timid",
-     1
+     2
     ]
    ],
    "abilities": [
     [
      "Overgrow",
-     4
+     5
     ],
     [
      "Leaf Guard",
@@ -12571,19 +12588,19 @@
    "moves": [
     [
      "Protect",
-     6
+     7
     ],
     [
      "Solar Beam",
-     6
+     7
     ],
     [
      "Weather Ball",
-     6
+     7
     ],
     [
      "Dazzling Gleam",
-     4
+     5
     ],
     [
      "Earth Power",
@@ -12601,6 +12618,17 @@
       "spe": 32
      },
      "count": 3
+    },
+    {
+     "sp": {
+      "hp": 10,
+      "atk": 0,
+      "def": 0,
+      "spa": 31,
+      "spd": 0,
+      "spe": 25
+     },
+     "count": 1
     },
     {
      "sp": {
@@ -12969,12 +12997,12 @@
   "Metagross-Mega": {
    "species": "Metagross",
    "forme": "Metagross-Mega",
-   "count": 39,
-   "teams": 39,
+   "count": 40,
+   "teams": 40,
    "items": [
     [
      "Metagrossite",
-     39
+     40
     ]
    ],
    "natures": [
@@ -12984,7 +13012,7 @@
     ],
     [
      "Adamant",
-     17
+     18
     ],
     [
      "Impish",
@@ -12994,7 +13022,7 @@
    "abilities": [
     [
      "Clear Body",
-     36
+     37
     ],
     [
      "Tough Claws",
@@ -13004,11 +13032,11 @@
    "moves": [
     [
      "Psychic Fangs",
-     36
+     37
     ],
     [
      "Protect",
-     31
+     32
     ],
     [
      "Steel Roller",
@@ -13016,7 +13044,7 @@
     ],
     [
      "Stomping Tantrum",
-     21
+     22
     ],
     [
      "Body Press",
@@ -13028,7 +13056,7 @@
     ],
     [
      "Iron Head",
-     10
+     11
     ],
     [
      "Psych Up",
@@ -13139,6 +13167,17 @@
     },
     {
      "sp": {
+      "hp": 32,
+      "atk": 15,
+      "def": 0,
+      "spa": 0,
+      "spd": 12,
+      "spe": 7
+     },
+     "count": 1
+    },
+    {
+     "sp": {
       "hp": 28,
       "atk": 8,
       "def": 1,
@@ -13180,33 +13219,22 @@
       "spe": 28
      },
      "count": 1
-    },
-    {
-     "sp": {
-      "hp": 14,
-      "atk": 20,
-      "def": 0,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 1
     }
    ]
   },
   "Milotic": {
    "species": "Milotic",
    "forme": null,
-   "count": 85,
-   "teams": 85,
+   "count": 88,
+   "teams": 88,
    "items": [
     [
      "Leftovers",
-     41
+     43
     ],
     [
      "Sitrus Berry",
-     31
+     32
     ],
     [
      "Psychic Seed",
@@ -13228,11 +13256,11 @@
    "natures": [
     [
      "Calm",
-     38
+     40
     ],
     [
      "Modest",
-     30
+     31
     ],
     [
      "Bold",
@@ -13246,41 +13274,41 @@
    "abilities": [
     [
      "Competitive",
-     85
+     88
     ]
    ],
    "moves": [
     [
      "Protect",
-     62
+     65
     ],
     [
      "Scald",
-     54
+     55
     ],
     [
      "Ice Beam",
-     48
+     49
     ],
     [
      "Icy Wind",
-     36
+     38
     ],
     [
      "Muddy Water",
-     31
+     33
     ],
     [
      "Coil",
-     30
+     32
     ],
     [
      "Hypnosis",
-     30
+     32
     ],
     [
      "Recover",
-     30
+     29
     ],
     [
      "Life Dew",
@@ -13371,6 +13399,17 @@
      "sp": {
       "hp": 32,
       "atk": 0,
+      "def": 32,
+      "spa": 0,
+      "spd": 0,
+      "spe": 2
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
       "def": 27,
       "spa": 0,
       "spd": 5,
@@ -13424,23 +13463,12 @@
     },
     {
      "sp": {
-      "hp": 32,
+      "hp": 27,
       "atk": 0,
-      "def": 22,
-      "spa": 10,
-      "spd": 0,
-      "spe": 2
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 30,
-      "atk": 0,
-      "def": 11,
-      "spa": 0,
-      "spd": 25,
-      "spe": 0
+      "def": 3,
+      "spa": 13,
+      "spd": 5,
+      "spe": 18
      },
      "count": 1
     }
@@ -14251,8 +14279,8 @@
   "Pelipper": {
    "species": "Pelipper",
    "forme": null,
-   "count": 99,
-   "teams": 99,
+   "count": 101,
+   "teams": 101,
    "items": [
     [
      "Sitrus Berry",
@@ -14264,11 +14292,11 @@
     ],
     [
      "Damp Rock",
-     12
+     13
     ],
     [
      "Choice Scarf",
-     6
+     7
     ],
     [
      "Life Orb",
@@ -14286,11 +14314,11 @@
     ],
     [
      "Bold",
-     24
+     25
     ],
     [
      "Timid",
-     23
+     24
     ],
     [
      "Calm",
@@ -14304,21 +14332,21 @@
    "abilities": [
     [
      "Drizzle",
-     99
+     101
     ]
    ],
    "moves": [
     [
      "Hurricane",
-     99
+     101
     ],
     [
      "Weather Ball",
-     85
+     87
     ],
     [
      "Tailwind",
-     68
+     69
     ],
     [
      "Wide Guard",
@@ -14326,7 +14354,7 @@
     ],
     [
      "Protect",
-     33
+     34
     ],
     [
      "Helping Hand",
@@ -14334,7 +14362,7 @@
     ],
     [
      "Muddy Water",
-     12
+     13
     ],
     [
      "Ice Beam",
@@ -14342,7 +14370,7 @@
     ],
     [
      "Icy Wind",
-     3
+     4
     ],
     [
      "Rain Dance",
@@ -14367,7 +14395,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 23
+     "count": 24
     },
     {
      "sp": {
@@ -14602,6 +14630,61 @@
     }
    ]
   },
+  "Pikachu": {
+   "species": "Pikachu",
+   "forme": null,
+   "count": 1,
+   "teams": 1,
+   "items": [
+    [
+     "Light Ball",
+     1
+    ]
+   ],
+   "natures": [
+    [
+     "Timid",
+     1
+    ]
+   ],
+   "abilities": [
+    [
+     "Lightning Rod",
+     1
+    ]
+   ],
+   "moves": [
+    [
+     "Fake Out",
+     1
+    ],
+    [
+     "Grass Knot",
+     1
+    ],
+    [
+     "Protect",
+     1
+    ],
+    [
+     "Rising Voltage",
+     1
+    ]
+   ],
+   "spPatterns": [
+    {
+     "sp": {
+      "hp": 1,
+      "atk": 0,
+      "def": 0,
+      "spa": 32,
+      "spd": 1,
+      "spe": 32
+     },
+     "count": 1
+    }
+   ]
+  },
   "Pincurchin": {
    "species": "Pincurchin",
    "forme": null,
@@ -14710,8 +14793,8 @@
   "Politoed": {
    "species": "Politoed",
    "forme": null,
-   "count": 36,
-   "teams": 36,
+   "count": 37,
+   "teams": 37,
    "items": [
     [
      "Sitrus Berry",
@@ -14719,7 +14802,7 @@
     ],
     [
      "Mystic Water",
-     10
+     11
     ],
     [
      "Choice Scarf",
@@ -14749,11 +14832,15 @@
    "natures": [
     [
      "Calm",
-     17
+     16
     ],
     [
      "Modest",
-     11
+     12
+    ],
+    [
+     "Bold",
+     3
     ],
     [
      "Quiet",
@@ -14762,26 +14849,22 @@
     [
      "Timid",
      3
-    ],
-    [
-     "Bold",
-     2
     ]
    ],
    "abilities": [
     [
      "Drizzle",
-     36
+     37
     ]
    ],
    "moves": [
     [
      "Protect",
-     32
+     33
     ],
     [
      "Weather Ball",
-     32
+     33
     ],
     [
      "Ice Beam",
@@ -14789,11 +14872,11 @@
     ],
     [
      "Muddy Water",
-     18
+     19
     ],
     [
      "Perish Song",
-     17
+     18
     ],
     [
      "Encore",
@@ -14801,7 +14884,7 @@
     ],
     [
      "Hypnosis",
-     4
+     5
     ],
     [
      "Rain Dance",
@@ -14814,10 +14897,6 @@
     [
      "Psych Up",
      2
-    ],
-    [
-     "Helping Hand",
-     1
     ]
    ],
    "spPatterns": [
@@ -14830,7 +14909,7 @@
       "spd": 12,
       "spe": 0
      },
-     "count": 9
+     "count": 8
     },
     {
      "sp": {
@@ -14875,6 +14954,28 @@
       "spe": 3
      },
      "count": 2
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 22,
+      "spa": 11,
+      "spd": 1,
+      "spe": 0
+     },
+     "count": 1
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 11,
+      "spa": 22,
+      "spd": 0,
+      "spe": 1
+     },
+     "count": 1
     },
     {
      "sp": {
@@ -14928,28 +15029,6 @@
       "spa": 24,
       "spd": 0,
       "spe": 0
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 0,
-      "atk": 0,
-      "def": 3,
-      "spa": 31,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 2,
-      "atk": 0,
-      "def": 0,
-      "spa": 32,
-      "spd": 0,
-      "spe": 32
      },
      "count": 1
     }
@@ -15419,18 +15498,18 @@
   "Raichu-Mega-X": {
    "species": "Raichu",
    "forme": "Raichu-Mega-X",
-   "count": 17,
-   "teams": 17,
+   "count": 18,
+   "teams": 18,
    "items": [
     [
      "Raichunite X",
-     17
+     18
     ]
    ],
    "natures": [
     [
      "Jolly",
-     14
+     15
     ],
     [
      "Timid",
@@ -15440,21 +15519,21 @@
    "abilities": [
     [
      "Lightning Rod",
-     17
+     18
     ]
    ],
    "moves": [
     [
      "Fake Out",
-     17
+     18
     ],
     [
      "Volt Tackle",
-     15
+     16
     ],
     [
      "Volt Switch",
-     10
+     11
     ],
     [
      "Feint",
@@ -15483,6 +15562,10 @@
     [
      "Surf",
      2
+    ],
+    [
+     "Discharge",
+     1
     ],
     [
      "Encore",
@@ -15515,6 +15598,17 @@
       "spe": 32
      },
      "count": 3
+    },
+    {
+     "sp": {
+      "hp": 24,
+      "atk": 1,
+      "def": 10,
+      "spa": 0,
+      "spd": 3,
+      "spe": 28
+     },
+     "count": 2
     },
     {
      "sp": {
@@ -15562,17 +15656,6 @@
     },
     {
      "sp": {
-      "hp": 24,
-      "atk": 1,
-      "def": 10,
-      "spa": 0,
-      "spd": 3,
-      "spe": 28
-     },
-     "count": 1
-    },
-    {
-     "sp": {
       "hp": 27,
       "atk": 0,
       "def": 7,
@@ -15609,24 +15692,24 @@
   "Raichu-Mega-Y": {
    "species": "Raichu",
    "forme": "Raichu-Mega-Y",
-   "count": 102,
-   "teams": 102,
+   "count": 111,
+   "teams": 111,
    "items": [
     [
      "Raichunite Y",
-     102
+     111
     ]
    ],
    "natures": [
     [
      "Timid",
-     102
+     111
     ]
    ],
    "abilities": [
     [
      "Lightning Rod",
-     98
+     107
     ],
     [
      "No Guard",
@@ -15636,23 +15719,27 @@
    "moves": [
     [
      "Zap Cannon",
-     102
+     111
     ],
     [
      "Protect",
-     99
+     108
     ],
     [
      "Focus Blast",
-     92
+     100
     ],
     [
      "Fake Out",
-     83
+     90
     ],
     [
      "Encore",
-     31
+     33
+    ],
+    [
+     "Grass Knot",
+     1
     ],
     [
      "Substitute",
@@ -15669,7 +15756,18 @@
       "spd": 0,
       "spe": 23
      },
-     "count": 10
+     "count": 11
+    },
+    {
+     "sp": {
+      "hp": 26,
+      "atk": 0,
+      "def": 3,
+      "spa": 0,
+      "spd": 8,
+      "spe": 29
+     },
+     "count": 5
     },
     {
      "sp": {
@@ -15712,17 +15810,6 @@
       "spa": 0,
       "spd": 0,
       "spe": 32
-     },
-     "count": 3
-    },
-    {
-     "sp": {
-      "hp": 26,
-      "atk": 0,
-      "def": 3,
-      "spa": 0,
-      "spd": 8,
-      "spe": 29
      },
      "count": 3
     },
@@ -15772,20 +15859,20 @@
     },
     {
      "sp": {
-      "hp": 32,
+      "hp": 28,
       "atk": 0,
-      "def": 22,
+      "def": 14,
       "spa": 0,
-      "spd": 3,
-      "spe": 9
+      "spd": 0,
+      "spe": 24
      },
      "count": 2
     },
     {
      "sp": {
-      "hp": 30,
+      "hp": 26,
       "atk": 0,
-      "def": 10,
+      "def": 14,
       "spa": 0,
       "spd": 0,
       "spe": 26
@@ -15797,8 +15884,8 @@
   "Rillaboom": {
    "species": "Rillaboom",
    "forme": null,
-   "count": 349,
-   "teams": 349,
+   "count": 358,
+   "teams": 358,
    "items": [
     [
      "Miracle Seed",
@@ -15806,11 +15893,11 @@
     ],
     [
      "Life Orb",
-     35
+     43
     ],
     [
      "Occa Berry",
-     25
+     26
     ],
     [
      "Sitrus Berry",
@@ -15860,7 +15947,7 @@
    "natures": [
     [
      "Adamant",
-     293
+     301
     ],
     [
      "Sassy",
@@ -15884,35 +15971,35 @@
     ],
     [
      "Relaxed",
-     1
+     2
     ]
    ],
    "abilities": [
     [
      "Grassy Surge",
-     349
+     358
     ]
    ],
    "moves": [
     [
-     "Grassy Glide",
-     347
+     "Fake Out",
+     356
     ],
     [
-     "Fake Out",
-     346
+     "Grassy Glide",
+     356
     ],
     [
      "Wood Hammer",
-     308
+     316
     ],
     [
      "High Horsepower",
-     167
+     174
     ],
     [
      "U-turn",
-     155
+     156
     ],
     [
      "Protect",
@@ -15920,7 +16007,7 @@
     ],
     [
      "Superpower",
-     13
+     14
     ],
     [
      "Drum Beating",
@@ -16323,15 +16410,23 @@
   "Runerigus": {
    "species": "Runerigus",
    "forme": null,
-   "count": 1,
-   "teams": 1,
+   "count": 2,
+   "teams": 2,
    "items": [
     [
      "Mental Herb",
      1
+    ],
+    [
+     "Sitrus Berry",
+     1
     ]
    ],
    "natures": [
+    [
+     "Impish",
+     1
+    ],
     [
      "Sassy",
      1
@@ -16340,16 +16435,24 @@
    "abilities": [
     [
      "Wandering Spirit",
-     1
+     2
     ]
    ],
    "moves": [
+    [
+     "Earthquake",
+     2
+    ],
+    [
+     "Trick Room",
+     2
+    ],
     [
      "Ally Switch",
      1
     ],
     [
-     "Earthquake",
+     "Poltergeist",
      1
     ],
     [
@@ -16357,7 +16460,7 @@
      1
     ],
     [
-     "Trick Room",
+     "Will-O-Wisp",
      1
     ]
    ],
@@ -16371,7 +16474,7 @@
       "spd": 24,
       "spe": 0
      },
-     "count": 1
+     "count": 2
     }
    ]
   },
@@ -16601,22 +16704,22 @@
   "Salamence-Mega": {
    "species": "Salamence",
    "forme": "Salamence-Mega",
-   "count": 203,
-   "teams": 203,
+   "count": 210,
+   "teams": 210,
    "items": [
     [
      "Salamencite",
-     203
+     210
     ]
    ],
    "natures": [
     [
      "Timid",
-     103
+     108
     ],
     [
      "Modest",
-     34
+     37
     ],
     [
      "Hasty",
@@ -16624,7 +16727,7 @@
     ],
     [
      "Naive",
-     27
+     26
     ],
     [
      "Jolly",
@@ -16642,7 +16745,7 @@
    "abilities": [
     [
      "Intimidate",
-     191
+     198
     ],
     [
      "Aerilate",
@@ -16656,31 +16759,31 @@
    "moves": [
     [
      "Protect",
-     201
+     208
     ],
     [
      "Hyper Voice",
-     193
+     200
     ],
     [
      "Tailwind",
-     161
+     165
     ],
     [
      "Draco Meteor",
-     101
+     108
     ],
     [
      "Double-Edge",
-     62
+     61
     ],
     [
      "Flamethrower",
-     46
+     48
     ],
     [
      "Dragon Pulse",
-     13
+     14
     ],
     [
      "Roost",
@@ -16695,11 +16798,11 @@
      7
     ],
     [
-     "Dragon Claw",
-     3
+     "Fire Blast",
+     4
     ],
     [
-     "Fire Blast",
+     "Dragon Claw",
      3
     ],
     [
@@ -16752,7 +16855,7 @@
       "spd": 1,
       "spe": 32
      },
-     "count": 15
+     "count": 14
     },
     {
      "sp": {
@@ -16767,17 +16870,6 @@
     },
     {
      "sp": {
-      "hp": 15,
-      "atk": 0,
-      "def": 0,
-      "spa": 0,
-      "spd": 31,
-      "spe": 20
-     },
-     "count": 4
-    },
-    {
-     "sp": {
       "hp": 1,
       "atk": 0,
       "def": 1,
@@ -16785,7 +16877,18 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 4
+     "count": 5
+    },
+    {
+     "sp": {
+      "hp": 15,
+      "atk": 0,
+      "def": 0,
+      "spa": 0,
+      "spd": 31,
+      "spe": 20
+     },
+     "count": 5
     },
     {
      "sp": {
@@ -16833,17 +16936,6 @@
     },
     {
      "sp": {
-      "hp": 2,
-      "atk": 32,
-      "def": 0,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 3
-    },
-    {
-     "sp": {
       "hp": 0,
       "atk": 15,
       "def": 0,
@@ -16861,6 +16953,17 @@
       "spa": 15,
       "spd": 0,
       "spe": 29
+     },
+     "count": 3
+    },
+    {
+     "sp": {
+      "hp": 3,
+      "atk": 0,
+      "def": 0,
+      "spa": 31,
+      "spd": 0,
+      "spe": 32
      },
      "count": 3
     }
@@ -17100,12 +17203,12 @@
   "Scovillain-Mega": {
    "species": "Scovillain",
    "forme": "Scovillain-Mega",
-   "count": 6,
-   "teams": 6,
+   "count": 7,
+   "teams": 7,
    "items": [
     [
      "Scovillainite",
-     6
+     7
     ]
    ],
    "natures": [
@@ -17115,16 +17218,16 @@
     ],
     [
      "Calm",
-     1
+     2
     ]
    ],
    "abilities": [
     [
-     "Chlorophyll",
-     2
+     "Moody",
+     3
     ],
     [
-     "Moody",
+     "Chlorophyll",
      2
     ],
     [
@@ -17139,19 +17242,23 @@
    "moves": [
     [
      "Protect",
-     6
+     7
     ],
     [
      "Rage Powder",
-     6
+     7
     ],
     [
      "Overheat",
-     5
+     6
     ],
     [
      "Giga Drain",
      3
+    ],
+    [
+     "Leech Seed",
+     2
     ],
     [
      "Flamethrower",
@@ -17162,15 +17269,22 @@
      1
     ],
     [
-     "Leech Seed",
-     1
-    ],
-    [
      "Super Fang",
      1
     ]
    ],
    "spPatterns": [
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 9,
+      "spa": 0,
+      "spd": 25,
+      "spe": 0
+     },
+     "count": 1
+    },
     {
      "sp": {
       "hp": 32,
@@ -17439,12 +17553,12 @@
   "Sinistcha": {
    "species": "Sinistcha",
    "forme": null,
-   "count": 34,
-   "teams": 34,
+   "count": 33,
+   "teams": 33,
    "items": [
     [
      "Colbur Berry",
-     12
+     11
     ],
     [
      "Sitrus Berry",
@@ -17452,11 +17566,11 @@
     ],
     [
      "Rocky Helmet",
-     5
+     6
     ],
     [
      "Kasib Berry",
-     4
+     3
     ],
     [
      "Occa Berry",
@@ -17478,7 +17592,7 @@
    "natures": [
     [
      "Bold",
-     20
+     19
     ],
     [
      "Calm",
@@ -17500,21 +17614,21 @@
    "abilities": [
     [
      "Hospitality",
-     34
+     33
     ]
    ],
    "moves": [
     [
      "Matcha Gotcha",
-     34
+     33
     ],
     [
      "Rage Powder",
-     34
+     33
     ],
     [
      "Trick Room",
-     27
+     26
     ],
     [
      "Protect",
@@ -17522,7 +17636,7 @@
     ],
     [
      "Life Dew",
-     7
+     6
     ],
     [
      "Shadow Ball",
@@ -17566,22 +17680,22 @@
     },
     {
      "sp": {
-      "hp": 32,
-      "atk": 0,
-      "def": 14,
-      "spa": 0,
-      "spd": 20,
-      "spe": 0
-     },
-     "count": 4
-    },
-    {
-     "sp": {
       "hp": 29,
       "atk": 0,
       "def": 14,
       "spa": 0,
       "spd": 23,
+      "spe": 0
+     },
+     "count": 3
+    },
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 0,
+      "def": 14,
+      "spa": 0,
+      "spd": 20,
       "spe": 0
      },
      "count": 3
@@ -17607,6 +17721,17 @@
       "spe": 0
      },
      "count": 2
+    },
+    {
+     "sp": {
+      "hp": 30,
+      "atk": 0,
+      "def": 16,
+      "spa": 0,
+      "spd": 20,
+      "spe": 0
+     },
+     "count": 1
     },
     {
      "sp": {
@@ -17659,17 +17784,6 @@
       "def": 16,
       "spa": 0,
       "spd": 19,
-      "spe": 0
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 31,
-      "atk": 0,
-      "def": 10,
-      "spa": 0,
-      "spd": 25,
       "spe": 0
      },
      "count": 1
@@ -18126,24 +18240,24 @@
   "Sneasler": {
    "species": "Sneasler",
    "forme": null,
-   "count": 322,
-   "teams": 322,
+   "count": 325,
+   "teams": 325,
    "items": [
     [
      "White Herb",
-     100
+     106
     ],
     [
      "Psychic Seed",
-     82
+     83
     ],
     [
      "Grassy Seed",
-     73
+     72
     ],
     [
      "Focus Sash",
-     58
+     55
     ],
     [
      "Electric Seed",
@@ -18161,7 +18275,7 @@
    "natures": [
     [
      "Adamant",
-     219
+     223
     ],
     [
      "Jolly",
@@ -18169,7 +18283,7 @@
     ],
     [
      "Naive",
-     5
+     4
     ],
     [
      "Brave",
@@ -18179,57 +18293,57 @@
    "abilities": [
     [
      "Unburden",
-     273
+     278
     ],
     [
      "Poison Touch",
-     49
+     47
     ]
    ],
    "moves": [
     [
      "Close Combat",
-     322
+     325
     ],
     [
      "Dire Claw",
-     278
+     280
     ],
     [
      "Protect",
-     230
+     237
     ],
     [
      "Fake Out",
-     151
+     150
     ],
     [
      "Rock Slide",
-     101
-    ],
-    [
-     "Rock Tomb",
-     35
+     104
     ],
     [
      "Throat Chop",
+     35
+    ],
+    [
+     "Rock Tomb",
      33
     ],
     [
      "Coaching",
-     29
-    ],
-    [
-     "Poison Jab",
-     22
+     28
     ],
     [
      "Swords Dance",
-     22
+     23
+    ],
+    [
+     "Poison Jab",
+     21
     ],
     [
      "Gunk Shot",
-     19
+     20
     ],
     [
      "Quick Guard",
@@ -18237,11 +18351,11 @@
     ],
     [
      "Feint",
-     13
+     12
     ],
     [
      "Acrobatics",
-     10
+     9
     ],
     [
      "U-turn",
@@ -18278,7 +18392,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 115
+     "count": 109
     },
     {
      "sp": {
@@ -18289,7 +18403,7 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 28
+     "count": 30
     },
     {
      "sp": {
@@ -18300,7 +18414,7 @@
       "spd": 0,
       "spe": 30
      },
-     "count": 9
+     "count": 10
     },
     {
      "sp": {
@@ -18322,7 +18436,7 @@
       "spd": 2,
       "spe": 32
      },
-     "count": 4
+     "count": 5
     },
     {
      "sp": {
@@ -18573,45 +18687,64 @@
   "Staraptor": {
    "species": "Staraptor",
    "forme": null,
-   "count": 1,
-   "teams": 1,
+   "count": 2,
+   "teams": 2,
    "items": [
     [
      "Choice Scarf",
-     1
+     2
     ]
    ],
    "natures": [
     [
      "Adamant",
      1
+    ],
+    [
+     "Jolly",
+     1
     ]
    ],
    "abilities": [
     [
      "Intimidate",
-     1
+     2
     ]
    ],
    "moves": [
     [
      "Close Combat",
+     2
+    ],
+    [
+     "Final Gambit",
+     2
+    ],
+    [
+     "U-turn",
+     2
+    ],
+    [
+     "Brave Bird",
      1
     ],
     [
      "Dual Wingbeat",
      1
-    ],
-    [
-     "Final Gambit",
-     1
-    ],
-    [
-     "U-turn",
-     1
     ]
    ],
    "spPatterns": [
+    {
+     "sp": {
+      "hp": 32,
+      "atk": 2,
+      "def": 0,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 1
+    },
     {
      "sp": {
       "hp": 32,
@@ -18628,18 +18761,18 @@
   "Staraptor-Mega": {
    "species": "Staraptor",
    "forme": "Staraptor-Mega",
-   "count": 53,
-   "teams": 53,
+   "count": 56,
+   "teams": 56,
    "items": [
     [
      "Staraptite",
-     53
+     56
     ]
    ],
    "natures": [
     [
      "Jolly",
-     51
+     54
     ],
     [
      "Adamant",
@@ -18653,7 +18786,7 @@
    "abilities": [
     [
      "Intimidate",
-     50
+     53
     ],
     [
      "Contrary",
@@ -18667,19 +18800,19 @@
    "moves": [
     [
      "Close Combat",
-     53
+     56
     ],
     [
      "Protect",
-     52
+     55
     ],
     [
      "Brave Bird",
-     51
+     54
     ],
     [
      "Tailwind",
-     38
+     41
     ],
     [
      "Roost",
@@ -18719,6 +18852,17 @@
     },
     {
      "sp": {
+      "hp": 29,
+      "atk": 2,
+      "def": 1,
+      "spa": 0,
+      "spd": 2,
+      "spe": 32
+     },
+     "count": 3
+    },
+    {
+     "sp": {
       "hp": 19,
       "atk": 15,
       "def": 0,
@@ -18727,6 +18871,28 @@
       "spe": 32
      },
      "count": 3
+    },
+    {
+     "sp": {
+      "hp": 2,
+      "atk": 32,
+      "def": 0,
+      "spa": 0,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 2
+    },
+    {
+     "sp": {
+      "hp": 1,
+      "atk": 32,
+      "def": 0,
+      "spa": 0,
+      "spd": 1,
+      "spe": 32
+     },
+     "count": 2
     },
     {
      "sp": {
@@ -18763,17 +18929,6 @@
     },
     {
      "sp": {
-      "hp": 29,
-      "atk": 2,
-      "def": 1,
-      "spa": 0,
-      "spd": 2,
-      "spe": 32
-     },
-     "count": 2
-    },
-    {
-     "sp": {
       "hp": 15,
       "atk": 19,
       "def": 0,
@@ -18802,28 +18957,6 @@
       "spa": 0,
       "spd": 0,
       "spe": 28
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 32,
-      "atk": 1,
-      "def": 0,
-      "spa": 0,
-      "spd": 2,
-      "spe": 31
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 15,
-      "atk": 22,
-      "def": 0,
-      "spa": 0,
-      "spd": 0,
-      "spe": 29
      },
      "count": 1
     }
@@ -18925,18 +19058,18 @@
   "Swampert-Mega": {
    "species": "Swampert",
    "forme": "Swampert-Mega",
-   "count": 27,
-   "teams": 27,
+   "count": 28,
+   "teams": 28,
    "items": [
     [
      "Swampertite",
-     27
+     28
     ]
    ],
    "natures": [
     [
      "Adamant",
-     26
+     27
     ],
     [
      "Modest",
@@ -18946,7 +19079,7 @@
    "abilities": [
     [
      "Torrent",
-     17
+     18
     ],
     [
      "Damp",
@@ -18960,15 +19093,15 @@
    "moves": [
     [
      "Protect",
-     26
+     27
     ],
     [
      "Wave Crash",
-     26
+     27
     ],
     [
      "Ice Punch",
-     24
+     25
     ],
     [
      "Earthquake",
@@ -18976,7 +19109,7 @@
     ],
     [
      "High Horsepower",
-     12
+     13
     ],
     [
      "Earth Power",
@@ -19043,6 +19176,17 @@
       "spe": 18
      },
      "count": 2
+    },
+    {
+     "sp": {
+      "hp": 1,
+      "atk": 30,
+      "def": 6,
+      "spa": 0,
+      "spd": 0,
+      "spe": 29
+     },
+     "count": 1
     },
     {
      "sp": {
@@ -19120,29 +19264,18 @@
       "spe": 28
      },
      "count": 1
-    },
-    {
-     "sp": {
-      "hp": 11,
-      "atk": 30,
-      "def": 0,
-      "spa": 0,
-      "spd": 0,
-      "spe": 25
-     },
-     "count": 1
     }
    ]
   },
   "Sylveon": {
    "species": "Sylveon",
    "forme": null,
-   "count": 89,
-   "teams": 89,
+   "count": 93,
+   "teams": 93,
    "items": [
     [
      "Fairy Feather",
-     84
+     88
     ],
     [
      "Life Orb",
@@ -19156,7 +19289,7 @@
    "natures": [
     [
      "Modest",
-     84
+     88
     ],
     [
      "Quiet",
@@ -19170,25 +19303,25 @@
    "abilities": [
     [
      "Pixilate",
-     89
+     93
     ]
    ],
    "moves": [
     [
      "Hyper Voice",
-     89
+     93
     ],
     [
      "Detect",
-     70
+     74
     ],
     [
      "Quick Attack",
-     68
+     69
     ],
     [
      "Hyper Beam",
-     65
+     67
     ],
     [
      "Yawn",
@@ -19200,11 +19333,11 @@
     ],
     [
      "Calm Mind",
-     8
+     11
     ],
     [
      "Moonblast",
-     6
+     8
     ],
     [
      "Mystical Fire",
@@ -19233,6 +19366,17 @@
     },
     {
      "sp": {
+      "hp": 19,
+      "atk": 0,
+      "def": 19,
+      "spa": 20,
+      "spd": 0,
+      "spe": 8
+     },
+     "count": 4
+    },
+    {
+     "sp": {
       "hp": 23,
       "atk": 0,
       "def": 6,
@@ -19244,12 +19388,12 @@
     },
     {
      "sp": {
-      "hp": 19,
+      "hp": 7,
       "atk": 0,
-      "def": 19,
+      "def": 32,
       "spa": 20,
       "spd": 0,
-      "spe": 8
+      "spe": 7
      },
      "count": 3
     },
@@ -19274,6 +19418,17 @@
       "spe": 0
      },
      "count": 3
+    },
+    {
+     "sp": {
+      "hp": 19,
+      "atk": 0,
+      "def": 27,
+      "spa": 20,
+      "spd": 0,
+      "spe": 0
+     },
+     "count": 2
     },
     {
      "sp": {
@@ -19327,28 +19482,6 @@
       "spa": 23,
       "spd": 0,
       "spe": 8
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 3,
-      "atk": 0,
-      "def": 17,
-      "spa": 30,
-      "spd": 0,
-      "spe": 16
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 21,
-      "atk": 0,
-      "def": 6,
-      "spa": 24,
-      "spd": 0,
-      "spe": 15
      },
      "count": 2
     }
@@ -19673,12 +19806,12 @@
   "Torkoal": {
    "species": "Torkoal",
    "forme": null,
-   "count": 38,
-   "teams": 38,
+   "count": 36,
+   "teams": 36,
    "items": [
     [
      "Charcoal",
-     35
+     33
     ],
     [
      "Life Orb",
@@ -19692,7 +19825,7 @@
    "natures": [
     [
      "Quiet",
-     37
+     35
     ],
     [
      "Sassy",
@@ -19702,21 +19835,21 @@
    "abilities": [
     [
      "Drought",
-     38
+     36
     ]
    ],
    "moves": [
     [
      "Eruption",
-     37
-    ],
-    [
-     "Protect",
      35
     ],
     [
+     "Protect",
+     33
+    ],
+    [
      "Weather Ball",
-     31
+     29
     ],
     [
      "Earth Power",
@@ -19724,11 +19857,11 @@
     ],
     [
      "Helping Hand",
-     15
+     14
     ],
     [
      "Heat Wave",
-     12
+     11
     ],
     [
      "Solar Beam",
@@ -19749,7 +19882,7 @@
       "spd": 1,
       "spe": 0
      },
-     "count": 13
+     "count": 12
     },
     {
      "sp": {
@@ -19760,7 +19893,7 @@
       "spd": 2,
       "spe": 0
      },
-     "count": 12
+     "count": 11
     },
     {
      "sp": {
@@ -20268,46 +20401,42 @@
   "Typhlosion-Hisui": {
    "species": "Typhlosion",
    "forme": "Typhlosion-Hisui",
-   "count": 4,
-   "teams": 4,
+   "count": 3,
+   "teams": 3,
    "items": [
     [
      "Choice Scarf",
-     4
+     3
     ]
    ],
    "natures": [
     [
      "Modest",
      3
-    ],
-    [
-     "Timid",
-     1
     ]
    ],
    "abilities": [
     [
      "Frisk",
-     4
+     3
     ]
    ],
    "moves": [
     [
      "Eruption",
-     4
+     3
     ],
     [
      "Heat Wave",
-     4
+     3
     ],
     [
      "Shadow Ball",
-     4
+     3
     ],
     [
      "Overheat",
-     3
+     2
     ],
     [
      "Focus Blast",
@@ -20317,22 +20446,22 @@
    "spPatterns": [
     {
      "sp": {
-      "hp": 1,
-      "atk": 0,
-      "def": 1,
-      "spa": 32,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 2
-    },
-    {
-     "sp": {
       "hp": 11,
       "atk": 0,
       "def": 1,
       "spa": 21,
       "spd": 1,
+      "spe": 32
+     },
+     "count": 1
+    },
+    {
+     "sp": {
+      "hp": 1,
+      "atk": 0,
+      "def": 1,
+      "spa": 32,
+      "spd": 0,
       "spe": 32
      },
      "count": 1
@@ -20506,11 +20635,11 @@
    "natures": [
     [
      "Adamant",
-     25
+     24
     ],
     [
      "Jolly",
-     21
+     22
     ]
    ],
    "abilities": [
@@ -20534,7 +20663,7 @@
     ],
     [
      "Low Kick",
-     32
+     31
     ],
     [
      "Dragon Dance",
@@ -20542,7 +20671,7 @@
     ],
     [
      "Ice Punch",
-     2
+     3
     ],
     [
      "Fire Blast",
@@ -20622,6 +20751,28 @@
     },
     {
      "sp": {
+      "hp": 27,
+      "atk": 14,
+      "def": 0,
+      "spa": 0,
+      "spd": 0,
+      "spe": 25
+     },
+     "count": 1
+    },
+    {
+     "sp": {
+      "hp": 28,
+      "atk": 32,
+      "def": 0,
+      "spa": 0,
+      "spd": 2,
+      "spe": 4
+     },
+     "count": 1
+    },
+    {
+     "sp": {
       "hp": 5,
       "atk": 32,
       "def": 0,
@@ -20661,28 +20812,6 @@
       "spa": 0,
       "spd": 1,
       "spe": 27
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 9,
-      "atk": 25,
-      "def": 0,
-      "spa": 0,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 1
-    },
-    {
-     "sp": {
-      "hp": 8,
-      "atk": 27,
-      "def": 1,
-      "spa": 0,
-      "spd": 0,
-      "spe": 30
      },
      "count": 1
     }
@@ -20956,6 +21085,61 @@
     }
    ]
   },
+  "Venusaur-Mega": {
+   "species": "Venusaur",
+   "forme": "Venusaur-Mega",
+   "count": 1,
+   "teams": 1,
+   "items": [
+    [
+     "Venusaurite",
+     1
+    ]
+   ],
+   "natures": [
+    [
+     "Modest",
+     1
+    ]
+   ],
+   "abilities": [
+    [
+     "Chlorophyll",
+     1
+    ]
+   ],
+   "moves": [
+    [
+     "Earth Power",
+     1
+    ],
+    [
+     "Giga Drain",
+     1
+    ],
+    [
+     "Sleep Powder",
+     1
+    ],
+    [
+     "Sludge Bomb",
+     1
+    ]
+   ],
+   "spPatterns": [
+    {
+     "sp": {
+      "hp": 29,
+      "atk": 0,
+      "def": 0,
+      "spa": 20,
+      "spd": 0,
+      "spe": 17
+     },
+     "count": 1
+    }
+   ]
+  },
   "Vivillon": {
    "species": "Vivillon",
    "forme": null,
@@ -21051,8 +21235,8 @@
   "Volcarona": {
    "species": "Volcarona",
    "forme": null,
-   "count": 52,
-   "teams": 52,
+   "count": 55,
+   "teams": 55,
    "items": [
     [
      "Rocky Helmet",
@@ -21064,15 +21248,15 @@
     ],
     [
      "Charti Berry",
-     6
+     8
+    ],
+    [
+     "Leftovers",
+     5
     ],
     [
      "Sitrus Berry",
      5
-    ],
-    [
-     "Leftovers",
-     4
     ],
     [
      "Focus Sash",
@@ -21094,11 +21278,11 @@
     ],
     [
      "Modest",
-     17
+     18
     ],
     [
      "Timid",
-     10
+     12
     ],
     [
      "Calm",
@@ -21108,29 +21292,29 @@
    "abilities": [
     [
      "Flame Body",
-     52
+     55
     ]
    ],
    "moves": [
     [
      "Protect",
-     42
+     45
     ],
     [
      "Rage Powder",
-     32
+     34
     ],
     [
      "Struggle Bug",
-     27
+     30
     ],
     [
      "Overheat",
-     25
+     27
     ],
     [
      "Quiver Dance",
-     20
+     21
     ],
     [
      "Heat Wave",
@@ -21145,11 +21329,11 @@
      13
     ],
     [
-     "Fiery Dance",
-     5
+     "Flamethrower",
+     6
     ],
     [
-     "Flamethrower",
+     "Fiery Dance",
      5
     ],
     [
@@ -21278,12 +21462,12 @@
     },
     {
      "sp": {
-      "hp": 32,
+      "hp": 17,
       "atk": 0,
-      "def": 4,
+      "def": 25,
       "spa": 5,
       "spd": 1,
-      "spe": 24
+      "spe": 18
      },
      "count": 1
     },
@@ -21291,10 +21475,10 @@
      "sp": {
       "hp": 32,
       "atk": 0,
-      "def": 25,
-      "spa": 1,
+      "def": 30,
+      "spa": 0,
       "spd": 0,
-      "spe": 8
+      "spe": 4
      },
      "count": 1
     }
@@ -21436,12 +21620,12 @@
   "Whimsicott": {
    "species": "Whimsicott",
    "forme": null,
-   "count": 48,
-   "teams": 48,
+   "count": 52,
+   "teams": 52,
    "items": [
     [
      "Focus Sash",
-     32
+     36
     ],
     [
      "Babiri Berry",
@@ -21479,7 +21663,7 @@
    "natures": [
     [
      "Timid",
-     41
+     45
     ],
     [
      "Modest",
@@ -21497,7 +21681,7 @@
    "abilities": [
     [
      "Prankster",
-     46
+     50
     ],
     [
      "Chlorophyll",
@@ -21507,19 +21691,19 @@
    "moves": [
     [
      "Moonblast",
-     48
+     52
     ],
     [
      "Tailwind",
-     48
+     52
     ],
     [
      "Encore",
-     34
+     38
     ],
     [
      "Protect",
-     28
+     32
     ],
     [
      "Sunny Day",
@@ -21580,13 +21764,24 @@
       "spd": 0,
       "spe": 32
      },
-     "count": 30
+     "count": 32
     },
     {
      "sp": {
       "hp": 1,
       "atk": 0,
       "def": 1,
+      "spa": 32,
+      "spd": 0,
+      "spe": 32
+     },
+     "count": 4
+    },
+    {
+     "sp": {
+      "hp": 0,
+      "atk": 0,
+      "def": 2,
       "spa": 32,
       "spd": 0,
       "spe": 32
@@ -21599,17 +21794,6 @@
       "atk": 0,
       "def": 0,
       "spa": 2,
-      "spd": 0,
-      "spe": 32
-     },
-     "count": 2
-    },
-    {
-     "sp": {
-      "hp": 0,
-      "atk": 0,
-      "def": 2,
-      "spa": 32,
       "spd": 0,
       "spe": 32
      },
