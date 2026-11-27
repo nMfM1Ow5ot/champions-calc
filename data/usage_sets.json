@@ -24,9 +24,9 @@
    ],
    "rates": {
     "ability": 86.1,
-    "nature": 65.3,
-    "item": 41.5,
-    "pattern": 42.7,
+    "nature": 65.2,
+    "item": 41.7,
+    "pattern": 42.6,
     "patternLabel": "AS + h"
    }
   },
@@ -50,9 +50,9 @@
     "High Horsepower"
    ],
    "rates": {
-    "ability": 100,
-    "nature": 82,
-    "item": 56.8,
+    "ability": 99.9,
+    "nature": 81.9,
+    "item": 56.5,
     "pattern": 10.3,
     "patternLabel": "HA + s"
    }
@@ -80,7 +80,7 @@
     "ability": 97.1,
     "nature": 35.4,
     "item": 31.2,
-    "pattern": 33.6,
+    "pattern": 33.5,
     "patternLabel": "AS + h"
    }
   },
@@ -105,8 +105,8 @@
    ],
    "rates": {
     "ability": 99.7,
-    "nature": 34.4,
-    "item": 61.1,
+    "nature": 34.5,
+    "item": 61.2,
     "pattern": 7.8,
     "patternLabel": "HD + b"
    }
@@ -131,9 +131,9 @@
     "Protect"
    ],
    "rates": {
-    "ability": 96.1,
+    "ability": 96,
     "nature": 87.6,
-    "item": 43.2,
+    "item": 43,
     "pattern": 15.7,
     "patternLabel": "HA + d"
    }
@@ -158,10 +158,10 @@
     "Solar Beam"
    ],
    "rates": {
-    "ability": 78.5,
+    "ability": 78.4,
     "nature": 58.3,
     "item": 93.5,
-    "pattern": 22.1,
+    "pattern": 22.2,
     "patternLabel": "CS + h"
    }
   },
@@ -186,9 +186,9 @@
    ],
    "rates": {
     "ability": 97.3,
-    "nature": 69.8,
-    "item": 70.2,
-    "pattern": 9.9,
+    "nature": 69.9,
+    "item": 70.4,
+    "pattern": 9.8,
     "patternLabel": "HS + b"
    }
   },
@@ -213,9 +213,9 @@
    ],
    "rates": {
     "ability": 99.3,
-    "nature": 42.8,
-    "item": 43.1,
-    "pattern": 54.9,
+    "nature": 42.7,
+    "item": 42.8,
+    "pattern": 54.8,
     "patternLabel": "HB + d"
    }
   },
@@ -241,8 +241,8 @@
    "rates": {
     "ability": 97.3,
     "nature": 70.8,
-    "item": 77.6,
-    "pattern": 56.8,
+    "item": 77.7,
+    "pattern": 56.7,
     "patternLabel": "CS + h"
    }
   },
@@ -266,7 +266,7 @@
     "Protect"
    ],
    "rates": {
-    "ability": 93.9,
+    "ability": 93.8,
     "nature": 52.5,
     "item": 32.6,
     "pattern": 32.5,
@@ -296,7 +296,7 @@
    ],
    "rates": {
     "ability": 92.6,
-    "nature": 38.8,
+    "nature": 38.9,
     "item": 83.9,
     "pattern": 4.6,
     "patternLabel": "HD + bcs"
@@ -322,9 +322,9 @@
     "Tailwind"
    ],
    "rates": {
-    "ability": 100,
-    "nature": 40.6,
-    "item": 32.8,
+    "ability": 99.9,
+    "nature": 40.7,
+    "item": 32.9,
     "pattern": 25.2,
     "patternLabel": "CS + h"
    }
@@ -351,9 +351,9 @@
    ],
    "rates": {
     "ability": 96.6,
-    "nature": 80.4,
+    "nature": 80.3,
     "item": 93.6,
-    "pattern": 18.9,
+    "pattern": 18.8,
     "patternLabel": "HS + ad"
    }
   },
@@ -379,7 +379,7 @@
    "rates": {
     "ability": 98,
     "nature": 30.7,
-    "item": 68.5,
+    "item": 68.4,
     "pattern": 7.7,
     "patternLabel": "HBD"
    }
@@ -407,9 +407,9 @@
    ],
    "rates": {
     "ability": 99.2,
-    "nature": 44.1,
-    "item": 53.6,
-    "pattern": 13.8,
+    "nature": 44.2,
+    "item": 54,
+    "pattern": 13.6,
     "patternLabel": "HB + cds"
    }
   },
@@ -434,9 +434,9 @@
    ],
    "rates": {
     "ability": 98.6,
-    "nature": 41.6,
+    "nature": 41.8,
     "item": 96.6,
-    "pattern": 31.4,
+    "pattern": 31.3,
     "patternLabel": "CS + h"
    }
   },
@@ -463,7 +463,7 @@
     "ability": 100,
     "nature": 76.8,
     "item": 76.9,
-    "pattern": 18.2,
+    "pattern": 18.3,
     "patternLabel": "CS + h"
    }
   },
@@ -488,9 +488,9 @@
    ],
    "rates": {
     "ability": 99.4,
-    "nature": 50.5,
+    "nature": 50.4,
     "item": 77.2,
-    "pattern": 19.4,
+    "pattern": 19.2,
     "patternLabel": "HAS"
    }
   },
@@ -515,9 +515,9 @@
    ],
    "rates": {
     "ability": 98.3,
-    "nature": 57.7,
-    "item": 27,
-    "pattern": 17.8,
+    "nature": 57.4,
+    "item": 26.8,
+    "pattern": 17.6,
     "patternLabel": "HD + b"
    }
   },
@@ -544,7 +544,7 @@
     "ability": 100,
     "nature": 68.5,
     "item": 97.6,
-    "pattern": 37.2,
+    "pattern": 37.1,
     "patternLabel": "HA + d"
    }
   },
@@ -565,12 +565,12 @@
     "Hyper Voice",
     "Detect",
     "Hyper Beam",
-    "Moonblast"
+    "Protect"
    ],
    "rates": {
     "ability": 99.7,
-    "nature": 79.1,
-    "item": 83.5,
+    "nature": 79,
+    "item": 83.3,
     "pattern": 11.7,
     "patternLabel": "HC + b"
    }
@@ -595,10 +595,10 @@
     "Thunderbolt"
    ],
    "rates": {
-    "ability": 65.6,
-    "nature": 58.7,
-    "item": 94.7,
-    "pattern": 36.1,
+    "ability": 65.8,
+    "nature": 58.9,
+    "item": 94.6,
+    "pattern": 36,
     "patternLabel": "CS + h"
    }
   },
@@ -622,10 +622,10 @@
     "Rock Slide"
    ],
    "rates": {
-    "ability": 96,
-    "nature": 78.3,
-    "item": 89.1,
-    "pattern": 50.6,
+    "ability": 95.9,
+    "nature": 78.2,
+    "item": 89,
+    "pattern": 50.7,
     "patternLabel": "AS + h"
    }
   },
@@ -649,7 +649,7 @@
     "Moonblast"
    ],
    "rates": {
-    "ability": 98.9,
+    "ability": 98.8,
     "nature": 82.5,
     "item": 98.4,
     "pattern": 14.2,
@@ -677,9 +677,9 @@
    ],
    "rates": {
     "ability": 56.6,
-    "nature": 65.7,
+    "nature": 65.6,
     "item": 49.6,
-    "pattern": 34,
+    "pattern": 33.8,
     "patternLabel": "CS + h"
    }
   },
@@ -704,9 +704,9 @@
    ],
    "rates": {
     "ability": 98.8,
-    "nature": 42.3,
-    "item": 25.8,
-    "pattern": 9.6,
+    "nature": 42.8,
+    "item": 26.3,
+    "pattern": 9.5,
     "patternLabel": "BS + h"
    }
   },
@@ -730,9 +730,9 @@
     "Calm Mind"
    ],
    "rates": {
-    "ability": 96.8,
+    "ability": 96.7,
     "nature": 69.4,
-    "item": 52.2,
+    "item": 52,
     "pattern": 12.1,
     "patternLabel": "HC + b"
    }
@@ -758,9 +758,9 @@
    ],
    "rates": {
     "ability": 99.9,
-    "nature": 47.7,
-    "item": 38.2,
-    "pattern": 51.6,
+    "nature": 47.6,
+    "item": 38,
+    "pattern": 51.5,
     "patternLabel": "CS + h"
    }
   },
@@ -784,10 +784,10 @@
     "Earth Power"
    ],
    "rates": {
-    "ability": 97.4,
+    "ability": 97.3,
     "nature": 79.5,
-    "item": 39.4,
-    "pattern": 38.3,
+    "item": 39.3,
+    "pattern": 38.1,
     "patternLabel": "CS + h"
    }
   },
@@ -811,36 +811,9 @@
     "Heat Wave"
    ],
    "rates": {
-    "ability": 55.1,
-    "nature": 66.2,
-    "item": 72.3,
-    "pattern": 31,
-    "patternLabel": "CS + h"
-   }
-  },
-  "froslass": {
-   "code": "0478-00",
-   "ja": "ユキメノコ",
-   "species": "Froslass",
-   "megaSpecies": "Froslass-Mega",
-   "ability": "Cursed Body",
-   "nature": "Timid",
-   "item": "Froslassite",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Blizzard",
-    "Shadow Ball",
-    "Protect",
-    "Aurora Veil"
-   ],
-   "rates": {
-    "ability": 76.5,
-    "nature": 71.4,
-    "item": 98.7,
+    "ability": 55.2,
+    "nature": 66,
+    "item": 72,
     "pattern": 31.1,
     "patternLabel": "CS + h"
    }
@@ -865,11 +838,38 @@
     "Earthquake"
    ],
    "rates": {
-    "ability": 65,
+    "ability": 65.1,
     "nature": 80.7,
-    "item": 88.5,
-    "pattern": 29.6,
+    "item": 88.6,
+    "pattern": 29.5,
     "patternLabel": "AS + h"
+   }
+  },
+  "froslass": {
+   "code": "0478-00",
+   "ja": "ユキメノコ",
+   "species": "Froslass",
+   "megaSpecies": "Froslass-Mega",
+   "ability": "Cursed Body",
+   "nature": "Timid",
+   "item": "Froslassite",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Blizzard",
+    "Shadow Ball",
+    "Protect",
+    "Aurora Veil"
+   ],
+   "rates": {
+    "ability": 76.5,
+    "nature": 71.2,
+    "item": 98.6,
+    "pattern": 31,
+    "patternLabel": "CS + h"
    }
   },
   "gengar": {
@@ -893,7 +893,7 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 51.1,
+    "nature": 50.7,
     "item": 87,
     "pattern": 18.6,
     "patternLabel": "CS + h"
@@ -922,7 +922,7 @@
     "ability": 99.7,
     "nature": 82.8,
     "item": 80.1,
-    "pattern": 44,
+    "pattern": 43.7,
     "patternLabel": "HC + d"
    }
   },
@@ -947,7 +947,7 @@
    ],
    "rates": {
     "ability": 99.4,
-    "nature": 48,
+    "nature": 47.9,
     "item": 84.5,
     "pattern": 26.9,
     "patternLabel": "AS + h"
@@ -974,8 +974,8 @@
    ],
    "rates": {
     "ability": 99.1,
-    "nature": 38.8,
-    "item": 83.5,
+    "nature": 38.7,
+    "item": 83.4,
     "pattern": 13.9,
     "patternLabel": "HB + d"
    }
@@ -1001,36 +1001,9 @@
    ],
    "rates": {
     "ability": 97.1,
-    "nature": 60.7,
+    "nature": 60.4,
     "item": 37.1,
     "pattern": 32.3,
-    "patternLabel": "CS + h"
-   }
-  },
-  "basculegionf": {
-   "code": "0902-01",
-   "ja": "イダイトウ (メス)",
-   "species": "Basculegion-F",
-   "megaSpecies": null,
-   "ability": "Swift Swim",
-   "nature": "Modest",
-   "item": "Focus Sash",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Shadow Ball",
-    "Muddy Water",
-    "Protect",
-    "Ice Beam"
-   ],
-   "rates": {
-    "ability": 81.4,
-    "nature": 85.4,
-    "item": 64.7,
-    "pattern": 35.1,
     "patternLabel": "CS + h"
    }
   },
@@ -1055,10 +1028,37 @@
    ],
    "rates": {
     "ability": 99.6,
-    "nature": 34.7,
-    "item": 48.2,
+    "nature": 34.6,
+    "item": 48.6,
     "pattern": 6.6,
     "patternLabel": "HB + d"
+   }
+  },
+  "basculegionf": {
+   "code": "0902-01",
+   "ja": "イダイトウ (メス)",
+   "species": "Basculegion-F",
+   "megaSpecies": null,
+   "ability": "Swift Swim",
+   "nature": "Modest",
+   "item": "Focus Sash",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Shadow Ball",
+    "Muddy Water",
+    "Protect",
+    "Ice Beam"
+   ],
+   "rates": {
+    "ability": 81.3,
+    "nature": 85.2,
+    "item": 64.6,
+    "pattern": 35.2,
+    "patternLabel": "CS + h"
    }
   },
   "delphox": {
@@ -1081,10 +1081,10 @@
     "Nasty Plot"
    ],
    "rates": {
-    "ability": 86.9,
-    "nature": 84.2,
+    "ability": 86.8,
+    "nature": 84.1,
     "item": 91.3,
-    "pattern": 23.6,
+    "pattern": 23.8,
     "patternLabel": "CS + h"
    }
   },
@@ -1110,7 +1110,7 @@
    "rates": {
     "ability": 99.7,
     "nature": 32.4,
-    "item": 31.4,
+    "item": 31.3,
     "pattern": 18.5,
     "patternLabel": "HD + b"
    }
@@ -1136,8 +1136,8 @@
    ],
    "rates": {
     "ability": 94.9,
-    "nature": 66.3,
-    "item": 81,
+    "nature": 66.1,
+    "item": 80.8,
     "pattern": 50.9,
     "patternLabel": "AS + h"
    }
@@ -1162,10 +1162,10 @@
     "Ancient Power"
    ],
    "rates": {
-    "ability": 93.1,
+    "ability": 93.2,
     "nature": 91.5,
     "item": 98.3,
-    "pattern": 63,
+    "pattern": 62.9,
     "patternLabel": "HC + b"
    }
   },
@@ -1189,10 +1189,10 @@
     "Wide Guard"
    ],
    "rates": {
-    "ability": 91.8,
-    "nature": 82.2,
-    "item": 44.2,
-    "pattern": 51.5,
+    "ability": 91.7,
+    "nature": 82,
+    "item": 44.3,
+    "pattern": 51.4,
     "patternLabel": "AS + h"
    }
   },
@@ -1217,8 +1217,8 @@
    ],
    "rates": {
     "ability": 84.2,
-    "nature": 77.2,
-    "item": 42.5,
+    "nature": 77,
+    "item": 42.2,
     "pattern": 23.3,
     "patternLabel": "CS + h"
    }
@@ -1245,8 +1245,8 @@
    "rates": {
     "ability": 97.3,
     "nature": 62.4,
-    "item": 33,
-    "pattern": 20.1,
+    "item": 32.8,
+    "pattern": 19.8,
     "patternLabel": "AS + h"
    }
   },
@@ -1297,8 +1297,8 @@
     "Freeze-Dry"
    ],
    "rates": {
-    "ability": 98.4,
-    "nature": 73.6,
+    "ability": 98.3,
+    "nature": 73.4,
     "item": 34.3,
     "pattern": 35.1,
     "patternLabel": "CS + h"
@@ -1308,10 +1308,10 @@
    "code": "0257-00",
    "ja": "バシャーモ",
    "species": "Blaziken",
-   "megaSpecies": null,
+   "megaSpecies": "Blaziken-Mega",
    "ability": "Speed Boost",
    "nature": "Adamant",
-   "item": "Focus Sash",
+   "item": "Blazikenite",
    "sp": {
     "hp": 2,
     "atk": 32,
@@ -1325,9 +1325,9 @@
    ],
    "rates": {
     "ability": 98.4,
-    "nature": 44.5,
+    "nature": 44.7,
     "item": 39.2,
-    "pattern": 26.1,
+    "pattern": 26.2,
     "patternLabel": "AS + h"
    }
   },
@@ -1351,10 +1351,10 @@
     "Flamethrower"
    ],
    "rates": {
-    "ability": 93.8,
-    "nature": 68.2,
-    "item": 29.1,
-    "pattern": 35.8,
+    "ability": 93.7,
+    "nature": 68.1,
+    "item": 28.9,
+    "pattern": 35.9,
     "patternLabel": "HC + b"
    }
   },
@@ -1378,10 +1378,10 @@
     "Detect"
    ],
    "rates": {
-    "ability": 68.8,
-    "nature": 71.5,
-    "item": 98.2,
-    "pattern": 65.3,
+    "ability": 68.6,
+    "nature": 71.2,
+    "item": 98.1,
+    "pattern": 65.2,
     "patternLabel": "AS + h"
    }
   },
@@ -1405,10 +1405,10 @@
     "Brave Bird"
    ],
    "rates": {
-    "ability": 97.6,
+    "ability": 97.5,
     "nature": 60,
-    "item": 29.7,
-    "pattern": 47.3,
+    "item": 30,
+    "pattern": 47.1,
     "patternLabel": "AS + h"
    }
   },
@@ -1432,10 +1432,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 93.8,
-    "nature": 77.2,
-    "item": 61.8,
-    "pattern": 45,
+    "ability": 93.7,
+    "nature": 77.1,
+    "item": 61.5,
+    "pattern": 44.8,
     "patternLabel": "HC + b"
    }
   },
@@ -1459,10 +1459,10 @@
     "Dark Pulse"
    ],
    "rates": {
-    "ability": 87.3,
+    "ability": 87.2,
     "nature": 41,
-    "item": 80.4,
-    "pattern": 35.3,
+    "item": 80.3,
+    "pattern": 35.4,
     "patternLabel": "CS + h"
    }
   },
@@ -1471,7 +1471,7 @@
    "ja": "イッカネズミ",
    "species": "Maushold",
    "megaSpecies": null,
-   "ability": "Friend Guard",
+   "ability": "Technician",
    "nature": "Jolly",
    "item": "Wide Lens",
    "sp": {
@@ -1486,10 +1486,10 @@
     "Encore"
    ],
    "rates": {
-    "ability": 49.6,
-    "nature": 60.3,
-    "item": 43.4,
-    "pattern": 33.3,
+    "ability": 49.7,
+    "nature": 60.2,
+    "item": 43.6,
+    "pattern": 33.5,
     "patternLabel": "AS + h"
    }
   },
@@ -1515,10 +1515,10 @@
     "Swords Dance"
    ],
    "rates": {
-    "ability": 81.7,
-    "nature": 79.1,
-    "item": 70.7,
-    "pattern": 16.5,
+    "ability": 80.6,
+    "nature": 79.4,
+    "item": 71.4,
+    "pattern": 17.9,
     "patternLabel": "HAD + bs"
    }
   },
@@ -1542,10 +1542,10 @@
     "Will-O-Wisp"
    ],
    "rates": {
-    "ability": 54,
-    "nature": 32.7,
-    "item": 39,
-    "pattern": 26.9,
+    "ability": 54.1,
+    "nature": 32.5,
+    "item": 38.7,
+    "pattern": 26.8,
     "patternLabel": "AS + h"
    }
   },
@@ -1569,10 +1569,10 @@
     "Iron Head"
    ],
    "rates": {
-    "ability": 96.5,
-    "nature": 40.7,
-    "item": 40.4,
-    "pattern": 6.5,
+    "ability": 96.4,
+    "nature": 40.5,
+    "item": 40.5,
+    "pattern": 6.6,
     "patternLabel": "HB + d"
    }
   },
@@ -1596,10 +1596,10 @@
     "Leaf Blade"
    ],
    "rates": {
-    "ability": 89.8,
+    "ability": 89.7,
     "nature": 45.7,
     "item": 22.9,
-    "pattern": 28.6,
+    "pattern": 28.7,
     "patternLabel": "AS + h"
    }
   },
@@ -1624,9 +1624,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 66.1,
-    "item": 50.3,
-    "pattern": 59.1,
+    "nature": 66,
+    "item": 50.2,
+    "pattern": 59,
     "patternLabel": "CS + h"
    }
   },
@@ -1652,8 +1652,8 @@
    "rates": {
     "ability": 100,
     "nature": 55.1,
-    "item": 40.2,
-    "pattern": 50.7,
+    "item": 40.4,
+    "pattern": 50.6,
     "patternLabel": "CS + h"
    }
   },
@@ -1677,10 +1677,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 64.6,
-    "nature": 59.1,
-    "item": 69.7,
-    "pattern": 47.6,
+    "ability": 64.5,
+    "nature": 59.2,
+    "item": 69.4,
+    "pattern": 47.5,
     "patternLabel": "CS + h"
    }
   },
@@ -1691,7 +1691,7 @@
    "megaSpecies": null,
    "ability": "Flash Fire",
    "nature": "Adamant",
-   "item": "Grassy Seed",
+   "item": "Focus Sash",
    "sp": {
     "hp": 2,
     "atk": 32,
@@ -1704,10 +1704,10 @@
     "Swords Dance"
    ],
    "rates": {
-    "ability": 84.4,
-    "nature": 70.1,
+    "ability": 84.3,
+    "nature": 70,
     "item": 21.4,
-    "pattern": 17.6,
+    "pattern": 17.7,
     "patternLabel": "AS + h"
    }
   },
@@ -1731,8 +1731,8 @@
     "Focus Blast"
    ],
    "rates": {
-    "ability": 68.8,
-    "nature": 55.9,
+    "ability": 68.7,
+    "nature": 55.7,
     "item": 69.8,
     "pattern": 39.2,
     "patternLabel": "CS + h"
@@ -1758,38 +1758,11 @@
     "Iron Head"
    ],
    "rates": {
-    "ability": 53.9,
-    "nature": 61.6,
+    "ability": 54.3,
+    "nature": 61.7,
     "item": 99.1,
-    "pattern": 42.9,
+    "pattern": 42.8,
     "patternLabel": "HA + d"
-   }
-  },
-  "vivillon": {
-   "code": "0666-18",
-   "ja": "ビビヨン",
-   "species": "Vivillon",
-   "megaSpecies": null,
-   "ability": "Compound Eyes",
-   "nature": "Timid",
-   "item": "Focus Sash",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Sleep Powder",
-    "Hurricane",
-    "Protect",
-    "Rage Powder"
-   ],
-   "rates": {
-    "ability": 96.3,
-    "nature": 92.1,
-    "item": 72.6,
-    "pattern": 51.3,
-    "patternLabel": "CS + h"
    }
   },
   "inteleon": {
@@ -1814,8 +1787,35 @@
    "rates": {
     "ability": 97.3,
     "nature": 76.6,
-    "item": 56.7,
-    "pattern": 69.7,
+    "item": 56.9,
+    "pattern": 70,
+    "patternLabel": "CS + h"
+   }
+  },
+  "vivillon": {
+   "code": "0666-18",
+   "ja": "ビビヨン",
+   "species": "Vivillon",
+   "megaSpecies": null,
+   "ability": "Compound Eyes",
+   "nature": "Timid",
+   "item": "Focus Sash",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Sleep Powder",
+    "Hurricane",
+    "Protect",
+    "Rage Powder"
+   ],
+   "rates": {
+    "ability": 96.3,
+    "nature": 91.9,
+    "item": 72.5,
+    "pattern": 51,
     "patternLabel": "CS + h"
    }
   },
@@ -1839,10 +1839,10 @@
     "U-turn"
    ],
    "rates": {
-    "ability": 89,
-    "nature": 51.2,
-    "item": 31.8,
-    "pattern": 49.1,
+    "ability": 89.1,
+    "nature": 51.1,
+    "item": 31.6,
+    "pattern": 49,
     "patternLabel": "AS + h"
    }
   },
@@ -1867,9 +1867,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 45.9,
-    "item": 26.3,
-    "pattern": 14.1,
+    "nature": 45.7,
+    "item": 26.4,
+    "pattern": 14,
     "patternLabel": "CS + h"
    }
   },
@@ -1893,10 +1893,10 @@
     "Recover"
    ],
    "rates": {
-    "ability": 90.4,
-    "nature": 37.6,
-    "item": 82.6,
-    "pattern": 20.6,
+    "ability": 90.3,
+    "nature": 37.3,
+    "item": 82.5,
+    "pattern": 20.3,
     "patternLabel": "HBD"
    }
   },
@@ -1922,37 +1922,10 @@
    ],
    "rates": {
     "ability": 98.2,
-    "nature": 45.1,
-    "item": 70.6,
-    "pattern": 18.8,
+    "nature": 44.9,
+    "item": 70.3,
+    "pattern": 18.7,
     "patternLabel": "HD + ab"
-   }
-  },
-  "espathra": {
-   "code": "0956-00",
-   "ja": "クエスパトラ",
-   "species": "Espathra",
-   "megaSpecies": null,
-   "ability": "Speed Boost",
-   "nature": "Timid",
-   "item": "Electric Seed",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Protect",
-    "Lumina Crash",
-    "Calm Mind",
-    "Baton Pass"
-   ],
-   "rates": {
-    "ability": 98.5,
-    "nature": 44.4,
-    "item": 33.8,
-    "pattern": 6.1,
-    "patternLabel": "CS + h"
    }
   },
   "tsareena": {
@@ -1978,8 +1951,35 @@
     "ability": 99,
     "nature": 56,
     "item": 43.7,
-    "pattern": 32.6,
+    "pattern": 32.5,
     "patternLabel": "AS + h"
+   }
+  },
+  "espathra": {
+   "code": "0956-00",
+   "ja": "クエスパトラ",
+   "species": "Espathra",
+   "megaSpecies": null,
+   "ability": "Speed Boost",
+   "nature": "Timid",
+   "item": "Electric Seed",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Protect",
+    "Lumina Crash",
+    "Calm Mind",
+    "Baton Pass"
+   ],
+   "rates": {
+    "ability": 98.5,
+    "nature": 44,
+    "item": 33.4,
+    "pattern": 6.1,
+    "patternLabel": "CS + h"
    }
   },
   "mimikyu": {
@@ -2003,7 +2003,7 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 43.3,
+    "nature": 43.5,
     "item": 36.4,
     "pattern": 15.1,
     "patternLabel": "HA + b"
@@ -2029,10 +2029,10 @@
     "Double-Edge"
    ],
    "rates": {
-    "ability": 92.2,
-    "nature": 40.3,
-    "item": 54.4,
-    "pattern": 20,
+    "ability": 92,
+    "nature": 40.2,
+    "item": 54.8,
+    "pattern": 20.2,
     "patternLabel": "HB + d"
    }
   },
@@ -2056,10 +2056,10 @@
     "Flare Blitz"
    ],
    "rates": {
-    "ability": 79.2,
-    "nature": 41.4,
-    "item": 89.8,
-    "pattern": 21.2,
+    "ability": 79.3,
+    "nature": 41.3,
+    "item": 89.6,
+    "pattern": 21,
     "patternLabel": "HB + d"
    }
   },
@@ -2083,10 +2083,10 @@
     "Energy Ball"
    ],
    "rates": {
-    "ability": 71.9,
-    "nature": 64.3,
-    "item": 87.7,
-    "pattern": 49.6,
+    "ability": 71.8,
+    "nature": 64.1,
+    "item": 87.8,
+    "pattern": 49.3,
     "patternLabel": "CS + h"
    }
   },
@@ -2110,10 +2110,10 @@
     "Psychic"
    ],
    "rates": {
-    "ability": 69.3,
+    "ability": 69.1,
     "nature": 38.4,
-    "item": 32.8,
-    "pattern": 18.7,
+    "item": 32.6,
+    "pattern": 18.8,
     "patternLabel": "HB + d"
    }
   },
@@ -2137,7 +2137,7 @@
     "Protect"
    ],
    "rates": {
-    "ability": 50.6,
+    "ability": 50.7,
     "nature": 77.2,
     "item": 98.8,
     "pattern": 15.7,
@@ -2164,10 +2164,10 @@
     "Night Slash"
    ],
    "rates": {
-    "ability": 96.7,
-    "nature": 56,
-    "item": 34,
-    "pattern": 45,
+    "ability": 96.6,
+    "nature": 55.8,
+    "item": 33.8,
+    "pattern": 44.9,
     "patternLabel": "AS + h"
    }
   },
@@ -2191,11 +2191,38 @@
     "Crunch"
    ],
    "rates": {
-    "ability": 91.5,
+    "ability": 91.4,
     "nature": 51.7,
-    "item": 61.9,
-    "pattern": 18.6,
+    "item": 62.1,
+    "pattern": 18.8,
     "patternLabel": "AS + h"
+   }
+  },
+  "scizor": {
+   "code": "0212-00",
+   "ja": "ハッサム",
+   "species": "Scizor",
+   "megaSpecies": "Scizor-Mega",
+   "ability": "Technician",
+   "nature": "Adamant",
+   "item": "Scizorite",
+   "sp": {
+    "hp": 32,
+    "atk": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Bullet Punch",
+    "Bug Bite",
+    "Protect",
+    "Swords Dance"
+   ],
+   "rates": {
+    "ability": 98,
+    "nature": 79.2,
+    "item": 35.2,
+    "pattern": 22.1,
+    "patternLabel": "HA + d"
    }
   },
   "scrafty": {
@@ -2220,35 +2247,8 @@
    "rates": {
     "ability": 96.5,
     "nature": 32.3,
-    "item": 57.6,
-    "pattern": 13,
-    "patternLabel": "HA + d"
-   }
-  },
-  "scizor": {
-   "code": "0212-00",
-   "ja": "ハッサム",
-   "species": "Scizor",
-   "megaSpecies": "Scizor-Mega",
-   "ability": "Technician",
-   "nature": "Adamant",
-   "item": "Scizorite",
-   "sp": {
-    "hp": 32,
-    "atk": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Bullet Punch",
-    "Bug Bite",
-    "Protect",
-    "Swords Dance"
-   ],
-   "rates": {
-    "ability": 98,
-    "nature": 79.3,
-    "item": 35.5,
-    "pattern": 22.3,
+    "item": 57.5,
+    "pattern": 12.8,
     "patternLabel": "HA + d"
    }
   },
@@ -2272,10 +2272,10 @@
     "Sucker Punch"
    ],
    "rates": {
-    "ability": 93.9,
-    "nature": 57.5,
-    "item": 48.9,
-    "pattern": 19.6,
+    "ability": 93.8,
+    "nature": 58.1,
+    "item": 49.3,
+    "pattern": 19.4,
     "patternLabel": "HA + b"
    }
   },
@@ -2299,9 +2299,9 @@
     "Life Dew"
    ],
    "rates": {
-    "ability": 65.8,
-    "nature": 49.1,
-    "item": 29.5,
+    "ability": 65.5,
+    "nature": 48.8,
+    "item": 29.2,
     "pattern": 16.9,
     "patternLabel": "HB + d"
    }
@@ -2328,7 +2328,7 @@
    "rates": {
     "ability": 97.6,
     "nature": 31.1,
-    "item": 48.5,
+    "item": 48.4,
     "pattern": 8,
     "patternLabel": "HA + d"
    }
@@ -2353,10 +2353,10 @@
     "Trick Room"
    ],
    "rates": {
-    "ability": 82,
+    "ability": 81.8,
     "nature": 55.5,
-    "item": 46.6,
-    "pattern": 24.9,
+    "item": 46.5,
+    "pattern": 25.1,
     "patternLabel": "CS + h"
    }
   },
@@ -2380,10 +2380,10 @@
     "Fake Out"
    ],
    "rates": {
-    "ability": 76,
+    "ability": 76.1,
     "nature": 71.3,
-    "item": 65.1,
-    "pattern": 58.6,
+    "item": 64.6,
+    "pattern": 58.4,
     "patternLabel": "AS + h"
    }
   },
@@ -2407,9 +2407,9 @@
     "Ice Spinner"
    ],
    "rates": {
-    "ability": 60.3,
-    "nature": 80.1,
-    "item": 52.2,
+    "ability": 60,
+    "nature": 79.8,
+    "item": 52.5,
     "pattern": 48.5,
     "patternLabel": "AS + h"
    }
@@ -2434,38 +2434,11 @@
     "Acrobatics"
    ],
    "rates": {
-    "ability": 84,
-    "nature": 61.4,
-    "item": 26.3,
-    "pattern": 14.4,
+    "ability": 83.8,
+    "nature": 61.3,
+    "item": 26,
+    "pattern": 14.5,
     "patternLabel": "AS + h"
-   }
-  },
-  "pyroar": {
-   "code": "0668-00",
-   "ja": "カエンジシ",
-   "species": "Pyroar",
-   "megaSpecies": "Pyroar-Mega",
-   "ability": "Unnerve",
-   "nature": "Timid",
-   "item": "Pyroarite",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Heat Wave",
-    "Protect",
-    "Overheat",
-    "Sunny Day"
-   ],
-   "rates": {
-    "ability": 86.1,
-    "nature": 81.5,
-    "item": 98.5,
-    "pattern": 66.9,
-    "patternLabel": "CS + h"
    }
   },
   "rotomheat": {
@@ -2489,9 +2462,36 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 61.8,
-    "item": 68.6,
-    "pattern": 36.4,
+    "nature": 61.7,
+    "item": 68.2,
+    "pattern": 36.1,
+    "patternLabel": "CS + h"
+   }
+  },
+  "pyroar": {
+   "code": "0668-00",
+   "ja": "カエンジシ",
+   "species": "Pyroar",
+   "megaSpecies": "Pyroar-Mega",
+   "ability": "Unnerve",
+   "nature": "Timid",
+   "item": "Pyroarite",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Heat Wave",
+    "Protect",
+    "Overheat",
+    "Sunny Day"
+   ],
+   "rates": {
+    "ability": 86,
+    "nature": 81.4,
+    "item": 98.5,
+    "pattern": 66.7,
     "patternLabel": "CS + h"
    }
   },
@@ -2517,63 +2517,9 @@
    "rates": {
     "ability": 89.4,
     "nature": 46.5,
-    "item": 54.9,
-    "pattern": 43.8,
+    "item": 55,
+    "pattern": 44,
     "patternLabel": "CS + h"
-   }
-  },
-  "grapploct": {
-   "code": "0853-00",
-   "ja": "オトスパス",
-   "species": "Grapploct",
-   "megaSpecies": null,
-   "ability": "Technician",
-   "nature": "Brave",
-   "item": "Black Belt",
-   "sp": {
-    "hp": 32,
-    "atk": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Storm Throw",
-    "Detect",
-    "Mach Punch",
-    "Sucker Punch"
-   ],
-   "rates": {
-    "ability": 97.9,
-    "nature": 63.2,
-    "item": 38.1,
-    "pattern": 49.9,
-    "patternLabel": "HA + d"
-   }
-  },
-  "overqwil": {
-   "code": "0904-00",
-   "ja": "ハリーマン",
-   "species": "Overqwil",
-   "megaSpecies": null,
-   "ability": "Intimidate",
-   "nature": "Adamant",
-   "item": "Leftovers",
-   "sp": {
-    "hp": 32,
-    "def": 2,
-    "spd": 32
-   },
-   "moves": [
-    "Throat Chop",
-    "Minimize",
-    "Protect",
-    "Barb Barrage"
-   ],
-   "rates": {
-    "ability": 49.7,
-    "nature": 40.2,
-    "item": 47,
-    "pattern": 20.5,
-    "patternLabel": "HD + b"
    }
   },
   "empoleon": {
@@ -2596,11 +2542,65 @@
     "Hydro Pump"
    ],
    "rates": {
-    "ability": 97.6,
-    "nature": 59.5,
+    "ability": 97.5,
+    "nature": 59.2,
     "item": 18.6,
-    "pattern": 18.7,
+    "pattern": 18.6,
     "patternLabel": "HC + b"
+   }
+  },
+  "overqwil": {
+   "code": "0904-00",
+   "ja": "ハリーマン",
+   "species": "Overqwil",
+   "megaSpecies": null,
+   "ability": "Intimidate",
+   "nature": "Adamant",
+   "item": "Leftovers",
+   "sp": {
+    "hp": 32,
+    "def": 2,
+    "spd": 32
+   },
+   "moves": [
+    "Throat Chop",
+    "Minimize",
+    "Protect",
+    "Barb Barrage"
+   ],
+   "rates": {
+    "ability": 49.5,
+    "nature": 40.1,
+    "item": 46.8,
+    "pattern": 20.2,
+    "patternLabel": "HD + b"
+   }
+  },
+  "grapploct": {
+   "code": "0853-00",
+   "ja": "オトスパス",
+   "species": "Grapploct",
+   "megaSpecies": null,
+   "ability": "Technician",
+   "nature": "Brave",
+   "item": "Black Belt",
+   "sp": {
+    "hp": 32,
+    "atk": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Storm Throw",
+    "Detect",
+    "Mach Punch",
+    "Sucker Punch"
+   ],
+   "rates": {
+    "ability": 97.8,
+    "nature": 62.7,
+    "item": 37.8,
+    "pattern": 49.6,
+    "patternLabel": "HA + d"
    }
   },
   "araquanid": {
@@ -2623,10 +2623,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 98.5,
-    "nature": 36.2,
-    "item": 40.1,
-    "pattern": 28.9,
+    "ability": 98.4,
+    "nature": 36.4,
+    "item": 39.8,
+    "pattern": 28.7,
     "patternLabel": "HA + b"
    }
   },
@@ -2650,9 +2650,9 @@
     "Flamethrower"
    ],
    "rates": {
-    "ability": 56.2,
+    "ability": 56,
     "nature": 27.4,
-    "item": 55.2,
+    "item": 55,
     "pattern": 12.8,
     "patternLabel": "HB + d"
    }
@@ -2677,10 +2677,10 @@
     "High Horsepower"
    ],
    "rates": {
-    "ability": 72.7,
-    "nature": 73.1,
-    "item": 48.7,
-    "pattern": 40.4,
+    "ability": 72.6,
+    "nature": 73.2,
+    "item": 48.6,
+    "pattern": 40.2,
     "patternLabel": "AS + h"
    }
   },
@@ -2705,64 +2705,9 @@
    ],
    "rates": {
     "ability": 94.6,
-    "nature": 66,
-    "item": 25,
-    "pattern": 69.2,
-    "patternLabel": "AS + h"
-   }
-  },
-  "houndstone": {
-   "code": "0972-00",
-   "ja": "ハカドッグ",
-   "species": "Houndstone",
-   "megaSpecies": null,
-   "ability": "Sand Rush",
-   "nature": "Adamant",
-   "item": "Life Orb",
-   "sp": {
-    "hp": 2,
-    "atk": 29,
-    "def": 7,
-    "spe": 28
-   },
-   "moves": [
-    "Last Respects",
-    "Protect",
-    "Ally Switch",
-    "Substitute"
-   ],
-   "rates": {
-    "ability": 90.9,
-    "nature": 76.6,
-    "item": 55.9,
-    "pattern": 29.8,
-    "patternLabel": "AS + hb"
-   }
-  },
-  "starmie": {
-   "code": "0121-00",
-   "ja": "スターミー",
-   "species": "Starmie",
-   "megaSpecies": "Starmie-Mega",
-   "ability": "Natural Cure",
-   "nature": "Hasty",
-   "item": "Starminite",
-   "sp": {
-    "hp": 2,
-    "atk": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Protect",
-    "Liquidation",
-    "Ice Spinner",
-    "Aqua Jet"
-   ],
-   "rates": {
-    "ability": 66.9,
-    "nature": 27.5,
-    "item": 82.4,
-    "pattern": 25.5,
+    "nature": 65.8,
+    "item": 25.3,
+    "pattern": 69.3,
     "patternLabel": "AS + h"
    }
   },
@@ -2787,10 +2732,65 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 54.2,
-    "item": 19.9,
-    "pattern": 13.7,
+    "nature": 54.3,
+    "item": 20,
+    "pattern": 13.6,
     "patternLabel": "HA + d"
+   }
+  },
+  "houndstone": {
+   "code": "0972-00",
+   "ja": "ハカドッグ",
+   "species": "Houndstone",
+   "megaSpecies": null,
+   "ability": "Sand Rush",
+   "nature": "Adamant",
+   "item": "Life Orb",
+   "sp": {
+    "hp": 2,
+    "atk": 29,
+    "def": 7,
+    "spe": 28
+   },
+   "moves": [
+    "Last Respects",
+    "Protect",
+    "Ally Switch",
+    "Substitute"
+   ],
+   "rates": {
+    "ability": 90.7,
+    "nature": 76.4,
+    "item": 55.6,
+    "pattern": 29.5,
+    "patternLabel": "AS + hb"
+   }
+  },
+  "starmie": {
+   "code": "0121-00",
+   "ja": "スターミー",
+   "species": "Starmie",
+   "megaSpecies": "Starmie-Mega",
+   "ability": "Natural Cure",
+   "nature": "Hasty",
+   "item": "Starminite",
+   "sp": {
+    "hp": 2,
+    "atk": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Protect",
+    "Liquidation",
+    "Ice Spinner",
+    "Aqua Jet"
+   ],
+   "rates": {
+    "ability": 66.7,
+    "nature": 27.5,
+    "item": 82.2,
+    "pattern": 25.6,
+    "patternLabel": "AS + h"
    }
   },
   "mudsdale": {
@@ -2813,10 +2813,10 @@
     "Rock Slide"
    ],
    "rates": {
-    "ability": 71.8,
+    "ability": 71.4,
     "nature": 48.3,
-    "item": 37.7,
-    "pattern": 36.3,
+    "item": 37.6,
+    "pattern": 36.1,
     "patternLabel": "HA + d"
    }
   },
@@ -2841,8 +2841,8 @@
    ],
    "rates": {
     "ability": 96.1,
-    "nature": 45.9,
-    "item": 57.7,
+    "nature": 46.2,
+    "item": 58.2,
     "pattern": 4.6,
     "patternLabel": "HC + s"
    }
@@ -2868,8 +2868,8 @@
    ],
    "rates": {
     "ability": 98.1,
-    "nature": 34.5,
-    "item": 26.1,
+    "nature": 34.4,
+    "item": 26.3,
     "pattern": 14.2,
     "patternLabel": "HC + d"
    }
@@ -2894,9 +2894,9 @@
     "Reflect"
    ],
    "rates": {
-    "ability": 97.7,
-    "nature": 33,
-    "item": 18.6,
+    "ability": 97.6,
+    "nature": 32.9,
+    "item": 18.4,
     "pattern": 8,
     "patternLabel": "HB + d"
    }
@@ -2921,10 +2921,10 @@
     "Detect"
    ],
    "rates": {
-    "ability": 86.3,
-    "nature": 53.7,
-    "item": 92.2,
-    "pattern": 59.6,
+    "ability": 86.1,
+    "nature": 53.1,
+    "item": 92,
+    "pattern": 58.9,
     "patternLabel": "AS + h"
    }
   },
@@ -2948,37 +2948,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 57,
-    "nature": 81.5,
-    "item": 93.2,
-    "pattern": 52.5,
-    "patternLabel": "AS + h"
-   }
-  },
-  "samurotthisui": {
-   "code": "0503-01",
-   "ja": "ダイケンキ (ヒスイ)",
-   "species": "Samurott-Hisui",
-   "megaSpecies": null,
-   "ability": "Sharpness",
-   "nature": "Adamant",
-   "item": "Life Orb",
-   "sp": {
-    "hp": 2,
-    "atk": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Sacred Sword",
-    "Ceaseless Edge",
-    "Aqua Cutter",
-    "Protect"
-   ],
-   "rates": {
-    "ability": 98.8,
-    "nature": 67,
-    "item": 20.3,
-    "pattern": 39.5,
+    "ability": 57.3,
+    "nature": 81.2,
+    "item": 93.3,
+    "pattern": 52.6,
     "patternLabel": "AS + h"
    }
   },
@@ -3002,10 +2975,37 @@
     "Detect"
    ],
    "rates": {
-    "ability": 50.3,
-    "nature": 53.8,
-    "item": 59.5,
+    "ability": 49.8,
+    "nature": 54.1,
+    "item": 60.1,
     "pattern": 35.1,
+    "patternLabel": "AS + h"
+   }
+  },
+  "samurotthisui": {
+   "code": "0503-01",
+   "ja": "ダイケンキ (ヒスイ)",
+   "species": "Samurott-Hisui",
+   "megaSpecies": null,
+   "ability": "Sharpness",
+   "nature": "Adamant",
+   "item": "Life Orb",
+   "sp": {
+    "hp": 2,
+    "atk": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Sacred Sword",
+    "Ceaseless Edge",
+    "Aqua Cutter",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 98.7,
+    "nature": 66.9,
+    "item": 20.4,
+    "pattern": 39.1,
     "patternLabel": "AS + h"
    }
   },
@@ -3029,10 +3029,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 65.7,
-    "nature": 41.9,
+    "ability": 65.2,
+    "nature": 41.7,
     "item": 15.9,
-    "pattern": 20.5,
+    "pattern": 20.6,
     "patternLabel": "AS + h"
    }
   },
@@ -3057,9 +3057,9 @@
    ],
    "rates": {
     "ability": 81.5,
-    "nature": 32.8,
-    "item": 33.6,
-    "pattern": 12.4,
+    "nature": 32.9,
+    "item": 33.5,
+    "pattern": 12.5,
     "patternLabel": "HC + b"
    }
   },
@@ -3084,8 +3084,8 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 59,
-    "item": 77.8,
+    "nature": 58.9,
+    "item": 77.6,
     "pattern": 59.5,
     "patternLabel": "AS + h"
    }
@@ -3110,10 +3110,10 @@
     "Destiny Bond"
    ],
    "rates": {
-    "ability": 78.7,
-    "nature": 51,
-    "item": 28.9,
-    "pattern": 14.2,
+    "ability": 79,
+    "nature": 50,
+    "item": 28.3,
+    "pattern": 14.1,
     "patternLabel": "HD + b"
    }
   },
@@ -3138,9 +3138,9 @@
    ],
    "rates": {
     "ability": 98.9,
-    "nature": 36.6,
-    "item": 41.4,
-    "pattern": 6.5,
+    "nature": 36.7,
+    "item": 41.3,
+    "pattern": 6.4,
     "patternLabel": "HB + d"
    }
   },
@@ -3164,38 +3164,11 @@
     "Weather Ball"
    ],
    "rates": {
-    "ability": 99.3,
-    "nature": 47.8,
-    "item": 21.2,
+    "ability": 99.4,
+    "nature": 47.7,
+    "item": 21.1,
     "pattern": 34.9,
     "patternLabel": "CS + h"
-   }
-  },
-  "pincurchin": {
-   "code": "0871-00",
-   "ja": "バチンウニ",
-   "species": "Pincurchin",
-   "megaSpecies": null,
-   "ability": "Electric Surge",
-   "nature": "Quiet",
-   "item": "Magnet",
-   "sp": {
-    "hp": 32,
-    "spa": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Rising Voltage",
-    "Protect",
-    "Scald",
-    "Muddy Water"
-   ],
-   "rates": {
-    "ability": 95.5,
-    "nature": 57.3,
-    "item": 29.8,
-    "pattern": 28.6,
-    "patternLabel": "HC + d"
    }
   },
   "umbreon": {
@@ -3218,11 +3191,38 @@
     "Protect"
    ],
    "rates": {
-    "ability": 81.8,
-    "nature": 37.3,
-    "item": 58.4,
-    "pattern": 25.4,
+    "ability": 82,
+    "nature": 37.9,
+    "item": 59,
+    "pattern": 25,
     "patternLabel": "HB + d"
+   }
+  },
+  "pincurchin": {
+   "code": "0871-00",
+   "ja": "バチンウニ",
+   "species": "Pincurchin",
+   "megaSpecies": null,
+   "ability": "Electric Surge",
+   "nature": "Quiet",
+   "item": "Magnet",
+   "sp": {
+    "hp": 32,
+    "spa": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Rising Voltage",
+    "Protect",
+    "Scald",
+    "Muddy Water"
+   ],
+   "rates": {
+    "ability": 95.1,
+    "nature": 56.8,
+    "item": 29.2,
+    "pattern": 28.2,
+    "patternLabel": "HC + d"
    }
   },
   "alcremie": {
@@ -3246,9 +3246,9 @@
    ],
    "rates": {
     "ability": 68.5,
-    "nature": 44,
-    "item": 20.6,
-    "pattern": 24.6,
+    "nature": 44.1,
+    "item": 20.8,
+    "pattern": 24.8,
     "patternLabel": "HB + d"
    }
   },
@@ -3272,10 +3272,10 @@
     "Discharge"
    ],
    "rates": {
-    "ability": 90,
-    "nature": 66.7,
-    "item": 22.2,
-    "pattern": 40.3,
+    "ability": 89.8,
+    "nature": 66.4,
+    "item": 22.3,
+    "pattern": 40.4,
     "patternLabel": "CS + h"
    }
   },
@@ -3300,9 +3300,9 @@
    ],
    "rates": {
     "ability": 61.9,
-    "nature": 56.5,
-    "item": 65.7,
-    "pattern": 22.4,
+    "nature": 56.6,
+    "item": 65.3,
+    "pattern": 22.6,
     "patternLabel": "HA + b"
    }
   },
@@ -3326,38 +3326,11 @@
     "Tailwind"
    ],
    "rates": {
-    "ability": 68.8,
-    "nature": 43.7,
-    "item": 83.1,
-    "pattern": 22.6,
+    "ability": 69,
+    "nature": 43.3,
+    "item": 82.9,
+    "pattern": 22.8,
     "patternLabel": "AS + h"
-   }
-  },
-  "vanilluxe": {
-   "code": "0584-00",
-   "ja": "バイバニラ",
-   "species": "Vanilluxe",
-   "megaSpecies": null,
-   "ability": "Snow Warning",
-   "nature": "Timid",
-   "item": "Choice Scarf",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Blizzard",
-    "Freeze-Dry",
-    "Aurora Veil",
-    "Protect"
-   ],
-   "rates": {
-    "ability": 97.5,
-    "nature": 37.8,
-    "item": 39.2,
-    "pattern": 21.6,
-    "patternLabel": "CS + h"
    }
   },
   "eelektross": {
@@ -3381,10 +3354,37 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 44.9,
-    "item": 80,
+    "nature": 44.6,
+    "item": 80.4,
     "pattern": 10.9,
     "patternLabel": "HC + b"
+   }
+  },
+  "vanilluxe": {
+   "code": "0584-00",
+   "ja": "バイバニラ",
+   "species": "Vanilluxe",
+   "megaSpecies": null,
+   "ability": "Snow Warning",
+   "nature": "Timid",
+   "item": "Choice Scarf",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Blizzard",
+    "Freeze-Dry",
+    "Aurora Veil",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 97.5,
+    "nature": 37.5,
+    "item": 39,
+    "pattern": 21.8,
+    "patternLabel": "CS + h"
    }
   },
   "sirfetchd": {
@@ -3408,9 +3408,9 @@
    ],
    "rates": {
     "ability": 98.1,
-    "nature": 51.4,
-    "item": 80.2,
-    "pattern": 29.6,
+    "nature": 51.5,
+    "item": 79.7,
+    "pattern": 29.7,
     "patternLabel": "HA + d"
    }
   },
@@ -3434,10 +3434,10 @@
     "Belly Drum"
    ],
    "rates": {
-    "ability": 82.4,
+    "ability": 82.6,
     "nature": 62.4,
-    "item": 51.1,
-    "pattern": 18.4,
+    "item": 51.5,
+    "pattern": 18.3,
     "patternLabel": "HA + s"
    }
   },
@@ -3462,8 +3462,8 @@
    ],
    "rates": {
     "ability": 97.6,
-    "nature": 53.4,
-    "item": 77,
+    "nature": 53.3,
+    "item": 76.8,
     "pattern": 28.1,
     "patternLabel": "HC + b"
    }
@@ -3488,10 +3488,10 @@
     "Slack Off"
    ],
    "rates": {
-    "ability": 48.5,
+    "ability": 48.4,
     "nature": 31.3,
-    "item": 70.3,
-    "pattern": 13,
+    "item": 69.9,
+    "pattern": 12.9,
     "patternLabel": "HC + d"
    }
   },
@@ -3515,38 +3515,11 @@
     "Parabolic Charge"
    ],
    "rates": {
-    "ability": 88.1,
-    "nature": 57.9,
-    "item": 82,
-    "pattern": 38.3,
+    "ability": 88,
+    "nature": 57.7,
+    "item": 81.9,
+    "pattern": 38.4,
     "patternLabel": "HC + b"
-   }
-  },
-  "audino": {
-   "code": "0531-00",
-   "ja": "タブンネ",
-   "species": "Audino",
-   "megaSpecies": "Audino-Mega",
-   "ability": "Healer",
-   "nature": "Relaxed",
-   "item": "Audinite",
-   "sp": {
-    "hp": 32,
-    "def": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Trick Room",
-    "Simple Beam",
-    "Heal Pulse",
-    "Protect"
-   ],
-   "rates": {
-    "ability": 70.4,
-    "nature": 52.8,
-    "item": 31.2,
-    "pattern": 23.6,
-    "patternLabel": "HB + d"
    }
   },
   "skeledirge": {
@@ -3569,11 +3542,38 @@
     "Earth Power"
    ],
    "rates": {
-    "ability": 94.1,
+    "ability": 93.9,
     "nature": 39.2,
-    "item": 25.3,
-    "pattern": 16.1,
+    "item": 25.4,
+    "pattern": 16.4,
     "patternLabel": "HC + d"
+   }
+  },
+  "audino": {
+   "code": "0531-00",
+   "ja": "タブンネ",
+   "species": "Audino",
+   "megaSpecies": "Audino-Mega",
+   "ability": "Healer",
+   "nature": "Relaxed",
+   "item": "Audinite",
+   "sp": {
+    "hp": 32,
+    "def": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Trick Room",
+    "Simple Beam",
+    "Heal Pulse",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 70.3,
+    "nature": 52.5,
+    "item": 31.2,
+    "pattern": 23.4,
+    "patternLabel": "HB + d"
    }
   },
   "serperior": {
@@ -3598,7 +3598,7 @@
    "rates": {
     "ability": 98.7,
     "nature": 58.3,
-    "item": 23.3,
+    "item": 23.2,
     "pattern": 20.9,
     "patternLabel": "CS + h"
    }
@@ -3623,10 +3623,10 @@
     "Iron Defense"
    ],
    "rates": {
-    "ability": 59.5,
-    "nature": 26.4,
-    "item": 88,
-    "pattern": 23.9,
+    "ability": 59.7,
+    "nature": 26.1,
+    "item": 88.1,
+    "pattern": 23.7,
     "patternLabel": "HD + b"
    }
   },
@@ -3650,10 +3650,10 @@
     "Boomburst"
    ],
    "rates": {
-    "ability": 93.2,
-    "nature": 61.8,
-    "item": 37.3,
-    "pattern": 36.3,
+    "ability": 92.7,
+    "nature": 61.2,
+    "item": 37,
+    "pattern": 36.1,
     "patternLabel": "CS + h"
    }
   },
@@ -3678,9 +3678,9 @@
    ],
    "rates": {
     "ability": 93.4,
-    "nature": 25.1,
-    "item": 38.8,
-    "pattern": 18.3,
+    "nature": 25.3,
+    "item": 38.4,
+    "pattern": 18.2,
     "patternLabel": "HD + b"
    }
   },
@@ -3704,9 +3704,9 @@
     "High Horsepower"
    ],
    "rates": {
-    "ability": 82.8,
-    "nature": 38.3,
-    "item": 62.3,
+    "ability": 82.1,
+    "nature": 38.2,
+    "item": 62.5,
     "pattern": 22.6,
     "patternLabel": "HA + d"
    }
@@ -3731,11 +3731,38 @@
     "Alluring Voice"
    ],
    "rates": {
-    "ability": 97.7,
-    "nature": 79.7,
-    "item": 93.1,
-    "pattern": 69.7,
+    "ability": 97.5,
+    "nature": 79.2,
+    "item": 93.2,
+    "pattern": 69.3,
     "patternLabel": "CS + h"
+   }
+  },
+  "rhyperior": {
+   "code": "0464-00",
+   "ja": "ドサイドン",
+   "species": "Rhyperior",
+   "megaSpecies": null,
+   "ability": "Solid Rock",
+   "nature": "Brave",
+   "item": "Life Orb",
+   "sp": {
+    "hp": 32,
+    "atk": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Rock Slide",
+    "Protect",
+    "High Horsepower",
+    "Ice Punch"
+   ],
+   "rates": {
+    "ability": 56.4,
+    "nature": 46.3,
+    "item": 49.6,
+    "pattern": 17.2,
+    "patternLabel": "HA + d"
    }
   },
   "houndoom": {
@@ -3758,10 +3785,10 @@
     "Solar Beam"
    ],
    "rates": {
-    "ability": 87.8,
-    "nature": 65.5,
+    "ability": 87.7,
+    "nature": 65.7,
     "item": 81.4,
-    "pattern": 40,
+    "pattern": 39.9,
     "patternLabel": "CS + h"
    }
   },
@@ -3785,38 +3812,11 @@
     "Ice Punch"
    ],
    "rates": {
-    "ability": 84,
-    "nature": 61.9,
-    "item": 68.4,
-    "pattern": 18.2,
+    "ability": 84.1,
+    "nature": 62,
+    "item": 68.5,
+    "pattern": 18.1,
     "patternLabel": "AS + h"
-   }
-  },
-  "rhyperior": {
-   "code": "0464-00",
-   "ja": "ドサイドン",
-   "species": "Rhyperior",
-   "megaSpecies": null,
-   "ability": "Solid Rock",
-   "nature": "Brave",
-   "item": "Life Orb",
-   "sp": {
-    "hp": 32,
-    "atk": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Rock Slide",
-    "Protect",
-    "High Horsepower",
-    "Ice Punch"
-   ],
-   "rates": {
-    "ability": 56.8,
-    "nature": 46.9,
-    "item": 48.4,
-    "pattern": 17.6,
-    "patternLabel": "HA + d"
    }
   },
   "clawitzer": {
@@ -3840,9 +3840,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 48.9,
-    "item": 40.2,
-    "pattern": 39.2,
+    "nature": 48.6,
+    "item": 40.3,
+    "pattern": 39.1,
     "patternLabel": "HC + b"
    }
   },
@@ -3866,10 +3866,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 51.1,
+    "ability": 50.5,
     "nature": 38.5,
-    "item": 48.3,
-    "pattern": 40.3,
+    "item": 47.9,
+    "pattern": 40.2,
     "patternLabel": "AS + h"
    }
   },
@@ -3893,9 +3893,9 @@
     "Protect"
    ],
    "rates": {
-    "ability": 63.7,
-    "nature": 62.5,
-    "item": 33.4,
+    "ability": 64,
+    "nature": 62.2,
+    "item": 33.2,
     "pattern": 33.1,
     "patternLabel": "AS + h"
    }
@@ -3921,10 +3921,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 81.5,
-    "nature": 64.5,
-    "item": 46.5,
-    "pattern": 17.8,
+    "ability": 81.4,
+    "nature": 64.3,
+    "item": 46.3,
+    "pattern": 17.5,
     "patternLabel": "HC + bs"
    }
   },
@@ -3948,10 +3948,10 @@
     "Volt Switch"
    ],
    "rates": {
-    "ability": 63.6,
-    "nature": 58,
-    "item": 23.4,
-    "pattern": 47.4,
+    "ability": 63.9,
+    "nature": 57.8,
+    "item": 23.1,
+    "pattern": 47.2,
     "patternLabel": "CS + h"
    }
   },
@@ -3975,10 +3975,10 @@
     "Thunderbolt"
    ],
    "rates": {
-    "ability": 95.9,
-    "nature": 73.6,
-    "item": 69.3,
-    "pattern": 48.3,
+    "ability": 95.8,
+    "nature": 74,
+    "item": 68.5,
+    "pattern": 48.7,
     "patternLabel": "CS + h"
    }
   },
@@ -4002,9 +4002,9 @@
     "Dazzling Gleam"
    ],
    "rates": {
-    "ability": 93.1,
-    "nature": 52.2,
-    "item": 24.1,
+    "ability": 93.2,
+    "nature": 52,
+    "item": 24.2,
     "pattern": 33.8,
     "patternLabel": "CS + h"
    }
@@ -4029,10 +4029,10 @@
     "Flamethrower"
    ],
    "rates": {
-    "ability": 73.4,
-    "nature": 65.5,
-    "item": 41.1,
-    "pattern": 33.9,
+    "ability": 73.5,
+    "nature": 65.4,
+    "item": 40.4,
+    "pattern": 33.3,
     "patternLabel": "HC + b"
    }
   },
@@ -4056,10 +4056,10 @@
     "Will-O-Wisp"
    ],
    "rates": {
-    "ability": 82.2,
-    "nature": 50.4,
-    "item": 43.7,
-    "pattern": 16.1,
+    "ability": 82.3,
+    "nature": 50.9,
+    "item": 43.3,
+    "pattern": 16.5,
     "patternLabel": "HA + s"
    }
   },
@@ -4083,10 +4083,10 @@
     "Drill Run"
    ],
    "rates": {
-    "ability": 69.6,
-    "nature": 74.5,
-    "item": 96.1,
-    "pattern": 33,
+    "ability": 70.4,
+    "nature": 75,
+    "item": 96.2,
+    "pattern": 32.3,
     "patternLabel": "AS + h"
    }
   },
@@ -4107,9 +4107,9 @@
    ],
    "rates": {
     "ability": 96.2,
-    "nature": 19.8,
-    "item": 28.9,
-    "pattern": 9.7,
+    "nature": 19.6,
+    "item": 29.7,
+    "pattern": 10,
     "patternLabel": "HS"
    }
   },
@@ -4130,13 +4130,13 @@
     "Spiky Shield",
     "Drain Punch",
     "Grassy Glide",
-    "Belly Drum"
+    "Body Press"
    ],
    "rates": {
-    "ability": 91.6,
-    "nature": 29.2,
-    "item": 80.4,
-    "pattern": 6.8,
+    "ability": 91.5,
+    "nature": 29.4,
+    "item": 80.1,
+    "pattern": 6.6,
     "patternLabel": "HD + b"
    }
   },
@@ -4160,10 +4160,10 @@
     "Dragon Pulse"
    ],
    "rates": {
-    "ability": 85.3,
+    "ability": 85.6,
     "nature": 41.2,
-    "item": 72.1,
-    "pattern": 24.6,
+    "item": 71.5,
+    "pattern": 24.5,
     "patternLabel": "HC + b"
    }
   },
@@ -4187,11 +4187,38 @@
     "Psychic"
    ],
    "rates": {
-    "ability": 84,
-    "nature": 44.5,
-    "item": 55.8,
-    "pattern": 26.7,
+    "ability": 83.9,
+    "nature": 43.9,
+    "item": 55.7,
+    "pattern": 26.5,
     "patternLabel": "HC + d"
+   }
+  },
+  "noivern": {
+   "code": "0715-00",
+   "ja": "オンバーン",
+   "species": "Noivern",
+   "megaSpecies": null,
+   "ability": "Infiltrator",
+   "nature": "Timid",
+   "item": "Focus Sash",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Tailwind",
+    "Draco Meteor",
+    "Protect",
+    "Air Slash"
+   ],
+   "rates": {
+    "ability": 34.3,
+    "nature": 69.3,
+    "item": 50,
+    "pattern": 53.9,
+    "patternLabel": "CS + h"
    }
   },
   "arboliva": {
@@ -4214,38 +4241,11 @@
     "Protect"
    ],
    "rates": {
-    "ability": 77.7,
-    "nature": 49,
-    "item": 26.6,
-    "pattern": 36.7,
+    "ability": 77.4,
+    "nature": 49.2,
+    "item": 26.5,
+    "pattern": 36.9,
     "patternLabel": "HC + b"
-   }
-  },
-  "noivern": {
-   "code": "0715-00",
-   "ja": "オンバーン",
-   "species": "Noivern",
-   "megaSpecies": null,
-   "ability": "Telepathy",
-   "nature": "Timid",
-   "item": "Focus Sash",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Tailwind",
-    "Draco Meteor",
-    "Protect",
-    "Air Slash"
-   ],
-   "rates": {
-    "ability": 34.4,
-    "nature": 69.4,
-    "item": 50,
-    "pattern": 53.9,
-    "patternLabel": "CS + h"
    }
   },
   "toxtricitylowkey": {
@@ -4268,10 +4268,10 @@
     "Boomburst"
    ],
    "rates": {
-    "ability": 90.8,
+    "ability": 90.7,
     "nature": 57.4,
-    "item": 31.1,
-    "pattern": 29.3,
+    "item": 30.6,
+    "pattern": 29.9,
     "patternLabel": "CS + h"
    }
   },
@@ -4296,9 +4296,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 75.5,
-    "item": 45.7,
-    "pattern": 29.9,
+    "nature": 74.8,
+    "item": 45.5,
+    "pattern": 30.1,
     "patternLabel": "AS + h"
    }
   },
@@ -4322,37 +4322,10 @@
     "Mach Punch"
    ],
    "rates": {
-    "ability": 63.5,
-    "nature": 60.4,
-    "item": 48.1,
-    "pattern": 29.2,
-    "patternLabel": "HA + d"
-   }
-  },
-  "crabominable": {
-   "code": "0740-00",
-   "ja": "ケケンカニ",
-   "species": "Crabominable",
-   "megaSpecies": "Crabominable-Mega",
-   "ability": "Hyper Cutter",
-   "nature": "Brave",
-   "item": "Crabominite",
-   "sp": {
-    "hp": 32,
-    "atk": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Ice Hammer",
-    "Drain Punch",
-    "Protect",
-    "Mach Punch"
-   ],
-   "rates": {
-    "ability": 66.7,
-    "nature": 75.8,
-    "item": 84.3,
-    "pattern": 34.4,
+    "ability": 63.3,
+    "nature": 60.6,
+    "item": 48.4,
+    "pattern": 28.8,
     "patternLabel": "HA + d"
    }
   },
@@ -4377,37 +4350,37 @@
    ],
    "rates": {
     "ability": 88.2,
-    "nature": 32.9,
-    "item": 37.8,
+    "nature": 33,
+    "item": 38,
     "pattern": 30.1,
     "patternLabel": "AS + h"
    }
   },
-  "vaporeon": {
-   "code": "0134-00",
-   "ja": "シャワーズ",
-   "species": "Vaporeon",
-   "megaSpecies": null,
-   "ability": "Water Absorb",
-   "nature": "Bold",
-   "item": "Leftovers",
+  "crabominable": {
+   "code": "0740-00",
+   "ja": "ケケンカニ",
+   "species": "Crabominable",
+   "megaSpecies": "Crabominable-Mega",
+   "ability": "Hyper Cutter",
+   "nature": "Brave",
+   "item": "Crabominite",
    "sp": {
     "hp": 32,
-    "def": 32,
+    "atk": 32,
     "spd": 2
    },
    "moves": [
-    "Scald",
-    "Ice Beam",
-    "Calm Mind",
-    "Protect"
+    "Ice Hammer",
+    "Drain Punch",
+    "Protect",
+    "Mach Punch"
    ],
    "rates": {
-    "ability": 93.4,
-    "nature": 39.7,
-    "item": 49.2,
-    "pattern": 11,
-    "patternLabel": "HB + d"
+    "ability": 66.4,
+    "nature": 75.8,
+    "item": 84.4,
+    "pattern": 34.3,
+    "patternLabel": "HA + d"
    }
   },
   "runerigus": {
@@ -4431,9 +4404,36 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 30.7,
-    "item": 38.1,
-    "pattern": 17.3,
+    "nature": 29.5,
+    "item": 40.9,
+    "pattern": 16.6,
+    "patternLabel": "HB + d"
+   }
+  },
+  "vaporeon": {
+   "code": "0134-00",
+   "ja": "シャワーズ",
+   "species": "Vaporeon",
+   "megaSpecies": null,
+   "ability": "Water Absorb",
+   "nature": "Bold",
+   "item": "Leftovers",
+   "sp": {
+    "hp": 32,
+    "def": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Scald",
+    "Ice Beam",
+    "Calm Mind",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 93.4,
+    "nature": 39.2,
+    "item": 49.1,
+    "pattern": 11.2,
     "patternLabel": "HB + d"
    }
   },
@@ -4457,38 +4457,11 @@
     "Focus Blast"
    ],
    "rates": {
-    "ability": 75.3,
-    "nature": 57.4,
-    "item": 63.1,
-    "pattern": 28.8,
+    "ability": 75.5,
+    "nature": 56.7,
+    "item": 63.2,
+    "pattern": 28.4,
     "patternLabel": "HC + b"
-   }
-  },
-  "vileplume": {
-   "code": "0045-00",
-   "ja": "ラフレシア",
-   "species": "Vileplume",
-   "megaSpecies": null,
-   "ability": "Chlorophyll",
-   "nature": "Timid",
-   "item": "Focus Sash",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Sludge Bomb",
-    "Sleep Powder",
-    "After You",
-    "Protect"
-   ],
-   "rates": {
-    "ability": 74.9,
-    "nature": 51.4,
-    "item": 34.7,
-    "pattern": 33.2,
-    "patternLabel": "CS + h"
    }
   },
   "decidueyehisui": {
@@ -4513,9 +4486,36 @@
    "rates": {
     "ability": 98,
     "nature": 56.2,
-    "item": 46.9,
-    "pattern": 15.8,
+    "item": 47.1,
+    "pattern": 15.6,
     "patternLabel": "AS + h"
+   }
+  },
+  "vileplume": {
+   "code": "0045-00",
+   "ja": "ラフレシア",
+   "species": "Vileplume",
+   "megaSpecies": null,
+   "ability": "Chlorophyll",
+   "nature": "Timid",
+   "item": "Focus Sash",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Sludge Bomb",
+    "Sleep Powder",
+    "After You",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 74.5,
+    "nature": 51.5,
+    "item": 34.9,
+    "pattern": 33.4,
+    "patternLabel": "CS + h"
    }
   },
   "aurorus": {
@@ -4538,10 +4538,10 @@
     "Freeze-Dry"
    ],
    "rates": {
-    "ability": 61.9,
-    "nature": 38.2,
-    "item": 21.1,
-    "pattern": 13.5,
+    "ability": 61.5,
+    "nature": 37.7,
+    "item": 21,
+    "pattern": 13.4,
     "patternLabel": "HC + b"
    }
   },
@@ -4566,9 +4566,9 @@
    ],
    "rates": {
     "ability": 77.6,
-    "nature": 49.4,
-    "item": 30.8,
-    "pattern": 10.5,
+    "nature": 49.7,
+    "item": 30.5,
+    "pattern": 10.4,
     "patternLabel": "HA + d"
    }
   },
@@ -4593,9 +4593,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 31.3,
-    "item": 30.2,
-    "pattern": 12.7,
+    "nature": 31.6,
+    "item": 30.9,
+    "pattern": 12.5,
     "patternLabel": "HD + b"
    }
   },
@@ -4619,10 +4619,10 @@
     "Toxic"
    ],
    "rates": {
-    "ability": 74.3,
-    "nature": 74,
-    "item": 69.1,
-    "pattern": 53.2,
+    "ability": 74.2,
+    "nature": 74.3,
+    "item": 68.6,
+    "pattern": 53.3,
     "patternLabel": "CS + h"
    }
   },
@@ -4643,13 +4643,13 @@
     "Protect",
     "Expanding Force",
     "Rising Voltage",
-    "Thunderbolt"
+    "Psychic"
    ],
    "rates": {
     "ability": 100,
-    "nature": 60.1,
-    "item": 34.3,
-    "pattern": 45.1,
+    "nature": 59.7,
+    "item": 34.8,
+    "pattern": 45.3,
     "patternLabel": "CS + h"
    }
   },
@@ -4673,10 +4673,10 @@
     "Bullet Punch"
    ],
    "rates": {
-    "ability": 91.3,
-    "nature": 48.1,
-    "item": 17.3,
-    "pattern": 22.8,
+    "ability": 91,
+    "nature": 47.9,
+    "item": 17.4,
+    "pattern": 23.1,
     "patternLabel": "HA + b"
    }
   },
@@ -4700,10 +4700,10 @@
     "Trick Room"
    ],
    "rates": {
-    "ability": 52.5,
-    "nature": 31.1,
+    "ability": 52.8,
+    "nature": 30.9,
     "item": 29.2,
-    "pattern": 15.3,
+    "pattern": 15.4,
     "patternLabel": "HB + d"
    }
   },
@@ -4727,9 +4727,9 @@
     "Will-O-Wisp"
    ],
    "rates": {
-    "ability": 79.4,
-    "nature": 38.3,
-    "item": 92,
+    "ability": 79.8,
+    "nature": 38,
+    "item": 92.3,
     "pattern": 18.2,
     "patternLabel": "HA + d"
    }
@@ -4754,10 +4754,10 @@
     "Heat Wave"
    ],
    "rates": {
-    "ability": 82.3,
-    "nature": 53.2,
-    "item": 42.9,
-    "pattern": 39.7,
+    "ability": 82,
+    "nature": 53.6,
+    "item": 43.3,
+    "pattern": 38.9,
     "patternLabel": "CS + h"
    }
   },
@@ -4781,10 +4781,10 @@
     "Fake Tears"
    ],
    "rates": {
-    "ability": 94.1,
-    "nature": 33.5,
-    "item": 70.8,
-    "pattern": 6.5,
+    "ability": 93.9,
+    "nature": 34,
+    "item": 70.4,
+    "pattern": 6.4,
     "patternLabel": "HS + b"
    }
   },
@@ -4808,10 +4808,10 @@
     "Rock Slide"
    ],
    "rates": {
-    "ability": 52.2,
-    "nature": 46.8,
-    "item": 25.8,
-    "pattern": 29.5,
+    "ability": 52.6,
+    "nature": 46.6,
+    "item": 25.6,
+    "pattern": 29.6,
     "patternLabel": "AS + h"
    }
   },
@@ -4835,37 +4835,10 @@
     "Expanding Force"
    ],
    "rates": {
-    "ability": 66.5,
-    "nature": 27.7,
+    "ability": 66.4,
+    "nature": 28,
     "item": 25.8,
-    "pattern": 10,
-    "patternLabel": "HC + b"
-   }
-  },
-  "chimecho": {
-   "code": "0358-00",
-   "ja": "チリーン",
-   "species": "Chimecho",
-   "megaSpecies": "Chimecho-Mega",
-   "ability": "Levitate",
-   "nature": "Quiet",
-   "item": "Chimechite",
-   "sp": {
-    "hp": 32,
-    "def": 2,
-    "spa": 32
-   },
-   "moves": [
-    "Flash Cannon",
-    "Trick Room",
-    "Psychic",
-    "Protect"
-   ],
-   "rates": {
-    "ability": 100,
-    "nature": 29.1,
-    "item": 89.9,
-    "pattern": 19.2,
+    "pattern": 9.8,
     "patternLabel": "HC + b"
    }
   },
@@ -4890,10 +4863,37 @@
    ],
    "rates": {
     "ability": 93.9,
-    "nature": 58.5,
+    "nature": 58,
     "item": 41,
-    "pattern": 20.3,
+    "pattern": 19.9,
     "patternLabel": "AS + h"
+   }
+  },
+  "chimecho": {
+   "code": "0358-00",
+   "ja": "チリーン",
+   "species": "Chimecho",
+   "megaSpecies": "Chimecho-Mega",
+   "ability": "Levitate",
+   "nature": "Quiet",
+   "item": "Chimechite",
+   "sp": {
+    "hp": 32,
+    "def": 2,
+    "spa": 32
+   },
+   "moves": [
+    "Flash Cannon",
+    "Trick Room",
+    "Psychic",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 100,
+    "nature": 29,
+    "item": 90,
+    "pattern": 19,
+    "patternLabel": "HC + b"
    }
   },
   "quaquaval": {
@@ -4916,10 +4916,10 @@
     "Detect"
    ],
    "rates": {
-    "ability": 95.6,
+    "ability": 95.7,
     "nature": 55.9,
-    "item": 32.5,
-    "pattern": 35.1,
+    "item": 32.3,
+    "pattern": 35.3,
     "patternLabel": "AS + h"
    }
   },
@@ -4943,10 +4943,10 @@
     "Giga Drain"
    ],
    "rates": {
-    "ability": 67.7,
-    "nature": 47.3,
-    "item": 27.7,
-    "pattern": 24.9,
+    "ability": 67.2,
+    "nature": 47.4,
+    "item": 26.8,
+    "pattern": 24.8,
     "patternLabel": "HC + d"
    }
   },
@@ -4971,9 +4971,9 @@
    ],
    "rates": {
     "ability": 96.2,
-    "nature": 71.7,
-    "item": 62.2,
-    "pattern": 51.4,
+    "nature": 71.8,
+    "item": 61.8,
+    "pattern": 52.2,
     "patternLabel": "AS + h"
    }
   },
@@ -4994,12 +4994,12 @@
     "Protect",
     "Thunderbolt",
     "Helping Hand",
-    "Surf"
+    "Grass Knot"
    ],
    "rates": {
-    "ability": 90.3,
-    "nature": 32.6,
-    "item": 81.1,
+    "ability": 90.4,
+    "nature": 32.2,
+    "item": 80.8,
     "pattern": 16.1,
     "patternLabel": "CS + h"
    }
@@ -5024,10 +5024,10 @@
     "Aqua Jet"
    ],
    "rates": {
-    "ability": 68.3,
-    "nature": 56,
-    "item": 26.6,
-    "pattern": 33.8,
+    "ability": 69.2,
+    "nature": 56.2,
+    "item": 26.7,
+    "pattern": 33.4,
     "patternLabel": "AS + h"
    }
   },
@@ -5051,10 +5051,10 @@
     "Sucker Punch"
    ],
    "rates": {
-    "ability": 71.3,
-    "nature": 53.7,
-    "item": 34.2,
-    "pattern": 36.1,
+    "ability": 71.7,
+    "nature": 53.4,
+    "item": 34.5,
+    "pattern": 35.6,
     "patternLabel": "AS + h"
    }
   },
@@ -5078,10 +5078,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 95.8,
-    "nature": 25.9,
-    "item": 78.5,
-    "pattern": 13.7,
+    "ability": 95.9,
+    "nature": 26,
+    "item": 78.7,
+    "pattern": 13.3,
     "patternLabel": "HC + s"
    }
   },
@@ -5106,10 +5106,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 93.8,
-    "nature": 39.7,
-    "item": 38,
-    "pattern": 7.7,
+    "ability": 93.7,
+    "nature": 39.2,
+    "item": 37.9,
+    "pattern": 7.3,
     "patternLabel": "HB + cd"
    }
   },
@@ -5129,14 +5129,14 @@
    "moves": [
     "Rock Slide",
     "Close Combat",
-    "Protect",
-    "Accelerock"
+    "Accelerock",
+    "Protect"
    ],
    "rates": {
-    "ability": 85.5,
-    "nature": 57.4,
-    "item": 66,
-    "pattern": 49,
+    "ability": 85.7,
+    "nature": 56.7,
+    "item": 65.6,
+    "pattern": 48.2,
     "patternLabel": "AS + h"
    }
   },
@@ -5160,10 +5160,37 @@
     "Rock Slide"
    ],
    "rates": {
-    "ability": 55.4,
-    "nature": 65.5,
-    "item": 40.2,
-    "pattern": 43,
+    "ability": 54.8,
+    "nature": 65.2,
+    "item": 39.7,
+    "pattern": 42.6,
+    "patternLabel": "AS + h"
+   }
+  },
+  "glalie": {
+   "code": "0362-00",
+   "ja": "オニゴーリ",
+   "species": "Glalie",
+   "megaSpecies": "Glalie-Mega",
+   "ability": "Inner Focus",
+   "nature": "Adamant",
+   "item": "Glalitite",
+   "sp": {
+    "hp": 2,
+    "atk": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Protect",
+    "Explosion",
+    "Ice Shard",
+    "Body Slam"
+   ],
+   "rates": {
+    "ability": 62.4,
+    "nature": 43.1,
+    "item": 77.6,
+    "pattern": 40.1,
     "patternLabel": "AS + h"
    }
   },
@@ -5187,10 +5214,10 @@
     "Tailwind"
    ],
    "rates": {
-    "ability": 45.3,
-    "nature": 64.4,
-    "item": 91.6,
-    "pattern": 49.4,
+    "ability": 45.4,
+    "nature": 64.5,
+    "item": 91.4,
+    "pattern": 49.6,
     "patternLabel": "CS + h"
    }
   },
@@ -5214,37 +5241,64 @@
     "Taunt"
    ],
    "rates": {
-    "ability": 75.3,
-    "nature": 61.6,
-    "item": 20.5,
-    "pattern": 10.4,
+    "ability": 74.9,
+    "nature": 61,
+    "item": 20.9,
+    "pattern": 10.3,
     "patternLabel": "HS + d"
    }
   },
-  "glalie": {
-   "code": "0362-00",
-   "ja": "オニゴーリ",
-   "species": "Glalie",
-   "megaSpecies": "Glalie-Mega",
-   "ability": "Inner Focus",
-   "nature": "Adamant",
-   "item": "Glalitite",
+  "rampardos": {
+   "code": "0409-00",
+   "ja": "ラムパルド",
+   "species": "Rampardos",
+   "megaSpecies": null,
+   "ability": "Sheer Force",
+   "nature": "Brave",
+   "item": "Life Orb",
+   "sp": {
+    "hp": 32,
+    "atk": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Rock Slide",
+    "Protect",
+    "Iron Head",
+    "Head Smash"
+   ],
+   "rates": {
+    "ability": 92.4,
+    "nature": 58.6,
+    "item": 51.2,
+    "pattern": 17.1,
+    "patternLabel": "HA + d"
+   }
+  },
+  "morpeko": {
+   "code": "0877-00",
+   "ja": "モルペコ",
+   "species": "Morpeko",
+   "megaSpecies": null,
+   "ability": "Hunger Switch",
+   "nature": "Jolly",
+   "item": "Focus Sash",
    "sp": {
     "hp": 2,
     "atk": 32,
     "spe": 32
    },
    "moves": [
+    "Aura Wheel",
+    "Fake Out",
     "Protect",
-    "Explosion",
-    "Ice Shard",
-    "Body Slam"
+    "Parting Shot"
    ],
    "rates": {
-    "ability": 62.6,
-    "nature": 43.1,
-    "item": 78.1,
-    "pattern": 40.4,
+    "ability": 100,
+    "nature": 47.7,
+    "item": 72.2,
+    "pattern": 60.3,
     "patternLabel": "AS + h"
    }
   },
@@ -5269,64 +5323,10 @@
    ],
    "rates": {
     "ability": 99.5,
-    "nature": 31.1,
-    "item": 60.7,
-    "pattern": 23.5,
+    "nature": 30.6,
+    "item": 59.7,
+    "pattern": 23.1,
     "patternLabel": "HD + b"
-   }
-  },
-  "morpeko": {
-   "code": "0877-00",
-   "ja": "モルペコ",
-   "species": "Morpeko",
-   "megaSpecies": null,
-   "ability": "Hunger Switch",
-   "nature": "Jolly",
-   "item": "Focus Sash",
-   "sp": {
-    "hp": 2,
-    "atk": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Aura Wheel",
-    "Fake Out",
-    "Protect",
-    "Parting Shot"
-   ],
-   "rates": {
-    "ability": 100,
-    "nature": 47.3,
-    "item": 72.4,
-    "pattern": 60.6,
-    "patternLabel": "AS + h"
-   }
-  },
-  "rampardos": {
-   "code": "0409-00",
-   "ja": "ラムパルド",
-   "species": "Rampardos",
-   "megaSpecies": null,
-   "ability": "Sheer Force",
-   "nature": "Brave",
-   "item": "Life Orb",
-   "sp": {
-    "hp": 32,
-    "atk": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Rock Slide",
-    "Protect",
-    "Iron Head",
-    "Head Smash"
-   ],
-   "rates": {
-    "ability": 92.5,
-    "nature": 58.7,
-    "item": 50.8,
-    "pattern": 17.2,
-    "patternLabel": "HA + d"
    }
   },
   "zoroark": {
@@ -5351,36 +5351,9 @@
    "rates": {
     "ability": 100,
     "nature": 42.5,
-    "item": 40.8,
-    "pattern": 45.8,
+    "item": 40.5,
+    "pattern": 46.5,
     "patternLabel": "CS + h"
-   }
-  },
-  "emboar": {
-   "code": "0500-00",
-   "ja": "エンブオー",
-   "species": "Emboar",
-   "megaSpecies": "Emboar-Mega",
-   "ability": "Reckless",
-   "nature": "Adamant",
-   "item": "Emboarite",
-   "sp": {
-    "hp": 32,
-    "atk": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Flare Blitz",
-    "Protect",
-    "Sucker Punch",
-    "Close Combat"
-   ],
-   "rates": {
-    "ability": 66.8,
-    "nature": 54.3,
-    "item": 60.5,
-    "pattern": 15.8,
-    "patternLabel": "HA + d"
    }
   },
   "wigglytuff": {
@@ -5404,10 +5377,37 @@
    ],
    "rates": {
     "ability": 95.3,
-    "nature": 42.1,
-    "item": 33.6,
-    "pattern": 20.4,
+    "nature": 41.6,
+    "item": 33.2,
+    "pattern": 20,
     "patternLabel": "HC + b"
+   }
+  },
+  "emboar": {
+   "code": "0500-00",
+   "ja": "エンブオー",
+   "species": "Emboar",
+   "megaSpecies": "Emboar-Mega",
+   "ability": "Reckless",
+   "nature": "Adamant",
+   "item": "Emboarite",
+   "sp": {
+    "hp": 32,
+    "atk": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Flare Blitz",
+    "Protect",
+    "Sucker Punch",
+    "Close Combat"
+   ],
+   "rates": {
+    "ability": 67.2,
+    "nature": 54,
+    "item": 60.2,
+    "pattern": 16.8,
+    "patternLabel": "HA + d"
    }
   },
   "trevenant": {
@@ -5430,65 +5430,11 @@
     "Poltergeist"
    ],
    "rates": {
-    "ability": 87.5,
-    "nature": 20.7,
-    "item": 76.4,
+    "ability": 87.4,
+    "nature": 20.6,
+    "item": 76,
     "pattern": 12.7,
     "patternLabel": "HA + b"
-   }
-  },
-  "florges": {
-   "code": "0671-00",
-   "ja": "フラージェス",
-   "species": "Florges",
-   "megaSpecies": null,
-   "ability": "Flower Veil",
-   "nature": "Modest",
-   "item": "Leftovers",
-   "sp": {
-    "hp": 32,
-    "def": 32,
-    "spa": 2
-   },
-   "moves": [
-    "Moonblast",
-    "Pollen Puff",
-    "Protect",
-    "Dazzling Gleam"
-   ],
-   "rates": {
-    "ability": 74.3,
-    "nature": 37.4,
-    "item": 26,
-    "pattern": 8,
-    "patternLabel": "HB + c"
-   }
-  },
-  "goodra": {
-   "code": "0706-00",
-   "ja": "ヌメルゴン",
-   "species": "Goodra",
-   "megaSpecies": null,
-   "ability": "Sap Sipper",
-   "nature": "Modest",
-   "item": "Leftovers",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spd": 32
-   },
-   "moves": [
-    "Protect",
-    "Flamethrower",
-    "Draco Meteor",
-    "Thunderbolt"
-   ],
-   "rates": {
-    "ability": 41.8,
-    "nature": 37.3,
-    "item": 36.4,
-    "pattern": 13.3,
-    "patternLabel": "CD + h"
    }
   },
   "leafeon": {
@@ -5511,11 +5457,65 @@
     "Detect"
    ],
    "rates": {
-    "ability": 97.4,
-    "nature": 74.1,
-    "item": 29.5,
-    "pattern": 19.2,
+    "ability": 97.3,
+    "nature": 73.5,
+    "item": 29,
+    "pattern": 18.5,
     "patternLabel": "AS + h"
+   }
+  },
+  "goodra": {
+   "code": "0706-00",
+   "ja": "ヌメルゴン",
+   "species": "Goodra",
+   "megaSpecies": null,
+   "ability": "Sap Sipper",
+   "nature": "Modest",
+   "item": "Leftovers",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spd": 32
+   },
+   "moves": [
+    "Protect",
+    "Flamethrower",
+    "Draco Meteor",
+    "Thunderbolt"
+   ],
+   "rates": {
+    "ability": 42,
+    "nature": 37.3,
+    "item": 35.7,
+    "pattern": 12.7,
+    "patternLabel": "CD + h"
+   }
+  },
+  "florges": {
+   "code": "0671-00",
+   "ja": "フラージェス",
+   "species": "Florges",
+   "megaSpecies": null,
+   "ability": "Flower Veil",
+   "nature": "Modest",
+   "item": "Leftovers",
+   "sp": {
+    "def": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Moonblast",
+    "Pollen Puff",
+    "Protect",
+    "Dazzling Gleam"
+   ],
+   "rates": {
+    "ability": 74.1,
+    "nature": 37.7,
+    "item": 25.6,
+    "pattern": 3.9,
+    "patternLabel": "CS + b"
    }
   },
   "pangoro": {
@@ -5538,10 +5538,10 @@
     "Knock Off"
    ],
    "rates": {
-    "ability": 72.6,
-    "nature": 48.7,
-    "item": 24.5,
-    "pattern": 18.4,
+    "ability": 72.2,
+    "nature": 48.3,
+    "item": 24.6,
+    "pattern": 18.2,
     "patternLabel": "HA + b"
    }
   },
@@ -5550,7 +5550,7 @@
    "ja": "ガチゴラス",
    "species": "Tyrantrum",
    "megaSpecies": null,
-   "ability": "Rock Head",
+   "ability": "Strong Jaw",
    "nature": "Adamant",
    "item": "Choice Scarf",
    "sp": {
@@ -5565,9 +5565,9 @@
     "Psychic Fangs"
    ],
    "rates": {
-    "ability": 50.5,
-    "nature": 43.3,
-    "item": 28.5,
+    "ability": 50.2,
+    "nature": 43,
+    "item": 28.4,
     "pattern": 21.7,
     "patternLabel": "AS + h"
    }
@@ -5592,10 +5592,10 @@
     "Helping Hand"
    ],
    "rates": {
-    "ability": 77.8,
-    "nature": 37.6,
-    "item": 32.1,
-    "pattern": 23.9,
+    "ability": 77.2,
+    "nature": 36.8,
+    "item": 31.3,
+    "pattern": 23.8,
     "patternLabel": "HA + d"
    }
   },
@@ -5619,38 +5619,11 @@
     "String Shot"
    ],
    "rates": {
-    "ability": 92.3,
-    "nature": 37.4,
+    "ability": 92.1,
+    "nature": 36.8,
     "item": 56.9,
-    "pattern": 7.1,
+    "pattern": 6.8,
     "patternLabel": "CS + h"
-   }
-  },
-  "toucannon": {
-   "code": "0733-00",
-   "ja": "ドデカバシ",
-   "species": "Toucannon",
-   "megaSpecies": null,
-   "ability": "Skill Link",
-   "nature": "Adamant",
-   "item": "Life Orb",
-   "sp": {
-    "hp": 32,
-    "atk": 32,
-    "spd": 2
-   },
-   "moves": [
-    "Rock Blast",
-    "Beak Blast",
-    "Bullet Seed",
-    "Protect"
-   ],
-   "rates": {
-    "ability": 86.5,
-    "nature": 61.5,
-    "item": 29.6,
-    "pattern": 17.8,
-    "patternLabel": "HA + d"
    }
   },
   "flapple": {
@@ -5673,11 +5646,38 @@
     "Sucker Punch"
    ],
    "rates": {
-    "ability": 90.1,
-    "nature": 59.7,
-    "item": 49.8,
-    "pattern": 24.1,
+    "ability": 90.5,
+    "nature": 59.2,
+    "item": 49.9,
+    "pattern": 24.3,
     "patternLabel": "AS + h"
+   }
+  },
+  "toucannon": {
+   "code": "0733-00",
+   "ja": "ドデカバシ",
+   "species": "Toucannon",
+   "megaSpecies": null,
+   "ability": "Skill Link",
+   "nature": "Adamant",
+   "item": "Life Orb",
+   "sp": {
+    "hp": 32,
+    "atk": 32,
+    "spd": 2
+   },
+   "moves": [
+    "Rock Blast",
+    "Beak Blast",
+    "Bullet Seed",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 86,
+    "nature": 60.4,
+    "item": 29.2,
+    "pattern": 17.9,
+    "patternLabel": "HA + d"
    }
   },
   "garganacl": {
@@ -5700,10 +5700,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 69.6,
-    "nature": 35.5,
-    "item": 43.8,
-    "pattern": 18.6,
+    "ability": 70,
+    "nature": 34.6,
+    "item": 44.1,
+    "pattern": 18.2,
     "patternLabel": "HD + b"
    }
   },
@@ -5729,8 +5729,8 @@
    "rates": {
     "ability": 100,
     "nature": 45.3,
-    "item": 43.9,
-    "pattern": 38.4,
+    "item": 42.7,
+    "pattern": 37.9,
     "patternLabel": "CS + h"
    }
   },
@@ -5743,8 +5743,8 @@
    "nature": "Adamant",
    "item": "Falinksite",
    "sp": {
+    "hp": 2,
     "atk": 32,
-    "spd": 2,
     "spe": 32
    },
    "moves": [
@@ -5754,11 +5754,11 @@
     "Rock Slide"
    ],
    "rates": {
-    "ability": 92.5,
-    "nature": 52.2,
-    "item": 86.8,
-    "pattern": 12.4,
-    "patternLabel": "AS + d"
+    "ability": 92.9,
+    "nature": 53,
+    "item": 87.4,
+    "pattern": 12.5,
+    "patternLabel": "AS + h"
    }
   },
   "luxray": {
@@ -5782,9 +5782,9 @@
    ],
    "rates": {
     "ability": 89.1,
-    "nature": 38.4,
+    "nature": 37.9,
     "item": 21.1,
-    "pattern": 8.2,
+    "pattern": 8.1,
     "patternLabel": "HD + b"
    }
   },
@@ -5809,9 +5809,9 @@
    ],
    "rates": {
     "ability": 87.1,
-    "nature": 57.9,
-    "item": 30.8,
-    "pattern": 48.4,
+    "nature": 57.6,
+    "item": 30.6,
+    "pattern": 47.4,
     "patternLabel": "AB + h"
    }
   },
@@ -5835,10 +5835,10 @@
     "Psychic"
    ],
    "rates": {
-    "ability": 68.1,
-    "nature": 32,
-    "item": 22.8,
-    "pattern": 11,
+    "ability": 68.3,
+    "nature": 31.6,
+    "item": 23,
+    "pattern": 11.4,
     "patternLabel": "HC + b"
    }
   },
@@ -5862,10 +5862,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 77.6,
-    "nature": 66.3,
-    "item": 91,
-    "pattern": 41.3,
+    "ability": 76.6,
+    "nature": 66.1,
+    "item": 90.7,
+    "pattern": 40.9,
     "patternLabel": "AS + h"
    }
   },
@@ -5890,9 +5890,9 @@
    ],
    "rates": {
     "ability": 84.8,
-    "nature": 32.8,
-    "item": 26.5,
-    "pattern": 17.4,
+    "nature": 33.4,
+    "item": 26,
+    "pattern": 16.5,
     "patternLabel": "HA + b"
    }
   },
@@ -5916,9 +5916,9 @@
     "Strength Sap"
    ],
    "rates": {
-    "ability": 61.6,
-    "nature": 45.9,
-    "item": 39.6,
+    "ability": 61.5,
+    "nature": 45.5,
+    "item": 39,
     "pattern": 15.7,
     "patternLabel": "CS + h"
    }
@@ -5944,9 +5944,9 @@
    ],
    "rates": {
     "ability": 76.6,
-    "nature": 66.8,
-    "item": 71.5,
-    "pattern": 21.5,
+    "nature": 66.2,
+    "item": 70.9,
+    "pattern": 22.3,
     "patternLabel": "AS + h"
    }
   },
@@ -5970,10 +5970,10 @@
     "Sleep Powder"
    ],
    "rates": {
-    "ability": 66,
-    "nature": 48.9,
-    "item": 25.5,
-    "pattern": 30.1,
+    "ability": 66.5,
+    "nature": 47.9,
+    "item": 24.5,
+    "pattern": 29.3,
     "patternLabel": "CS + h"
    }
   },
@@ -5997,10 +5997,10 @@
     "Iron Defense"
    ],
    "rates": {
-    "ability": 62.6,
-    "nature": 34.6,
-    "item": 37.2,
-    "pattern": 23.1,
+    "ability": 62.5,
+    "nature": 34,
+    "item": 37.5,
+    "pattern": 22.8,
     "patternLabel": "HB + d"
    }
   },
@@ -6024,10 +6024,10 @@
     "Speed Swap"
    ],
    "rates": {
-    "ability": 71.1,
-    "nature": 49.8,
-    "item": 44.9,
-    "pattern": 28.2,
+    "ability": 70.7,
+    "nature": 49.7,
+    "item": 44.4,
+    "pattern": 28.4,
     "patternLabel": "CS + h"
    }
   },
@@ -6051,10 +6051,10 @@
     "U-turn"
    ],
    "rates": {
-    "ability": 75.5,
-    "nature": 68.5,
-    "item": 66,
-    "pattern": 33.3,
+    "ability": 74.6,
+    "nature": 67.5,
+    "item": 66.3,
+    "pattern": 33.1,
     "patternLabel": "HS + a"
    }
   },
@@ -6078,10 +6078,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 99.4,
-    "nature": 62.9,
-    "item": 29.7,
-    "pattern": 32,
+    "ability": 99.5,
+    "nature": 63.8,
+    "item": 30.4,
+    "pattern": 31.4,
     "patternLabel": "AS + h"
    }
   },
@@ -6106,9 +6106,9 @@
    ],
    "rates": {
     "ability": 81.7,
-    "nature": 78.7,
-    "item": 68.2,
-    "pattern": 42.9,
+    "nature": 78.1,
+    "item": 67.6,
+    "pattern": 42.1,
     "patternLabel": "HS + a"
    }
   },
@@ -6132,10 +6132,10 @@
     "Protect"
    ],
    "rates": {
-    "ability": 52.1,
-    "nature": 26.9,
-    "item": 25,
-    "pattern": 9.5,
+    "ability": 53.1,
+    "nature": 26.5,
+    "item": 24.5,
+    "pattern": 9.3,
     "patternLabel": "HD + b"
    }
   },
@@ -6159,10 +6159,10 @@
     "Close Combat"
    ],
    "rates": {
-    "ability": 58.9,
-    "nature": 36.3,
-    "item": 50.2,
-    "pattern": 21.1,
+    "ability": 57.6,
+    "nature": 36.9,
+    "item": 51.7,
+    "pattern": 20.8,
     "patternLabel": "AS + h"
    }
   },
@@ -6186,10 +6186,10 @@
     "Sludge Bomb"
    ],
    "rates": {
-    "ability": 56,
-    "nature": 40.5,
+    "ability": 56.6,
+    "nature": 41.1,
     "item": 14,
-    "pattern": 20.2,
+    "pattern": 21.6,
     "patternLabel": "HC + d"
    }
   },
@@ -6209,14 +6209,14 @@
    "moves": [
     "Trick Room",
     "Poltergeist",
-    "Power Whip",
-    "Trick-or-Treat"
+    "Trick-or-Treat",
+    "Power Whip"
    ],
    "rates": {
-    "ability": 68.1,
-    "nature": 25.9,
-    "item": 26.6,
-    "pattern": 14.5,
+    "ability": 68.7,
+    "nature": 25.1,
+    "item": 26.8,
+    "pattern": 14.9,
     "patternLabel": "HD + b"
    }
   },
@@ -6240,10 +6240,10 @@
     "Rock Slide"
    ],
    "rates": {
-    "ability": 73.9,
-    "nature": 45.3,
-    "item": 19.7,
-    "pattern": 23.4,
+    "ability": 73,
+    "nature": 45.9,
+    "item": 19.5,
+    "pattern": 24,
     "patternLabel": "AS + h"
    }
   },
@@ -6267,10 +6267,10 @@
     "Parting Shot"
    ],
    "rates": {
-    "ability": 65.3,
-    "nature": 30.8,
+    "ability": 66.1,
+    "nature": 31.8,
     "item": 31.1,
-    "pattern": 10.1,
+    "pattern": 9.6,
     "patternLabel": "CS + h"
    }
   },
@@ -6294,11 +6294,38 @@
     "Protect"
    ],
    "rates": {
-    "ability": 72.6,
-    "nature": 53,
-    "item": 35.8,
-    "pattern": 28.5,
+    "ability": 73,
+    "nature": 52.4,
+    "item": 34.6,
+    "pattern": 28,
     "patternLabel": "AS + h"
+   }
+  },
+  "mabosstiff": {
+   "code": "0943-00",
+   "ja": "マフィティフ",
+   "species": "Mabosstiff",
+   "megaSpecies": null,
+   "ability": "Guard Dog",
+   "nature": "Adamant",
+   "item": "Focus Sash",
+   "sp": {
+    "atk": 32,
+    "spd": 2,
+    "spe": 32
+   },
+   "moves": [
+    "Jaw Lock",
+    "Protect",
+    "Psychic Fangs",
+    "Play Rough"
+   ],
+   "rates": {
+    "ability": 72,
+    "nature": 56.5,
+    "item": 13.9,
+    "pattern": 16.7,
+    "patternLabel": "AS + d"
    }
   },
   "arbok": {
@@ -6321,64 +6348,10 @@
     "Glare"
    ],
    "rates": {
-    "ability": 97.6,
-    "nature": 36.8,
-    "item": 14.7,
+    "ability": 97.2,
+    "nature": 37.5,
+    "item": 14.3,
     "pattern": 11.8,
-    "patternLabel": "AS + h"
-   }
-  },
-  "mabosstiff": {
-   "code": "0943-00",
-   "ja": "マフィティフ",
-   "species": "Mabosstiff",
-   "megaSpecies": null,
-   "ability": "Guard Dog",
-   "nature": "Adamant",
-   "item": "Focus Sash",
-   "sp": {
-    "atk": 32,
-    "spd": 2,
-    "spe": 32
-   },
-   "moves": [
-    "Jaw Lock",
-    "Protect",
-    "Psychic Fangs",
-    "Crunch"
-   ],
-   "rates": {
-    "ability": 72.1,
-    "nature": 57.1,
-    "item": 13.3,
-    "pattern": 16.8,
-    "patternLabel": "AS + d"
-   }
-  },
-  "gogoat": {
-   "code": "0673-00",
-   "ja": "ゴーゴート",
-   "species": "Gogoat",
-   "megaSpecies": null,
-   "ability": "Grass Pelt",
-   "nature": "Adamant",
-   "item": "Grassy Seed",
-   "sp": {
-    "hp": 2,
-    "atk": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Horn Leech",
-    "Milk Drink",
-    "Protect",
-    "Rock Slide"
-   ],
-   "rates": {
-    "ability": 65.8,
-    "nature": 38.4,
-    "item": 17.6,
-    "pattern": 16.4,
     "patternLabel": "AS + h"
    }
   },
@@ -6403,10 +6376,37 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 60.3,
-    "item": 37.1,
-    "pattern": 18.2,
+    "nature": 59.1,
+    "item": 36.3,
+    "pattern": 19.5,
     "patternLabel": "CS + h"
+   }
+  },
+  "gogoat": {
+   "code": "0673-00",
+   "ja": "ゴーゴート",
+   "species": "Gogoat",
+   "megaSpecies": null,
+   "ability": "Grass Pelt",
+   "nature": "Adamant",
+   "item": "Grassy Seed",
+   "sp": {
+    "hp": 2,
+    "atk": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Horn Leech",
+    "Milk Drink",
+    "Protect",
+    "Rock Slide"
+   ],
+   "rates": {
+    "ability": 66,
+    "nature": 38.6,
+    "item": 17.9,
+    "pattern": 16.2,
+    "patternLabel": "AS + h"
    }
   },
   "rotomfan": {
@@ -6430,9 +6430,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 42.2,
-    "item": 16.8,
-    "pattern": 15,
+    "nature": 41.6,
+    "item": 17.2,
+    "pattern": 15.1,
     "patternLabel": "CS + d"
    }
   },
@@ -6456,10 +6456,10 @@
     "Iron Defense"
    ],
    "rates": {
-    "ability": 60.7,
-    "nature": 33.1,
-    "item": 26.9,
-    "pattern": 31.3,
+    "ability": 61.4,
+    "nature": 32,
+    "item": 25.9,
+    "pattern": 30.2,
     "patternLabel": "AB + h"
    }
   },
@@ -6483,10 +6483,10 @@
     "Thunderbolt"
    ],
    "rates": {
-    "ability": 52.8,
-    "nature": 60.7,
-    "item": 35.3,
-    "pattern": 33.9,
+    "ability": 53.2,
+    "nature": 60.1,
+    "item": 35.9,
+    "pattern": 33.2,
     "patternLabel": "CS + h"
    }
   },
@@ -6510,10 +6510,10 @@
     "First Impression"
    ],
    "rates": {
-    "ability": 59.8,
+    "ability": 59.2,
     "nature": 25.6,
-    "item": 31.4,
-    "pattern": 24.8,
+    "item": 31.3,
+    "pattern": 23.9,
     "patternLabel": "HB + d"
    }
   },
@@ -6537,10 +6537,10 @@
     "Endeavor"
    ],
    "rates": {
-    "ability": 83.3,
-    "nature": 35.7,
-    "item": 45.5,
-    "pattern": 26.2,
+    "ability": 84.1,
+    "nature": 34.9,
+    "item": 46.2,
+    "pattern": 25.8,
     "patternLabel": "AS + h"
    }
   },
@@ -6566,8 +6566,8 @@
    "rates": {
     "ability": 87.8,
     "nature": 41.5,
-    "item": 38.2,
-    "pattern": 13.6,
+    "item": 37.2,
+    "pattern": 14.4,
     "patternLabel": "HC + d"
    }
   },
@@ -6591,10 +6591,10 @@
     "Stealth Rock"
    ],
    "rates": {
-    "ability": 91.5,
-    "nature": 23.2,
-    "item": 25.6,
-    "pattern": 12.3,
+    "ability": 90.6,
+    "nature": 23.3,
+    "item": 25.8,
+    "pattern": 11.6,
     "patternLabel": "HD + b"
    }
   },
@@ -6608,20 +6608,21 @@
    "item": "Normal Gem",
    "sp": {
     "hp": 32,
-    "atk": 32
+    "atk": 32,
+    "def": 2
    },
    "moves": [
     "Explosion",
     "Gunk Shot",
     "Toxic Spikes",
-    "Drain Punch"
+    "Rock Blast"
    ],
    "rates": {
-    "ability": 57.2,
-    "nature": 50.8,
-    "item": 24.3,
-    "pattern": 14.6,
-    "patternLabel": "HA"
+    "ability": 54.9,
+    "nature": 52.6,
+    "item": 22.8,
+    "pattern": 18.1,
+    "patternLabel": "HA + b"
    }
   },
   "lycanrocmidnight": {
@@ -6644,10 +6645,10 @@
     "Iron Tail"
    ],
    "rates": {
-    "ability": 94.9,
-    "nature": 53.3,
-    "item": 37.8,
-    "pattern": 34.1,
+    "ability": 94.8,
+    "nature": 53.5,
+    "item": 37.7,
+    "pattern": 34.3,
     "patternLabel": "AS + h"
    }
   },
@@ -6672,9 +6673,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 47.6,
-    "item": 44,
-    "pattern": 30.5,
+    "nature": 47.5,
+    "item": 45.7,
+    "pattern": 30.3,
     "patternLabel": "CS + h"
    }
   },
@@ -6698,10 +6699,10 @@
     "Stockpile"
    ],
    "rates": {
-    "ability": 52.9,
-    "nature": 20.5,
-    "item": 58.7,
-    "pattern": 20.9,
+    "ability": 55,
+    "nature": 22.2,
+    "item": 58.5,
+    "pattern": 22.2,
     "patternLabel": "BD + h"
    }
   },
@@ -6725,10 +6726,10 @@
     "Waterfall"
    ],
    "rates": {
-    "ability": 51.9,
-    "nature": 47.8,
-    "item": 17.1,
-    "pattern": 25.6,
+    "ability": 50,
+    "nature": 48.2,
+    "item": 16.8,
+    "pattern": 24.9,
     "patternLabel": "AS + h"
    }
   },
@@ -6749,13 +6750,13 @@
     "Trick-or-Treat",
     "Poltergeist",
     "Trick",
-    "Disable"
+    "Will-O-Wisp"
    ],
    "rates": {
-    "ability": 68.6,
-    "nature": 36.1,
-    "item": 49.8,
-    "pattern": 16.7,
+    "ability": 68.3,
+    "nature": 36,
+    "item": 48.7,
+    "pattern": 16.3,
     "patternLabel": "AS + h"
    }
   },
@@ -6780,9 +6781,9 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 57.2,
-    "item": 29.4,
-    "pattern": 27.5,
+    "nature": 56.7,
+    "item": 30.2,
+    "pattern": 27.3,
     "patternLabel": "CS + h"
    }
   },
@@ -6802,70 +6803,15 @@
    "moves": [
     "Cotton Guard",
     "Protect",
-    "Last Resort",
-    "Helping Hand"
+    "Helping Hand",
+    "Last Resort"
    ],
    "rates": {
     "ability": 100,
-    "nature": 22.3,
-    "item": 42.3,
-    "pattern": 11.7,
+    "nature": 23.7,
+    "item": 40.6,
+    "pattern": 13.3,
     "patternLabel": "HD + b"
-   }
-  },
-  "samurott": {
-   "code": "0503-00",
-   "ja": "ダイケンキ",
-   "species": "Samurott",
-   "megaSpecies": null,
-   "ability": "Torrent",
-   "nature": "Modest",
-   "item": "Life Orb",
-   "sp": {
-    "hp": 11,
-    "def": 13,
-    "spa": 32,
-    "spd": 10
-   },
-   "moves": [
-    "Ice Beam",
-    "Hydro Pump",
-    "Hydro Cannon",
-    "Vacuum Wave"
-   ],
-   "rates": {
-    "ability": 68.8,
-    "nature": 29.1,
-    "item": 37.7,
-    "pattern": 41.5,
-    "patternLabel": "C + hbd"
-   }
-  },
-  "simipour": {
-   "code": "0516-00",
-   "ja": "ヒヤッキー",
-   "species": "Simipour",
-   "megaSpecies": null,
-   "ability": "Torrent",
-   "nature": "Modest",
-   "item": "Mystic Water",
-   "sp": {
-    "hp": 2,
-    "spa": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Scald",
-    "Ice Beam",
-    "Protect",
-    "Hydro Pump"
-   ],
-   "rates": {
-    "ability": 88.4,
-    "nature": 37.3,
-    "item": 22.4,
-    "pattern": 32.2,
-    "patternLabel": "CS + h"
    }
   },
   "tauros": {
@@ -6884,14 +6830,14 @@
    "moves": [
     "Rock Slide",
     "Body Slam",
-    "Close Combat",
-    "Iron Head"
+    "Raging Bull",
+    "Protect"
    ],
    "rates": {
-    "ability": 66.3,
-    "nature": 47.8,
-    "item": 62,
-    "pattern": 29.3,
+    "ability": 63.7,
+    "nature": 46.7,
+    "item": 59.3,
+    "pattern": 29,
     "patternLabel": "AS + h"
    }
   },
@@ -6915,11 +6861,66 @@
     "Poltergeist"
    ],
    "rates": {
-    "ability": 49.2,
-    "nature": 31.4,
-    "item": 27,
-    "pattern": 11.4,
+    "ability": 50.5,
+    "nature": 32.1,
+    "item": 27.5,
+    "pattern": 10.6,
     "patternLabel": "HD + b"
+   }
+  },
+  "simipour": {
+   "code": "0516-00",
+   "ja": "ヒヤッキー",
+   "species": "Simipour",
+   "megaSpecies": null,
+   "ability": "Torrent",
+   "nature": "Modest",
+   "item": "Mystic Water",
+   "sp": {
+    "hp": 2,
+    "spa": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Scald",
+    "Ice Beam",
+    "Protect",
+    "Hydro Pump"
+   ],
+   "rates": {
+    "ability": 89,
+    "nature": 36.1,
+    "item": 22.1,
+    "pattern": 31.6,
+    "patternLabel": "CS + h"
+   }
+  },
+  "samurott": {
+   "code": "0503-00",
+   "ja": "ダイケンキ",
+   "species": "Samurott",
+   "megaSpecies": null,
+   "ability": "Torrent",
+   "nature": "Modest",
+   "item": "Life Orb",
+   "sp": {
+    "hp": 11,
+    "def": 13,
+    "spa": 32,
+    "spd": 10
+   },
+   "moves": [
+    "Ice Beam",
+    "Hydro Pump",
+    "Hydro Cannon",
+    "Grass Knot"
+   ],
+   "rates": {
+    "ability": 69.4,
+    "nature": 30.4,
+    "item": 36.3,
+    "pattern": 42.1,
+    "patternLabel": "C + hbd"
    }
   },
   "simisear": {
@@ -6942,11 +6943,38 @@
     "Overheat"
    ],
    "rates": {
-    "ability": 88.8,
-    "nature": 28.8,
-    "item": 30.9,
-    "pattern": 33.3,
+    "ability": 88.4,
+    "nature": 29.4,
+    "item": 32.9,
+    "pattern": 32.4,
     "patternLabel": "CS + h"
+   }
+  },
+  "taurospaldeacombat": {
+   "code": "0128-01",
+   "ja": "ケンタロス:格",
+   "species": "Tauros-Paldea-Combat",
+   "megaSpecies": null,
+   "ability": "Intimidate",
+   "nature": "Adamant",
+   "item": "Sitrus Berry",
+   "sp": {
+    "hp": 2,
+    "atk": 32,
+    "spe": 32
+   },
+   "moves": [
+    "Raging Bull",
+    "Rock Slide",
+    "Earthquake",
+    "Protect"
+   ],
+   "rates": {
+    "ability": 40.4,
+    "nature": 57.3,
+    "item": 27.9,
+    "pattern": 32.2,
+    "patternLabel": "AS + h"
    }
   },
   "simisage": {
@@ -6969,65 +6997,11 @@
     "Protect"
    ],
    "rates": {
-    "ability": 94,
-    "nature": 32.3,
+    "ability": 94.1,
+    "nature": 32.2,
     "item": 41.2,
-    "pattern": 26.2,
+    "pattern": 26.5,
     "patternLabel": "AS + h"
-   }
-  },
-  "taurospaldeacombat": {
-   "code": "0128-01",
-   "ja": "ケンタロス:格",
-   "species": "Tauros-Paldea-Combat",
-   "megaSpecies": null,
-   "ability": "Anger Point",
-   "nature": "Adamant",
-   "item": "Sitrus Berry",
-   "sp": {
-    "hp": 2,
-    "atk": 32,
-    "spe": 32
-   },
-   "moves": [
-    "Raging Bull",
-    "Rock Slide",
-    "Earthquake",
-    "Protect"
-   ],
-   "rates": {
-    "ability": 36.8,
-    "nature": 54.8,
-    "item": 30.6,
-    "pattern": 34.2,
-    "patternLabel": "AS + h"
-   }
-  },
-  "gourgeist": {
-   "code": "0711-00",
-   "ja": "パンプジン (ちゅうだま)",
-   "species": "Gourgeist",
-   "megaSpecies": null,
-   "ability": "Frisk",
-   "nature": "Jolly",
-   "item": "Choice Scarf",
-   "sp": {
-    "hp": 32,
-    "atk": 2,
-    "spe": 32
-   },
-   "moves": [
-    "Trick-or-Treat",
-    "Poltergeist",
-    "Will-O-Wisp",
-    "Trick Room"
-   ],
-   "rates": {
-    "ability": 76.2,
-    "nature": 39.6,
-    "item": 35.8,
-    "pattern": 14.9,
-    "patternLabel": "HS + a"
    }
   },
   "stunfiskgalar": {
@@ -7051,10 +7025,37 @@
    ],
    "rates": {
     "ability": 100,
-    "nature": 21.5,
-    "item": 36,
-    "pattern": 11.9,
+    "nature": 23.5,
+    "item": 34,
+    "pattern": 10.9,
     "patternLabel": "HA + d"
+   }
+  },
+  "gourgeist": {
+   "code": "0711-00",
+   "ja": "パンプジン (ちゅうだま)",
+   "species": "Gourgeist",
+   "megaSpecies": null,
+   "ability": "Frisk",
+   "nature": "Jolly",
+   "item": "Choice Scarf",
+   "sp": {
+    "hp": 32,
+    "atk": 2,
+    "spe": 32
+   },
+   "moves": [
+    "Trick-or-Treat",
+    "Poltergeist",
+    "Will-O-Wisp",
+    "Trick Room"
+   ],
+   "rates": {
+    "ability": 76.2,
+    "nature": 38.3,
+    "item": 35,
+    "pattern": 14.3,
+    "patternLabel": "HS + a"
    }
   },
   "watchog": {
@@ -7076,10 +7077,10 @@
     "Thunder Wave"
    ],
    "rates": {
-    "ability": 49.7,
-    "nature": 32.5,
-    "item": 36.3,
-    "pattern": 32.9,
+    "ability": 50.1,
+    "nature": 30.7,
+    "item": 34.3,
+    "pattern": 31.1,
     "patternLabel": "AS"
    }
   }
